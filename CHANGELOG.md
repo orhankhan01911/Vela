@@ -2,6 +2,49 @@
 
 All notable changes to Vela, newest first.
 
+## [project-options fork, unreleased — perf-patch branch, off v0.6.17]
+
+Modified per Apache License 2.0 §4(b) — this is a fork of `luxalgo/vela`
+(`orhankhan01911/Vela`), not the upstream project. Changes made for
+weak/mobile-GPU rendering performance; see
+`project-options/docs/research/vela-perf-findings-2026-09-10.md` for the
+measured before/after and full investigation.
+
+### Changed
+
+- **Device-pixel-ratio capped at 2** in `NativeRenderer.syncSize()` (was
+  the raw, uncapped `window.devicePixelRatio`). Every canvas layer is sized
+  off this value, so this scales down backing-store resolution (and the
+  per-layer compositing cost) on high-DPR phone screens (3x+) with no
+  visible difference at normal viewing distance.
+- **WebGL2 `antialias` forced off** in `WebGL2Backend.mount()` (was `true`).
+  The renderer's own fragment shader already does analytic per-pixel AA on
+  line/series edges; MSAA was only smoothing flat-polygon edges (candle
+  bodies, fills) on top of that. Real trade-off: those edges may show very
+  slight aliasing on steep diagonals now. Removes a forced multisample
+  resolve cost on every full-plot WebGL layer, every frame.
+- **WebGL2 context `powerPreference` forced to `'high-performance'`** in
+  `WebGL2Backend.mount()` (was unset). Chrome has defaulted this hint to
+  low-power since v80, which routes rendering to the weak integrated GPU
+  on hybrid-GPU laptops — a likely direct cause of "fine on desktop, janky
+  on this laptop" reports. Trade-off: higher battery drain; this is a
+  hint, not a guarantee, on every platform/browser.
+- **Volume + VPVR renderers merged onto one shared canvas**, down from two
+  separate full-viewport canvases (`NativeRenderer.ts`: `volumeCanvas`
+  field now serves both; `vpvrCanvas` field removed). Both are Canvas2D,
+  always sit on the same side of the WebGL data canvas, and are always
+  invalidated together in the same `paintData()` call — safe to share one
+  compositor layer instead of two. `VpvrRenderer.render()` no longer
+  clears its canvas itself (`VolumeRenderer.render()`, called immediately
+  before it every frame, already does). Reduces the per-chart canvas
+  stack from 8 to 7.
+- **Axis/chip label text-width measurements now cached** in
+  `ChromeRenderer.ts` (bounded 2-generation LRU, keyed by `font + text`).
+  Previously called `ctx.measureText()` fresh every frame for every price
+  tick, time tick, and price/countdown chip, even when panning/zooming
+  changed nothing about the label text itself — pure Canvas2D/CPU cost,
+  unrelated to WebGL.
+
 ## [v0.6.17]
 
 ### Changed

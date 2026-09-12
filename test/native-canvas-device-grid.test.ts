@@ -37,8 +37,7 @@ function setup(): { r: AnyRenderer } {
     r.plot = { style: {}, getBoundingClientRect: () => RECT };
     r.backdropCanvas = canvas();
     r.dataCanvas = canvas();
-    r.volumeCanvas = canvas();
-    r.vpvrCanvas = canvas();
+    r.volumeCanvas = canvas(); // PERF PATCH (project-options fork): shared with vpvrRenderer, no separate vpvrCanvas field anymore
     r.chromeCanvas = canvas();
     r.drawingsCanvas = canvas();
     r.cursorCanvas = canvas();
@@ -80,7 +79,7 @@ describe('syncSize pins the canvas pile to the device-pixel grid', () => {
     it('applies the same geometry to every canvas in the pile', () => {
         const { r } = setup();
         r.syncSize();
-        for (const c of [r.backdropCanvas, r.volumeCanvas, r.vpvrCanvas, r.chromeCanvas, r.drawingsCanvas, r.cursorCanvas, r.extLayers[0].canvas]) {
+        for (const c of [r.backdropCanvas, r.volumeCanvas, r.chromeCanvas, r.drawingsCanvas, r.cursorCanvas, r.extLayers[0].canvas]) {
             expect(c.width).toBe(1802);
             expect(c.height).toBe(827);
             expect(c.style.width).toBe('1441.6px');

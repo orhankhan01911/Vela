@@ -142,8 +142,8 @@ export class NativeRenderer implements IChartRenderer {
     private mountContainer: HTMLElement | null = null; // the host-owned element mount() renders into
     private backdropCanvas!: HTMLCanvasElement; // session highlights + gridlines, the pile's very bottom
     private dataCanvas!: HTMLCanvasElement;
-    private volumeCanvas!: HTMLCanvasElement; // bottom-anchored volume columns above grid/candles
-    private vpvrCanvas!: HTMLCanvasElement; // visible-range volume profile (above candles, right edge)
+    // PERF PATCH (project-options fork): volume + vpvr share this one canvas now (see mount()).
+    private volumeCanvas!: HTMLCanvasElement; // bottom-anchored volume columns + visible-range volume profile, above grid/candles
     private chromeCanvas!: HTMLCanvasElement;
     private drawingsCanvas!: HTMLCanvasElement;
     private cursorCanvas!: HTMLCanvasElement;
@@ -1285,19 +1285,25 @@ export class NativeRenderer implements IChartRenderer {
         this.backdropCanvas = document.createElement('canvas');
         Object.assign(this.backdropCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
 
-        // L0.25 volume columns: bottom-anchored per-bar volume, ABOVE the geometry canvas so
-        // grid lines and candles cannot paint over them. Transparent + pointer-transparent.
+        // L0.25/L0.6 volume + VPVR: bottom-anchored per-bar volume, ABOVE the geometry canvas so
+        // grid lines and candles cannot paint over them, PLUS the visible-range volume profile
+        // against the right edge (painted above the candles, translucent) — SHARE one canvas.
+        // PERF PATCH (project-options fork): merged from two separate canvases into one. Both
+        // renderers are Canvas2D, both sit on the same side of the data canvas (always between
+        // dataCanvas and the chrome/axes layer, with no SDK ext-layer ever insertable between
+        // them — see canvasPile()/orderedLayerCanvases() below, below/above ext-layers only land
+        // before dataCanvas or after this shared canvas), and paintData() always calls
+        // volumeRenderer.render() then vpvrRenderer.render() back-to-back in the same frame —
+        // grep-verified single call site each, both inside paintData(). Safe merge: one fewer
+        // full-viewport compositor layer per chart. vpvrRenderer.render() is told to skip its own
+        // clearRect since volumeRenderer's clear (which always runs, visible or not) already reset
+        // the shared canvas for both this frame — see docs/research/vela-perf-findings-2026-09-10.md.
         this.volumeCanvas = document.createElement('canvas');
         Object.assign(this.volumeCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
 
         // L0 geometry — the swappable backend (WebGL2 if available, else canvas2d)
         // owns the data canvas + gets its rendering context.
         this.dataCanvas = this.createGeometryBackend();
-
-        // L0.6 VPVR: the visible-range volume profile against the right edge, painted ABOVE
-        // the candles (it reads over them, translucent) but below the chrome/axes.
-        this.vpvrCanvas = document.createElement('canvas');
-        Object.assign(this.vpvrCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
 
         // L1 chrome (canvas2d): Pine drawings + axes + current-price line. Transparent,
         // above the geometry layer (so the GL backend never has to rasterize text).
@@ -1333,7 +1339,7 @@ export class NativeRenderer implements IChartRenderer {
         });
         const below = this.extLayers.filter((l) => l.def.placement === 'below-data').map((l) => l.canvas);
         const above = this.extLayers.filter((l) => l.def.placement !== 'below-data').map((l) => l.canvas);
-        this.plot.append(this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, this.vpvrCanvas, ...above, this.chromeCanvas, this.drawingsCanvas, this.cursorCanvas, this.overlayRoot);
+        this.plot.append(this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, ...above, this.chromeCanvas, this.drawingsCanvas, this.cursorCanvas, this.overlayRoot);
         this.layerOrderSig = ''; // recomputed on the first data frame (owned layers follow their indicator's z)
         this.wrapper.appendChild(this.plot);
         this.factoryConfig = this.getConfig();
@@ -1346,7 +1352,7 @@ export class NativeRenderer implements IChartRenderer {
 
         this.backdropRenderer.mount(this.backdropCanvas);
         this.volumeRenderer.mount(this.volumeCanvas);
-        this.vpvrRenderer.mount(this.vpvrCanvas);
+        this.vpvrRenderer.mount(this.volumeCanvas); // PERF PATCH: shared canvas, see field comment above
         for (const l of this.extLayers) l.instance.mount(l.canvas);
         this.chrome.mount(this.chromeCanvas);
         this.crosshairLayer.mount(this.cursorCanvas);
@@ -3447,7 +3453,7 @@ export class NativeRenderer implements IChartRenderer {
      *  the DOM stacking and the screenshot compositor must both follow. */
     private canvasPile(): HTMLCanvasElement[] {
         const { below, above } = this.orderedLayerCanvases();
-        return [this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, this.vpvrCanvas, ...above];
+        return [this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, ...above];
     }
 
     /** Re-slot the SDK layer canvases in the plot when the computed order changed (a z
@@ -3780,7 +3786,15 @@ export class NativeRenderer implements IChartRenderer {
         const w = this.wrapper.clientWidth;
         const h = this.wrapper.clientHeight;
         if (w <= 0 || h <= 0) return;
-        const dpr = window.devicePixelRatio || 1;
+        // PERF PATCH (project-options fork): capped at 2, not the raw device value.
+        // Every canvas below (data/backdrop/volume/ext layers/vpvr/chrome/drawings/
+        // cursor — up to 8+ full-plot layers) is sized off this number, so an
+        // uncapped 3x phone panel was rendering ~2.25x the pixels of a capped-at-2
+        // one, PER LAYER, for a difference invisible at normal viewing distance on
+        // a phone screen. This is the single highest-leverage lever available from
+        // outside Vela's renderer (no public API exposed it) — see
+        // project-options' docs/research/vela-perf-findings-2026-09-10.md.
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
         // The plot area is inset to the right of the toolbar gutter; the canvases fill the plot
         // sub-container (0-based), so the coordinate system / pointer coords stay unchanged.
         this.plot.style.left = `${this.toolbarGutter}px`;
@@ -3818,9 +3832,8 @@ export class NativeRenderer implements IChartRenderer {
         };
         size(this.dataCanvas);
         size(this.backdropCanvas);
-        size(this.volumeCanvas);
+        size(this.volumeCanvas); // shared with vpvrRenderer, see field comment
         for (const l of this.extLayers) size(l.canvas);
-        size(this.vpvrCanvas);
         size(this.chromeCanvas);
         size(this.drawingsCanvas);
         size(this.cursorCanvas);

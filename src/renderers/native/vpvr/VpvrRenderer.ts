@@ -52,7 +52,14 @@ export class VpvrRenderer {
 
         const dpr = coords.dpr;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr); // always clear — a hide/remove must wipe the last frame
+        // PERF PATCH (project-options fork): no clearRect here anymore. This renderer now shares
+        // its canvas with VolumeRenderer (see NativeRenderer.ts's field comment on volumeCanvas) —
+        // NativeRenderer.paintData() calls volumeRenderer.render() immediately before this every
+        // frame, unconditionally, and VolumeRenderer's own clearRect ("always clear — a hide/remove
+        // must wipe the last frame") already reset the whole shared canvas for both renderers this
+        // frame. Clearing again here would wipe the volume columns this same renderer.render() call
+        // is meant to paint alongside. If this renderer is ever given its own dedicated canvas again,
+        // restore `ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr)` here first.
         if (!data || !visible || bars.length === 0 || bounds.height <= 0) return;
 
         const r = coords.visibleLogicalRange();

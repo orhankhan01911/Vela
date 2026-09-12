@@ -158,11 +158,28 @@ export class WebGL2Backend implements IRenderBackend {
         this.canvas = canvas;
         // alpha:true keeps the canvas transparent where nothing is drawn, so a layer behind it (the
         // reveal-layer background) shows through; the chart background is painted by the wrapper element.
-        // antialias smooths line-quad + polygon edges. premultipliedAlpha:TRUE is REQUIRED: the SRC_ALPHA
-        // over-blend writes PREMULTIPLIED pixels (rgb·a) to the framebuffer, so the compositor must be
-        // told so — otherwise it re-applies alpha and double-darkens every semi-transparent pixel
-        // (faint fills, and a darkened line-AA feather that reads as jaggies). Matches canvas2d exactly.
-        this.gl = canvas.getContext('webgl2', { alpha: true, antialias: true, depth: false, stencil: false, premultipliedAlpha: true });
+        // premultipliedAlpha:TRUE is REQUIRED: the SRC_ALPHA over-blend writes PREMULTIPLIED pixels
+        // (rgb·a) to the framebuffer, so the compositor must be told so — otherwise it re-applies alpha
+        // and double-darkens every semi-transparent pixel (faint fills, and a darkened line-AA feather
+        // that reads as jaggies). Matches canvas2d exactly.
+        //
+        // PERF PATCH (project-options fork): antialias FORCED OFF, was `true`. MSAA is largely
+        // redundant here for line/series edges specifically — FRAG_SRC above already does analytic
+        // per-pixel AA on line quads via `fwidth`-based coverage (the `vEdge.y < 0.0` branch is the
+        // only unsmoothed case: flat-color solid geometry, i.e. candle bodies/fills/rects). Real
+        // trade-off, stated plainly: candle-body and other flat-polygon edges lose MSAA's edge
+        // smoothing and may show very slight aliasing on a steep diagonal; line/series edges are
+        // unaffected (the shader covers those). On a weak/old mobile GPU this removes a real,
+        // uniformly-forced-on multisample resolve cost on every one of the (now DPR-capped, see
+        // NativeRenderer.syncSize) full-plot WebGL layers, every frame. See
+        // docs/research/vela-perf-findings-2026-09-10.md in project-options for the measured case.
+        //
+        // PERF PATCH (project-options fork): powerPreference forced to 'high-performance', was
+        // unset (defaults to 'default'/low-power in Chrome since v80). On a hybrid-GPU laptop
+        // (integrated + discrete) the low-power default routes this context to the WEAK integrated
+        // GPU, which is exactly the "fine on desktop, janky on this laptop" symptom reported live.
+        // Trade-off: higher battery drain; this is a hint, not a guarantee, on every platform.
+        this.gl = canvas.getContext('webgl2', { alpha: true, antialias: false, depth: false, stencil: false, premultipliedAlpha: true, powerPreference: 'high-performance' });
         if (!this.gl) return;
         if (!this.initGL()) {
             this.gl = null; // shaders/program failed → ok=false → renderer uses canvas2d

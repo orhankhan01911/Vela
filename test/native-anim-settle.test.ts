@@ -116,8 +116,7 @@ describe('syncSize paints synchronously while the Animator owns the frame', () =
         r.plot = { style: {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 300 }) };
         r.backdropCanvas = canvas();
         r.dataCanvas = canvas();
-        r.volumeCanvas = canvas();
-        r.vpvrCanvas = canvas();
+        r.volumeCanvas = canvas(); // PERF PATCH (project-options fork): shared with vpvrRenderer, no separate vpvrCanvas field anymore
         r.chromeCanvas = canvas();
         r.drawingsCanvas = canvas();
         r.cursorCanvas = canvas();
