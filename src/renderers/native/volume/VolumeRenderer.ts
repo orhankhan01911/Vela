@@ -48,30 +48,39 @@ export class VolumeRenderer {
         this.ctx = null;
     }
 
-    render(args: VolumeRenderArgs): void {
+    /**
+     * Paint one frame. Returns whether anything was actually drawn.
+     *
+     * PERF PATCH (project-options fork): the return value is the `hasContent` signal for the
+     * renderer's composite pass — this layer's surface is a DETACHED buffer now (shared with
+     * VpvrRenderer), and a buffer known to be fully transparent is skipped entirely when the
+     * two visible canvases are composited. Every `return` below is a "nothing drawn" path
+     * (the canvas was cleared and left blank), so they all report false.
+     */
+    render(args: VolumeRenderArgs): boolean {
         const ctx = this.ctx;
         const canvas = this.canvas;
-        if (!ctx || !canvas) return;
+        if (!ctx || !canvas) return false;
         const { bars, data, visible, coords, bounds, fillPane } = args;
 
         const dpr = coords.dpr;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr); // always clear — a hide/remove must wipe the last frame
-        if (!data || !visible || bars.length === 0 || bounds.height <= 0) return;
+        if (!data || !visible || bars.length === 0 || bounds.height <= 0) return false;
 
         // Visible bar-index window (bar index = logical index), padded nowhere — a half-off
         // column at either edge is included via the floor/ceil.
         const r = coords.visibleLogicalRange();
         const i0 = Math.max(0, Math.floor(r.from));
         const i1 = Math.min(bars.length - 1, Math.ceil(r.to));
-        if (i0 > i1) return;
+        if (i0 > i1) return false;
 
         let maxVol = 0;
         for (let i = i0; i <= i1; i += 1) {
             const v = bars[i]?.volume;
             if (v != null && v > maxVol) maxVol = v;
         }
-        if (maxVol <= 0) return;
+        if (maxVol <= 0) return false;
 
         ctx.save();
         ctx.beginPath();
@@ -89,5 +98,6 @@ export class VolumeRenderer {
             maxVol,
         }, { up: data.upColor, down: data.downColor });
         ctx.restore();
+        return true;
     }
 }

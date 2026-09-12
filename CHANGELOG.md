@@ -44,6 +44,60 @@ measured before/after and full investigation.
   tick, time tick, and price/countdown chip, even when panning/zooming
   changed nothing about the label text itself — pure Canvas2D/CPU cost,
   unrelated to WebGL.
+- **The Canvas2D layers are detached buffers composited onto two visible
+  canvases** (`NativeRenderer.ts`, phase 1 of the DOM-canvas reduction).
+  The backdrop, volume+VPVR, chrome and user-drawings layers, plus every
+  SDK renderer layer (`registerRendererLayer`), no longer have a `<canvas>`
+  element each in the plot. They are now `document.createElement('canvas')`
+  buffers that are never appended to the DOM; each frame their pixels are
+  `drawImage`-composited, in the exact order the DOM used to stack them,
+  onto two real canvases sandwiching the untouched WebGL data canvas:
+
+      plot → belowCanvas, dataCanvas (WebGL2), aboveCanvas, cursorCanvas
+
+  That is **4 DOM canvases regardless of how many SDK layers are mounted**,
+  down from 7-8. Chrome gives every full-viewport canvas its own GPU
+  compositor layer, so the old stack paid fill-rate + compositing per layer
+  on every pan/zoom frame; measured head-to-head against
+  `lightweight-charts` (~2 canvases) on the same host at the same moment,
+  Vela hit 8-16 frames over 100ms per 5s synthetic drag (worst frame
+  245-265ms) where `lightweight-charts` hit 0 (worst 63-68ms).
+
+  No feature was removed and no visual output changed: every 2D renderer in
+  `src/` paints with plain source-over and `globalAlpha` only (zero
+  `globalCompositeOperation` uses), which is associative under premultiplied
+  alpha — pre-blending the buffers in the original stacking order is
+  mathematically identical to the browser compositing separate layers. The
+  composite runs at identity transform; each renderer still sets its own
+  device-pixel-ratio transform inside its own buffer, and every buffer keeps
+  the same backing-store size as its target, so the device-pixel-grid
+  alignment guarantee is unchanged end to end.
+
+  Details that came with it:
+  - **The cheap repaint tiers stay cheap.** The chrome-only tier (the
+    countdown chip's wall-clock tick) re-composites only the above stack;
+    the cursor tier composites nothing at all unless a renderer layer that
+    declared `repaintOnCursor` actually repainted, so an ordinary pointer
+    move costs exactly what it did before. The crosshair keeps its own DOM
+    canvas this phase — folding it in would make every pointer move pay a
+    full multi-buffer composite, and is deferred.
+  - **Blank buffers are skipped.** `BackdropRenderer.render()`,
+    `VolumeRenderer.render()` and `VpvrRenderer.render()` now return whether
+    they actually drew anything; a buffer known to be fully transparent
+    (volume/VPVR both off, a collapsed pane's SDK layer, an empty drawings
+    state) is not composited at all.
+  - **`UserDrawingDeps` gains `requestComposite(hasContent)`** — the drawings
+    layer repaints itself from ~20 internal sites without going through the
+    scheduler, and each of those must re-flatten the composite now.
+  - `screenshot()` / `screenshotCanvas()` composite the same pile in the same
+    order, so exports are unchanged.
+  - `destroy()` explicitly zeroes every buffer's backing store: detached
+    buffers are not DOM children, so removing the chart's wrapper no longer
+    frees them.
+
+  _(Internal only — no public API change. `RendererLayerInstance.mount()`
+  still receives a real `HTMLCanvasElement`, deliberately not an
+  `OffscreenCanvas`, so existing SDK layer implementations are unaffected.)_
 
 ## [v0.6.17]
 

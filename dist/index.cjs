@@ -26313,6 +26313,7 @@ var UserDrawingController = class {
   render() {
     const ctx = this.ctx;
     if (!ctx) return;
+    let painted = false;
     const dpr = this.deps.dpr();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width / dpr, this.canvas.height / dpr);
@@ -26325,23 +26326,45 @@ var UserDrawingController = class {
       mutedLabel: edited instanceof TextLabel ? edited.id : null
     };
     this.painter.seriesLook = this.deps.seriesLook();
-    this.painter.paintAll(ctx, this.drawings.filter((d) => !this.isInterleaved(d)), proj, this.deps.theme(), targets);
-    this.painter.paintHighlights(ctx, this.drawings.filter((d) => this.isInterleaved(d)), proj, handleIdsFor(targets));
+    const front = this.drawings.filter((d) => !this.isInterleaved(d));
+    const interleaved = this.drawings.filter((d) => this.isInterleaved(d));
+    this.painter.paintAll(ctx, front, proj, this.deps.theme(), targets);
+    this.painter.paintHighlights(ctx, interleaved, proj, handleIdsFor(targets));
+    if (front.length > 0 || interleaved.length > 0) painted = true;
     this.layoutTextEditor();
     const ghost = this.interaction.ghost();
-    if (ghost) this.painter.paintGhost(ctx, ghost, proj, this.deps.theme());
-    if (this.externalGhost) this.painter.paintGhost(ctx, this.externalGhost, proj, this.deps.theme());
+    if (ghost) {
+      this.painter.paintGhost(ctx, ghost, proj, this.deps.theme());
+      painted = true;
+    }
+    if (this.externalGhost) {
+      this.painter.paintGhost(ctx, this.externalGhost, proj, this.deps.theme());
+      painted = true;
+    }
     this.emitDraft(ghost);
     if (this.activeTool && !ghost) {
       const hint = getDrawingType(this.activeTool)?.placementHint;
-      if (hint) this.painter.paintPlacementHint(ctx, hint, this.deps.theme(), proj.width, proj.height);
+      if (hint) {
+        this.painter.paintPlacementHint(ctx, hint, this.deps.theme(), proj.width, proj.height);
+        painted = true;
+      }
     }
     const markers = this.interaction.placingMarkers(proj);
-    if (markers) this.painter.paintHandles(ctx, markers);
+    if (markers) {
+      this.painter.paintHandles(ctx, markers);
+      painted = true;
+    }
     const m = this.interaction.snapMarker();
     const my = m ? proj.yOf(m.point.price, m.paneId) : null;
-    if (m && my != null) this.painter.paintSnapRing(ctx, proj.xOf(m.point.time), my, this.deps.theme());
-    if (this.measure.isActive()) this.measure.paint(ctx, proj, this.deps.theme());
+    if (m && my != null) {
+      this.painter.paintSnapRing(ctx, proj.xOf(m.point.time), my, this.deps.theme());
+      painted = true;
+    }
+    if (this.measure.isActive()) {
+      this.measure.paint(ctx, proj, this.deps.theme());
+      painted = true;
+    }
+    this.deps.requestComposite(painted);
   }
   destroy() {
     this.closeTextEditor();
@@ -26926,21 +26949,30 @@ var BackdropRenderer = class {
     this.canvas = null;
     this.ctx = null;
   }
-  /** Paint one frame: highlight bands first, gridlines on top (the order they had inside
-   *  the data canvas). `gridAlpha` fades the gridlines as a reveal-under layer opens. */
+  /**
+   * Paint one frame: highlight bands first, gridlines on top (the order they had inside
+   * the data canvas). `gridAlpha` fades the gridlines as a reveal-under layer opens.
+   *
+   * Returns whether anything was actually drawn. PERF PATCH (project-options fork): this
+   * layer's surface is a DETACHED buffer now, and the return value is the `hasContent`
+   * signal the renderer's composite pass uses to skip a fully-transparent one (see
+   * NativeRenderer's `Buf` doc). Both `return`s below are pre-data gates that leave the
+   * buffer cleared and blank.
+   */
   render(scene, coords, theme, gridAlpha) {
     const ctx = this.ctx;
     const canvas = this.canvas;
-    if (!ctx || !canvas) return;
+    if (!ctx || !canvas) return false;
     const dpr = coords.dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
     const n = coords.barCount;
-    if (n === 0) return;
+    if (n === 0) return false;
     const vr = coords.visibleLogicalRange();
-    if (Math.min(n - 1, Math.ceil(vr.to)) < Math.max(0, Math.floor(vr.from))) return;
+    if (Math.min(n - 1, Math.ceil(vr.to)) < Math.max(0, Math.floor(vr.from))) return false;
     this.drawHighlights(ctx, scene, coords);
     this.drawGrid(ctx, scene, coords, theme, coords.width, gridAlpha);
+    return true;
   }
   /** Renderer-owned session highlight bands: full-height (all panes), behind the grid.
    *  Session-zone washes paint first (edges snapped to bar-slot boundaries so a band
@@ -27041,25 +27073,34 @@ var VolumeRenderer = class {
     this.canvas = null;
     this.ctx = null;
   }
+  /**
+   * Paint one frame. Returns whether anything was actually drawn.
+   *
+   * PERF PATCH (project-options fork): the return value is the `hasContent` signal for the
+   * renderer's composite pass — this layer's surface is a DETACHED buffer now (shared with
+   * VpvrRenderer), and a buffer known to be fully transparent is skipped entirely when the
+   * two visible canvases are composited. Every `return` below is a "nothing drawn" path
+   * (the canvas was cleared and left blank), so they all report false.
+   */
   render(args) {
     const ctx = this.ctx;
     const canvas = this.canvas;
-    if (!ctx || !canvas) return;
+    if (!ctx || !canvas) return false;
     const { bars, data, visible, coords, bounds, fillPane } = args;
     const dpr = coords.dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-    if (!data || !visible || bars.length === 0 || bounds.height <= 0) return;
+    if (!data || !visible || bars.length === 0 || bounds.height <= 0) return false;
     const r = coords.visibleLogicalRange();
     const i0 = Math.max(0, Math.floor(r.from));
     const i1 = Math.min(bars.length - 1, Math.ceil(r.to));
-    if (i0 > i1) return;
+    if (i0 > i1) return false;
     let maxVol = 0;
     for (let i = i0; i <= i1; i += 1) {
       const v = bars[i]?.volume;
       if (v != null && v > maxVol) maxVol = v;
     }
-    if (maxVol <= 0) return;
+    if (maxVol <= 0) return false;
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, bounds.top, coords.width, bounds.height);
@@ -27076,6 +27117,7 @@ var VolumeRenderer = class {
       maxVol
     }, { up: data.upColor, down: data.downColor });
     ctx.restore();
+    return true;
   }
 };
 
@@ -27541,18 +27583,26 @@ var VpvrRenderer = class {
     this.memoKey = "";
     this.memo = null;
   }
+  /**
+   * Paint one frame. Returns whether anything was actually drawn — the `hasContent`
+   * signal the renderer's composite pass uses to skip a fully-transparent buffer
+   * (PERF PATCH, project-options fork; see VolumeRenderer.render's note and
+   * NativeRenderer's `Buf` doc). Every `return` below leaves the surface untouched by
+   * THIS renderer, so they all report false; the shared buffer's real content flag is
+   * `volumePainted || vpvrPainted` at the call site.
+   */
   render(args) {
     const ctx = this.ctx;
     const canvas = this.canvas;
-    if (!ctx || !canvas) return;
+    if (!ctx || !canvas) return false;
     const { bars, data, visible, coords, scale, bounds, theme } = args;
     const dpr = coords.dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (!data || !visible || bars.length === 0 || bounds.height <= 0) return;
+    if (!data || !visible || bars.length === 0 || bounds.height <= 0) return false;
     const r = coords.visibleLogicalRange();
     const i0 = Math.max(0, Math.floor(r.from));
     const i1 = Math.min(bars.length - 1, Math.ceil(r.to));
-    if (i0 > i1) return;
+    if (i0 > i1) return false;
     const last = bars[i1];
     const key = `${i0}:${i1}:${bars.length}:${last.high}:${last.low}:${last.close}:${last.volume ?? 0}:${data.rows}:${data.valueAreaFrac}`;
     if (key !== this.memoKey) {
@@ -27560,7 +27610,7 @@ var VpvrRenderer = class {
       this.memo = buildVpvrProfile(bars, i0, i1, data.rows, data.valueAreaFrac);
     }
     const profile = this.memo;
-    if (!profile) return;
+    if (!profile) return false;
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, bounds.top, coords.width, bounds.height);
@@ -27571,6 +27621,7 @@ var VpvrRenderer = class {
       yOf: (p) => coords.priceToY(p, scale, bounds)
     }, { upColor: data.upColor, downColor: data.downColor, showPoc: data.showPoc, pocColor: theme.textColor });
     ctx.restore();
+    return true;
   }
 };
 
@@ -27601,6 +27652,16 @@ var FLING_STOP_PX = 0.02;
 var PRICE_SCALE_K = 4e-3;
 var KEY_ZOOM_STEP = 0.2;
 var SEPARATOR_HIT_PX = 4;
+function makeBuf() {
+  return { canvas: document.createElement("canvas"), dirty: true, hasContent: false };
+}
+function releaseBuf(buf) {
+  if (!buf) return;
+  buf.canvas.width = 0;
+  buf.canvas.height = 0;
+  buf.hasContent = false;
+  buf.dirty = true;
+}
 var NativeRenderer = class {
   constructor(opts) {
     this.capabilities = NATIVE_CAPABILITIES;
@@ -27614,13 +27675,24 @@ var NativeRenderer = class {
     this.toolbarGutter = 0;
     // px reserved on the left for the docked drawings toolbar (0 when hidden)
     this.mountContainer = null;
+    this.belowCtx = null;
+    this.aboveCtx = null;
     this.userDrawings = null;
     this.backdropRenderer = new BackdropRenderer();
     this.volumeRenderer = new VolumeRenderer();
-    /** SDK renderer layers instantiated at mount ({@link registerRendererLayer}). */
+    /** SDK renderer layers instantiated at mount ({@link registerRendererLayer}). Each owns
+     *  a detached buffer instead of a DOM canvas; `mount()` still hands it a real
+     *  `HTMLCanvasElement`, so the public layer API is unchanged. */
     this.extLayers = [];
-    /** Last applied layer-canvas order (ids below + above the data canvas) — re-slotted only on change. */
+    /** Last computed layer order (ids below + above the data canvas) — recomputed only on change. */
     this.layerOrderSig = "";
+    /** The cached split of {@link extLayers} the composite pass walks, back-to-front on each
+     *  side of the data canvas. Refreshed by {@link syncLayerBufOrder} when the order changes. */
+    this.belowExtBufs = [];
+    this.aboveExtBufs = [];
+    /** True for the duration of {@link paintData}, which composites once at its end — so the
+     *  drawings layer's internal `requestComposite` doesn't composite a second time per frame. */
+    this.paintingData = false;
     // The attribution mark (see chrome/AttributionMark + the NOTICE file): default-on;
     // disabling requires an equivalent visible attribution elsewhere in the host UI.
     this.attributionEl = null;
@@ -28578,7 +28650,7 @@ var NativeRenderer = class {
         if (el.getAttribute("data-vela-screenshot") === "under") rasterizeOverlay(ctx, el, frame);
       }
     }
-    for (const canvas of [...this.canvasPile(), this.chromeCanvas, this.drawingsCanvas]) {
+    for (const canvas of this.compositePile()) {
       if (canvas && canvas.width > 0 && canvas.height > 0) ctx.drawImage(canvas, 0, 0);
     }
     if (frame) {
@@ -28692,29 +28764,27 @@ var NativeRenderer = class {
     this.wrapper = document.createElement("div");
     Object.assign(this.wrapper.style, { position: "relative", width: "100%", height: "100%", overflow: "hidden", cursor: "crosshair", userSelect: "none", webkitUserSelect: "none" });
     applyChromeTokens(this.wrapper, this.chromeTheme());
-    this.backdropCanvas = document.createElement("canvas");
-    Object.assign(this.backdropCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none" });
-    this.volumeCanvas = document.createElement("canvas");
-    Object.assign(this.volumeCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none" });
+    this.backdropBuf = makeBuf();
+    this.volumeBuf = makeBuf();
+    this.chromeBuf = makeBuf();
+    this.drawingsBuf = makeBuf();
+    this.belowCanvas = document.createElement("canvas");
+    Object.assign(this.belowCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none" });
+    this.belowCtx = this.belowCanvas.getContext("2d");
     this.dataCanvas = this.createGeometryBackend();
-    this.chromeCanvas = document.createElement("canvas");
-    Object.assign(this.chromeCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none" });
-    this.drawingsCanvas = document.createElement("canvas");
-    Object.assign(this.drawingsCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none" });
+    this.aboveCanvas = document.createElement("canvas");
+    Object.assign(this.aboveCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none" });
+    this.aboveCtx = this.aboveCanvas.getContext("2d");
     this.cursorCanvas = document.createElement("canvas");
     Object.assign(this.cursorCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none" });
     this.overlayRoot = document.createElement("div");
     Object.assign(this.overlayRoot.style, { position: "absolute", inset: "0", pointerEvents: "none" });
     this.plot = document.createElement("div");
     Object.assign(this.plot.style, { position: "absolute", top: "0", right: "0", bottom: "0", left: "0" });
-    this.extLayers = rendererLayers().map((def) => {
-      const canvas = document.createElement("canvas");
-      Object.assign(canvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none" });
-      return { def, instance: def.create(), canvas };
-    });
-    const below = this.extLayers.filter((l) => l.def.placement === "below-data").map((l) => l.canvas);
-    const above = this.extLayers.filter((l) => l.def.placement !== "below-data").map((l) => l.canvas);
-    this.plot.append(this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, ...above, this.chromeCanvas, this.drawingsCanvas, this.cursorCanvas, this.overlayRoot);
+    this.extLayers = rendererLayers().map((def) => ({ def, instance: def.create(), buf: makeBuf() }));
+    this.belowExtBufs = this.extLayers.filter((l) => l.def.placement === "below-data").map((l) => l.buf);
+    this.aboveExtBufs = this.extLayers.filter((l) => l.def.placement !== "below-data").map((l) => l.buf);
+    this.plot.append(this.belowCanvas, this.dataCanvas, this.aboveCanvas, this.cursorCanvas, this.overlayRoot);
     this.layerOrderSig = "";
     this.wrapper.appendChild(this.plot);
     this.factoryConfig = this.getConfig();
@@ -28724,11 +28794,11 @@ var NativeRenderer = class {
     this.wrapper.appendChild(this.attributionEl);
     container.appendChild(this.wrapper);
     this.applyBackground();
-    this.backdropRenderer.mount(this.backdropCanvas);
-    this.volumeRenderer.mount(this.volumeCanvas);
-    this.vpvrRenderer.mount(this.volumeCanvas);
-    for (const l of this.extLayers) l.instance.mount(l.canvas);
-    this.chrome.mount(this.chromeCanvas);
+    this.backdropRenderer.mount(this.backdropBuf.canvas);
+    this.volumeRenderer.mount(this.volumeBuf.canvas);
+    this.vpvrRenderer.mount(this.volumeBuf.canvas);
+    for (const l of this.extLayers) l.instance.mount(l.buf.canvas);
+    this.chrome.mount(this.chromeBuf.canvas);
     this.crosshairLayer.mount(this.cursorCanvas);
     this.coords.setViewport(defaultViewport());
     this.scene.ensurePane(PRICE_PANE_ID, "price", 0, 3);
@@ -28783,7 +28853,7 @@ var NativeRenderer = class {
       theme: () => this.chromeTheme(),
       lookup: (x, y) => this.indicatorSlices.labelTooltipAt(x, y)
     });
-    this.userDrawings = new UserDrawingController(this.wrapper, this.plot, this.drawingsCanvas, {
+    this.userDrawings = new UserDrawingController(this.wrapper, this.plot, this.drawingsBuf.canvas, {
       projector: () => this.drawingProjector(),
       dpr: () => this.coords.dpr,
       theme: () => this.theme,
@@ -28791,6 +28861,17 @@ var NativeRenderer = class {
       seriesBoundaries: (paneId) => this.scene.seriesBoundaries(paneId),
       priceZ: (paneId) => paneId === PRICE_PANE_ID ? this.scene.candleZ : null,
       requestDataPaint: () => this.scheduler.invalidate(3 /* Light */),
+      // PERF PATCH (project-options fork): the drawings layer no longer has its own DOM
+      // canvas — it paints into `drawingsBuf` and must re-composite `aboveCanvas` for the
+      // repaint to become visible. Its render() drives this from ALL of its internal call
+      // sites (live edits, selection, the placing ghost, the ruler) without going through
+      // the scheduler. Suppressed while paintData() runs — that path composites once at
+      // its end anyway, so this would otherwise double the composite cost per data frame.
+      requestComposite: (hasContent) => {
+        this.drawingsBuf.hasContent = hasContent;
+        this.drawingsBuf.dirty = false;
+        if (!this.paintingData) this.compositeAbove();
+      },
       // The look the price series ACTUALLY paints with: candle colors resolved through
       // the per-style override, line/area colors through their configured styles — so
       // series-mirroring content (the magnifier inset) matches the chart exactly.
@@ -29047,6 +29128,15 @@ var NativeRenderer = class {
     this.scrollButton?.remove();
     this.scrollButton = null;
     for (const l of this.extLayers) l.instance.destroy?.();
+    for (const l of this.extLayers) releaseBuf(l.buf);
+    releaseBuf(this.backdropBuf);
+    releaseBuf(this.volumeBuf);
+    releaseBuf(this.chromeBuf);
+    releaseBuf(this.drawingsBuf);
+    this.belowExtBufs = [];
+    this.aboveExtBufs = [];
+    this.belowCtx = null;
+    this.aboveCtx = null;
     this.extLayers = [];
     this.backdropRenderer.destroy();
     this.volumeRenderer.destroy();
@@ -30099,26 +30189,41 @@ var NativeRenderer = class {
     } else if (repaintsChrome(level) && this.paintedData) {
       this.chrome.prepare(this.scene, this.coords, this.theme);
       this.chrome.render(this.scene, this.coords, this.theme, this.axisSurface());
+      this.chromeBuf.hasContent = true;
+      this.chromeBuf.dirty = false;
+      this.compositeAbove();
     }
     this.crosshairLayer.render(this.scene, this.coords, this.theme, this.hoverSeparatorY, this.externalCrossPx());
-    if (!repaintsData(level) && this.paintedData) this.repaintCursorLayers();
+    if (!repaintsData(level) && this.paintedData && this.repaintCursorLayers()) this.compositeAbove();
     this.updateLegendValues();
   }
-  /** Repaint the SDK layers that opted into cursor tracking (their own canvas only). */
+  /** Repaint the SDK layers that opted into cursor tracking (their own buffer only).
+   *  Returns true when at least one actually repainted — the caller then re-composites
+   *  `aboveCanvas`; with no `repaintOnCursor` layer registered it returns false and the
+   *  cursor tier never touches the composite target. */
   repaintCursorLayers() {
     const pane = this.scene.panes.get(PRICE_PANE_ID);
-    if (!pane) return;
+    if (!pane) return false;
     const nowMs = typeof performance !== "undefined" ? performance.now() : Date.now();
+    let repainted = false;
     for (const l of this.extLayers) {
       if (!l.def.repaintOnCursor) continue;
       const lp = this.layerPane(l.def.id) ?? pane;
       if (lp.collapsed) continue;
       l.instance.render(this.extLayerArgs(l.def.id, lp.scale, lp.bounds, nowMs));
+      l.buf.hasContent = true;
+      l.buf.dirty = false;
+      repainted = true;
       if (this.animZoom && l.instance.animating?.()) this.animator.start();
     }
+    return repainted;
   }
-  /** Blank one SDK layer canvas (a collapsed host pane suppresses the layer's painting). */
-  clearLayerCanvas(canvas) {
+  /** Blank one SDK layer's buffer (a collapsed host pane suppresses the layer's painting).
+   *  Marking it content-free lets the composite pass skip its `drawImage` entirely. */
+  clearLayerBuf(buf) {
+    buf.dirty = false;
+    buf.hasContent = false;
+    const canvas = buf.canvas;
     if (canvas.width === 0 || canvas.height === 0) return;
     canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
   }
@@ -30138,9 +30243,31 @@ var NativeRenderer = class {
       cursor: this.lastPointer
     };
   }
-  /** Paint the below-data (L-1) + geometry (L0) + chrome (L1) layers from the current scene/coords. */
+  /**
+   * Paint the below-data (L-1) + geometry (L0) + chrome (L1) layers from the current
+   * scene/coords, then flatten both buffer stacks onto the two visible canvases.
+   *
+   * PERF PATCH (project-options fork): `paintingData` suppresses the drawings layer's own
+   * per-edit composite request while the body runs — it fires from every one of that
+   * controller's internal repaint sites, and this frame composites once at the end anyway.
+   * The `finally` matters: a throw inside the body must not strand the flag on, or live
+   * drawing edits would stop appearing until the next successful data frame.
+   */
   paintData() {
-    this.syncLayerCanvasOrder();
+    this.paintingData = true;
+    try {
+      this.paintDataLayers();
+    } finally {
+      this.paintingData = false;
+    }
+    this.compositeBelow();
+    this.compositeAbove();
+    this.paintedData = true;
+  }
+  /** {@link paintData}'s body: repaint every layer into its own buffer (plus the geometry
+   *  backend straight onto the DOM data canvas). Composites nothing itself. */
+  paintDataLayers() {
+    this.syncLayerBufOrder();
     this.stampScaleInvert();
     this.backend.modelAlpha = this.modelAlpha;
     this.backend.candleBodyAlpha = this.candleBodyAlpha;
@@ -30151,7 +30278,7 @@ var NativeRenderer = class {
     const pane = this.scene.panes.get(PRICE_PANE_ID);
     if (pane) {
       const volumePane = this.nativeLayerPane("volume") ?? pane;
-      this.volumeRenderer.render({
+      const volPainted = this.volumeRenderer.render({
         bars: this.scene.bars,
         data: this.scene.volumeLayer,
         visible: this.volumeActive && !this.volumeHidden && !volumePane.collapsed,
@@ -30159,7 +30286,7 @@ var NativeRenderer = class {
         bounds: volumePane.bounds,
         fillPane: volumePane.kind !== "price"
       });
-      this.vpvrRenderer.render({
+      const vpvrPainted = this.vpvrRenderer.render({
         bars: this.scene.bars,
         data: this.scene.vpvrLayer,
         visible: this.vpvrActive && !this.vpvrHidden,
@@ -30168,16 +30295,20 @@ var NativeRenderer = class {
         bounds: pane.bounds,
         theme: this.theme
       });
+      this.volumeBuf.hasContent = volPainted || vpvrPainted;
+      this.volumeBuf.dirty = false;
       const nowMs = typeof performance !== "undefined" ? performance.now() : Date.now();
       let folded = null;
       for (const l of this.extLayers) {
         const lp = this.layerPane(l.def.id) ?? pane;
         if (lp.collapsed) {
-          this.clearLayerCanvas(l.canvas);
+          this.clearLayerBuf(l.buf);
           continue;
         }
         const args = this.extLayerArgs(l.def.id, lp.scale, lp.bounds, nowMs);
         l.instance.render(args);
+        l.buf.hasContent = true;
+        l.buf.dirty = false;
         if (lp === pane) folded = foldBaseModulation(folded, l.instance.modulateBase?.(args) ?? null);
         if (this.animZoom && l.instance.animating?.()) this.animator.start();
       }
@@ -30195,12 +30326,51 @@ var NativeRenderer = class {
       this.indicatorSlices.prepare(this.scene, this.coords, this.theme, this.dataCanvas),
       this.userDrawings?.prepareSlices(this.scene.orderedPanes().map((p) => p.id)) ?? /* @__PURE__ */ new Map()
     );
-    this.backdropRenderer.render(this.scene, this.coords, this.theme, gridAlpha);
+    this.backdropBuf.hasContent = this.backdropRenderer.render(this.scene, this.coords, this.theme, gridAlpha);
+    this.backdropBuf.dirty = false;
     this.backend.render(this.scene, this.coords, this.theme);
     this.chrome.render(this.scene, this.coords, this.theme, this.axisSurface());
+    this.chromeBuf.hasContent = true;
+    this.chromeBuf.dirty = false;
     this.userDrawings?.render();
     if (easeLive && liveActual) this.bars[li] = liveActual;
-    this.paintedData = true;
+  }
+  /**
+   * PERF PATCH (project-options fork) — flatten the below-data buffers onto `belowCanvas`.
+   *
+   * Order mirrors the DOM append order these layers used to have exactly: the backdrop
+   * (grid + session highlights, which nothing may paint under), then the SDK layers slotted
+   * below the data canvas, back-to-front. The context is reset to IDENTITY first: buffers
+   * and target share a backing-store pixel size, so no dpr scaling applies here (each
+   * renderer sets its own dpr transform inside its buffer — unrelated and unchanged).
+   */
+  compositeBelow() {
+    const ctx = this.belowCtx;
+    const target = this.belowCanvas;
+    if (!ctx || !target || target.width === 0 || target.height === 0) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, target.width, target.height);
+    if (this.backdropBuf.hasContent) ctx.drawImage(this.backdropBuf.canvas, 0, 0);
+    for (const b of this.belowExtBufs) if (b.hasContent) ctx.drawImage(b.canvas, 0, 0);
+  }
+  /**
+   * PERF PATCH (project-options fork) — flatten the above-data buffers onto `aboveCanvas`.
+   *
+   * Order mirrors the old DOM append order exactly: volume + VPVR (shared buffer), the SDK
+   * layers slotted above the data canvas back-to-front, chrome (axes/price line), then the
+   * user drawings on top. The crosshair is NOT here — it keeps its own DOM canvas so a
+   * pointer move never triggers a composite (see the `cursorCanvas` field comment).
+   */
+  compositeAbove() {
+    const ctx = this.aboveCtx;
+    const target = this.aboveCanvas;
+    if (!ctx || !target || target.width === 0 || target.height === 0) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, target.width, target.height);
+    if (this.volumeBuf.hasContent) ctx.drawImage(this.volumeBuf.canvas, 0, 0);
+    for (const b of this.aboveExtBufs) if (b.hasContent) ctx.drawImage(b.canvas, 0, 0);
+    if (this.chromeBuf.hasContent) ctx.drawImage(this.chromeBuf.canvas, 0, 0);
+    if (this.drawingsBuf.hasContent) ctx.drawImage(this.drawingsBuf.canvas, 0, 0);
   }
   /** Build the data→pixel projector user drawings resolve their anchors through. */
   drawingProjector() {
@@ -30474,12 +30644,11 @@ var NativeRenderer = class {
     const paneId = owner ? owner.paneId ?? PRICE_PANE_ID : PRICE_PANE_ID;
     return this.scene.panes.get(paneId) ?? null;
   }
-  /** The SDK layer canvases split around the data canvas, each side back-to-front:
+  /** The SDK layer ids split around the data canvas, each side back-to-front:
    *  owned layers by their owner's z key against the candles' (an indicator restacked
-   *  below the candles takes its layer canvas along), unowned by declared placement. */
-  orderedLayerCanvases() {
-    const byId = new Map(this.extLayers.map((l) => [l.def.id, l.canvas]));
-    const { below, above } = stackLayers(
+   *  below the candles takes its layer along), unowned by declared placement. */
+  orderedLayerIds() {
+    return stackLayers(
       this.extLayers.map((l) => {
         const owner = this.layerOwner(l.def.id);
         return {
@@ -30490,26 +30659,35 @@ var NativeRenderer = class {
       }),
       this.scene.candleZ
     );
-    return { below: below.map((id) => byId.get(id)), above: above.map((id) => byId.get(id)) };
   }
-  /** The full canvas pile in paint order (backdrop + layers + data/volume/vpvr) — what
-   *  the DOM stacking and the screenshot compositor must both follow. */
-  canvasPile() {
-    const { below, above } = this.orderedLayerCanvases();
-    return [this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, ...above];
+  /** The full pile in paint order — every buffer plus the one DOM data canvas, blank
+   *  buffers skipped. The composite passes and the screenshot compositor must both follow
+   *  this order; it is the order the layers had as DOM children before the buffer patch. */
+  compositePile() {
+    const pile = [];
+    if (this.backdropBuf?.hasContent) pile.push(this.backdropBuf.canvas);
+    for (const b of this.belowExtBufs) if (b.hasContent) pile.push(b.canvas);
+    pile.push(this.dataCanvas);
+    if (this.volumeBuf?.hasContent) pile.push(this.volumeBuf.canvas);
+    for (const b of this.aboveExtBufs) if (b.hasContent) pile.push(b.canvas);
+    if (this.chromeBuf?.hasContent) pile.push(this.chromeBuf.canvas);
+    if (this.drawingsBuf?.hasContent) pile.push(this.drawingsBuf.canvas);
+    return pile;
   }
-  /** Re-slot the SDK layer canvases in the plot when the computed order changed (a z
-   *  write, a restored config, an indicator mount/remove/restack). Runs at the top of
-   *  every data frame; a no-op when the signature is unchanged. Re-inserting an
-   *  absolutely-positioned, pointer-transparent canvas repaints nothing by itself. */
-  syncLayerCanvasOrder() {
-    if (this.extLayers.length === 0 || !this.plot) return;
-    const { below, above } = this.orderedLayerCanvases();
-    const sig = [...below.map((c) => this.extLayers.find((l) => l.canvas === c).def.id), "|", ...above.map((c) => this.extLayers.find((l) => l.canvas === c).def.id)].join(",");
+  /** Recompute the SDK layers' composite order when it changed (a z write, a restored
+   *  config, an indicator mount/remove/restack). Runs at the top of every data frame; a
+   *  no-op when the signature is unchanged. PERF PATCH (project-options fork): this used
+   *  to re-slot DOM canvases with insertBefore — the layers are detached buffers now, so
+   *  ordering is pure bookkeeping for the two composite passes and touches no DOM at all. */
+  syncLayerBufOrder() {
+    if (this.extLayers.length === 0) return;
+    const { below, above } = this.orderedLayerIds();
+    const sig = [...below, "|", ...above].join(",");
     if (sig === this.layerOrderSig) return;
     this.layerOrderSig = sig;
-    for (const c of below) this.plot.insertBefore(c, this.dataCanvas);
-    for (const c of above) this.plot.insertBefore(c, this.chromeCanvas);
+    const byId = new Map(this.extLayers.map((l) => [l.def.id, l.buf]));
+    this.belowExtBufs = below.map((id) => byId.get(id));
+    this.aboveExtBufs = above.map((id) => byId.get(id));
   }
   /** True when an active volume layer is this study pane's ONLY content — so its scale should
    *  come from volume, not the empty {0,1} placeholder. (In the price pane, or alongside a real
@@ -30806,13 +30984,21 @@ var NativeRenderer = class {
       canvas.style.width = `${pw}px`;
       canvas.style.height = `${ph}px`;
     };
+    const sizeBuf = (buf) => {
+      buf.canvas.width = bw;
+      buf.canvas.height = bh;
+      buf.hasContent = false;
+      buf.dirty = true;
+    };
     size(this.dataCanvas);
-    size(this.backdropCanvas);
-    size(this.volumeCanvas);
-    for (const l of this.extLayers) size(l.canvas);
-    size(this.chromeCanvas);
-    size(this.drawingsCanvas);
+    size(this.belowCanvas);
+    size(this.aboveCanvas);
     size(this.cursorCanvas);
+    sizeBuf(this.backdropBuf);
+    sizeBuf(this.volumeBuf);
+    for (const l of this.extLayers) sizeBuf(l.buf);
+    sizeBuf(this.chromeBuf);
+    sizeBuf(this.drawingsBuf);
     this.coords.setSize(Math.max(1, pw - this.rightAxisW), Math.max(1, ph - TIME_AXIS_H), dpr);
     this.scene.crosshair = null;
     this.layoutPanes();

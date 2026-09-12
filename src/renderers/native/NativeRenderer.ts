@@ -119,6 +119,55 @@ const KEY_ZOOM_STEP = 0.2;
 const SEPARATOR_HIT_PX = 4;
 
 /**
+ * PERF PATCH (project-options fork) — one DETACHED Canvas2D buffer in the composite pile.
+ *
+ * Every Canvas2D layer used to be its own full-viewport `<canvas>` ELEMENT in the plot
+ * (backdrop, volume+vpvr, chrome, drawings, cursor, plus one per SDK renderer layer —
+ * 7-8 elements on a normal chart). Chrome promotes each to its own GPU compositor layer,
+ * so every pan/zoom frame paid full-viewport fill-rate + compositing PER LAYER: measured
+ * head-to-head against lightweight-charts (~2 canvases) on the same host at the same
+ * moment, Vela hit 8-16 frames over 100ms per 5s drag (worst 245-265ms) where
+ * lightweight-charts hit 0 (worst 63-68ms). These buffers are `document.createElement`'d
+ * and NEVER appended to the DOM; their renderers paint into them exactly as before and
+ * the renderer `drawImage`-composites them onto two real DOM canvases that sandwich the
+ * untouched WebGL data canvas — see {@link NativeRenderer.compositeBelow} /
+ * {@link NativeRenderer.compositeAbove}. Full findings:
+ * project-options' docs/research/vela-perf-findings-2026-09-10.md.
+ *
+ * A real detached `<canvas>` (not `OffscreenCanvas`): `RendererLayerInstance.mount()` is
+ * public SDK API taking an `HTMLCanvasElement`, and downstream indicator code consumes it.
+ * The same "detached sized canvas" pattern already exists in `UserDrawingController
+ * .prepareSlices()` and `IndicatorDrawingSlices.prepare()`.
+ */
+interface Buf {
+    /** The detached backing canvas the layer's renderer paints into. */
+    canvas: HTMLCanvasElement;
+    /** This buffer's renderer must re-run before the next composite. */
+    dirty: boolean;
+    /** The buffer is known to hold ink. `false` ⇒ fully transparent ⇒ its `drawImage` is
+     *  skipped in the composite pass (a hidden volume layer, a collapsed SDK layer, an
+     *  empty drawings state). Set CONSERVATIVELY — a false `true` only costs a cheap
+     *  no-op composite, a false `false` would drop real pixels. */
+    hasContent: boolean;
+}
+
+/** A fresh, unsized, detached buffer (sized by {@link NativeRenderer.syncSize}). */
+function makeBuf(): Buf {
+    return { canvas: document.createElement('canvas'), dirty: true, hasContent: false };
+}
+
+/** Release a buffer's backing store on teardown. A detached buffer is not a DOM child, so
+ *  removing the chart's wrapper does NOT free it — every remount would otherwise leak one
+ *  full-viewport bitmap per layer. Zeroing the dimensions drops the bitmap immediately. */
+function releaseBuf(buf: Buf | undefined): void {
+    if (!buf) return;
+    buf.canvas.width = 0;
+    buf.canvas.height = 0;
+    buf.hasContent = false;
+    buf.dirty = true;
+}
+
+/**
  * The from-scratch "native" renderer (canvas2d backend in P0/P1/P2; hand-rolled
  * WebGL2 added in P3 behind the same backend seam). P0 implements the full
  * `IChartRenderer` surface but only the foundation is live: layered DOM, the
@@ -140,21 +189,54 @@ export class NativeRenderer implements IChartRenderer {
     private plot!: HTMLDivElement; // the plot area (canvases + DOM overlays), inset to the right of the toolbar gutter
     private toolbarGutter = 0; // px reserved on the left for the docked drawings toolbar (0 when hidden)
     private mountContainer: HTMLElement | null = null; // the host-owned element mount() renders into
-    private backdropCanvas!: HTMLCanvasElement; // session highlights + gridlines, the pile's very bottom
-    private dataCanvas!: HTMLCanvasElement;
-    // PERF PATCH (project-options fork): volume + vpvr share this one canvas now (see mount()).
-    private volumeCanvas!: HTMLCanvasElement; // bottom-anchored volume columns + visible-range volume profile, above grid/candles
-    private chromeCanvas!: HTMLCanvasElement;
-    private drawingsCanvas!: HTMLCanvasElement;
+    // ── PERF PATCH (project-options fork) — Phase 1 buffer/composite architecture ──
+    // The Canvas2D layers are DETACHED buffers now (see the `Buf` doc above), composited
+    // onto exactly two visible DOM canvases that sandwich the untouched WebGL data canvas:
+    //   plot → belowCanvas, dataCanvas (WebGL2), aboveCanvas, cursorCanvas, overlayRoot
+    // i.e. 4 DOM canvases regardless of how many SDK ext layers are mounted (it was 7-8).
+    // No renderer's own painting changed: every 2D renderer in src/ uses plain source-over
+    // with `globalAlpha` only (grep-verified: zero `globalCompositeOperation` hits), which
+    // is associative under premultiplied alpha — pre-blending the buffers in the ORIGINAL
+    // DOM append order is mathematically identical to the browser compositing the separate
+    // layers, so no visual change is possible from the blend math. The composite contexts
+    // draw at identity transform (buffers and targets share a backing-store pixel size);
+    // the per-renderer dpr transform is set INSIDE each buffer and is unrelated.
+    /** L-2 session highlights + gridlines — the pile's very bottom (below the data canvas). */
+    private backdropBuf!: Buf;
+    private dataCanvas!: HTMLCanvasElement; // L0 geometry — the ONLY DOM canvas a backend owns (WebGL2 or canvas2d)
+    /** L0.25/L0.6 volume columns + VPVR profile — one shared buffer (see mount()). */
+    private volumeBuf!: Buf;
+    /** L1 axes + price line + trade markers. */
+    private chromeBuf!: Buf;
+    /** L1.5 user drawings (top layer + selection handles + transients). */
+    private drawingsBuf!: Buf;
+    /** Composite target for everything BELOW the data canvas (backdrop + below-data ext layers). */
+    private belowCanvas!: HTMLCanvasElement;
+    private belowCtx: CanvasRenderingContext2D | null = null;
+    /** Composite target for everything ABOVE it (volume/vpvr + above-data ext layers + chrome + drawings). */
+    private aboveCanvas!: HTMLCanvasElement;
+    private aboveCtx: CanvasRenderingContext2D | null = null;
+    /** L2 crosshair. Deliberately still its OWN DOM canvas this phase: folding it into
+     *  `aboveCanvas` would make every pointer move pay a full multi-buffer composite —
+     *  a real regression risk, deferred to a later phase. */
     private cursorCanvas!: HTMLCanvasElement;
     private overlayRoot!: HTMLDivElement;
     private userDrawings: UserDrawingController | null = null;
     private readonly backdropRenderer = new BackdropRenderer();
     private readonly volumeRenderer = new VolumeRenderer();
-    /** SDK renderer layers instantiated at mount ({@link registerRendererLayer}). */
-    private extLayers: Array<{ def: RendererLayerDefinition; instance: RendererLayerInstance; canvas: HTMLCanvasElement }> = [];
-    /** Last applied layer-canvas order (ids below + above the data canvas) — re-slotted only on change. */
+    /** SDK renderer layers instantiated at mount ({@link registerRendererLayer}). Each owns
+     *  a detached buffer instead of a DOM canvas; `mount()` still hands it a real
+     *  `HTMLCanvasElement`, so the public layer API is unchanged. */
+    private extLayers: Array<{ def: RendererLayerDefinition; instance: RendererLayerInstance; buf: Buf }> = [];
+    /** Last computed layer order (ids below + above the data canvas) — recomputed only on change. */
     private layerOrderSig = '';
+    /** The cached split of {@link extLayers} the composite pass walks, back-to-front on each
+     *  side of the data canvas. Refreshed by {@link syncLayerBufOrder} when the order changes. */
+    private belowExtBufs: Buf[] = [];
+    private aboveExtBufs: Buf[] = [];
+    /** True for the duration of {@link paintData}, which composites once at its end — so the
+     *  drawings layer's internal `requestComposite` doesn't composite a second time per frame. */
+    private paintingData = false;
     // The attribution mark (see chrome/AttributionMark + the NOTICE file): default-on;
     // disabling requires an equivalent visible attribution elsewhere in the host UI.
     private attributionEl: HTMLElement | null = null;
@@ -1151,7 +1233,9 @@ export class NativeRenderer implements IChartRenderer {
                 if (el.getAttribute('data-vela-screenshot') === 'under') rasterizeOverlay(ctx, el, frame);
             }
         }
-        for (const canvas of [...this.canvasPile(), this.chromeCanvas, this.drawingsCanvas]) {
+        // PERF PATCH (project-options fork): the pile is buffers + the one DOM data canvas
+        // now, not a list of DOM canvases — same order, same result (see compositePile()).
+        for (const canvas of this.compositePile()) {
             if (canvas && canvas.width > 0 && canvas.height > 0) ctx.drawImage(canvas, 0, 0);
         }
         if (frame) {
@@ -1280,44 +1364,59 @@ export class NativeRenderer implements IChartRenderer {
         // Every DOM overlay below is a descendant, so the chrome tokens land once here.
         applyChromeTokens(this.wrapper, this.chromeTheme());
 
+        // PERF PATCH (project-options fork): the five Canvas2D layers below are DETACHED
+        // buffers now — created, sized and painted exactly as before, but never appended to
+        // the DOM. They are drawImage-composited onto belowCanvas/aboveCanvas (created just
+        // below) in the same order the DOM used to stack them. See the `Buf` doc at the top
+        // of this file for why, and the field block for the resulting DOM shape.
+
         // L-2 backdrop: session highlights + gridlines, the very BOTTOM of the pile — even
-        // an SDK layer canvas slotted below the data canvas stays above the grid.
-        this.backdropCanvas = document.createElement('canvas');
-        Object.assign(this.backdropCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
+        // an SDK layer buffer slotted below the data canvas stays above the grid.
+        this.backdropBuf = makeBuf();
 
         // L0.25/L0.6 volume + VPVR: bottom-anchored per-bar volume, ABOVE the geometry canvas so
         // grid lines and candles cannot paint over them, PLUS the visible-range volume profile
-        // against the right edge (painted above the candles, translucent) — SHARE one canvas.
+        // against the right edge (painted above the candles, translucent) — SHARE one buffer.
         // PERF PATCH (project-options fork): merged from two separate canvases into one. Both
         // renderers are Canvas2D, both sit on the same side of the data canvas (always between
         // dataCanvas and the chrome/axes layer, with no SDK ext-layer ever insertable between
-        // them — see canvasPile()/orderedLayerCanvases() below, below/above ext-layers only land
-        // before dataCanvas or after this shared canvas), and paintData() always calls
+        // them — see compositePile()/orderedLayerBufs() below, below/above ext-layers only land
+        // before dataCanvas or after this shared buffer), and paintDataLayers() always calls
         // volumeRenderer.render() then vpvrRenderer.render() back-to-back in the same frame —
-        // grep-verified single call site each, both inside paintData(). Safe merge: one fewer
-        // full-viewport compositor layer per chart. vpvrRenderer.render() is told to skip its own
+        // grep-verified single call site each, both inside paintDataLayers(). Safe merge: one fewer
+        // full-viewport surface per chart. vpvrRenderer.render() is told to skip its own
         // clearRect since volumeRenderer's clear (which always runs, visible or not) already reset
         // the shared canvas for both this frame — see docs/research/vela-perf-findings-2026-09-10.md.
-        this.volumeCanvas = document.createElement('canvas');
-        Object.assign(this.volumeCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
+        this.volumeBuf = makeBuf();
 
-        // L0 geometry — the swappable backend (WebGL2 if available, else canvas2d)
-        // owns the data canvas + gets its rendering context.
-        this.dataCanvas = this.createGeometryBackend();
-
-        // L1 chrome (canvas2d): Pine drawings + axes + current-price line. Transparent,
-        // above the geometry layer (so the GL backend never has to rasterize text).
-        this.chromeCanvas = document.createElement('canvas');
-        Object.assign(this.chromeCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
+        // L1 chrome (canvas2d): axes + current-price line + trade markers. Transparent,
+        // composited above the geometry layer (so the GL backend never has to rasterize text).
+        this.chromeBuf = makeBuf();
 
         // L1.5 user drawings: trend lines/boxes/labels + selection handles + the live
-        // placing ghost. Above Pine drawings (chrome), below the crosshair. Transparent +
-        // pointer-transparent — pointer events reach the data canvas (InputController),
-        // which hands gestures to the drawings layer via the region-claim seam.
-        this.drawingsCanvas = document.createElement('canvas');
-        Object.assign(this.drawingsCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
+        // placing ghost. Above Pine drawings (chrome), below the crosshair. Pointer events
+        // are unaffected — they reach the data canvas (InputController), which hands
+        // gestures to the drawings layer via the region-claim seam.
+        this.drawingsBuf = makeBuf();
 
-        // L2 cursor: the crosshair, repainted alone on the cheap Cursor tier.
+        // The composite target for everything BELOW the data canvas.
+        this.belowCanvas = document.createElement('canvas');
+        Object.assign(this.belowCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
+        this.belowCtx = this.belowCanvas.getContext('2d');
+
+        // L0 geometry — the swappable backend (WebGL2 if available, else canvas2d)
+        // owns the data canvas + gets its rendering context. The ONE canvas in the
+        // middle of the sandwich, untouched by this patch.
+        this.dataCanvas = this.createGeometryBackend();
+
+        // The composite target for everything ABOVE the data canvas (volume/vpvr, the
+        // above-data SDK layers, chrome, user drawings).
+        this.aboveCanvas = document.createElement('canvas');
+        Object.assign(this.aboveCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
+        this.aboveCtx = this.aboveCanvas.getContext('2d');
+
+        // L2 cursor: the crosshair, repainted alone on the cheap Cursor tier. Still its own
+        // DOM canvas on purpose — see the field comment.
         this.cursorCanvas = document.createElement('canvas');
         Object.assign(this.cursorCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
 
@@ -1330,16 +1429,15 @@ export class NativeRenderer implements IChartRenderer {
         // are unchanged. The toolbar docks in the wrapper's left strip (the gutter).
         this.plot = document.createElement('div');
         Object.assign(this.plot.style, { position: 'absolute', top: '0', right: '0', bottom: '0', left: '0' });
-        // SDK renderer layers: one transparent canvas each, stacked by placement —
+        // SDK renderer layers: one transparent DETACHED buffer each, composited by placement —
         // 'below-data' behind the candles, 'above-data' over them (under the chrome/axes).
-        this.extLayers = rendererLayers().map((def) => {
-            const canvas = document.createElement('canvas');
-            Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
-            return { def, instance: def.create(), canvas };
-        });
-        const below = this.extLayers.filter((l) => l.def.placement === 'below-data').map((l) => l.canvas);
-        const above = this.extLayers.filter((l) => l.def.placement !== 'below-data').map((l) => l.canvas);
-        this.plot.append(this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, ...above, this.chromeCanvas, this.drawingsCanvas, this.cursorCanvas, this.overlayRoot);
+        // PERF PATCH (project-options fork): these used to be one DOM canvas each, so a chart
+        // with several mounted layers paid a compositor layer per layer; they now cost one
+        // extra drawImage into belowCanvas/aboveCanvas instead.
+        this.extLayers = rendererLayers().map((def) => ({ def, instance: def.create(), buf: makeBuf() }));
+        this.belowExtBufs = this.extLayers.filter((l) => l.def.placement === 'below-data').map((l) => l.buf);
+        this.aboveExtBufs = this.extLayers.filter((l) => l.def.placement !== 'below-data').map((l) => l.buf);
+        this.plot.append(this.belowCanvas, this.dataCanvas, this.aboveCanvas, this.cursorCanvas, this.overlayRoot);
         this.layerOrderSig = ''; // recomputed on the first data frame (owned layers follow their indicator's z)
         this.wrapper.appendChild(this.plot);
         this.factoryConfig = this.getConfig();
@@ -1350,11 +1448,11 @@ export class NativeRenderer implements IChartRenderer {
         container.appendChild(this.wrapper);
         this.applyBackground();
 
-        this.backdropRenderer.mount(this.backdropCanvas);
-        this.volumeRenderer.mount(this.volumeCanvas);
-        this.vpvrRenderer.mount(this.volumeCanvas); // PERF PATCH: shared canvas, see field comment above
-        for (const l of this.extLayers) l.instance.mount(l.canvas);
-        this.chrome.mount(this.chromeCanvas);
+        this.backdropRenderer.mount(this.backdropBuf.canvas);
+        this.volumeRenderer.mount(this.volumeBuf.canvas);
+        this.vpvrRenderer.mount(this.volumeBuf.canvas); // PERF PATCH: shared buffer, see field comment above
+        for (const l of this.extLayers) l.instance.mount(l.buf.canvas);
+        this.chrome.mount(this.chromeBuf.canvas);
         this.crosshairLayer.mount(this.cursorCanvas);
         this.coords.setViewport(defaultViewport());
         this.scene.ensurePane(PRICE_PANE_ID, 'price', 0, 3);
@@ -1422,7 +1520,7 @@ export class NativeRenderer implements IChartRenderer {
         // User-drawings layer (paints L1.5 plus the interleave layers the geometry backend
         // composites into the series stack, and owns the interaction/settings popup). It
         // implements the IDrawingsRendererPort the core DrawingController drives.
-        this.userDrawings = new UserDrawingController(this.wrapper, this.plot, this.drawingsCanvas, {
+        this.userDrawings = new UserDrawingController(this.wrapper, this.plot, this.drawingsBuf.canvas, {
             projector: () => this.drawingProjector(),
             dpr: () => this.coords.dpr,
             theme: () => this.theme,
@@ -1430,6 +1528,17 @@ export class NativeRenderer implements IChartRenderer {
             seriesBoundaries: (paneId) => this.scene.seriesBoundaries(paneId),
             priceZ: (paneId) => (paneId === PRICE_PANE_ID ? this.scene.candleZ : null),
             requestDataPaint: () => this.scheduler.invalidate(InvalidateLevel.Light),
+            // PERF PATCH (project-options fork): the drawings layer no longer has its own DOM
+            // canvas — it paints into `drawingsBuf` and must re-composite `aboveCanvas` for the
+            // repaint to become visible. Its render() drives this from ALL of its internal call
+            // sites (live edits, selection, the placing ghost, the ruler) without going through
+            // the scheduler. Suppressed while paintData() runs — that path composites once at
+            // its end anyway, so this would otherwise double the composite cost per data frame.
+            requestComposite: (hasContent: boolean) => {
+                this.drawingsBuf.hasContent = hasContent;
+                this.drawingsBuf.dirty = false;
+                if (!this.paintingData) this.compositeAbove();
+            },
             // The look the price series ACTUALLY paints with: candle colors resolved through
             // the per-style override, line/area colors through their configured styles — so
             // series-mirroring content (the magnifier inset) matches the chart exactly.
@@ -1608,7 +1717,10 @@ export class NativeRenderer implements IChartRenderer {
         const c2 = new Canvas2dBackend();
         c2.mount(canvas);
         this.backend = c2;
-        old.replaceWith(canvas); // keep the same z-position under the chrome canvas
+        // Keep the same z-position: the data canvas is the middle child of the sandwich
+        // (belowCanvas, dataCanvas, aboveCanvas, cursorCanvas, overlayRoot) and replaceWith
+        // swaps it in place, so the two composite targets stay its siblings on either side.
+        old.replaceWith(canvas);
         this.dataCanvas = canvas;
         this.input?.attach(canvas);
         this.syncSize(); // size the new canvas + flushNow(Full) to repaint
@@ -1711,6 +1823,18 @@ export class NativeRenderer implements IChartRenderer {
         this.scrollButton?.remove();
         this.scrollButton = null;
         for (const l of this.extLayers) l.instance.destroy?.();
+        // PERF PATCH (project-options fork): the buffers are NOT DOM children, so removing the
+        // wrapper below does not release them — a remount would leak a full-viewport backing
+        // store per layer. Zero them explicitly (the browser frees a 0×0 canvas's bitmap).
+        for (const l of this.extLayers) releaseBuf(l.buf);
+        releaseBuf(this.backdropBuf);
+        releaseBuf(this.volumeBuf);
+        releaseBuf(this.chromeBuf);
+        releaseBuf(this.drawingsBuf);
+        this.belowExtBufs = [];
+        this.aboveExtBufs = [];
+        this.belowCtx = null;
+        this.aboveCtx = null;
         this.extLayers = [];
         this.backdropRenderer.destroy();
         this.volumeRenderer.destroy();
@@ -2945,40 +3069,61 @@ export class NativeRenderer implements IChartRenderer {
         if (this.animator.active) return;
         if (repaintsData(level)) {
             this.computeScales();
-            this.paintData();
+            this.paintData(); // composites BOTH targets at its end
         } else if (repaintsChrome(level) && this.paintedData) {
             // Chrome-only tier (the countdown's wall-clock tick): neither data nor viewport
-            // changed, so repaint just the chrome canvas over the frame's existing scales —
+            // changed, so repaint just the chrome buffer over the frame's existing scales —
             // the geometry backend, volume/VPVR and SDK layers stay untouched. prepare()
             // re-wires the drawing resolvers (three closures over live refs — cheap).
+            // PERF PATCH (project-options fork): only `aboveCanvas` is re-composited (chrome
+            // lives there); `belowCanvas` is left exactly as the last data frame left it.
             this.chrome.prepare(this.scene, this.coords, this.theme);
             this.chrome.render(this.scene, this.coords, this.theme, this.axisSurface());
+            this.chromeBuf.hasContent = true; // the chrome layer always paints the axes
+            this.chromeBuf.dirty = false;
+            this.compositeAbove();
         }
         this.crosshairLayer.render(this.scene, this.coords, this.theme, this.hoverSeparatorY, this.externalCrossPx()); // L2 crosshair
-        // Hover-testing SDK layers (repaintOnCursor) follow pointer moves too — each owns
-        // one transparent canvas, so this stays as cheap as the crosshair tier itself.
-        if (!repaintsData(level) && this.paintedData) this.repaintCursorLayers();
+        // Hover-testing SDK layers (repaintOnCursor) follow pointer moves too. PERF PATCH
+        // (project-options fork): when NO layer opted in (the overwhelmingly common case) this
+        // tier must not touch `aboveCanvas` at all — a pointer move stays exactly as cheap as
+        // the crosshair repaint it was before, on its own untouched DOM canvas.
+        if (!repaintsData(level) && this.paintedData && this.repaintCursorLayers()) this.compositeAbove();
         // Legend values follow the same tiers (hover moves the read bar, data changes the
         // value); the push diffs per row, so an unchanged frame touches no DOM.
         this.updateLegendValues();
     }
 
-    /** Repaint the SDK layers that opted into cursor tracking (their own canvas only). */
-    private repaintCursorLayers(): void {
+    /** Repaint the SDK layers that opted into cursor tracking (their own buffer only).
+     *  Returns true when at least one actually repainted — the caller then re-composites
+     *  `aboveCanvas`; with no `repaintOnCursor` layer registered it returns false and the
+     *  cursor tier never touches the composite target. */
+    private repaintCursorLayers(): boolean {
         const pane = this.scene.panes.get(PRICE_PANE_ID);
-        if (!pane) return;
+        if (!pane) return false;
         const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        let repainted = false;
         for (const l of this.extLayers) {
             if (!l.def.repaintOnCursor) continue;
             const lp = this.layerPane(l.def.id) ?? pane;
             if (lp.collapsed) continue; // blanked by the data frame; nothing to hover
             l.instance.render(this.extLayerArgs(l.def.id, lp.scale, lp.bounds, nowMs));
+            // The SDK layer API gives no "I painted nothing" signal, so a rendered layer
+            // conservatively counts as content (a false `true` only costs a no-op drawImage).
+            l.buf.hasContent = true;
+            l.buf.dirty = false;
+            repainted = true;
             if (this.animZoom && l.instance.animating?.()) this.animator.start();
         }
+        return repainted;
     }
 
-    /** Blank one SDK layer canvas (a collapsed host pane suppresses the layer's painting). */
-    private clearLayerCanvas(canvas: HTMLCanvasElement): void {
+    /** Blank one SDK layer's buffer (a collapsed host pane suppresses the layer's painting).
+     *  Marking it content-free lets the composite pass skip its `drawImage` entirely. */
+    private clearLayerBuf(buf: Buf): void {
+        buf.dirty = false;
+        buf.hasContent = false;
+        const canvas = buf.canvas;
         if (canvas.width === 0 || canvas.height === 0) return;
         canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
     }
@@ -3000,12 +3145,35 @@ export class NativeRenderer implements IChartRenderer {
         };
     }
 
-    /** Paint the below-data (L-1) + geometry (L0) + chrome (L1) layers from the current scene/coords. */
+    /**
+     * Paint the below-data (L-1) + geometry (L0) + chrome (L1) layers from the current
+     * scene/coords, then flatten both buffer stacks onto the two visible canvases.
+     *
+     * PERF PATCH (project-options fork): `paintingData` suppresses the drawings layer's own
+     * per-edit composite request while the body runs — it fires from every one of that
+     * controller's internal repaint sites, and this frame composites once at the end anyway.
+     * The `finally` matters: a throw inside the body must not strand the flag on, or live
+     * drawing edits would stop appearing until the next successful data frame.
+     */
     private paintData(): void {
-        // Layer-canvas stacking follows the indicators' z keys — recomputed lazily here so
+        this.paintingData = true;
+        try {
+            this.paintDataLayers();
+        } finally {
+            this.paintingData = false;
+        }
+        this.compositeBelow();
+        this.compositeAbove();
+        this.paintedData = true; // scales are real from here on — the chrome-only tier may run
+    }
+
+    /** {@link paintData}'s body: repaint every layer into its own buffer (plus the geometry
+     *  backend straight onto the DOM data canvas). Composites nothing itself. */
+    private paintDataLayers(): void {
+        // Layer stacking follows the indicators' z keys — recomputed lazily here so
         // every path that can move them (a z write, a restored config, a mount/remove, a
         // pane move) is covered without its own call site. No-op when unchanged.
-        this.syncLayerCanvasOrder();
+        this.syncLayerBufOrder();
         this.stampScaleInvert(); // flip axes (if inverted) before any layer reads pane.scale
         this.backend.modelAlpha = this.modelAlpha;
         this.backend.candleBodyAlpha = this.candleBodyAlpha;
@@ -3018,7 +3186,10 @@ export class NativeRenderer implements IChartRenderer {
             // The volume layer follows its indicator's pane (it can be moved to its own pane);
             // a collapsed host pane shows its legend strip only, so the columns are suppressed.
             const volumePane = this.nativeLayerPane('volume') ?? pane;
-            this.volumeRenderer.render({
+            // PERF PATCH (project-options fork): both renderers report whether they actually
+            // put ink on the shared buffer, so a chart with volume and VPVR both off (the
+            // common case) skips this buffer's drawImage in the composite entirely.
+            const volPainted = this.volumeRenderer.render({
                 bars: this.scene.bars,
                 data: this.scene.volumeLayer,
                 visible: this.volumeActive && !this.volumeHidden && !volumePane.collapsed,
@@ -3026,7 +3197,7 @@ export class NativeRenderer implements IChartRenderer {
                 bounds: volumePane.bounds,
                 fillPane: volumePane.kind !== 'price',
             });
-            this.vpvrRenderer.render({
+            const vpvrPainted = this.vpvrRenderer.render({
                 bars: this.scene.bars,
                 data: this.scene.vpvrLayer,
                 visible: this.vpvrActive && !this.vpvrHidden,
@@ -3035,7 +3206,9 @@ export class NativeRenderer implements IChartRenderer {
                 bounds: pane.bounds,
                 theme: this.theme,
             });
-            // SDK renderer layers: shared paint cycle, own channel data, own canvas. Each
+            this.volumeBuf.hasContent = volPainted || vpvrPainted;
+            this.volumeBuf.dirty = false;
+            // SDK renderer layers: shared paint cycle, own channel data, own buffer. Each
             // paints on its OWNING indicator's pane (the volume layer's rule, generalized) —
             // the price pane for chart-type channels and price-pane overlays alike.
             const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -3045,11 +3218,15 @@ export class NativeRenderer implements IChartRenderer {
                 // A collapsed host pane shows its legend strip only — blank the layer for
                 // the duration (the instance isn't poked, so it can't clear itself).
                 if (lp.collapsed) {
-                    this.clearLayerCanvas(l.canvas);
+                    this.clearLayerBuf(l.buf);
                     continue;
                 }
                 const args = this.extLayerArgs(l.def.id, lp.scale, lp.bounds, nowMs);
                 l.instance.render(args);
+                // No "painted nothing" signal exists in the public layer API — conservatively
+                // treat a rendered layer as content (a false `true` costs one no-op drawImage).
+                l.buf.hasContent = true;
+                l.buf.dirty = false;
                 // Any mounted layer may dim/slim the base painting (chart type or overlay)
                 // — folded this same frame, applied below before the backend paints. Only
                 // layers ON the price pane get a say: one moved to its own pane no longer
@@ -3079,13 +3256,56 @@ export class NativeRenderer implements IChartRenderer {
             this.indicatorSlices.prepare(this.scene, this.coords, this.theme, this.dataCanvas),
             this.userDrawings?.prepareSlices(this.scene.orderedPanes().map((p) => p.id)) ?? new Map(),
         );
-        this.backdropRenderer.render(this.scene, this.coords, this.theme, gridAlpha); // L-2, under every layer canvas
+        this.backdropBuf.hasContent = this.backdropRenderer.render(this.scene, this.coords, this.theme, gridAlpha); // L-2, under every layer
+        this.backdropBuf.dirty = false;
         this.backend.render(this.scene, this.coords, this.theme);
         this.chrome.render(this.scene, this.coords, this.theme, this.axisSurface());
-        this.userDrawings?.render(); // L1.5 — above Pine drawings, below the crosshair
+        this.chromeBuf.hasContent = true; // the chrome layer always paints the axes
+        this.chromeBuf.dirty = false;
+        // L1.5 — above Pine drawings, below the crosshair. Its own render() reports content
+        // through `requestComposite` (suppressed here — this frame composites below).
+        this.userDrawings?.render();
 
         if (easeLive && liveActual) this.bars[li] = liveActual; // restore the true forming bar
-        this.paintedData = true; // scales are real from here on — the chrome-only tier may run
+    }
+
+    /**
+     * PERF PATCH (project-options fork) — flatten the below-data buffers onto `belowCanvas`.
+     *
+     * Order mirrors the DOM append order these layers used to have exactly: the backdrop
+     * (grid + session highlights, which nothing may paint under), then the SDK layers slotted
+     * below the data canvas, back-to-front. The context is reset to IDENTITY first: buffers
+     * and target share a backing-store pixel size, so no dpr scaling applies here (each
+     * renderer sets its own dpr transform inside its buffer — unrelated and unchanged).
+     */
+    private compositeBelow(): void {
+        const ctx = this.belowCtx;
+        const target = this.belowCanvas;
+        if (!ctx || !target || target.width === 0 || target.height === 0) return;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, target.width, target.height);
+        if (this.backdropBuf.hasContent) ctx.drawImage(this.backdropBuf.canvas, 0, 0);
+        for (const b of this.belowExtBufs) if (b.hasContent) ctx.drawImage(b.canvas, 0, 0);
+    }
+
+    /**
+     * PERF PATCH (project-options fork) — flatten the above-data buffers onto `aboveCanvas`.
+     *
+     * Order mirrors the old DOM append order exactly: volume + VPVR (shared buffer), the SDK
+     * layers slotted above the data canvas back-to-front, chrome (axes/price line), then the
+     * user drawings on top. The crosshair is NOT here — it keeps its own DOM canvas so a
+     * pointer move never triggers a composite (see the `cursorCanvas` field comment).
+     */
+    private compositeAbove(): void {
+        const ctx = this.aboveCtx;
+        const target = this.aboveCanvas;
+        if (!ctx || !target || target.width === 0 || target.height === 0) return;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, target.width, target.height);
+        if (this.volumeBuf.hasContent) ctx.drawImage(this.volumeBuf.canvas, 0, 0);
+        for (const b of this.aboveExtBufs) if (b.hasContent) ctx.drawImage(b.canvas, 0, 0);
+        if (this.chromeBuf.hasContent) ctx.drawImage(this.chromeBuf.canvas, 0, 0);
+        if (this.drawingsBuf.hasContent) ctx.drawImage(this.drawingsBuf.canvas, 0, 0);
     }
 
     /** Build the data→pixel projector user drawings resolve their anchors through. */
@@ -3430,12 +3650,11 @@ export class NativeRenderer implements IChartRenderer {
         return this.scene.panes.get(paneId) ?? null;
     }
 
-    /** The SDK layer canvases split around the data canvas, each side back-to-front:
+    /** The SDK layer ids split around the data canvas, each side back-to-front:
      *  owned layers by their owner's z key against the candles' (an indicator restacked
-     *  below the candles takes its layer canvas along), unowned by declared placement. */
-    private orderedLayerCanvases(): { below: HTMLCanvasElement[]; above: HTMLCanvasElement[] } {
-        const byId = new Map(this.extLayers.map((l) => [l.def.id, l.canvas]));
-        const { below, above } = stackLayers(
+     *  below the candles takes its layer along), unowned by declared placement. */
+    private orderedLayerIds(): { below: string[]; above: string[] } {
+        return stackLayers(
             this.extLayers.map((l) => {
                 const owner = this.layerOwner(l.def.id);
                 return {
@@ -3446,28 +3665,37 @@ export class NativeRenderer implements IChartRenderer {
             }),
             this.scene.candleZ,
         );
-        return { below: below.map((id) => byId.get(id)!), above: above.map((id) => byId.get(id)!) };
     }
 
-    /** The full canvas pile in paint order (backdrop + layers + data/volume/vpvr) — what
-     *  the DOM stacking and the screenshot compositor must both follow. */
-    private canvasPile(): HTMLCanvasElement[] {
-        const { below, above } = this.orderedLayerCanvases();
-        return [this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, ...above];
+    /** The full pile in paint order — every buffer plus the one DOM data canvas, blank
+     *  buffers skipped. The composite passes and the screenshot compositor must both follow
+     *  this order; it is the order the layers had as DOM children before the buffer patch. */
+    private compositePile(): HTMLCanvasElement[] {
+        const pile: HTMLCanvasElement[] = [];
+        if (this.backdropBuf?.hasContent) pile.push(this.backdropBuf.canvas);
+        for (const b of this.belowExtBufs) if (b.hasContent) pile.push(b.canvas);
+        pile.push(this.dataCanvas);
+        if (this.volumeBuf?.hasContent) pile.push(this.volumeBuf.canvas);
+        for (const b of this.aboveExtBufs) if (b.hasContent) pile.push(b.canvas);
+        if (this.chromeBuf?.hasContent) pile.push(this.chromeBuf.canvas);
+        if (this.drawingsBuf?.hasContent) pile.push(this.drawingsBuf.canvas);
+        return pile;
     }
 
-    /** Re-slot the SDK layer canvases in the plot when the computed order changed (a z
-     *  write, a restored config, an indicator mount/remove/restack). Runs at the top of
-     *  every data frame; a no-op when the signature is unchanged. Re-inserting an
-     *  absolutely-positioned, pointer-transparent canvas repaints nothing by itself. */
-    private syncLayerCanvasOrder(): void {
-        if (this.extLayers.length === 0 || !this.plot) return;
-        const { below, above } = this.orderedLayerCanvases();
-        const sig = [...below.map((c) => this.extLayers.find((l) => l.canvas === c)!.def.id), '|', ...above.map((c) => this.extLayers.find((l) => l.canvas === c)!.def.id)].join(',');
+    /** Recompute the SDK layers' composite order when it changed (a z write, a restored
+     *  config, an indicator mount/remove/restack). Runs at the top of every data frame; a
+     *  no-op when the signature is unchanged. PERF PATCH (project-options fork): this used
+     *  to re-slot DOM canvases with insertBefore — the layers are detached buffers now, so
+     *  ordering is pure bookkeeping for the two composite passes and touches no DOM at all. */
+    private syncLayerBufOrder(): void {
+        if (this.extLayers.length === 0) return;
+        const { below, above } = this.orderedLayerIds();
+        const sig = [...below, '|', ...above].join(',');
         if (sig === this.layerOrderSig) return;
         this.layerOrderSig = sig;
-        for (const c of below) this.plot.insertBefore(c, this.dataCanvas);
-        for (const c of above) this.plot.insertBefore(c, this.chromeCanvas);
+        const byId = new Map(this.extLayers.map((l) => [l.def.id, l.buf]));
+        this.belowExtBufs = below.map((id) => byId.get(id)!);
+        this.aboveExtBufs = above.map((id) => byId.get(id)!);
     }
 
     /** True when an active volume layer is this study pane's ONLY content — so its scale should
@@ -3787,8 +4015,8 @@ export class NativeRenderer implements IChartRenderer {
         const h = this.wrapper.clientHeight;
         if (w <= 0 || h <= 0) return;
         // PERF PATCH (project-options fork): capped at 2, not the raw device value.
-        // Every canvas below (data/backdrop/volume/ext layers/vpvr/chrome/drawings/
-        // cursor — up to 8+ full-plot layers) is sized off this number, so an
+        // Every surface below (the DOM canvases AND every detached buffer:
+        // data/backdrop/volume/ext layers/vpvr/chrome/drawings/cursor) is sized off this number, so an
         // uncapped 3x phone panel was rendering ~2.25x the pixels of a capped-at-2
         // one, PER LAYER, for a difference invisible at normal viewing distance on
         // a phone screen. This is the single highest-leverage lever available from
@@ -3830,13 +4058,28 @@ export class NativeRenderer implements IChartRenderer {
             canvas.style.width = `${pw}px`;
             canvas.style.height = `${ph}px`;
         };
+        // PERF PATCH (project-options fork): a DETACHED buffer gets the backing store ONLY —
+        // it is never laid out, so a CSS size on it is meaningless. Its pixels reach the
+        // screen through drawImage onto a DOM canvas of the identical backing-store size, so
+        // the device-pixel-grid guarantee this function exists to keep (bitmap px == device
+        // px, never resampled at composite time) still holds end to end.
+        const sizeBuf = (buf: Buf): void => {
+            buf.canvas.width = bw;
+            buf.canvas.height = bh;
+            // The width/height writes above CLEARED this buffer — nothing may be composited
+            // from it until its renderer has painted the new size.
+            buf.hasContent = false;
+            buf.dirty = true;
+        };
         size(this.dataCanvas);
-        size(this.backdropCanvas);
-        size(this.volumeCanvas); // shared with vpvrRenderer, see field comment
-        for (const l of this.extLayers) size(l.canvas);
-        size(this.chromeCanvas);
-        size(this.drawingsCanvas);
+        size(this.belowCanvas);
+        size(this.aboveCanvas);
         size(this.cursorCanvas);
+        sizeBuf(this.backdropBuf);
+        sizeBuf(this.volumeBuf); // shared with vpvrRenderer, see field comment
+        for (const l of this.extLayers) sizeBuf(l.buf);
+        sizeBuf(this.chromeBuf);
+        sizeBuf(this.drawingsBuf);
         // Reserve strips for the price axis (right) + time axis (bottom); the
         // data area drives the coordinate transform so series sit clear of them.
         this.coords.setSize(Math.max(1, pw - this.rightAxisW), Math.max(1, ph - TIME_AXIS_H), dpr);
@@ -3850,7 +4093,8 @@ export class NativeRenderer implements IChartRenderer {
             this.didInitialFit = true;
         }
         if (this.animator.active) {
-            // The width/height assignments above just CLEARED every canvas, and renderFrame
+            // The width/height assignments above just CLEARED every canvas AND every detached
+            // buffer (which is also why each buffer's hasContent was reset), and renderFrame
             // yields to the Animator while it runs — so a scheduler flush would paint
             // nothing and the browser would present blank canvases until the animator's
             // next rAF tick (a visible flash on every splitter/divider move of an

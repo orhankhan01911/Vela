@@ -56,6 +56,19 @@ export interface UserDrawingDeps {
     /** Ask the renderer for a data-layer repaint — needed when a drawing that paints INSIDE the
      *  series stack changed, since its pixels live in the backend composite, not on this layer. */
     requestDataPaint(): void;
+    /**
+     * The top drawings layer just repainted — re-flatten the renderer's composite.
+     *
+     * PERF PATCH (project-options fork): this layer no longer owns a DOM canvas. It paints
+     * into a detached buffer the renderer `drawImage`-composites onto one visible canvas, so
+     * a repaint is invisible until that composite runs again. {@link render} calls this at the
+     * end of its body, which covers every one of the controller's ~20 internal repaint sites
+     * (live edits, drag, selection, the placing ghost, the ruler) without going through the
+     * scheduler. `hasContent` is false when the layer is now blank, letting the renderer skip
+     * the buffer entirely; it is deliberately CONSERVATIVE (a false `true` costs one no-op
+     * drawImage, a false `false` would drop real pixels).
+     */
+    requestComposite(hasContent: boolean): void;
     /** The chart's active series look — price style plus the RESOLVED series colors — so
      *  content that mirrors the series (the magnifier's inset) matches it exactly. */
     seriesLook(): { style: string; upColor: string; downColor: string; lineColor: string };
@@ -917,6 +930,11 @@ export class UserDrawingController implements IDrawingsRendererPort {
     render(): void {
         const ctx = this.ctx;
         if (!ctx) return;
+        // PERF PATCH (project-options fork): `painted` is the conservative hasContent signal
+        // handed to deps.requestComposite() at the end — see the UserDrawingDeps doc. Each
+        // flag below is set where that branch is CAPABLE of putting ink on the layer, not
+        // where it provably did, so the layer can never be wrongly skipped in the composite.
+        let painted = false;
         const dpr = this.deps.dpr();
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, this.canvas.width / dpr, this.canvas.height / dpr);
@@ -934,13 +952,16 @@ export class UserDrawingController implements IDrawingsRendererPort {
         // stack painted their bodies on the backend layers, so only their handles come back on top
         // — buried under the candles they'd be unusable.
         this.painter.seriesLook = this.deps.seriesLook();
-        this.painter.paintAll(ctx, this.drawings.filter((d) => !this.isInterleaved(d)), proj, this.deps.theme(), targets);
-        this.painter.paintHighlights(ctx, this.drawings.filter((d) => this.isInterleaved(d)), proj, handleIdsFor(targets));
+        const front = this.drawings.filter((d) => !this.isInterleaved(d));
+        const interleaved = this.drawings.filter((d) => this.isInterleaved(d));
+        this.painter.paintAll(ctx, front, proj, this.deps.theme(), targets);
+        this.painter.paintHighlights(ctx, interleaved, proj, handleIdsFor(targets));
+        if (front.length > 0 || interleaved.length > 0) painted = true;
         this.layoutTextEditor();
         const ghost = this.interaction.ghost();
-        if (ghost) this.painter.paintGhost(ctx, ghost, proj, this.deps.theme());
+        if (ghost) { this.painter.paintGhost(ctx, ghost, proj, this.deps.theme()); painted = true; }
         // A remote placement mirrored here (drawings sync) paints as the same ghost.
-        if (this.externalGhost) this.painter.paintGhost(ctx, this.externalGhost, proj, this.deps.theme());
+        if (this.externalGhost) { this.painter.paintGhost(ctx, this.externalGhost, proj, this.deps.theme()); painted = true; }
         // Every placing change re-renders (deps.changed), so this catches each anchor
         // click, cursor move and cancel; the fingerprint gate drops the no-change frames.
         this.emitDraft(ghost);
@@ -948,18 +969,21 @@ export class UserDrawingController implements IDrawingsRendererPort {
         // telling the user what gesture to perform; it clears once placement starts.
         if (this.activeTool && !ghost) {
             const hint = getDrawingType(this.activeTool)?.placementHint;
-            if (hint) this.painter.paintPlacementHint(ctx, hint, this.deps.theme(), proj.width, proj.height);
+            if (hint) { this.painter.paintPlacementHint(ctx, hint, this.deps.theme(), proj.width, proj.height); painted = true; }
         }
         // While placing, show control circles on the points clicked so far (so the user
         // sees where each anchor — e.g. a pitchfork's pivot — landed before it completes).
         const markers = this.interaction.placingMarkers(proj);
-        if (markers) this.painter.paintHandles(ctx, markers);
+        if (markers) { this.painter.paintHandles(ctx, markers); painted = true; }
         // Magnet (Ctrl) affordance: a ring on the candle point the next anchor will snap to.
         const m = this.interaction.snapMarker();
         const my = m ? proj.yOf(m.point.price, m.paneId) : null;
-        if (m && my != null) this.painter.paintSnapRing(ctx, proj.xOf(m.point.time), my, this.deps.theme());
+        if (m && my != null) { this.painter.paintSnapRing(ctx, proj.xOf(m.point.time), my, this.deps.theme()); painted = true; }
         // The transient ruler paints on top of everything (until cleared on the next press/pan/zoom).
-        if (this.measure.isActive()) this.measure.paint(ctx, proj, this.deps.theme());
+        if (this.measure.isActive()) { this.measure.paint(ctx, proj, this.deps.theme()); painted = true; }
+        // The pixels above live in a detached buffer — ask the renderer to re-flatten it onto
+        // the visible canvas (a no-op cost when the renderer is already compositing this frame).
+        this.deps.requestComposite(painted);
     }
 
     destroy(): void {

@@ -349,20 +349,42 @@ declare class NativeRenderer implements IChartRenderer {
     private plot;
     private toolbarGutter;
     private mountContainer;
-    private backdropCanvas;
+    /** L-2 session highlights + gridlines — the pile's very bottom (below the data canvas). */
+    private backdropBuf;
     private dataCanvas;
-    private volumeCanvas;
-    private chromeCanvas;
-    private drawingsCanvas;
+    /** L0.25/L0.6 volume columns + VPVR profile — one shared buffer (see mount()). */
+    private volumeBuf;
+    /** L1 axes + price line + trade markers. */
+    private chromeBuf;
+    /** L1.5 user drawings (top layer + selection handles + transients). */
+    private drawingsBuf;
+    /** Composite target for everything BELOW the data canvas (backdrop + below-data ext layers). */
+    private belowCanvas;
+    private belowCtx;
+    /** Composite target for everything ABOVE it (volume/vpvr + above-data ext layers + chrome + drawings). */
+    private aboveCanvas;
+    private aboveCtx;
+    /** L2 crosshair. Deliberately still its OWN DOM canvas this phase: folding it into
+     *  `aboveCanvas` would make every pointer move pay a full multi-buffer composite —
+     *  a real regression risk, deferred to a later phase. */
     private cursorCanvas;
     private overlayRoot;
     private userDrawings;
     private readonly backdropRenderer;
     private readonly volumeRenderer;
-    /** SDK renderer layers instantiated at mount ({@link registerRendererLayer}). */
+    /** SDK renderer layers instantiated at mount ({@link registerRendererLayer}). Each owns
+     *  a detached buffer instead of a DOM canvas; `mount()` still hands it a real
+     *  `HTMLCanvasElement`, so the public layer API is unchanged. */
     private extLayers;
-    /** Last applied layer-canvas order (ids below + above the data canvas) — re-slotted only on change. */
+    /** Last computed layer order (ids below + above the data canvas) — recomputed only on change. */
     private layerOrderSig;
+    /** The cached split of {@link extLayers} the composite pass walks, back-to-front on each
+     *  side of the data canvas. Refreshed by {@link syncLayerBufOrder} when the order changes. */
+    private belowExtBufs;
+    private aboveExtBufs;
+    /** True for the duration of {@link paintData}, which composites once at its end — so the
+     *  drawings layer's internal `requestComposite` doesn't composite a second time per frame. */
+    private paintingData;
     private attributionEl;
     private attributionEnabled;
     /** Host-supplied mark shown INSTEAD of the built-in one (`attribution: '<html>'`). */
@@ -844,14 +866,49 @@ declare class NativeRenderer implements IChartRenderer {
      *  no scene model, so its row is absent from the map and its readout clears. */
     private updateLegendValues;
     private renderFrame;
-    /** Repaint the SDK layers that opted into cursor tracking (their own canvas only). */
+    /** Repaint the SDK layers that opted into cursor tracking (their own buffer only).
+     *  Returns true when at least one actually repainted — the caller then re-composites
+     *  `aboveCanvas`; with no `repaintOnCursor` layer registered it returns false and the
+     *  cursor tier never touches the composite target. */
     private repaintCursorLayers;
-    /** Blank one SDK layer canvas (a collapsed host pane suppresses the layer's painting). */
-    private clearLayerCanvas;
+    /** Blank one SDK layer's buffer (a collapsed host pane suppresses the layer's painting).
+     *  Marking it content-free lets the composite pass skip its `drawImage` entirely. */
+    private clearLayerBuf;
     /** One frame's args for an SDK renderer layer (shared by the data + cursor paint paths). */
     private extLayerArgs;
-    /** Paint the below-data (L-1) + geometry (L0) + chrome (L1) layers from the current scene/coords. */
+    /**
+     * Paint the below-data (L-1) + geometry (L0) + chrome (L1) layers from the current
+     * scene/coords, then flatten both buffer stacks onto the two visible canvases.
+     *
+     * PERF PATCH (project-options fork): `paintingData` suppresses the drawings layer's own
+     * per-edit composite request while the body runs — it fires from every one of that
+     * controller's internal repaint sites, and this frame composites once at the end anyway.
+     * The `finally` matters: a throw inside the body must not strand the flag on, or live
+     * drawing edits would stop appearing until the next successful data frame.
+     */
     private paintData;
+    /** {@link paintData}'s body: repaint every layer into its own buffer (plus the geometry
+     *  backend straight onto the DOM data canvas). Composites nothing itself. */
+    private paintDataLayers;
+    /**
+     * PERF PATCH (project-options fork) — flatten the below-data buffers onto `belowCanvas`.
+     *
+     * Order mirrors the DOM append order these layers used to have exactly: the backdrop
+     * (grid + session highlights, which nothing may paint under), then the SDK layers slotted
+     * below the data canvas, back-to-front. The context is reset to IDENTITY first: buffers
+     * and target share a backing-store pixel size, so no dpr scaling applies here (each
+     * renderer sets its own dpr transform inside its buffer — unrelated and unchanged).
+     */
+    private compositeBelow;
+    /**
+     * PERF PATCH (project-options fork) — flatten the above-data buffers onto `aboveCanvas`.
+     *
+     * Order mirrors the old DOM append order exactly: volume + VPVR (shared buffer), the SDK
+     * layers slotted above the data canvas back-to-front, chrome (axes/price line), then the
+     * user drawings on top. The crosshair is NOT here — it keeps its own DOM canvas so a
+     * pointer move never triggers a composite (see the `cursorCanvas` field comment).
+     */
+    private compositeAbove;
     /** Build the data→pixel projector user drawings resolve their anchors through. */
     private drawingProjector;
     /** OHLC bars whose open-time falls within `[from, to]` (inclusive) — the data a regression
@@ -918,18 +975,20 @@ declare class NativeRenderer implements IChartRenderer {
     private layerOwner;
     /** The pane an SDK layer paints on: its owner's pane, else the price pane. */
     private layerPane;
-    /** The SDK layer canvases split around the data canvas, each side back-to-front:
+    /** The SDK layer ids split around the data canvas, each side back-to-front:
      *  owned layers by their owner's z key against the candles' (an indicator restacked
-     *  below the candles takes its layer canvas along), unowned by declared placement. */
-    private orderedLayerCanvases;
-    /** The full canvas pile in paint order (backdrop + layers + data/volume/vpvr) — what
-     *  the DOM stacking and the screenshot compositor must both follow. */
-    private canvasPile;
-    /** Re-slot the SDK layer canvases in the plot when the computed order changed (a z
-     *  write, a restored config, an indicator mount/remove/restack). Runs at the top of
-     *  every data frame; a no-op when the signature is unchanged. Re-inserting an
-     *  absolutely-positioned, pointer-transparent canvas repaints nothing by itself. */
-    private syncLayerCanvasOrder;
+     *  below the candles takes its layer along), unowned by declared placement. */
+    private orderedLayerIds;
+    /** The full pile in paint order — every buffer plus the one DOM data canvas, blank
+     *  buffers skipped. The composite passes and the screenshot compositor must both follow
+     *  this order; it is the order the layers had as DOM children before the buffer patch. */
+    private compositePile;
+    /** Recompute the SDK layers' composite order when it changed (a z write, a restored
+     *  config, an indicator mount/remove/restack). Runs at the top of every data frame; a
+     *  no-op when the signature is unchanged. PERF PATCH (project-options fork): this used
+     *  to re-slot DOM canvases with insertBefore — the layers are detached buffers now, so
+     *  ordering is pure bookkeeping for the two composite passes and touches no DOM at all. */
+    private syncLayerBufOrder;
     /** True when an active volume layer is this study pane's ONLY content — so its scale should
      *  come from volume, not the empty {0,1} placeholder. (In the price pane, or alongside a real
      *  series, volume stays a bottom overlay and the master scale wins.) */

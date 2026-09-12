@@ -112,14 +112,19 @@ describe('syncSize paints synchronously while the Animator owns the frame', () =
         const { r, paints } = setup();
         let flushes = 0;
         const canvas = () => ({ width: 0, height: 0, style: {} });
+        // PERF PATCH (project-options fork): detached buffers + two composite targets, see
+        // native-canvas-device-grid.test.ts and NativeRenderer's `Buf` doc.
+        const buf = () => ({ canvas: canvas(), dirty: false, hasContent: true });
         r.wrapper = { clientWidth: 400, clientHeight: 300 };
         r.plot = { style: {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 300 }) };
-        r.backdropCanvas = canvas();
+        r.belowCanvas = canvas();
         r.dataCanvas = canvas();
-        r.volumeCanvas = canvas(); // PERF PATCH (project-options fork): shared with vpvrRenderer, no separate vpvrCanvas field anymore
-        r.chromeCanvas = canvas();
-        r.drawingsCanvas = canvas();
+        r.aboveCanvas = canvas();
         r.cursorCanvas = canvas();
+        r.backdropBuf = buf();
+        r.volumeBuf = buf(); // shared with vpvrRenderer, no separate vpvrBuf field
+        r.chromeBuf = buf();
+        r.drawingsBuf = buf();
         r.extLayers = [];
         r.layoutPanes = () => {};
         r.repositionTables = () => {};

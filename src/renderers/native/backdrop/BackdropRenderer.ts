@@ -47,12 +47,20 @@ export class BackdropRenderer {
         this.ctx = null;
     }
 
-    /** Paint one frame: highlight bands first, gridlines on top (the order they had inside
-     *  the data canvas). `gridAlpha` fades the gridlines as a reveal-under layer opens. */
-    render(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, gridAlpha: number): void {
+    /**
+     * Paint one frame: highlight bands first, gridlines on top (the order they had inside
+     * the data canvas). `gridAlpha` fades the gridlines as a reveal-under layer opens.
+     *
+     * Returns whether anything was actually drawn. PERF PATCH (project-options fork): this
+     * layer's surface is a DETACHED buffer now, and the return value is the `hasContent`
+     * signal the renderer's composite pass uses to skip a fully-transparent one (see
+     * NativeRenderer's `Buf` doc). Both `return`s below are pre-data gates that leave the
+     * buffer cleared and blank.
+     */
+    render(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, gridAlpha: number): boolean {
         const ctx = this.ctx;
         const canvas = this.canvas;
-        if (!ctx || !canvas) return;
+        if (!ctx || !canvas) return false;
 
         const dpr = coords.dpr;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -60,12 +68,13 @@ export class BackdropRenderer {
 
         // Same gate as the geometry backend: no grid before data reaches the view.
         const n = coords.barCount;
-        if (n === 0) return;
+        if (n === 0) return false;
         const vr = coords.visibleLogicalRange();
-        if (Math.min(n - 1, Math.ceil(vr.to)) < Math.max(0, Math.floor(vr.from))) return;
+        if (Math.min(n - 1, Math.ceil(vr.to)) < Math.max(0, Math.floor(vr.from))) return false;
 
         this.drawHighlights(ctx, scene, coords);
         this.drawGrid(ctx, scene, coords, theme, coords.width, gridAlpha);
+        return true;
     }
 
     /** Renderer-owned session highlight bands: full-height (all panes), behind the grid.

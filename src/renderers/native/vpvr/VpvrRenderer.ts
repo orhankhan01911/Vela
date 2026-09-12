@@ -44,28 +44,36 @@ export class VpvrRenderer {
         this.memo = null;
     }
 
-    render(args: VpvrRenderArgs): void {
+    /**
+     * Paint one frame. Returns whether anything was actually drawn — the `hasContent`
+     * signal the renderer's composite pass uses to skip a fully-transparent buffer
+     * (PERF PATCH, project-options fork; see VolumeRenderer.render's note and
+     * NativeRenderer's `Buf` doc). Every `return` below leaves the surface untouched by
+     * THIS renderer, so they all report false; the shared buffer's real content flag is
+     * `volumePainted || vpvrPainted` at the call site.
+     */
+    render(args: VpvrRenderArgs): boolean {
         const ctx = this.ctx;
         const canvas = this.canvas;
-        if (!ctx || !canvas) return;
+        if (!ctx || !canvas) return false;
         const { bars, data, visible, coords, scale, bounds, theme } = args;
 
         const dpr = coords.dpr;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         // PERF PATCH (project-options fork): no clearRect here anymore. This renderer now shares
-        // its canvas with VolumeRenderer (see NativeRenderer.ts's field comment on volumeCanvas) —
-        // NativeRenderer.paintData() calls volumeRenderer.render() immediately before this every
+        // its buffer with VolumeRenderer (see NativeRenderer.ts's field comment on volumeBuf) —
+        // NativeRenderer.paintDataLayers() calls volumeRenderer.render() immediately before this every
         // frame, unconditionally, and VolumeRenderer's own clearRect ("always clear — a hide/remove
         // must wipe the last frame") already reset the whole shared canvas for both renderers this
         // frame. Clearing again here would wipe the volume columns this same renderer.render() call
         // is meant to paint alongside. If this renderer is ever given its own dedicated canvas again,
         // restore `ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr)` here first.
-        if (!data || !visible || bars.length === 0 || bounds.height <= 0) return;
+        if (!data || !visible || bars.length === 0 || bounds.height <= 0) return false;
 
         const r = coords.visibleLogicalRange();
         const i0 = Math.max(0, Math.floor(r.from));
         const i1 = Math.min(bars.length - 1, Math.ceil(r.to));
-        if (i0 > i1) return;
+        if (i0 > i1) return false;
 
         // Memoize the bucketing on the visible window + the forming bar (its OHLCV mutates
         // in place on live ticks) + the shape inputs; pans/zooms hit the cache mid-gesture
@@ -77,7 +85,7 @@ export class VpvrRenderer {
             this.memo = buildVpvrProfile(bars, i0, i1, data.rows, data.valueAreaFrac);
         }
         const profile = this.memo;
-        if (!profile) return;
+        if (!profile) return false;
 
         ctx.save();
         ctx.beginPath();
@@ -89,5 +97,6 @@ export class VpvrRenderer {
             yOf: (p) => coords.priceToY(p, scale, bounds),
         }, { upColor: data.upColor, downColor: data.downColor, showPoc: data.showPoc, pocColor: theme.textColor });
         ctx.restore();
+        return true;
     }
 }

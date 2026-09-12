@@ -33,15 +33,22 @@ function setup(): { r: AnyRenderer } {
     const renderer = new NativeRenderer();
     const r = renderer as unknown as AnyRenderer;
     const canvas = () => ({ width: 0, height: 0, style: {} });
+    // PERF PATCH (project-options fork): the Canvas2D layers are DETACHED buffers now —
+    // `{ canvas, dirty, hasContent }` — composited onto the DOM canvases below.
+    const buf = () => ({ canvas: canvas(), dirty: false, hasContent: true });
     r.wrapper = { clientWidth: 1486, clientHeight: 662 };
     r.plot = { style: {}, getBoundingClientRect: () => RECT };
-    r.backdropCanvas = canvas();
+    // The four real DOM canvases.
+    r.belowCanvas = canvas();
     r.dataCanvas = canvas();
-    r.volumeCanvas = canvas(); // PERF PATCH (project-options fork): shared with vpvrRenderer, no separate vpvrCanvas field anymore
-    r.chromeCanvas = canvas();
-    r.drawingsCanvas = canvas();
+    r.aboveCanvas = canvas();
     r.cursorCanvas = canvas();
-    r.extLayers = [{ def: { id: 'x', placement: 'above-data' }, instance: {}, canvas: canvas() }];
+    // The detached buffers.
+    r.backdropBuf = buf();
+    r.volumeBuf = buf(); // shared with vpvrRenderer, no separate vpvrBuf field
+    r.chromeBuf = buf();
+    r.drawingsBuf = buf();
+    r.extLayers = [{ def: { id: 'x', placement: 'above-data' }, instance: {}, buf: buf() }];
     r.layoutPanes = () => {};
     r.didInitialFit = true;
     r.scheduler = { flushNow: () => {} };
@@ -76,13 +83,40 @@ describe('syncSize pins the canvas pile to the device-pixel grid', () => {
         expect(r.dataCanvas.style.transform).toBeUndefined();
     });
 
-    it('applies the same geometry to every canvas in the pile', () => {
+    it('applies the same backing-store geometry to every DOM canvas in the pile', () => {
         const { r } = setup();
         r.syncSize();
-        for (const c of [r.backdropCanvas, r.volumeCanvas, r.chromeCanvas, r.drawingsCanvas, r.cursorCanvas, r.extLayers[0].canvas]) {
+        for (const c of [r.belowCanvas, r.aboveCanvas, r.cursorCanvas]) {
             expect(c.width).toBe(1802);
             expect(c.height).toBe(827);
+            // A DOM canvas gets a pinned CSS size too, so bitmap px == device px on screen.
             expect(c.style.width).toBe('1441.6px');
+            expect(c.style.height).toBe('661.6px');
+        }
+    });
+
+    it('sizes every detached buffer to the SAME backing store, with no CSS size', () => {
+        const { r } = setup();
+        r.syncSize();
+        for (const b of [r.backdropBuf, r.volumeBuf, r.chromeBuf, r.drawingsBuf, r.extLayers[0].buf]) {
+            // Identical backing store to the DOM canvases: drawImage must be a 1:1 blit, never
+            // a rescale — that is what preserves the device-pixel-grid guarantee end to end.
+            expect(b.canvas.width).toBe(1802);
+            expect(b.canvas.height).toBe(827);
+            // A detached canvas is never laid out, so a CSS size on it would be meaningless.
+            expect(b.canvas.style.width).toBeUndefined();
+            expect(b.canvas.style.height).toBeUndefined();
+        }
+    });
+
+    it('resize marks every buffer blank + dirty (no stale pixels may be composited)', () => {
+        const { r } = setup();
+        // The width/height writes in syncSize CLEAR each buffer; compositing one before its
+        // renderer repaints at the new size would show the previous frame's pixels.
+        r.syncSize();
+        for (const b of [r.backdropBuf, r.volumeBuf, r.chromeBuf, r.drawingsBuf, r.extLayers[0].buf]) {
+            expect(b.hasContent).toBe(false);
+            expect(b.dirty).toBe(true);
         }
     });
 
