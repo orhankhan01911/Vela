@@ -27163,6 +27163,7 @@ var ChromeRenderer = class {
     this.drawMergedScaleColumns(ctx, scene, coords, dataW);
     this.drawPaneSeparators(ctx, scene, theme, fullW, panes);
     this.drawPriceLineAndCountdown(ctx, scene, coords, theme, dataW, pricePane);
+    this.drawPriceLineLabels(ctx, scene, theme, coords, dataW);
     this.drawTimeAxis(ctx, scene, coords, theme, dataW, dataH, fullH);
   }
   destroy() {
@@ -27329,6 +27330,43 @@ var ChromeRenderer = class {
     ctx.fillStyle = textColor;
     ctx.textAlign = "center";
     ctx.fillText(text, x + w / 2, y);
+    ctx.textAlign = "start";
+  }
+  /**
+   * On-chart text chip for any `PriceLine` that opts in via `labelPosition`
+   * (unset ⇒ no chip, today's behavior — see the type's own doc comment).
+   * Unlike the last-price chip (`drawPriceLineAndCountdown`), which always
+   * sits in the right axis gutter, these sit INSIDE the plot area at a
+   * left/center/right position so multiple indicator-drawn lines (Payoff
+   * Levels' Breakeven/Stop Loss/Take Profit) can be told apart without
+   * fighting the axis gutter's own chips for space.
+   */
+  drawPriceLineLabels(ctx, scene, theme, coords, dataW) {
+    const PAD = 8;
+    const INSET = 4;
+    ctx.textBaseline = "middle";
+    for (const pane of scene.orderedPanes()) {
+      if (pane.collapsed) continue;
+      for (const m of scene.orderedIndicatorsForPane(pane.id)) {
+        if (m.priceLines.length === 0) continue;
+        const sc = scene.scaleFor(m, pane);
+        const eff = sc === pane.scale ? pane : { ...pane, scale: sc };
+        for (const pl of m.priceLines) {
+          if (!pl.title || !pl.labelPosition) continue;
+          const y = coords.priceToY(pl.price, eff.scale, eff.bounds);
+          if (y < eff.bounds.top || y > eff.bounds.top + eff.bounds.height) continue;
+          const color = pl.color ?? theme.textColor;
+          const textColor = tagTextColor(color, theme.background);
+          const w = this.measureCached(ctx, pl.title) + PAD;
+          const x = pl.labelPosition === "left" ? INSET : pl.labelPosition === "center" ? dataW / 2 - w / 2 : dataW - w - INSET;
+          ctx.fillStyle = color;
+          ctx.fillRect(x, y - 8, w, 16);
+          ctx.fillStyle = textColor;
+          ctx.textAlign = "center";
+          ctx.fillText(pl.title, x + w / 2, y);
+        }
+      }
+    }
     ctx.textAlign = "start";
   }
   /**

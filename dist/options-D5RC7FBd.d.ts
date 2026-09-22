@@ -338,6 +338,11 @@ interface PriceLine {
     lineStyle?: LineStyle;
     width?: number;
     title?: string;
+    /** Draw `title` as an on-chart text chip at this horizontal position along
+     *  the line. Unset ⇒ no chip drawn at all (today's behavior, unchanged for
+     *  every existing caller) — only a caller that explicitly wants on-chart
+     *  text sets this. */
+    labelPosition?: 'left' | 'center' | 'right';
 }
 /**
  * The renderer-neutral, full description of what to draw. In the engine-owned

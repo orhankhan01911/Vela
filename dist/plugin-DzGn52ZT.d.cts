@@ -1,9 +1,9 @@
-import { w as DrawingTypeKey, aa as DrawingStyle, S as SerializedDrawing, D as Drawing, aG as SeriesKind, O as OHLCV, c as VelaTheme } from './options-CX1lSYWA.cjs';
-import { c as DataControl } from './contributions-C3b0Sx5P.cjs';
+import { w as DrawingTypeKey, aa as DrawingStyle, S as SerializedDrawing, D as Drawing, aG as SeriesKind, O as OHLCV, c as VelaTheme } from './options-D5RC7FBd.cjs';
+import { c as DataControl } from './contributions-BLqg8g60.cjs';
 import './side-panel-HF0IAzwf.cjs';
 import './icons-BZYbJXSV.cjs';
 import './keymap-CGOz5F5f.cjs';
-import './DataProvider-OfR3fXg9.cjs';
+import './DataProvider-DmWTTVjB.cjs';
 
 /** What a drawing type contributes to the toolbar + factory (renderer-neutral). */
 interface DrawingTypeMeta {

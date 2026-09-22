@@ -1,5 +1,5 @@
-import { O as OHLCV, U as Unsubscribe } from '../options-CX1lSYWA.cjs';
-import { D as DataProvider, P as ProviderInfo, B as BarRange, S as SymbolInfo, a as SymbolDescriptor } from '../DataProvider-OfR3fXg9.cjs';
+import { O as OHLCV, U as Unsubscribe } from '../options-D5RC7FBd.cjs';
+import { D as DataProvider, P as ProviderInfo, B as BarRange, S as SymbolInfo, a as SymbolDescriptor } from '../DataProvider-DmWTTVjB.cjs';
 
 /**
  * Coinbase market-data provider, built from scratch on the public Exchange REST + WebSocket APIs
