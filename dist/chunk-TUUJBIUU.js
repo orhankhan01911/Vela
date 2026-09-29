@@ -1,4 +1,4 @@
-import { deserializeDrawing, chartTypes, rendererLayers, foldBaseModulation, registerChartType, rendererDefaults, getDrawingType, settingsRowVisible, normalizeSettingsRow, Magnifier, TextLabel, Callout, resetDrawingSettings, registerNativeIndicator, chartType, getNativeIndicator, nativeIndicatorDescriptors, drawingTypes, settingsRowValueKeys, formatDuration, RegressionChannel, FixedRangeVolumeProfile, SegmentDrawing, ArrowMark, GlyphStamp, RadialFib, FibSpiral, DedekindTessellation, MachFigure, GannSquare, FibRatios, MeasureBox, PositionTool, AnchoredVwap, PatternDrawing, Comment, PriceNote, Signpost, Note, PriceLabel, GANN_SQUARE_ARCS, magnifierTimeframeLabel, lineSegmentIntersection, DEFAULT_DRAWING_COLOR, MAGNIFIER_TIMEFRAME_OPTIONS, GLYPH_OPTIONS, STAMP_SIZE_OPTIONS, LINE_STYLE_OPTIONS, DEDEKIND_CURVATURE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, TEXT_SIZE_OPTIONS, createDrawing, inputVisible, tickerModifierIds, CalloutBase, DIRECTION_OPTIONS, stableSeriesId } from './chunk-IFJJPXSV.js';
+import { deserializeDrawing, chartTypes, rendererLayers, foldBaseModulation, registerChartType, rendererDefaults, getDrawingType, settingsRowVisible, normalizeSettingsRow, Magnifier, TextLabel, Callout, resetDrawingSettings, registerNativeIndicator, chartType, getNativeIndicator, nativeIndicatorDescriptors, drawingTypes, settingsRowValueKeys, formatDuration, RegressionChannel, FixedRangeVolumeProfile, FixedRangeTpoProfile, SegmentDrawing, ArrowMark, GlyphStamp, RadialFib, FibSpiral, DedekindTessellation, MachFigure, GannSquare, FibRatios, MeasureBox, PositionTool, AnchoredVwap, PatternDrawing, Comment, PriceNote, Signpost, Note, PriceLabel, GANN_SQUARE_ARCS, magnifierTimeframeLabel, tpoLetter, lineSegmentIntersection, DEFAULT_DRAWING_COLOR, MAGNIFIER_TIMEFRAME_OPTIONS, GLYPH_OPTIONS, STAMP_SIZE_OPTIONS, LINE_STYLE_OPTIONS, DEDEKIND_CURVATURE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, TEXT_SIZE_OPTIONS, createDrawing, inputVisible, tickerModifierIds, CalloutBase, DIRECTION_OPTIONS, stableSeriesId } from './chunk-BCTY4FPM.js';
 import { themeTokens, Dialog, closeOpenPopovers, closeWidthPopover, fieldSection, buildFieldControl, fieldSeparator, fieldGrid, fieldRow, blendOver, splitColor, CalloutBubble, Menu, TextArea, Popover, NumberInput, buildColorPicker, isPopoverOpen, eventDismissedPopover, toggleSelectList, openPopoverTrigger, fieldGridColumns, FIELD_GAP_PX, STATIC_TOKENS } from './chunk-T5Z5YUCF.js';
 import { icon, iconAt, withAlpha, WARNING, ACCENT, NEUTRAL, BEARISH, BULLISH, isDarkColor, SERIES_LINE, CHIP_PLATE, CROSSHAIR, TRADE_EXIT, TRADE_SHORT, TRADE_LONG, overlayScrollbarCss, SLATE_DEEP, VALID, INVALID, SLATE, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, INFO, svg24, svg24Solid } from './chunk-CAFCLMPF.js';
 
@@ -64,6 +64,7 @@ var ELLIOTT_TYPES = ["elliottimpulse", "elliottcorrection"];
 var HARMONIC_TYPES = ["gartley", "bat", "butterfly", "crab", "shark", "cypher"];
 var MEASUREMENT_TYPES = ["position", "datepricerange", "magnifier"];
 var VOLUME_TYPES = ["anchoredvwap", "fixedrangevp"];
+var TIME_PRICE_TYPES = ["fixedrangetpo"];
 var BRUSH_TYPES = ["freehand", "highlighter"];
 var ARROW_TYPES = ["arrow", "arrowmarkup", "arrowmarkdown"];
 var SHAPE_TYPES = ["box", "ellipse", "triangle", "polyline", "circle", "rotatedrect", "path", "arc", "curve"];
@@ -102,7 +103,8 @@ var TOOLBAR_LAYOUT = [
     label: "Measurements",
     sections: [
       { label: "Measurements", types: MEASUREMENT_TYPES },
-      { label: "Volume", types: VOLUME_TYPES }
+      { label: "Volume", types: VOLUME_TYPES },
+      { label: "Time and Price", types: TIME_PRICE_TYPES }
     ]
   },
   {
@@ -11347,7 +11349,7 @@ var DrawingPainter = class {
   /** Paint the in-progress drawing (during placing) at reduced opacity. */
   paintGhost(ctx, ghost, proj, theme) {
     ctx.globalAlpha = GHOST_ALPHA;
-    if (ghost instanceof RegressionChannel || ghost instanceof FixedRangeVolumeProfile) {
+    if (ghost instanceof RegressionChannel || ghost instanceof FixedRangeVolumeProfile || ghost instanceof FixedRangeTpoProfile) {
       this.paintTimeSpanGhost(ctx, ghost, proj);
     } else if (ghost instanceof Magnifier) {
       this.paintMagnifierGhost(ctx, ghost, proj, theme);
@@ -11481,6 +11483,11 @@ var DrawingPainter = class {
     }
     if (d instanceof FixedRangeVolumeProfile) {
       this.paintFixedRangeVp(ctx, d, proj, theme);
+      this.paintLabel(ctx, d, proj, theme);
+      return;
+    }
+    if (d instanceof FixedRangeTpoProfile) {
+      this.paintFixedRangeTpo(ctx, d, proj, theme);
       this.paintLabel(ctx, d, proj, theme);
       return;
     }
@@ -12246,6 +12253,58 @@ var DrawingPainter = class {
       this.strokePolyline(ctx, L.developingVaHigh, devStyle);
       this.strokePolyline(ctx, L.developingVaLow, devStyle);
     }
+  }
+  /** Paint a fixed-range TPO profile: one letter per period stacked left-to-right in every price
+   *  row the period traded through (or solid blocks when the rows / letters get too small), the
+   *  value-area rows in their own color, and VAH / VAL / POC lines across the range. */
+  paintFixedRangeTpo(ctx, d, proj, theme) {
+    const L = d.layout(proj);
+    if (!L) return;
+    const s = d.frtpo;
+    const { profile, maxW, anchorX, grow, yEdges } = L;
+    if (profile.maxCount <= 0 || maxW <= 0) return;
+    const rowPx = Math.abs(yEdges[1] - yEdges[0]);
+    const fontPx = Math.min(12, Math.floor(rowPx) - 1);
+    const charW = Math.min(fontPx * 0.72, maxW / profile.maxCount);
+    const asLetters = s.display === "letters" && fontPx >= 7 && charW >= 5;
+    const pocInk = s.pocColor ?? contrastColor(theme.background);
+    ctx.save();
+    if (asLetters) {
+      ctx.font = `${fontPx}px ${theme.fontFamily}`;
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "left";
+    }
+    for (let k = 0; k < profile.rows.length; k += 1) {
+      const row = profile.rows[k];
+      const n = row.periods.length;
+      if (n <= 0) continue;
+      const yTop = Math.min(yEdges[k], yEdges[k + 1]);
+      const h = Math.max(1, Math.abs(yEdges[k + 1] - yEdges[k]) - 1);
+      const inVa = k >= profile.vaFrom && k <= profile.vaTo;
+      const ink = k === profile.poc && s.showPoc ? pocInk : inVa ? s.vaColor : s.color;
+      ctx.fillStyle = ink;
+      if (asLetters) {
+        for (let j = 0; j < n; j += 1) {
+          const x = grow === 1 ? anchorX + j * charW : anchorX - (j + 1) * charW;
+          ctx.fillText(tpoLetter(row.periods[j]), x, yTop + h / 2);
+        }
+      } else {
+        const w2 = n / profile.maxCount * maxW;
+        ctx.fillRect(grow === 1 ? anchorX : anchorX - w2, yTop, w2, h);
+      }
+    }
+    ctx.restore();
+    const w = d.style.lineWidth;
+    const hLine = (show, color, style, y) => {
+      if (!show || y == null || isTransparent(color)) return;
+      this.stroke(ctx, { lineColor: color, lineWidth: w, lineStyle: style }, () => {
+        ctx.moveTo(L.x0, y);
+        ctx.lineTo(L.x1, y);
+      });
+    };
+    hLine(s.showVah, s.vahColor, s.vahStyle, L.vahY);
+    hLine(s.showVal, s.valColor, s.valStyle, L.valY);
+    hLine(s.showPoc, pocInk, s.pocStyle, L.pocY);
   }
   /** Paint an anchored VWAP: the shaded band between the upper/lower σ curves, the two band
    *  edges (transparent by default), then the VWAP midline on top. All three are polylines that
@@ -13213,6 +13272,7 @@ var FRVP_ANCHOR = [
 var TITLES = {
   position: "Position size",
   frvp: "Volume profile",
+  frtpo: "TPO profile",
   levels: "Levels"
 };
 var DrawingSettingsDialog = class {
@@ -13240,6 +13300,7 @@ var DrawingSettingsDialog = class {
     grid.style.flex = "1 1 auto";
     if (kind === "position" && drawing instanceof PositionTool) this.buildPosition(grid, drawing, actions);
     else if (kind === "frvp" && drawing instanceof FixedRangeVolumeProfile) this.buildFrvp(grid, drawing, actions);
+    else if (kind === "frtpo" && drawing instanceof FixedRangeTpoProfile) this.buildFrtpo(grid, drawing, actions);
     else if (kind === "levels") this.buildLevels(grid, drawing, actions);
     else return;
     const ui = new Dialog({
@@ -13501,6 +13562,103 @@ var DrawingSettingsDialog = class {
     levelRow("Developing POC", "showDevelopingPoc", "developingPocColor", "developingPocStyle");
     levelRow("Developing VA", "showDevelopingVa", "developingVaColor", "developingVaStyle");
   }
+  buildFrtpo(grid, drawing, actions) {
+    const styleOf = () => {
+      const d = actions.resolve();
+      return d instanceof FixedRangeTpoProfile ? d.frtpo : drawing.frtpo;
+    };
+    const s = styleOf();
+    const numberRow = (label, path, min, max) => {
+      grid.appendChild(fieldRow({
+        label,
+        control: buildFieldControl({
+          kind: "number",
+          value: s[path],
+          min,
+          max,
+          step: 1,
+          integer: true,
+          fill: false,
+          commit: "blur",
+          onChange: (n) => actions.patch({ [`frtpo.${path}`]: n })
+        }).el
+      }));
+    };
+    numberRow("Rows", "rows", 1, 500);
+    numberRow("Period (min)", "periodMin", 1, 1440);
+    numberRow("Value Area", "valueAreaPct", 0, 100);
+    numberRow("Width %", "widthPct", 0, 100);
+    const selectRow = (label, path, options) => {
+      grid.appendChild(fieldRow({
+        label,
+        control: buildFieldControl({
+          kind: "select",
+          options,
+          value: s[path],
+          fill: false,
+          theme: this.theme,
+          onChange: (v) => actions.patch({ [`frtpo.${path}`]: v })
+        }).el
+      }));
+    };
+    selectRow("Anchor", "anchor", FRVP_ANCHOR);
+    selectRow("Display", "display", [
+      { value: "letters", label: "Letters" },
+      { value: "blocks", label: "Blocks" }
+    ]);
+    const colorRow = (label, path) => {
+      grid.appendChild(fieldRow({
+        label,
+        fit: true,
+        control: buildFieldControl({
+          kind: "color",
+          theme: this.theme,
+          get: () => styleOf()[path],
+          onChange: (v) => actions.patch({ [`frtpo.${path}`]: v })
+        }).el
+      }));
+    };
+    colorRow("TPO", "color");
+    colorRow("Value Area", "vaColor");
+    const styles = LINE_STYLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
+    const levelRow = (label, showPath, colorPath, stylePath) => {
+      const row = document.createElement("div");
+      row.className = "vela-field-span";
+      row.style.cssText = "display:flex;align-items:center;gap:8px;";
+      const sw = buildFieldControl({
+        kind: "switch",
+        checked: Boolean(s[showPath]),
+        onChange: (v) => actions.patch({ [`frtpo.${showPath}`]: v })
+      });
+      const lbl = document.createElement("span");
+      lbl.className = "vela-field-label";
+      lbl.style.flex = "1";
+      lbl.textContent = label;
+      let cur = s[colorPath] ?? contrastColor(this.theme.background);
+      const col = buildFieldControl({
+        kind: "color",
+        theme: this.theme,
+        get: () => cur,
+        onChange: (v) => {
+          cur = v;
+          actions.patch({ [`frtpo.${colorPath}`]: v });
+        }
+      });
+      const style = buildFieldControl({
+        kind: "select",
+        options: styles,
+        value: s[stylePath],
+        fill: false,
+        theme: this.theme,
+        onChange: (v) => actions.patch({ [`frtpo.${stylePath}`]: v })
+      });
+      row.append(sw.el, lbl, col.el, style.el);
+      grid.appendChild(row);
+    };
+    levelRow("VAH", "showVah", "vahColor", "vahStyle");
+    levelRow("VAL", "showVal", "valColor", "valStyle");
+    levelRow("POC", "showPoc", "pocColor", "pocStyle");
+  }
   buildLevels(grid, drawing, actions) {
     const levels = drawing.editableLevels();
     if (!levels) return;
@@ -13707,6 +13865,7 @@ var DrawingSettingsPopup = class {
     if (paths.has("style.lineStyle")) bar.appendChild(this.dropdown("Line style", LINE_STYLE_OPTIONS.map((o) => o.value), drawing.style.lineStyle, (s) => lineIcon(2, s), (v) => actions.patch({ "style.lineStyle": v }), { label: styleLabel2 }));
     if (paths.has("style.fillColor")) bar.appendChild(this.colorButton("Fill", BUCKET_ICON, effectiveFillColor(drawing, this.theme) ?? drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR, (v) => actions.patch({ "style.fillColor": v })));
     const isFrvp = paths.has("frvp.rows") && drawing instanceof FixedRangeVolumeProfile;
+    const isFrtpo = paths.has("frtpo.rows") && drawing instanceof FixedRangeTpoProfile;
     const isPosition = paths.has("riskPercent") && drawing instanceof PositionTool;
     if (isPosition) {
       const pos = drawing;
@@ -13786,6 +13945,7 @@ var DrawingSettingsPopup = class {
     }
     bar.appendChild(this.divider());
     if (isFrvp) bar.appendChild(this.iconBtn("Settings", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "frvp")));
+    if (isFrtpo) bar.appendChild(this.iconBtn("Settings", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "frtpo")));
     if (isPosition) bar.appendChild(this.iconBtn("Position size", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "position")));
     if (editableLevels) bar.appendChild(this.iconBtn("Levels", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "levels")));
     bar.appendChild(this.toggle("Lock", LOCK_ICON, drawing.locked, (v) => actions.setLocked(v)));

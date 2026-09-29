@@ -1817,6 +1817,258 @@ var FixedRangeVolumeProfile = class extends Drawing {
   }
 };
 
+// src/core/drawings/types/FixedRangeTpoProfile.ts
+var LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+function tpoLetter(periodIndex) {
+  return LETTERS[(periodIndex % LETTERS.length + LETTERS.length) % LETTERS.length];
+}
+function defaultFrtpStyle() {
+  return {
+    rows: 30,
+    periodMin: 30,
+    valueAreaPct: 70,
+    widthPct: 35,
+    anchor: "left",
+    display: "letters",
+    color: `${NEUTRAL}CC`,
+    vaColor: ACCENT,
+    showVah: true,
+    vahColor: NEUTRAL,
+    vahStyle: "solid",
+    showVal: true,
+    valColor: NEUTRAL,
+    valStyle: "solid",
+    showPoc: true,
+    pocColor: void 0,
+    pocStyle: "solid"
+  };
+}
+function clampIndex2(k, n) {
+  return k < 0 ? 0 : k >= n ? n - 1 : k;
+}
+function toPeriods(bars, periodMs) {
+  const sorted = [...bars].sort((a, b) => a.time - b.time);
+  const out = [];
+  let cur = Number.NaN;
+  for (const b of sorted) {
+    const bucket = Math.floor(b.time / periodMs);
+    if (bucket !== cur) {
+      out.push({ high: b.high, low: b.low });
+      cur = bucket;
+    } else {
+      const p = out[out.length - 1];
+      if (b.high > p.high) p.high = b.high;
+      if (b.low < p.low) p.low = b.low;
+    }
+  }
+  return out;
+}
+function growValueArea2(counts, poc, valueAreaFrac) {
+  const n = counts.length;
+  let total = 0;
+  for (const c of counts) total += c;
+  const target = total * Math.min(1, Math.max(0, valueAreaFrac));
+  let vaFrom = poc;
+  let vaTo = poc;
+  let acc = counts[poc];
+  while (acc < target && (vaFrom > 0 || vaTo < n - 1)) {
+    const below = vaFrom > 0 ? counts[vaFrom - 1] : -1;
+    const above = vaTo < n - 1 ? counts[vaTo + 1] : -1;
+    if (above > below) {
+      vaTo += 1;
+      acc += above;
+    } else {
+      vaFrom -= 1;
+      acc += below;
+    }
+  }
+  return { vaFrom, vaTo };
+}
+function buildTpoProfile(bars, rowCount, periodMs, valueAreaFrac) {
+  if (bars.length < 1 || !(periodMs > 0)) return null;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const b of bars) {
+    if (b.low < min) min = b.low;
+    if (b.high > max) max = b.high;
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  const n = max > min ? Math.max(1, Math.round(rowCount)) : 1;
+  const rowH = max > min ? (max - min) / n : 1;
+  const rows = Array.from({ length: n }, (_, k) => ({ price: min + k * rowH, periods: [] }));
+  const periods = toPeriods(bars, periodMs);
+  periods.forEach((p, i) => {
+    const kLo = clampIndex2(Math.floor((p.low - min) / rowH), n);
+    const kHi = Math.max(kLo, clampIndex2(Math.ceil((p.high - min) / rowH - 1e-9) - 1, n));
+    for (let k = kLo; k <= kHi; k += 1) rows[k].periods.push(i);
+  });
+  const counts = rows.map((r) => r.periods.length);
+  let maxCount = 0;
+  for (const c of counts) if (c > maxCount) maxCount = c;
+  if (maxCount <= 0) return null;
+  const mid = (n - 1) / 2;
+  let poc = -1;
+  for (let k = 0; k < n; k += 1) {
+    if (counts[k] !== maxCount) continue;
+    if (poc < 0 || Math.abs(k - mid) < Math.abs(poc - mid)) poc = k;
+  }
+  const { vaFrom, vaTo } = growValueArea2(counts, poc, valueAreaFrac);
+  return { rows, rowH, min, periodCount: periods.length, maxCount, poc, vaFrom, vaTo };
+}
+var FixedRangeTpoProfile = class extends Drawing {
+  constructor(init) {
+    super(init);
+    this.type = "fixedrangetpo";
+    this.cachedRange = null;
+    if (!this.frtpo) this.frtpo = defaultFrtpStyle();
+  }
+  anchorSchema() {
+    return { min: 2, max: 2, slots: [{ role: "start", free: "x" }, { role: "end", free: "x" }] };
+  }
+  barsInSpan(proj) {
+    const a = this.anchors[0];
+    const b = this.anchors[1];
+    if (!a || !b) return null;
+    const from = Math.min(a.time, b.time);
+    const to = Math.max(a.time, b.time);
+    const raw = proj.barsInRange?.(from, to) ?? null;
+    if (!raw || raw.length < 1) return null;
+    return raw.map((bar) => ({ time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close }));
+  }
+  /** Compute the profile, caching the price span for autoscale. */
+  compute(proj) {
+    const bars = this.barsInSpan(proj);
+    if (!bars) return null;
+    const s = this.frtpo;
+    const profile = buildTpoProfile(bars, s.rows, Math.max(1, s.periodMin) * 6e4, s.valueAreaPct / 100);
+    if (profile) this.cachedRange = { min: profile.min, max: profile.min + profile.rowH * profile.rows.length };
+    return profile;
+  }
+  /** Resolve the compute to pixel geometry for the painter + hit-test. */
+  layout(proj) {
+    const a = this.anchors[0];
+    const b = this.anchors[1];
+    if (!a || !b) return null;
+    const profile = this.compute(proj);
+    if (!profile) return null;
+    const x0 = proj.xOf(Math.min(a.time, b.time));
+    const x1 = proj.xOf(Math.max(a.time, b.time));
+    const spanW = Math.abs(x1 - x0);
+    const maxW = Math.max(1, Math.min(100, Math.max(0, this.frtpo.widthPct)) / 100 * spanW);
+    const growRight = this.frtpo.anchor === "left";
+    const anchorX = growRight ? Math.min(x0, x1) : Math.max(x0, x1);
+    const yEdges = [];
+    for (let k = 0; k <= profile.rows.length; k += 1) {
+      const y = proj.yOf(profile.min + k * profile.rowH, this.paneId);
+      if (y == null) return null;
+      yEdges.push(y);
+    }
+    const yAt = (price) => proj.yOf(price, this.paneId);
+    return {
+      x0: Math.min(x0, x1),
+      x1: Math.max(x0, x1),
+      anchorX,
+      maxW,
+      grow: growRight ? 1 : -1,
+      profile,
+      yEdges,
+      vahY: yAt(profile.rows[profile.vaTo].price + profile.rowH),
+      valY: yAt(profile.rows[profile.vaFrom].price),
+      pocY: yAt(profile.rows[profile.poc].price + profile.rowH / 2)
+    };
+  }
+  hitTest(px, py, proj, tol) {
+    const L = this.layout(proj);
+    if (!L) return false;
+    const left = L.grow === 1 ? L.anchorX : L.anchorX - L.maxW;
+    const right = L.grow === 1 ? L.anchorX + L.maxW : L.anchorX;
+    const yLo = Math.min(L.yEdges[0], L.yEdges[L.yEdges.length - 1]);
+    const yHi = Math.max(L.yEdges[0], L.yEdges[L.yEdges.length - 1]);
+    if (pointInPolygon(px, py, [[left, yLo], [right, yLo], [right, yHi], [left, yHi]])) return true;
+    for (const y of [L.vahY, L.valY, L.pocY]) {
+      if (y != null && distToSegment(px, py, L.x0, y, L.x1, y) <= tol) return true;
+    }
+    return false;
+  }
+  handlePoints(proj) {
+    const L = this.layout(proj);
+    if (L && L.pocY != null) return [[L.x0, L.pocY], [L.x1, L.pocY]];
+    const pts = [];
+    for (const a of this.anchors) {
+      const y = proj.yOf(a.price, this.paneId);
+      if (y == null) return [];
+      pts.push([proj.xOf(a.time), y]);
+    }
+    return pts;
+  }
+  hitHandle(px, py, proj, tol) {
+    return handleAt(px, py, this.handlePoints(proj), tol + 3);
+  }
+  bounds(proj) {
+    const L = this.layout(proj);
+    if (!L) return null;
+    const left = Math.min(L.x0, L.grow === 1 ? L.anchorX : L.anchorX - L.maxW);
+    const right = Math.max(L.x1, L.grow === 1 ? L.anchorX + L.maxW : L.anchorX);
+    const yLo = Math.min(L.yEdges[0], L.yEdges[L.yEdges.length - 1]);
+    const yHi = Math.max(L.yEdges[0], L.yEdges[L.yEdges.length - 1]);
+    return { x: left, y: yLo, w: right - left, h: yHi - yLo };
+  }
+  priceRange() {
+    if (this.cachedRange) return this.cachedRange;
+    const a = this.anchors[0];
+    const b = this.anchors[1];
+    if (!a || !b) return null;
+    return { min: Math.min(a.price, b.price), max: Math.max(a.price, b.price) };
+  }
+  schema() {
+    return {
+      fields: [
+        { path: "frtpo.rows", label: "Rows", kind: "number", min: 1, max: 500, step: 1, group: "behavior" },
+        { path: "frtpo.periodMin", label: "Period (min)", kind: "number", min: 1, max: 1440, step: 1, group: "behavior" },
+        { path: "frtpo.valueAreaPct", label: "Value Area", kind: "number", min: 0, max: 100, step: 1, group: "behavior" },
+        { path: "frtpo.widthPct", label: "Width %", kind: "number", min: 0, max: 100, step: 1, group: "behavior" },
+        {
+          path: "frtpo.anchor",
+          label: "Anchor",
+          kind: "select",
+          options: [
+            { value: "right", label: "Right" },
+            { value: "left", label: "Left" }
+          ],
+          group: "behavior"
+        },
+        {
+          path: "frtpo.display",
+          label: "Display",
+          kind: "select",
+          options: [
+            { value: "letters", label: "Letters" },
+            { value: "blocks", label: "Blocks" }
+          ],
+          group: "behavior"
+        },
+        { path: "frtpo.color", label: "TPO", kind: "color", group: "fill" },
+        { path: "frtpo.vaColor", label: "Value Area", kind: "color", group: "fill" },
+        { path: "frtpo.showVah", label: "VAH", kind: "boolean", group: "line" },
+        { path: "frtpo.vahColor", label: "VAH color", kind: "color", group: "line" },
+        { path: "frtpo.vahStyle", label: "VAH style", kind: "lineStyle", options: LINE_STYLE_OPTIONS, group: "line" },
+        { path: "frtpo.showVal", label: "VAL", kind: "boolean", group: "line" },
+        { path: "frtpo.valColor", label: "VAL color", kind: "color", group: "line" },
+        { path: "frtpo.valStyle", label: "VAL style", kind: "lineStyle", options: LINE_STYLE_OPTIONS, group: "line" },
+        { path: "frtpo.showPoc", label: "POC", kind: "boolean", group: "line" },
+        { path: "frtpo.pocColor", label: "POC color", kind: "color", group: "line" },
+        { path: "frtpo.pocStyle", label: "POC style", kind: "lineStyle", options: LINE_STYLE_OPTIONS, group: "line" }
+      ]
+    };
+  }
+  writeProps() {
+    return { ...this.frtpo };
+  }
+  readProps(props) {
+    this.frtpo = { ...defaultFrtpStyle(), ...props };
+  }
+};
+
 // src/core/drawings/types/Pitchfork.ts
 var Pitchfork = class extends SegmentDrawing {
   constructor() {
@@ -5767,6 +6019,17 @@ registerDrawingType({
   defaultStyle: { lineColor: BULLISH, lineWidth: 1, lineStyle: "solid" },
   create: (init) => new FixedRangeVolumeProfile(init)
 });
+var FRTPO_ICON = svg24(
+  '<path d="M4 4v16"/><path d="M7 7h2M11 7h2"/><path d="M7 11h2M11 11h2M15 11h2"/><path d="M7 15h2M11 15h2"/><path d="M7 19h2"/>'
+);
+registerDrawingType({
+  type: "fixedrangetpo",
+  group: "measure",
+  label: "Fixed Range TPO Profile",
+  icon: FRTPO_ICON,
+  defaultStyle: { lineColor: ACCENT, lineWidth: 1, lineStyle: "solid" },
+  create: (init) => new FixedRangeTpoProfile(init)
+});
 
 // src/chart-types/registry.ts
 function normalizeSettingsRow(r) {
@@ -6365,4 +6628,4 @@ var SidePanel = class {
   }
 };
 
-export { AnchoredVwap, ArrowMark, Callout, CalloutBase, Comment, DEDEKIND_CURVATURE_OPTIONS, DEFAULT_DRAWING_COLOR, DEFAULT_PANEL_MAX_WIDTH, DEFAULT_PANEL_MIN_WIDTH, DEFAULT_PANEL_ORDER, DEFAULT_PANEL_WIDTH, DIRECTION_OPTIONS, DedekindTessellation, Drawing, FibRatios, FibSpiral, FixedRangeVolumeProfile, GANN_SQUARE_ARCS, GLYPH_OPTIONS, GannSquare, GlyphStamp, LINE_STYLE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, MAGNIFIER_TIMEFRAME_OPTIONS, MachFigure, Magnifier, MeasureBox, Note, OVERRIDABLE_TOPBAR_IDS, PatternDrawing, PositionTool, PriceLabel, PriceNote, RadialFib, RegressionChannel, STAMP_SIZE_OPTIONS, SegmentDrawing, SidePanel, Signpost, TEXT_SIZE_OPTIONS, TOPBAR_BUILTIN_IDS, TOPBAR_DEFAULT_LEFT, TOPBAR_DEFAULT_RIGHT, TextLabel, chartType, chartTypes, clampPanelWidth, createDrawing, deserializeDrawing, drawingTypes, foldBaseModulation, formatDuration, getDrawingType, getNativeIndicator, inputDeltas, inputVisible, legendActions, legendActionsProviderFor, legendCallouts, legendCalloutsProviderFor, lineSegmentIntersection, magnifierTimeframeLabel, nativeIndicatorDescriptors, nativeIndicatorTypes, normalizeSettingsRow, pinnedTopbarActionIds, registerChartType, registerDefaultEngine, registerDrawingType, registerLegendAction, registerLegendCallout, registerNativeIndicator, registerRendererDefaults, registerRendererLayer, registerSidePanel, registerStatePersistence, registerSymbolRanking, registerWidgetAction, registerWidgetAttachment, rendererDefaults, rendererLayers, resetDrawingSettings, resolveEngines, resolveTopbarComposition, settingsRowValueKeys, settingsRowVisible, sidePanels, stableSeriesId, statePersistenceHandlers, symbolRanking, tickerModifierIds, topbarActionOverride, topbarHas, unregisterChartType, unregisterDefaultEngine, unregisterLegendAction, unregisterLegendCallout, unregisterNativeIndicator, unregisterRendererDefaults, unregisterRendererLayer, unregisterSidePanel, unregisterStatePersistence, unregisterWidgetAction, unregisterWidgetAttachment, widgetActions, widgetAttachments };
+export { AnchoredVwap, ArrowMark, Callout, CalloutBase, Comment, DEDEKIND_CURVATURE_OPTIONS, DEFAULT_DRAWING_COLOR, DEFAULT_PANEL_MAX_WIDTH, DEFAULT_PANEL_MIN_WIDTH, DEFAULT_PANEL_ORDER, DEFAULT_PANEL_WIDTH, DIRECTION_OPTIONS, DedekindTessellation, Drawing, FibRatios, FibSpiral, FixedRangeTpoProfile, FixedRangeVolumeProfile, GANN_SQUARE_ARCS, GLYPH_OPTIONS, GannSquare, GlyphStamp, LINE_STYLE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, MAGNIFIER_TIMEFRAME_OPTIONS, MachFigure, Magnifier, MeasureBox, Note, OVERRIDABLE_TOPBAR_IDS, PatternDrawing, PositionTool, PriceLabel, PriceNote, RadialFib, RegressionChannel, STAMP_SIZE_OPTIONS, SegmentDrawing, SidePanel, Signpost, TEXT_SIZE_OPTIONS, TOPBAR_BUILTIN_IDS, TOPBAR_DEFAULT_LEFT, TOPBAR_DEFAULT_RIGHT, TextLabel, chartType, chartTypes, clampPanelWidth, createDrawing, deserializeDrawing, drawingTypes, foldBaseModulation, formatDuration, getDrawingType, getNativeIndicator, inputDeltas, inputVisible, legendActions, legendActionsProviderFor, legendCallouts, legendCalloutsProviderFor, lineSegmentIntersection, magnifierTimeframeLabel, nativeIndicatorDescriptors, nativeIndicatorTypes, normalizeSettingsRow, pinnedTopbarActionIds, registerChartType, registerDefaultEngine, registerDrawingType, registerLegendAction, registerLegendCallout, registerNativeIndicator, registerRendererDefaults, registerRendererLayer, registerSidePanel, registerStatePersistence, registerSymbolRanking, registerWidgetAction, registerWidgetAttachment, rendererDefaults, rendererLayers, resetDrawingSettings, resolveEngines, resolveTopbarComposition, settingsRowValueKeys, settingsRowVisible, sidePanels, stableSeriesId, statePersistenceHandlers, symbolRanking, tickerModifierIds, topbarActionOverride, topbarHas, tpoLetter, unregisterChartType, unregisterDefaultEngine, unregisterLegendAction, unregisterLegendCallout, unregisterNativeIndicator, unregisterRendererDefaults, unregisterRendererLayer, unregisterSidePanel, unregisterStatePersistence, unregisterWidgetAction, unregisterWidgetAttachment, widgetActions, widgetAttachments };

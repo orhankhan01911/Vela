@@ -8115,6 +8115,258 @@ var FixedRangeVolumeProfile = class extends Drawing {
   }
 };
 
+// src/core/drawings/types/FixedRangeTpoProfile.ts
+var LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+function tpoLetter(periodIndex) {
+  return LETTERS[(periodIndex % LETTERS.length + LETTERS.length) % LETTERS.length];
+}
+function defaultFrtpStyle() {
+  return {
+    rows: 30,
+    periodMin: 30,
+    valueAreaPct: 70,
+    widthPct: 35,
+    anchor: "left",
+    display: "letters",
+    color: `${NEUTRAL}CC`,
+    vaColor: ACCENT,
+    showVah: true,
+    vahColor: NEUTRAL,
+    vahStyle: "solid",
+    showVal: true,
+    valColor: NEUTRAL,
+    valStyle: "solid",
+    showPoc: true,
+    pocColor: void 0,
+    pocStyle: "solid"
+  };
+}
+function clampIndex2(k, n) {
+  return k < 0 ? 0 : k >= n ? n - 1 : k;
+}
+function toPeriods(bars, periodMs) {
+  const sorted = [...bars].sort((a, b) => a.time - b.time);
+  const out = [];
+  let cur = Number.NaN;
+  for (const b of sorted) {
+    const bucket = Math.floor(b.time / periodMs);
+    if (bucket !== cur) {
+      out.push({ high: b.high, low: b.low });
+      cur = bucket;
+    } else {
+      const p = out[out.length - 1];
+      if (b.high > p.high) p.high = b.high;
+      if (b.low < p.low) p.low = b.low;
+    }
+  }
+  return out;
+}
+function growValueArea2(counts, poc, valueAreaFrac) {
+  const n = counts.length;
+  let total = 0;
+  for (const c of counts) total += c;
+  const target = total * Math.min(1, Math.max(0, valueAreaFrac));
+  let vaFrom = poc;
+  let vaTo = poc;
+  let acc = counts[poc];
+  while (acc < target && (vaFrom > 0 || vaTo < n - 1)) {
+    const below = vaFrom > 0 ? counts[vaFrom - 1] : -1;
+    const above = vaTo < n - 1 ? counts[vaTo + 1] : -1;
+    if (above > below) {
+      vaTo += 1;
+      acc += above;
+    } else {
+      vaFrom -= 1;
+      acc += below;
+    }
+  }
+  return { vaFrom, vaTo };
+}
+function buildTpoProfile(bars, rowCount, periodMs, valueAreaFrac) {
+  if (bars.length < 1 || !(periodMs > 0)) return null;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const b of bars) {
+    if (b.low < min) min = b.low;
+    if (b.high > max) max = b.high;
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  const n = max > min ? Math.max(1, Math.round(rowCount)) : 1;
+  const rowH = max > min ? (max - min) / n : 1;
+  const rows = Array.from({ length: n }, (_, k) => ({ price: min + k * rowH, periods: [] }));
+  const periods = toPeriods(bars, periodMs);
+  periods.forEach((p, i) => {
+    const kLo = clampIndex2(Math.floor((p.low - min) / rowH), n);
+    const kHi = Math.max(kLo, clampIndex2(Math.ceil((p.high - min) / rowH - 1e-9) - 1, n));
+    for (let k = kLo; k <= kHi; k += 1) rows[k].periods.push(i);
+  });
+  const counts = rows.map((r) => r.periods.length);
+  let maxCount = 0;
+  for (const c of counts) if (c > maxCount) maxCount = c;
+  if (maxCount <= 0) return null;
+  const mid = (n - 1) / 2;
+  let poc = -1;
+  for (let k = 0; k < n; k += 1) {
+    if (counts[k] !== maxCount) continue;
+    if (poc < 0 || Math.abs(k - mid) < Math.abs(poc - mid)) poc = k;
+  }
+  const { vaFrom, vaTo } = growValueArea2(counts, poc, valueAreaFrac);
+  return { rows, rowH, min, periodCount: periods.length, maxCount, poc, vaFrom, vaTo };
+}
+var FixedRangeTpoProfile = class extends Drawing {
+  constructor(init) {
+    super(init);
+    this.type = "fixedrangetpo";
+    this.cachedRange = null;
+    if (!this.frtpo) this.frtpo = defaultFrtpStyle();
+  }
+  anchorSchema() {
+    return { min: 2, max: 2, slots: [{ role: "start", free: "x" }, { role: "end", free: "x" }] };
+  }
+  barsInSpan(proj) {
+    const a = this.anchors[0];
+    const b = this.anchors[1];
+    if (!a || !b) return null;
+    const from = Math.min(a.time, b.time);
+    const to = Math.max(a.time, b.time);
+    const raw = proj.barsInRange?.(from, to) ?? null;
+    if (!raw || raw.length < 1) return null;
+    return raw.map((bar) => ({ time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close }));
+  }
+  /** Compute the profile, caching the price span for autoscale. */
+  compute(proj) {
+    const bars = this.barsInSpan(proj);
+    if (!bars) return null;
+    const s = this.frtpo;
+    const profile = buildTpoProfile(bars, s.rows, Math.max(1, s.periodMin) * 6e4, s.valueAreaPct / 100);
+    if (profile) this.cachedRange = { min: profile.min, max: profile.min + profile.rowH * profile.rows.length };
+    return profile;
+  }
+  /** Resolve the compute to pixel geometry for the painter + hit-test. */
+  layout(proj) {
+    const a = this.anchors[0];
+    const b = this.anchors[1];
+    if (!a || !b) return null;
+    const profile = this.compute(proj);
+    if (!profile) return null;
+    const x0 = proj.xOf(Math.min(a.time, b.time));
+    const x1 = proj.xOf(Math.max(a.time, b.time));
+    const spanW = Math.abs(x1 - x0);
+    const maxW = Math.max(1, Math.min(100, Math.max(0, this.frtpo.widthPct)) / 100 * spanW);
+    const growRight = this.frtpo.anchor === "left";
+    const anchorX = growRight ? Math.min(x0, x1) : Math.max(x0, x1);
+    const yEdges = [];
+    for (let k = 0; k <= profile.rows.length; k += 1) {
+      const y = proj.yOf(profile.min + k * profile.rowH, this.paneId);
+      if (y == null) return null;
+      yEdges.push(y);
+    }
+    const yAt = (price) => proj.yOf(price, this.paneId);
+    return {
+      x0: Math.min(x0, x1),
+      x1: Math.max(x0, x1),
+      anchorX,
+      maxW,
+      grow: growRight ? 1 : -1,
+      profile,
+      yEdges,
+      vahY: yAt(profile.rows[profile.vaTo].price + profile.rowH),
+      valY: yAt(profile.rows[profile.vaFrom].price),
+      pocY: yAt(profile.rows[profile.poc].price + profile.rowH / 2)
+    };
+  }
+  hitTest(px, py, proj, tol) {
+    const L = this.layout(proj);
+    if (!L) return false;
+    const left = L.grow === 1 ? L.anchorX : L.anchorX - L.maxW;
+    const right = L.grow === 1 ? L.anchorX + L.maxW : L.anchorX;
+    const yLo = Math.min(L.yEdges[0], L.yEdges[L.yEdges.length - 1]);
+    const yHi = Math.max(L.yEdges[0], L.yEdges[L.yEdges.length - 1]);
+    if (pointInPolygon(px, py, [[left, yLo], [right, yLo], [right, yHi], [left, yHi]])) return true;
+    for (const y of [L.vahY, L.valY, L.pocY]) {
+      if (y != null && distToSegment(px, py, L.x0, y, L.x1, y) <= tol) return true;
+    }
+    return false;
+  }
+  handlePoints(proj) {
+    const L = this.layout(proj);
+    if (L && L.pocY != null) return [[L.x0, L.pocY], [L.x1, L.pocY]];
+    const pts = [];
+    for (const a of this.anchors) {
+      const y = proj.yOf(a.price, this.paneId);
+      if (y == null) return [];
+      pts.push([proj.xOf(a.time), y]);
+    }
+    return pts;
+  }
+  hitHandle(px, py, proj, tol) {
+    return handleAt(px, py, this.handlePoints(proj), tol + 3);
+  }
+  bounds(proj) {
+    const L = this.layout(proj);
+    if (!L) return null;
+    const left = Math.min(L.x0, L.grow === 1 ? L.anchorX : L.anchorX - L.maxW);
+    const right = Math.max(L.x1, L.grow === 1 ? L.anchorX + L.maxW : L.anchorX);
+    const yLo = Math.min(L.yEdges[0], L.yEdges[L.yEdges.length - 1]);
+    const yHi = Math.max(L.yEdges[0], L.yEdges[L.yEdges.length - 1]);
+    return { x: left, y: yLo, w: right - left, h: yHi - yLo };
+  }
+  priceRange() {
+    if (this.cachedRange) return this.cachedRange;
+    const a = this.anchors[0];
+    const b = this.anchors[1];
+    if (!a || !b) return null;
+    return { min: Math.min(a.price, b.price), max: Math.max(a.price, b.price) };
+  }
+  schema() {
+    return {
+      fields: [
+        { path: "frtpo.rows", label: "Rows", kind: "number", min: 1, max: 500, step: 1, group: "behavior" },
+        { path: "frtpo.periodMin", label: "Period (min)", kind: "number", min: 1, max: 1440, step: 1, group: "behavior" },
+        { path: "frtpo.valueAreaPct", label: "Value Area", kind: "number", min: 0, max: 100, step: 1, group: "behavior" },
+        { path: "frtpo.widthPct", label: "Width %", kind: "number", min: 0, max: 100, step: 1, group: "behavior" },
+        {
+          path: "frtpo.anchor",
+          label: "Anchor",
+          kind: "select",
+          options: [
+            { value: "right", label: "Right" },
+            { value: "left", label: "Left" }
+          ],
+          group: "behavior"
+        },
+        {
+          path: "frtpo.display",
+          label: "Display",
+          kind: "select",
+          options: [
+            { value: "letters", label: "Letters" },
+            { value: "blocks", label: "Blocks" }
+          ],
+          group: "behavior"
+        },
+        { path: "frtpo.color", label: "TPO", kind: "color", group: "fill" },
+        { path: "frtpo.vaColor", label: "Value Area", kind: "color", group: "fill" },
+        { path: "frtpo.showVah", label: "VAH", kind: "boolean", group: "line" },
+        { path: "frtpo.vahColor", label: "VAH color", kind: "color", group: "line" },
+        { path: "frtpo.vahStyle", label: "VAH style", kind: "lineStyle", options: LINE_STYLE_OPTIONS, group: "line" },
+        { path: "frtpo.showVal", label: "VAL", kind: "boolean", group: "line" },
+        { path: "frtpo.valColor", label: "VAL color", kind: "color", group: "line" },
+        { path: "frtpo.valStyle", label: "VAL style", kind: "lineStyle", options: LINE_STYLE_OPTIONS, group: "line" },
+        { path: "frtpo.showPoc", label: "POC", kind: "boolean", group: "line" },
+        { path: "frtpo.pocColor", label: "POC color", kind: "color", group: "line" },
+        { path: "frtpo.pocStyle", label: "POC style", kind: "lineStyle", options: LINE_STYLE_OPTIONS, group: "line" }
+      ]
+    };
+  }
+  writeProps() {
+    return { ...this.frtpo };
+  }
+  readProps(props) {
+    this.frtpo = { ...defaultFrtpStyle(), ...props };
+  }
+};
+
 // src/core/drawings/types/Pitchfork.ts
 var Pitchfork = class extends SegmentDrawing {
   constructor() {
@@ -12064,6 +12316,17 @@ registerDrawingType({
   icon: FRVP_ICON,
   defaultStyle: { lineColor: BULLISH, lineWidth: 1, lineStyle: "solid" },
   create: (init) => new FixedRangeVolumeProfile(init)
+});
+var FRTPO_ICON = svg24(
+  '<path d="M4 4v16"/><path d="M7 7h2M11 7h2"/><path d="M7 11h2M11 11h2M15 11h2"/><path d="M7 15h2M11 15h2"/><path d="M7 19h2"/>'
+);
+registerDrawingType({
+  type: "fixedrangetpo",
+  group: "measure",
+  label: "Fixed Range TPO Profile",
+  icon: FRTPO_ICON,
+  defaultStyle: { lineColor: ACCENT, lineWidth: 1, lineStyle: "solid" },
+  create: (init) => new FixedRangeTpoProfile(init)
 });
 
 // src/widget/object-tree-model.ts
@@ -16394,6 +16657,7 @@ var ELLIOTT_TYPES = ["elliottimpulse", "elliottcorrection"];
 var HARMONIC_TYPES = ["gartley", "bat", "butterfly", "crab", "shark", "cypher"];
 var MEASUREMENT_TYPES = ["position", "datepricerange", "magnifier"];
 var VOLUME_TYPES = ["anchoredvwap", "fixedrangevp"];
+var TIME_PRICE_TYPES = ["fixedrangetpo"];
 var BRUSH_TYPES = ["freehand", "highlighter"];
 var ARROW_TYPES = ["arrow", "arrowmarkup", "arrowmarkdown"];
 var SHAPE_TYPES = ["box", "ellipse", "triangle", "polyline", "circle", "rotatedrect", "path", "arc", "curve"];
@@ -16432,7 +16696,8 @@ var TOOLBAR_LAYOUT = [
     label: "Measurements",
     sections: [
       { label: "Measurements", types: MEASUREMENT_TYPES },
-      { label: "Volume", types: VOLUME_TYPES }
+      { label: "Volume", types: VOLUME_TYPES },
+      { label: "Time and Price", types: TIME_PRICE_TYPES }
     ]
   },
   {
@@ -28842,7 +29107,7 @@ var DrawingPainter = class {
   /** Paint the in-progress drawing (during placing) at reduced opacity. */
   paintGhost(ctx, ghost, proj, theme) {
     ctx.globalAlpha = GHOST_ALPHA;
-    if (ghost instanceof RegressionChannel || ghost instanceof FixedRangeVolumeProfile) {
+    if (ghost instanceof RegressionChannel || ghost instanceof FixedRangeVolumeProfile || ghost instanceof FixedRangeTpoProfile) {
       this.paintTimeSpanGhost(ctx, ghost, proj);
     } else if (ghost instanceof Magnifier) {
       this.paintMagnifierGhost(ctx, ghost, proj, theme);
@@ -28976,6 +29241,11 @@ var DrawingPainter = class {
     }
     if (d instanceof FixedRangeVolumeProfile) {
       this.paintFixedRangeVp(ctx, d, proj, theme);
+      this.paintLabel(ctx, d, proj, theme);
+      return;
+    }
+    if (d instanceof FixedRangeTpoProfile) {
+      this.paintFixedRangeTpo(ctx, d, proj, theme);
       this.paintLabel(ctx, d, proj, theme);
       return;
     }
@@ -29741,6 +30011,58 @@ var DrawingPainter = class {
       this.strokePolyline(ctx, L.developingVaHigh, devStyle);
       this.strokePolyline(ctx, L.developingVaLow, devStyle);
     }
+  }
+  /** Paint a fixed-range TPO profile: one letter per period stacked left-to-right in every price
+   *  row the period traded through (or solid blocks when the rows / letters get too small), the
+   *  value-area rows in their own color, and VAH / VAL / POC lines across the range. */
+  paintFixedRangeTpo(ctx, d, proj, theme) {
+    const L = d.layout(proj);
+    if (!L) return;
+    const s = d.frtpo;
+    const { profile, maxW, anchorX, grow, yEdges } = L;
+    if (profile.maxCount <= 0 || maxW <= 0) return;
+    const rowPx = Math.abs(yEdges[1] - yEdges[0]);
+    const fontPx = Math.min(12, Math.floor(rowPx) - 1);
+    const charW = Math.min(fontPx * 0.72, maxW / profile.maxCount);
+    const asLetters = s.display === "letters" && fontPx >= 7 && charW >= 5;
+    const pocInk = s.pocColor ?? contrastColor(theme.background);
+    ctx.save();
+    if (asLetters) {
+      ctx.font = `${fontPx}px ${theme.fontFamily}`;
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "left";
+    }
+    for (let k = 0; k < profile.rows.length; k += 1) {
+      const row = profile.rows[k];
+      const n = row.periods.length;
+      if (n <= 0) continue;
+      const yTop = Math.min(yEdges[k], yEdges[k + 1]);
+      const h = Math.max(1, Math.abs(yEdges[k + 1] - yEdges[k]) - 1);
+      const inVa = k >= profile.vaFrom && k <= profile.vaTo;
+      const ink = k === profile.poc && s.showPoc ? pocInk : inVa ? s.vaColor : s.color;
+      ctx.fillStyle = ink;
+      if (asLetters) {
+        for (let j = 0; j < n; j += 1) {
+          const x = grow === 1 ? anchorX + j * charW : anchorX - (j + 1) * charW;
+          ctx.fillText(tpoLetter(row.periods[j]), x, yTop + h / 2);
+        }
+      } else {
+        const w2 = n / profile.maxCount * maxW;
+        ctx.fillRect(grow === 1 ? anchorX : anchorX - w2, yTop, w2, h);
+      }
+    }
+    ctx.restore();
+    const w = d.style.lineWidth;
+    const hLine = (show, color, style, y) => {
+      if (!show || y == null || isTransparent(color)) return;
+      this.stroke(ctx, { lineColor: color, lineWidth: w, lineStyle: style }, () => {
+        ctx.moveTo(L.x0, y);
+        ctx.lineTo(L.x1, y);
+      });
+    };
+    hLine(s.showVah, s.vahColor, s.vahStyle, L.vahY);
+    hLine(s.showVal, s.valColor, s.valStyle, L.valY);
+    hLine(s.showPoc, pocInk, s.pocStyle, L.pocY);
   }
   /** Paint an anchored VWAP: the shaded band between the upper/lower σ curves, the two band
    *  edges (transparent by default), then the VWAP midline on top. All three are polylines that
@@ -30708,6 +31030,7 @@ var FRVP_ANCHOR = [
 var TITLES = {
   position: "Position size",
   frvp: "Volume profile",
+  frtpo: "TPO profile",
   levels: "Levels"
 };
 var DrawingSettingsDialog = class {
@@ -30735,6 +31058,7 @@ var DrawingSettingsDialog = class {
     grid.style.flex = "1 1 auto";
     if (kind === "position" && drawing instanceof PositionTool) this.buildPosition(grid, drawing, actions);
     else if (kind === "frvp" && drawing instanceof FixedRangeVolumeProfile) this.buildFrvp(grid, drawing, actions);
+    else if (kind === "frtpo" && drawing instanceof FixedRangeTpoProfile) this.buildFrtpo(grid, drawing, actions);
     else if (kind === "levels") this.buildLevels(grid, drawing, actions);
     else return;
     const ui = new Dialog({
@@ -30996,6 +31320,103 @@ var DrawingSettingsDialog = class {
     levelRow("Developing POC", "showDevelopingPoc", "developingPocColor", "developingPocStyle");
     levelRow("Developing VA", "showDevelopingVa", "developingVaColor", "developingVaStyle");
   }
+  buildFrtpo(grid, drawing, actions) {
+    const styleOf = () => {
+      const d = actions.resolve();
+      return d instanceof FixedRangeTpoProfile ? d.frtpo : drawing.frtpo;
+    };
+    const s = styleOf();
+    const numberRow = (label, path, min, max) => {
+      grid.appendChild(fieldRow({
+        label,
+        control: buildFieldControl({
+          kind: "number",
+          value: s[path],
+          min,
+          max,
+          step: 1,
+          integer: true,
+          fill: false,
+          commit: "blur",
+          onChange: (n) => actions.patch({ [`frtpo.${path}`]: n })
+        }).el
+      }));
+    };
+    numberRow("Rows", "rows", 1, 500);
+    numberRow("Period (min)", "periodMin", 1, 1440);
+    numberRow("Value Area", "valueAreaPct", 0, 100);
+    numberRow("Width %", "widthPct", 0, 100);
+    const selectRow = (label, path, options) => {
+      grid.appendChild(fieldRow({
+        label,
+        control: buildFieldControl({
+          kind: "select",
+          options,
+          value: s[path],
+          fill: false,
+          theme: this.theme,
+          onChange: (v) => actions.patch({ [`frtpo.${path}`]: v })
+        }).el
+      }));
+    };
+    selectRow("Anchor", "anchor", FRVP_ANCHOR);
+    selectRow("Display", "display", [
+      { value: "letters", label: "Letters" },
+      { value: "blocks", label: "Blocks" }
+    ]);
+    const colorRow = (label, path) => {
+      grid.appendChild(fieldRow({
+        label,
+        fit: true,
+        control: buildFieldControl({
+          kind: "color",
+          theme: this.theme,
+          get: () => styleOf()[path],
+          onChange: (v) => actions.patch({ [`frtpo.${path}`]: v })
+        }).el
+      }));
+    };
+    colorRow("TPO", "color");
+    colorRow("Value Area", "vaColor");
+    const styles = LINE_STYLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
+    const levelRow = (label, showPath, colorPath, stylePath) => {
+      const row = document.createElement("div");
+      row.className = "vela-field-span";
+      row.style.cssText = "display:flex;align-items:center;gap:8px;";
+      const sw = buildFieldControl({
+        kind: "switch",
+        checked: Boolean(s[showPath]),
+        onChange: (v) => actions.patch({ [`frtpo.${showPath}`]: v })
+      });
+      const lbl = document.createElement("span");
+      lbl.className = "vela-field-label";
+      lbl.style.flex = "1";
+      lbl.textContent = label;
+      let cur = s[colorPath] ?? contrastColor(this.theme.background);
+      const col = buildFieldControl({
+        kind: "color",
+        theme: this.theme,
+        get: () => cur,
+        onChange: (v) => {
+          cur = v;
+          actions.patch({ [`frtpo.${colorPath}`]: v });
+        }
+      });
+      const style = buildFieldControl({
+        kind: "select",
+        options: styles,
+        value: s[stylePath],
+        fill: false,
+        theme: this.theme,
+        onChange: (v) => actions.patch({ [`frtpo.${stylePath}`]: v })
+      });
+      row.append(sw.el, lbl, col.el, style.el);
+      grid.appendChild(row);
+    };
+    levelRow("VAH", "showVah", "vahColor", "vahStyle");
+    levelRow("VAL", "showVal", "valColor", "valStyle");
+    levelRow("POC", "showPoc", "pocColor", "pocStyle");
+  }
   buildLevels(grid, drawing, actions) {
     const levels = drawing.editableLevels();
     if (!levels) return;
@@ -31202,6 +31623,7 @@ var DrawingSettingsPopup = class {
     if (paths.has("style.lineStyle")) bar.appendChild(this.dropdown("Line style", LINE_STYLE_OPTIONS.map((o) => o.value), drawing.style.lineStyle, (s) => lineIcon(2, s), (v) => actions.patch({ "style.lineStyle": v }), { label: styleLabel2 }));
     if (paths.has("style.fillColor")) bar.appendChild(this.colorButton("Fill", BUCKET_ICON, effectiveFillColor(drawing, this.theme) ?? drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR, (v) => actions.patch({ "style.fillColor": v })));
     const isFrvp = paths.has("frvp.rows") && drawing instanceof FixedRangeVolumeProfile;
+    const isFrtpo = paths.has("frtpo.rows") && drawing instanceof FixedRangeTpoProfile;
     const isPosition = paths.has("riskPercent") && drawing instanceof PositionTool;
     if (isPosition) {
       const pos = drawing;
@@ -31281,6 +31703,7 @@ var DrawingSettingsPopup = class {
     }
     bar.appendChild(this.divider());
     if (isFrvp) bar.appendChild(this.iconBtn("Settings", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "frvp")));
+    if (isFrtpo) bar.appendChild(this.iconBtn("Settings", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "frtpo")));
     if (isPosition) bar.appendChild(this.iconBtn("Position size", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "position")));
     if (editableLevels) bar.appendChild(this.iconBtn("Levels", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "levels")));
     bar.appendChild(this.toggle("Lock", LOCK_ICON, drawing.locked, (v) => actions.setLocked(v)));
@@ -33796,12 +34219,12 @@ function buildVpvrProfile(bars, i0, i1, rowCount, valueAreaFrac) {
     const side = b.close >= b.open ? "up" : "down";
     const span = b.high - b.low;
     if (span <= 0) {
-      const k = clampIndex2(Math.floor((b.low - min) / rowH), n);
+      const k = clampIndex3(Math.floor((b.low - min) / rowH), n);
       rows[k][side] += v;
       continue;
     }
-    const kFirst = clampIndex2(Math.floor((b.low - min) / rowH), n);
-    const kLast = clampIndex2(Math.floor((b.high - min) / rowH - 1e-9), n);
+    const kFirst = clampIndex3(Math.floor((b.low - min) / rowH), n);
+    const kLast = clampIndex3(Math.floor((b.high - min) / rowH - 1e-9), n);
     for (let k = kFirst; k <= kLast; k += 1) {
       const rowBot = min + k * rowH;
       const overlap = Math.min(b.high, rowBot + rowH) - Math.max(b.low, rowBot);
@@ -33837,7 +34260,7 @@ function buildVpvrProfile(bars, i0, i1, rowCount, valueAreaFrac) {
   }
   return { rows, rowH, min, maxTotal, poc, vaFrom, vaTo };
 }
-function clampIndex2(k, n) {
+function clampIndex3(k, n) {
   return k < 0 ? 0 : k >= n ? n - 1 : k;
 }
 

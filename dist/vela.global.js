@@ -2274,6 +2274,258 @@ var Vela = (function (exports) {
     }
   };
 
+  // src/core/drawings/types/FixedRangeTpoProfile.ts
+  var LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  function tpoLetter(periodIndex) {
+    return LETTERS[(periodIndex % LETTERS.length + LETTERS.length) % LETTERS.length];
+  }
+  function defaultFrtpStyle() {
+    return {
+      rows: 30,
+      periodMin: 30,
+      valueAreaPct: 70,
+      widthPct: 35,
+      anchor: "left",
+      display: "letters",
+      color: `${NEUTRAL}CC`,
+      vaColor: ACCENT,
+      showVah: true,
+      vahColor: NEUTRAL,
+      vahStyle: "solid",
+      showVal: true,
+      valColor: NEUTRAL,
+      valStyle: "solid",
+      showPoc: true,
+      pocColor: void 0,
+      pocStyle: "solid"
+    };
+  }
+  function clampIndex2(k, n) {
+    return k < 0 ? 0 : k >= n ? n - 1 : k;
+  }
+  function toPeriods(bars, periodMs) {
+    const sorted = [...bars].sort((a, b) => a.time - b.time);
+    const out = [];
+    let cur = Number.NaN;
+    for (const b of sorted) {
+      const bucket = Math.floor(b.time / periodMs);
+      if (bucket !== cur) {
+        out.push({ high: b.high, low: b.low });
+        cur = bucket;
+      } else {
+        const p = out[out.length - 1];
+        if (b.high > p.high) p.high = b.high;
+        if (b.low < p.low) p.low = b.low;
+      }
+    }
+    return out;
+  }
+  function growValueArea2(counts, poc, valueAreaFrac) {
+    const n = counts.length;
+    let total = 0;
+    for (const c of counts) total += c;
+    const target = total * Math.min(1, Math.max(0, valueAreaFrac));
+    let vaFrom = poc;
+    let vaTo = poc;
+    let acc = counts[poc];
+    while (acc < target && (vaFrom > 0 || vaTo < n - 1)) {
+      const below = vaFrom > 0 ? counts[vaFrom - 1] : -1;
+      const above = vaTo < n - 1 ? counts[vaTo + 1] : -1;
+      if (above > below) {
+        vaTo += 1;
+        acc += above;
+      } else {
+        vaFrom -= 1;
+        acc += below;
+      }
+    }
+    return { vaFrom, vaTo };
+  }
+  function buildTpoProfile(bars, rowCount, periodMs, valueAreaFrac) {
+    if (bars.length < 1 || !(periodMs > 0)) return null;
+    let min2 = Infinity;
+    let max2 = -Infinity;
+    for (const b of bars) {
+      if (b.low < min2) min2 = b.low;
+      if (b.high > max2) max2 = b.high;
+    }
+    if (!Number.isFinite(min2) || !Number.isFinite(max2)) return null;
+    const n = max2 > min2 ? Math.max(1, Math.round(rowCount)) : 1;
+    const rowH = max2 > min2 ? (max2 - min2) / n : 1;
+    const rows = Array.from({ length: n }, (_, k) => ({ price: min2 + k * rowH, periods: [] }));
+    const periods = toPeriods(bars, periodMs);
+    periods.forEach((p, i) => {
+      const kLo = clampIndex2(Math.floor((p.low - min2) / rowH), n);
+      const kHi = Math.max(kLo, clampIndex2(Math.ceil((p.high - min2) / rowH - 1e-9) - 1, n));
+      for (let k = kLo; k <= kHi; k += 1) rows[k].periods.push(i);
+    });
+    const counts = rows.map((r) => r.periods.length);
+    let maxCount = 0;
+    for (const c of counts) if (c > maxCount) maxCount = c;
+    if (maxCount <= 0) return null;
+    const mid = (n - 1) / 2;
+    let poc = -1;
+    for (let k = 0; k < n; k += 1) {
+      if (counts[k] !== maxCount) continue;
+      if (poc < 0 || Math.abs(k - mid) < Math.abs(poc - mid)) poc = k;
+    }
+    const { vaFrom, vaTo } = growValueArea2(counts, poc, valueAreaFrac);
+    return { rows, rowH, min: min2, periodCount: periods.length, maxCount, poc, vaFrom, vaTo };
+  }
+  var FixedRangeTpoProfile = class extends Drawing {
+    constructor(init) {
+      super(init);
+      this.type = "fixedrangetpo";
+      this.cachedRange = null;
+      if (!this.frtpo) this.frtpo = defaultFrtpStyle();
+    }
+    anchorSchema() {
+      return { min: 2, max: 2, slots: [{ role: "start", free: "x" }, { role: "end", free: "x" }] };
+    }
+    barsInSpan(proj) {
+      const a = this.anchors[0];
+      const b = this.anchors[1];
+      if (!a || !b) return null;
+      const from = Math.min(a.time, b.time);
+      const to = Math.max(a.time, b.time);
+      const raw = proj.barsInRange?.(from, to) ?? null;
+      if (!raw || raw.length < 1) return null;
+      return raw.map((bar) => ({ time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close }));
+    }
+    /** Compute the profile, caching the price span for autoscale. */
+    compute(proj) {
+      const bars = this.barsInSpan(proj);
+      if (!bars) return null;
+      const s = this.frtpo;
+      const profile = buildTpoProfile(bars, s.rows, Math.max(1, s.periodMin) * 6e4, s.valueAreaPct / 100);
+      if (profile) this.cachedRange = { min: profile.min, max: profile.min + profile.rowH * profile.rows.length };
+      return profile;
+    }
+    /** Resolve the compute to pixel geometry for the painter + hit-test. */
+    layout(proj) {
+      const a = this.anchors[0];
+      const b = this.anchors[1];
+      if (!a || !b) return null;
+      const profile = this.compute(proj);
+      if (!profile) return null;
+      const x0 = proj.xOf(Math.min(a.time, b.time));
+      const x1 = proj.xOf(Math.max(a.time, b.time));
+      const spanW = Math.abs(x1 - x0);
+      const maxW = Math.max(1, Math.min(100, Math.max(0, this.frtpo.widthPct)) / 100 * spanW);
+      const growRight = this.frtpo.anchor === "left";
+      const anchorX = growRight ? Math.min(x0, x1) : Math.max(x0, x1);
+      const yEdges = [];
+      for (let k = 0; k <= profile.rows.length; k += 1) {
+        const y = proj.yOf(profile.min + k * profile.rowH, this.paneId);
+        if (y == null) return null;
+        yEdges.push(y);
+      }
+      const yAt = (price) => proj.yOf(price, this.paneId);
+      return {
+        x0: Math.min(x0, x1),
+        x1: Math.max(x0, x1),
+        anchorX,
+        maxW,
+        grow: growRight ? 1 : -1,
+        profile,
+        yEdges,
+        vahY: yAt(profile.rows[profile.vaTo].price + profile.rowH),
+        valY: yAt(profile.rows[profile.vaFrom].price),
+        pocY: yAt(profile.rows[profile.poc].price + profile.rowH / 2)
+      };
+    }
+    hitTest(px, py, proj, tol) {
+      const L = this.layout(proj);
+      if (!L) return false;
+      const left = L.grow === 1 ? L.anchorX : L.anchorX - L.maxW;
+      const right = L.grow === 1 ? L.anchorX + L.maxW : L.anchorX;
+      const yLo = Math.min(L.yEdges[0], L.yEdges[L.yEdges.length - 1]);
+      const yHi = Math.max(L.yEdges[0], L.yEdges[L.yEdges.length - 1]);
+      if (pointInPolygon(px, py, [[left, yLo], [right, yLo], [right, yHi], [left, yHi]])) return true;
+      for (const y of [L.vahY, L.valY, L.pocY]) {
+        if (y != null && distToSegment(px, py, L.x0, y, L.x1, y) <= tol) return true;
+      }
+      return false;
+    }
+    handlePoints(proj) {
+      const L = this.layout(proj);
+      if (L && L.pocY != null) return [[L.x0, L.pocY], [L.x1, L.pocY]];
+      const pts = [];
+      for (const a of this.anchors) {
+        const y = proj.yOf(a.price, this.paneId);
+        if (y == null) return [];
+        pts.push([proj.xOf(a.time), y]);
+      }
+      return pts;
+    }
+    hitHandle(px, py, proj, tol) {
+      return handleAt(px, py, this.handlePoints(proj), tol + 3);
+    }
+    bounds(proj) {
+      const L = this.layout(proj);
+      if (!L) return null;
+      const left = Math.min(L.x0, L.grow === 1 ? L.anchorX : L.anchorX - L.maxW);
+      const right = Math.max(L.x1, L.grow === 1 ? L.anchorX + L.maxW : L.anchorX);
+      const yLo = Math.min(L.yEdges[0], L.yEdges[L.yEdges.length - 1]);
+      const yHi = Math.max(L.yEdges[0], L.yEdges[L.yEdges.length - 1]);
+      return { x: left, y: yLo, w: right - left, h: yHi - yLo };
+    }
+    priceRange() {
+      if (this.cachedRange) return this.cachedRange;
+      const a = this.anchors[0];
+      const b = this.anchors[1];
+      if (!a || !b) return null;
+      return { min: Math.min(a.price, b.price), max: Math.max(a.price, b.price) };
+    }
+    schema() {
+      return {
+        fields: [
+          { path: "frtpo.rows", label: "Rows", kind: "number", min: 1, max: 500, step: 1, group: "behavior" },
+          { path: "frtpo.periodMin", label: "Period (min)", kind: "number", min: 1, max: 1440, step: 1, group: "behavior" },
+          { path: "frtpo.valueAreaPct", label: "Value Area", kind: "number", min: 0, max: 100, step: 1, group: "behavior" },
+          { path: "frtpo.widthPct", label: "Width %", kind: "number", min: 0, max: 100, step: 1, group: "behavior" },
+          {
+            path: "frtpo.anchor",
+            label: "Anchor",
+            kind: "select",
+            options: [
+              { value: "right", label: "Right" },
+              { value: "left", label: "Left" }
+            ],
+            group: "behavior"
+          },
+          {
+            path: "frtpo.display",
+            label: "Display",
+            kind: "select",
+            options: [
+              { value: "letters", label: "Letters" },
+              { value: "blocks", label: "Blocks" }
+            ],
+            group: "behavior"
+          },
+          { path: "frtpo.color", label: "TPO", kind: "color", group: "fill" },
+          { path: "frtpo.vaColor", label: "Value Area", kind: "color", group: "fill" },
+          { path: "frtpo.showVah", label: "VAH", kind: "boolean", group: "line" },
+          { path: "frtpo.vahColor", label: "VAH color", kind: "color", group: "line" },
+          { path: "frtpo.vahStyle", label: "VAH style", kind: "lineStyle", options: LINE_STYLE_OPTIONS, group: "line" },
+          { path: "frtpo.showVal", label: "VAL", kind: "boolean", group: "line" },
+          { path: "frtpo.valColor", label: "VAL color", kind: "color", group: "line" },
+          { path: "frtpo.valStyle", label: "VAL style", kind: "lineStyle", options: LINE_STYLE_OPTIONS, group: "line" },
+          { path: "frtpo.showPoc", label: "POC", kind: "boolean", group: "line" },
+          { path: "frtpo.pocColor", label: "POC color", kind: "color", group: "line" },
+          { path: "frtpo.pocStyle", label: "POC style", kind: "lineStyle", options: LINE_STYLE_OPTIONS, group: "line" }
+        ]
+      };
+    }
+    writeProps() {
+      return { ...this.frtpo };
+    }
+    readProps(props) {
+      this.frtpo = { ...defaultFrtpStyle(), ...props };
+    }
+  };
+
   // src/core/drawings/types/Pitchfork.ts
   var Pitchfork = class extends SegmentDrawing {
     constructor() {
@@ -6224,6 +6476,17 @@ var Vela = (function (exports) {
     defaultStyle: { lineColor: BULLISH, lineWidth: 1, lineStyle: "solid" },
     create: (init) => new FixedRangeVolumeProfile(init)
   });
+  var FRTPO_ICON = svg24(
+    '<path d="M4 4v16"/><path d="M7 7h2M11 7h2"/><path d="M7 11h2M11 11h2M15 11h2"/><path d="M7 15h2M11 15h2"/><path d="M7 19h2"/>'
+  );
+  registerDrawingType({
+    type: "fixedrangetpo",
+    group: "measure",
+    label: "Fixed Range TPO Profile",
+    icon: FRTPO_ICON,
+    defaultStyle: { lineColor: ACCENT, lineWidth: 1, lineStyle: "solid" },
+    create: (init) => new FixedRangeTpoProfile(init)
+  });
 
   // src/core/drawings/toolbar.ts
   var FIBONACCI_TYPES = [
@@ -6247,6 +6510,7 @@ var Vela = (function (exports) {
   var HARMONIC_TYPES = ["gartley", "bat", "butterfly", "crab", "shark", "cypher"];
   var MEASUREMENT_TYPES = ["position", "datepricerange", "magnifier"];
   var VOLUME_TYPES = ["anchoredvwap", "fixedrangevp"];
+  var TIME_PRICE_TYPES = ["fixedrangetpo"];
   var BRUSH_TYPES = ["freehand", "highlighter"];
   var ARROW_TYPES = ["arrow", "arrowmarkup", "arrowmarkdown"];
   var SHAPE_TYPES = ["box", "ellipse", "triangle", "polyline", "circle", "rotatedrect", "path", "arc", "curve"];
@@ -6285,7 +6549,8 @@ var Vela = (function (exports) {
       label: "Measurements",
       sections: [
         { label: "Measurements", types: MEASUREMENT_TYPES },
-        { label: "Volume", types: VOLUME_TYPES }
+        { label: "Volume", types: VOLUME_TYPES },
+        { label: "Time and Price", types: TIME_PRICE_TYPES }
       ]
     },
     {
@@ -10537,12 +10802,12 @@ var Vela = (function (exports) {
     return { el, dispose };
   }
 
-  // node_modules/@zag-js/vanilla/dist/chunk-QZ7TP4HQ.mjs
+  // ../../claude/Vela/node_modules/@zag-js/vanilla/dist/chunk-QZ7TP4HQ.mjs
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  // node_modules/@zag-js/utils/dist/array.mjs
+  // ../../claude/Vela/node_modules/@zag-js/utils/dist/array.mjs
   function toArray(v) {
     if (v == null) return [];
     return Array.isArray(v) ? v : [v];
@@ -10570,7 +10835,7 @@ var Vela = (function (exports) {
     return v[prevIndex(v, index, opts)];
   }
 
-  // node_modules/@zag-js/utils/dist/equal.mjs
+  // ../../claude/Vela/node_modules/@zag-js/utils/dist/equal.mjs
   var isArrayLike = (value) => value?.constructor.name === "Array";
   var isArrayEqual = (a, b) => {
     if (a.length !== b.length) return false;
@@ -10605,7 +10870,7 @@ var Vela = (function (exports) {
     return true;
   };
 
-  // node_modules/@zag-js/utils/dist/guard.mjs
+  // ../../claude/Vela/node_modules/@zag-js/utils/dist/guard.mjs
   var isObjectLike = (v) => v != null && typeof v === "object";
   var isString = (v) => typeof v === "string";
   var isFunction = (v) => typeof v === "function";
@@ -10625,7 +10890,7 @@ var Vela = (function (exports) {
   var isVueElement = (x) => typeof x === "object" && x !== null && "__v_isVNode" in x;
   var isFrameworkElement = (x) => isReactElement(x) || isVueElement(x);
 
-  // node_modules/@zag-js/utils/dist/functions.mjs
+  // ../../claude/Vela/node_modules/@zag-js/utils/dist/functions.mjs
   var runIfFn = (v, ...a) => {
     const res = typeof v === "function" ? v(...a) : v;
     return res ?? void 0;
@@ -10640,7 +10905,7 @@ var Vela = (function (exports) {
     });
   };
 
-  // node_modules/@zag-js/utils/dist/object.mjs
+  // ../../claude/Vela/node_modules/@zag-js/utils/dist/object.mjs
   function compact(obj) {
     if (!isPlainObject(obj) || obj === void 0) return obj;
     const keys2 = Reflect.ownKeys(obj).filter((key) => typeof key === "string");
@@ -10654,7 +10919,7 @@ var Vela = (function (exports) {
     return filtered;
   }
 
-  // node_modules/@zag-js/utils/dist/warning.mjs
+  // ../../claude/Vela/node_modules/@zag-js/utils/dist/warning.mjs
   function warn(...a) {
     const m = a.length === 1 ? a[0] : a[1];
     const c = a.length === 2 ? a[0] : true;
@@ -10673,7 +10938,7 @@ var Vela = (function (exports) {
     if (c == null) throw new Error(m());
   }
 
-  // node_modules/@zag-js/core/dist/merge-props.mjs
+  // ../../claude/Vela/node_modules/@zag-js/core/dist/merge-props.mjs
   var clsx = (...args) => args.map((str4) => str4?.trim?.()).filter(Boolean).join(" ");
   var CSS_REGEX = /((?:--)?(?:\w+-?)+)\s*:\s*([^;]*)/g;
   var serialize = (style) => {
@@ -10725,7 +10990,7 @@ var Vela = (function (exports) {
     return result;
   }
 
-  // node_modules/@zag-js/core/dist/state.mjs
+  // ../../claude/Vela/node_modules/@zag-js/core/dist/state.mjs
   var STATE_DELIMITER = ".";
   var ABSOLUTE_PREFIX = "#";
   var stateIndexCache = /* @__PURE__ */ new WeakMap();
@@ -10893,7 +11158,7 @@ var Vela = (function (exports) {
     return getStateChain(machine3, state).some((item) => item.state.tags?.includes(tag));
   }
 
-  // node_modules/@zag-js/core/dist/create-machine.mjs
+  // ../../claude/Vela/node_modules/@zag-js/core/dist/create-machine.mjs
   function createGuards() {
     return {
       and: (...guards) => {
@@ -10918,7 +11183,7 @@ var Vela = (function (exports) {
     return config;
   }
 
-  // node_modules/@zag-js/core/dist/types.mjs
+  // ../../claude/Vela/node_modules/@zag-js/core/dist/types.mjs
   var MachineStatus = /* @__PURE__ */ ((MachineStatus2) => {
     MachineStatus2["NotStarted"] = "Not Started";
     MachineStatus2["Started"] = "Started";
@@ -10927,12 +11192,12 @@ var Vela = (function (exports) {
   })(MachineStatus || {});
   var INIT_STATE = "__init__";
 
-  // node_modules/@zag-js/dom-query/dist/chunk-QZ7TP4HQ.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/chunk-QZ7TP4HQ.mjs
   var __defProp2 = Object.defineProperty;
   var __defNormalProp2 = (obj, key, value) => key in obj ? __defProp2(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField2 = (obj, key, value) => __defNormalProp2(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  // node_modules/@zag-js/dom-query/dist/shared.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/shared.mjs
   var wrap = (v, idx) => {
     return v.map((_, index) => v[(Math.max(idx, 0) + index) % v.length]);
   };
@@ -10941,7 +11206,7 @@ var Vela = (function (exports) {
   var dataAttr = (guard) => guard ? "" : void 0;
   var ariaAttr = (guard) => guard ? "true" : void 0;
 
-  // node_modules/@zag-js/dom-query/dist/node.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/node.mjs
   var ELEMENT_NODE = 1;
   var DOCUMENT_NODE = 9;
   var DOCUMENT_FRAGMENT_NODE = 11;
@@ -11030,7 +11295,7 @@ var Vela = (function (exports) {
     return node.ownerDocument ?? document;
   }
 
-  // node_modules/@zag-js/dom-query/dist/computed-style.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/computed-style.mjs
   var styleCache = /* @__PURE__ */ new WeakMap();
   function getComputedStyle2(el) {
     if (!styleCache.has(el)) {
@@ -11039,7 +11304,7 @@ var Vela = (function (exports) {
     return styleCache.get(el);
   }
 
-  // node_modules/@zag-js/dom-query/dist/controller.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/controller.mjs
   var INTERACTIVE_CONTAINER_ROLE = /* @__PURE__ */ new Set(["menu", "listbox", "dialog", "grid", "tree", "region", "application"]);
   var isInteractiveContainerRole = (role) => INTERACTIVE_CONTAINER_ROLE.has(role);
   var getAriaControls = (element) => element.getAttribute("aria-controls")?.split(" ") || [];
@@ -11127,7 +11392,7 @@ var Vela = (function (exports) {
     return Boolean(controller && isInteractiveContainerElement(element));
   }
 
-  // node_modules/@zag-js/dom-query/dist/platform.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/platform.mjs
   var isDom = () => typeof document !== "undefined";
   function getPlatform() {
     const agent = navigator.userAgentData;
@@ -11150,7 +11415,7 @@ var Vela = (function (exports) {
   var isFirefox = () => ua(/Firefox/i);
   var isAndroid = () => ua(/Android/i);
 
-  // node_modules/@zag-js/dom-query/dist/event.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/event.mjs
   function getComposedPath(event) {
     return event.composedPath?.() ?? event.nativeEvent?.composedPath?.();
   }
@@ -11229,7 +11494,7 @@ var Vela = (function (exports) {
     };
   };
 
-  // node_modules/@zag-js/dom-query/dist/tabbable.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/tabbable.mjs
   var isFrame = (el) => isHTMLElement(el) && el.tagName === "IFRAME";
   var NATURALLY_TABBABLE_REGEX = /^(audio|video|details)$/;
   function parseTabIndex(el) {
@@ -11375,7 +11640,7 @@ var Vela = (function (exports) {
     return node.tabIndex;
   }
 
-  // node_modules/@zag-js/dom-query/dist/initial-focus.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/initial-focus.mjs
   function getInitialFocus(options) {
     const { root, getInitialEl, filter, enabled = true } = options;
     if (!enabled) return;
@@ -11398,7 +11663,7 @@ var Vela = (function (exports) {
     return true;
   }
 
-  // node_modules/@zag-js/dom-query/dist/raf.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/raf.mjs
   var AnimationFrame = class _AnimationFrame {
     constructor() {
       __publicField2(this, "id", null);
@@ -11458,7 +11723,7 @@ var Vela = (function (exports) {
     return cancelTimer;
   }
 
-  // node_modules/@zag-js/dom-query/dist/mutation-observer.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/mutation-observer.mjs
   function observeAttributesImpl(node, options) {
     if (!node) return;
     const { attributes, callback: fn } = options;
@@ -11487,7 +11752,7 @@ var Vela = (function (exports) {
     };
   }
 
-  // node_modules/@zag-js/dom-query/dist/navigate.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/navigate.mjs
   function clickIfLink(el) {
     const click = () => {
       const win = getWindow(el);
@@ -11500,7 +11765,7 @@ var Vela = (function (exports) {
     }
   }
 
-  // node_modules/@zag-js/dom-query/dist/overflow.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/overflow.mjs
   function getNearestOverflowAncestor(el) {
     const parentNode = getParentNode(el);
     if (isRootElement(parentNode)) return getDocument(parentNode).body;
@@ -11515,7 +11780,7 @@ var Vela = (function (exports) {
     return OVERFLOW_RE.test(overflow + overflowY + overflowX) && !nonOverflowValues.has(display);
   }
 
-  // node_modules/@zag-js/dom-query/dist/query.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/query.mjs
   function queryAll(root, selector) {
     return Array.from(root?.querySelectorAll(selector) ?? []);
   }
@@ -11528,7 +11793,7 @@ var Vela = (function (exports) {
     return item ? v.indexOf(item) : -1;
   }
 
-  // node_modules/@zag-js/dom-query/dist/scroll.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/scroll.mjs
   function isScrollable(el) {
     return el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth;
   }
@@ -11539,7 +11804,7 @@ var Vela = (function (exports) {
     el.scrollIntoView(scrollOptions);
   }
 
-  // node_modules/@zag-js/dom-query/dist/searchable.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/searchable.mjs
   var sanitize = (str4) => str4.split("").map((char) => {
     const code = char.charCodeAt(0);
     if (code > 0 && code < 128) return char;
@@ -11562,7 +11827,7 @@ var Vela = (function (exports) {
     return items.find((item) => match(getValueText(item), text));
   }
 
-  // node_modules/@zag-js/dom-query/dist/set.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/set.mjs
   function setStyle(el, style) {
     if (!el) return noop2;
     const prev3 = Object.keys(style).reduce((acc, key) => {
@@ -11594,7 +11859,7 @@ var Vela = (function (exports) {
     return Object.keys(a).every((key) => a[key] === b[key]);
   }
 
-  // node_modules/@zag-js/dom-query/dist/typeahead.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/typeahead.mjs
   function getByTypeaheadImpl(baseItems, options) {
     const { state, activeId, key, timeout = 350, itemToId } = options;
     const search = state.keysSoFar + key;
@@ -11627,7 +11892,7 @@ var Vela = (function (exports) {
     return event.key.length === 1 && !event.ctrlKey && !event.metaKey;
   }
 
-  // node_modules/@zag-js/dom-query/dist/wait-for.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dom-query/dist/wait-for.mjs
   function waitForPromise(promise, controller, timeout) {
     const { signal } = controller;
     const wrappedPromise = new Promise((resolve, reject) => {
@@ -11682,7 +11947,7 @@ var Vela = (function (exports) {
     );
   }
 
-  // node_modules/@zag-js/core/dist/scope.mjs
+  // ../../claude/Vela/node_modules/@zag-js/core/dist/scope.mjs
   function createScope(props) {
     const getRootNode2 = () => props.getRootNode?.() ?? document;
     const getDoc = () => getDocument(getRootNode2());
@@ -11700,7 +11965,7 @@ var Vela = (function (exports) {
     };
   }
 
-  // node_modules/@zag-js/types/dist/prop-types.mjs
+  // ../../claude/Vela/node_modules/@zag-js/types/dist/prop-types.mjs
   function createNormalizer(fn) {
     return new Proxy({}, {
       get(_target, key) {
@@ -11713,7 +11978,7 @@ var Vela = (function (exports) {
     });
   }
 
-  // node_modules/@zag-js/vanilla/dist/normalize-props.mjs
+  // ../../claude/Vela/node_modules/@zag-js/vanilla/dist/normalize-props.mjs
   var propMap = {
     onFocus: "onFocusin",
     onBlur: "onFocusout",
@@ -11751,7 +12016,7 @@ var Vela = (function (exports) {
     }, {});
   });
 
-  // node_modules/@zag-js/vanilla/dist/spread-props.mjs
+  // ../../claude/Vela/node_modules/@zag-js/vanilla/dist/spread-props.mjs
   var prevAttrsMap = /* @__PURE__ */ new WeakMap();
   var assignableProps = /* @__PURE__ */ new Set(["value", "checked", "selected"]);
   var caseSensitiveSvgAttrs2 = /* @__PURE__ */ new Set([
@@ -11849,7 +12114,7 @@ var Vela = (function (exports) {
     };
   }
 
-  // node_modules/@zag-js/store/dist/global.mjs
+  // ../../claude/Vela/node_modules/@zag-js/store/dist/global.mjs
   function glob() {
     if (typeof globalThis !== "undefined") return globalThis;
     if (typeof self !== "undefined") return self;
@@ -11864,7 +12129,7 @@ var Vela = (function (exports) {
   }
   var refSet = globalRef("__zag__refSet", () => /* @__PURE__ */ new WeakSet());
 
-  // node_modules/@zag-js/store/dist/utils.mjs
+  // ../../claude/Vela/node_modules/@zag-js/store/dist/utils.mjs
   var isReactElement2 = (x) => typeof x === "object" && x !== null && "$$typeof" in x && "props" in x;
   var isVueElement2 = (x) => typeof x === "object" && x !== null && "__v_isVNode" in x;
   var isDOMElement = (x) => typeof x === "object" && x !== null && "nodeType" in x && typeof x.nodeName === "string";
@@ -11872,7 +12137,7 @@ var Vela = (function (exports) {
   var isObject2 = (x) => x !== null && typeof x === "object";
   var canProxy = (x) => isObject2(x) && !refSet.has(x) && (Array.isArray(x) || !(Symbol.iterator in x)) && !isElement(x) && !(x instanceof WeakMap) && !(x instanceof WeakSet) && !(x instanceof Error) && !(x instanceof Number) && !(x instanceof Date) && !(x instanceof String) && !(x instanceof RegExp) && !(x instanceof ArrayBuffer) && !(x instanceof Promise) && !(x instanceof File) && !(x instanceof Blob) && !(x instanceof AbortController);
 
-  // node_modules/proxy-compare/dist/index.js
+  // ../../claude/Vela/node_modules/proxy-compare/dist/index.js
   var GET_ORIGINAL_SYMBOL = /* @__PURE__ */ Symbol();
   var getProto = Object.getPrototypeOf;
   var objectsToTrack = /* @__PURE__ */ new WeakMap();
@@ -11887,7 +12152,7 @@ var Vela = (function (exports) {
     objectsToTrack.set(obj, mark);
   };
 
-  // node_modules/@zag-js/store/dist/proxy.mjs
+  // ../../claude/Vela/node_modules/@zag-js/store/dist/proxy.mjs
   var proxyStateMap = globalRef("__zag__proxyStateMap", () => /* @__PURE__ */ new WeakMap());
   var buildProxyFunction = (objectIs = Object.is, newProxy = (target, handler) => new Proxy(target, handler), snapCache = /* @__PURE__ */ new WeakMap(), createSnapshot = (target, version) => {
     const cache2 = snapCache.get(target);
@@ -12090,7 +12355,7 @@ var Vela = (function (exports) {
     return createSnapshot(target, ensureVersion());
   }
 
-  // node_modules/@zag-js/vanilla/dist/bindable.mjs
+  // ../../claude/Vela/node_modules/@zag-js/vanilla/dist/bindable.mjs
   function bindable(props) {
     const initial = props().value ?? props().defaultValue;
     if (props().debug) {
@@ -12136,7 +12401,7 @@ var Vela = (function (exports) {
     };
   };
 
-  // node_modules/@zag-js/vanilla/dist/refs.mjs
+  // ../../claude/Vela/node_modules/@zag-js/vanilla/dist/refs.mjs
   function createRefs(refs) {
     const ref2 = { current: refs };
     return {
@@ -12149,7 +12414,7 @@ var Vela = (function (exports) {
     };
   }
 
-  // node_modules/@zag-js/vanilla/dist/merge-machine-props.mjs
+  // ../../claude/Vela/node_modules/@zag-js/vanilla/dist/merge-machine-props.mjs
   function mergeMachineProps(prev3, next2) {
     if (!isPlainObject(prev3) || !isPlainObject(next2)) {
       return next2 === void 0 ? prev3 : next2;
@@ -12170,7 +12435,7 @@ var Vela = (function (exports) {
     return result;
   }
 
-  // node_modules/@zag-js/vanilla/dist/machine.mjs
+  // ../../claude/Vela/node_modules/@zag-js/vanilla/dist/machine.mjs
   var VanillaMachine = class {
     constructor(machine3, userProps = {}) {
       __publicField(this, "machine", machine3);
@@ -12498,7 +12763,7 @@ var Vela = (function (exports) {
     return span;
   }
 
-  // node_modules/@zag-js/anatomy/dist/create-anatomy.mjs
+  // ../../claude/Vela/node_modules/@zag-js/anatomy/dist/create-anatomy.mjs
   var createAnatomy = (name, parts3 = []) => ({
     parts: (...values) => {
       if (isEmpty(parts3)) {
@@ -12526,7 +12791,7 @@ var Vela = (function (exports) {
   var toKebabCase = (value) => value.replace(/([A-Z])([A-Z])/g, "$1-$2").replace(/([a-z])([A-Z])/g, "$1-$2").replace(/[\s_]+/g, "-").toLowerCase();
   var isEmpty = (v) => v.length === 0;
 
-  // node_modules/@zag-js/menu/dist/menu.anatomy.mjs
+  // ../../claude/Vela/node_modules/@zag-js/menu/dist/menu.anatomy.mjs
   var anatomy = createAnatomy("menu").parts(
     "arrow",
     "arrowTip",
@@ -12545,7 +12810,7 @@ var Vela = (function (exports) {
   );
   var parts = anatomy.build();
 
-  // node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs
+  // ../../claude/Vela/node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs
   var sides = ["top", "right", "bottom", "left"];
   var min = Math.min;
   var max = Math.max;
@@ -12674,7 +12939,7 @@ var Vela = (function (exports) {
     };
   }
 
-  // node_modules/@floating-ui/core/dist/floating-ui.core.mjs
+  // ../../claude/Vela/node_modules/@floating-ui/core/dist/floating-ui.core.mjs
   function computeCoordsFromPlacement(_ref, placement, rtl) {
     let {
       reference,
@@ -13372,7 +13637,7 @@ var Vela = (function (exports) {
     };
   };
 
-  // node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs
+  // ../../claude/Vela/node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs
   function hasWindow() {
     return typeof window !== "undefined";
   }
@@ -13528,7 +13793,7 @@ var Vela = (function (exports) {
     return win.parent && Object.getPrototypeOf(win.parent) ? win.frameElement : null;
   }
 
-  // node_modules/@floating-ui/dom/dist/floating-ui.dom.mjs
+  // ../../claude/Vela/node_modules/@floating-ui/dom/dist/floating-ui.dom.mjs
   function getCssDimensions(element) {
     const css2 = getComputedStyle3(element);
     let width = parseFloat(css2.width) || 0;
@@ -14137,7 +14402,7 @@ var Vela = (function (exports) {
     });
   };
 
-  // node_modules/@zag-js/popper/dist/get-anchor.mjs
+  // ../../claude/Vela/node_modules/@zag-js/popper/dist/get-anchor.mjs
   function createDOMRect(x = 0, y = 0, width = 0, height = 0) {
     if (typeof DOMRect === "function") {
       return new DOMRect(x, y, width, height);
@@ -14173,7 +14438,7 @@ var Vela = (function (exports) {
     };
   }
 
-  // node_modules/@zag-js/popper/dist/middleware.mjs
+  // ../../claude/Vela/node_modules/@zag-js/popper/dist/middleware.mjs
   var toVar = (value) => ({ variable: value, reference: `var(${value})` });
   var cssVars = {
     arrowSize: toVar("--arrow-size"),
@@ -14248,7 +14513,7 @@ var Vela = (function (exports) {
     };
   };
 
-  // node_modules/@zag-js/popper/dist/placement.mjs
+  // ../../claude/Vela/node_modules/@zag-js/popper/dist/placement.mjs
   function getPlacementDetails(placement) {
     const [side, align] = placement.split("-");
     return { side, align, hasAlign: align != null };
@@ -14257,7 +14522,7 @@ var Vela = (function (exports) {
     return placement.split("-")[0];
   }
 
-  // node_modules/@zag-js/popper/dist/get-placement.mjs
+  // ../../claude/Vela/node_modules/@zag-js/popper/dist/get-placement.mjs
   var defaultOptions = {
     strategy: "absolute",
     placement: "bottom",
@@ -14553,7 +14818,7 @@ var Vela = (function (exports) {
     };
   }
 
-  // node_modules/@zag-js/popper/dist/get-styles.mjs
+  // ../../claude/Vela/node_modules/@zag-js/popper/dist/get-styles.mjs
   var ARROW_FLOATING_STYLE = {
     bottom: "rotate(45deg)",
     left: "rotate(135deg)",
@@ -14598,7 +14863,7 @@ var Vela = (function (exports) {
     };
   }
 
-  // node_modules/@zag-js/menu/dist/menu.dom.mjs
+  // ../../claude/Vela/node_modules/@zag-js/menu/dist/menu.dom.mjs
   var getTriggerId = (ctx, value) => {
     const customId = ctx.ids?.trigger;
     if (customId != null) return isFunction(customId) ? customId(value) : customId;
@@ -14684,7 +14949,7 @@ var Vela = (function (exports) {
     return false;
   }
 
-  // node_modules/@zag-js/rect-utils/dist/rect.mjs
+  // ../../claude/Vela/node_modules/@zag-js/rect-utils/dist/rect.mjs
   var createPoint = (x, y) => ({ x, y });
   function createRect(r) {
     const { x, y, width, height } = r;
@@ -14712,7 +14977,7 @@ var Vela = (function (exports) {
     return { top, right, bottom, left };
   }
 
-  // node_modules/@zag-js/rect-utils/dist/polygon.mjs
+  // ../../claude/Vela/node_modules/@zag-js/rect-utils/dist/polygon.mjs
   function getElementPolygon(rectValue, placement) {
     const rect = createRect(rectValue);
     const { top, right, left, bottom } = getRectCorners(rect);
@@ -14739,7 +15004,7 @@ var Vela = (function (exports) {
     return c;
   }
 
-  // node_modules/@zag-js/menu/dist/menu.utils.mjs
+  // ../../claude/Vela/node_modules/@zag-js/menu/dist/menu.utils.mjs
   function closeRootMenu(ctx) {
     let parent = ctx.parent;
     while (parent && parent.context.get("isSubmenu")) {
@@ -14795,7 +15060,7 @@ var Vela = (function (exports) {
     }
   }
 
-  // node_modules/@zag-js/menu/dist/menu.connect.mjs
+  // ../../claude/Vela/node_modules/@zag-js/menu/dist/menu.connect.mjs
   function connect(service, normalize) {
     const { context, send, state, computed, prop, scope } = service;
     const open2 = state.hasTag("open");
@@ -15234,7 +15499,7 @@ var Vela = (function (exports) {
     };
   }
 
-  // node_modules/@zag-js/interact-outside/dist/frame-utils.mjs
+  // ../../claude/Vela/node_modules/@zag-js/interact-outside/dist/frame-utils.mjs
   function getWindowFrames(win) {
     const frames = {
       each(cb) {
@@ -15292,7 +15557,7 @@ var Vela = (function (exports) {
     };
   }
 
-  // node_modules/@zag-js/interact-outside/dist/index.mjs
+  // ../../claude/Vela/node_modules/@zag-js/interact-outside/dist/index.mjs
   var POINTER_OUTSIDE_EVENT = "pointerdown.outside";
   var FOCUS_OUTSIDE_EVENT = "focus.outside";
   function isComposedPathFocusable(composedPath) {
@@ -15461,7 +15726,7 @@ var Vela = (function (exports) {
     return el.dispatchEvent(event);
   }
 
-  // node_modules/@zag-js/dismissable/dist/escape-keydown.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dismissable/dist/escape-keydown.mjs
   function trackEscapeKeydown(node, fn) {
     const handleKeyDown = (event) => {
       if (event.key !== "Escape") return;
@@ -15471,7 +15736,7 @@ var Vela = (function (exports) {
     return addDomEvent(getDocument(node), "keydown", handleKeyDown, { capture: true });
   }
 
-  // node_modules/@zag-js/dismissable/dist/layer-stack.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dismissable/dist/layer-stack.mjs
   var LAYER_REQUEST_DISMISS_EVENT = "layer:request-dismiss";
   var layerStack = {
     layers: [],
@@ -15627,7 +15892,7 @@ var Vela = (function (exports) {
     el.addEventListener(type, callback, { once: true });
   }
 
-  // node_modules/@zag-js/dismissable/dist/pointer-event-outside.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dismissable/dist/pointer-event-outside.mjs
   var originalBodyPointerEvents = /* @__PURE__ */ new WeakMap();
   var layerObservers = /* @__PURE__ */ new WeakMap();
   function getDesiredPointerEvents(node) {
@@ -15704,7 +15969,7 @@ var Vela = (function (exports) {
     };
   }
 
-  // node_modules/@zag-js/dismissable/dist/dismissable-layer.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dismissable/dist/dismissable-layer.mjs
   function trackDismissableElementImpl(node, options) {
     const { warnOnMissingNode = true } = options;
     if (warnOnMissingNode && !node) {
@@ -15798,7 +16063,7 @@ var Vela = (function (exports) {
     };
   }
 
-  // node_modules/@zag-js/focus-visible/dist/index.mjs
+  // ../../claude/Vela/node_modules/@zag-js/focus-visible/dist/index.mjs
   function isValidKey(e) {
     return !(e.metaKey || !isMac() && e.altKey || e.ctrlKey || e.key === "Control" || e.key === "Shift" || e.key === "Meta");
   }
@@ -15957,7 +16222,7 @@ var Vela = (function (exports) {
     };
   }
 
-  // node_modules/@zag-js/menu/dist/menu.machine.mjs
+  // ../../claude/Vela/node_modules/@zag-js/menu/dist/menu.machine.mjs
   var { not, and, or } = createGuards();
   var machine = createMachine({
     props({ props }) {
@@ -17931,7 +18196,7 @@ ${STATIC_DECLS}
     }
   };
 
-  // node_modules/@zag-js/dialog/dist/dialog.anatomy.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dialog/dist/dialog.anatomy.mjs
   var anatomy2 = createAnatomy("dialog").parts(
     "trigger",
     "backdrop",
@@ -17943,7 +18208,7 @@ ${STATIC_DECLS}
   );
   var parts2 = anatomy2.build();
 
-  // node_modules/@zag-js/dialog/dist/dialog.dom.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dialog/dist/dialog.dom.mjs
   var getPositionerId2 = (ctx) => ctx.ids?.positioner ?? `dialog:${ctx.id}:positioner`;
   var getBackdropId = (ctx) => ctx.ids?.backdrop ?? `dialog:${ctx.id}:backdrop`;
   var getContentId2 = (ctx) => ctx.ids?.content ?? `dialog:${ctx.id}:content`;
@@ -17970,7 +18235,7 @@ ${STATIC_DECLS}
     return ctx.getById(getTriggerId2(ctx, value));
   };
 
-  // node_modules/@zag-js/dialog/dist/dialog.connect.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dialog/dist/dialog.connect.mjs
   function connect2(service, normalize) {
     const { state, send, context, prop, scope } = service;
     const ariaLabel = prop("aria-label");
@@ -18077,7 +18342,7 @@ ${STATIC_DECLS}
     };
   }
 
-  // node_modules/@zag-js/aria-hidden/dist/walk-tree-outside.mjs
+  // ../../claude/Vela/node_modules/@zag-js/aria-hidden/dist/walk-tree-outside.mjs
   var counterMap = /* @__PURE__ */ new WeakMap();
   var uncontrolledNodes = /* @__PURE__ */ new WeakMap();
   var markerMap = {};
@@ -18181,7 +18446,7 @@ ${STATIC_DECLS}
     };
   };
 
-  // node_modules/@zag-js/aria-hidden/dist/aria-hidden.mjs
+  // ../../claude/Vela/node_modules/@zag-js/aria-hidden/dist/aria-hidden.mjs
   var getParentNode3 = (originalTarget) => {
     const target = Array.isArray(originalTarget) ? originalTarget[0] : originalTarget;
     return target.ownerDocument.body;
@@ -18197,7 +18462,7 @@ ${STATIC_DECLS}
     });
   };
 
-  // node_modules/@zag-js/aria-hidden/dist/index.mjs
+  // ../../claude/Vela/node_modules/@zag-js/aria-hidden/dist/index.mjs
   var raf2 = (fn) => {
     const frameId = requestAnimationFrame(() => fn());
     return () => cancelAnimationFrame(frameId);
@@ -18219,12 +18484,12 @@ ${STATIC_DECLS}
     };
   }
 
-  // node_modules/@zag-js/focus-trap/dist/chunk-QZ7TP4HQ.mjs
+  // ../../claude/Vela/node_modules/@zag-js/focus-trap/dist/chunk-QZ7TP4HQ.mjs
   var __defProp3 = Object.defineProperty;
   var __defNormalProp3 = (obj, key, value) => key in obj ? __defProp3(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField3 = (obj, key, value) => __defNormalProp3(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  // node_modules/@zag-js/focus-trap/dist/focus-trap.mjs
+  // ../../claude/Vela/node_modules/@zag-js/focus-trap/dist/focus-trap.mjs
   var activeFocusTraps = {
     activateTrap(trapStack, trap) {
       if (trapStack.length > 0) {
@@ -18797,7 +19062,7 @@ ${STATIC_DECLS}
   var delay = (fn) => setTimeout(fn, 0);
   var isSelectableInput = (node) => node.localName === "input" && "select" in node && typeof node.select === "function";
 
-  // node_modules/@zag-js/focus-trap/dist/index.mjs
+  // ../../claude/Vela/node_modules/@zag-js/focus-trap/dist/index.mjs
   function trapFocus(el, options = {}) {
     let trap;
     const cleanup = raf(() => {
@@ -18826,7 +19091,7 @@ ${STATIC_DECLS}
     };
   }
 
-  // node_modules/@zag-js/remove-scroll/dist/index.mjs
+  // ../../claude/Vela/node_modules/@zag-js/remove-scroll/dist/index.mjs
   var LOCK_CLASSNAME = "data-scroll-lock";
   var lockMap = /* @__PURE__ */ new WeakMap();
   function getPaddingProperty(documentElement) {
@@ -18903,7 +19168,7 @@ ${STATIC_DECLS}
     };
   }
 
-  // node_modules/@zag-js/dialog/dist/dialog.machine.mjs
+  // ../../claude/Vela/node_modules/@zag-js/dialog/dist/dialog.machine.mjs
   var machine2 = createMachine({
     props({ props, scope }) {
       const alertDialog = props.role === "alertdialog";
@@ -29134,7 +29399,7 @@ ${overlayScrollbarCss(".vela-sd-pane")}
     /** Paint the in-progress drawing (during placing) at reduced opacity. */
     paintGhost(ctx, ghost, proj, theme) {
       ctx.globalAlpha = GHOST_ALPHA;
-      if (ghost instanceof RegressionChannel || ghost instanceof FixedRangeVolumeProfile) {
+      if (ghost instanceof RegressionChannel || ghost instanceof FixedRangeVolumeProfile || ghost instanceof FixedRangeTpoProfile) {
         this.paintTimeSpanGhost(ctx, ghost, proj);
       } else if (ghost instanceof Magnifier) {
         this.paintMagnifierGhost(ctx, ghost, proj, theme);
@@ -29268,6 +29533,11 @@ ${overlayScrollbarCss(".vela-sd-pane")}
       }
       if (d instanceof FixedRangeVolumeProfile) {
         this.paintFixedRangeVp(ctx, d, proj, theme);
+        this.paintLabel(ctx, d, proj, theme);
+        return;
+      }
+      if (d instanceof FixedRangeTpoProfile) {
+        this.paintFixedRangeTpo(ctx, d, proj, theme);
         this.paintLabel(ctx, d, proj, theme);
         return;
       }
@@ -30033,6 +30303,58 @@ ${overlayScrollbarCss(".vela-sd-pane")}
         this.strokePolyline(ctx, L.developingVaHigh, devStyle);
         this.strokePolyline(ctx, L.developingVaLow, devStyle);
       }
+    }
+    /** Paint a fixed-range TPO profile: one letter per period stacked left-to-right in every price
+     *  row the period traded through (or solid blocks when the rows / letters get too small), the
+     *  value-area rows in their own color, and VAH / VAL / POC lines across the range. */
+    paintFixedRangeTpo(ctx, d, proj, theme) {
+      const L = d.layout(proj);
+      if (!L) return;
+      const s = d.frtpo;
+      const { profile, maxW, anchorX, grow, yEdges } = L;
+      if (profile.maxCount <= 0 || maxW <= 0) return;
+      const rowPx = Math.abs(yEdges[1] - yEdges[0]);
+      const fontPx = Math.min(12, Math.floor(rowPx) - 1);
+      const charW = Math.min(fontPx * 0.72, maxW / profile.maxCount);
+      const asLetters = s.display === "letters" && fontPx >= 7 && charW >= 5;
+      const pocInk = s.pocColor ?? contrastColor(theme.background);
+      ctx.save();
+      if (asLetters) {
+        ctx.font = `${fontPx}px ${theme.fontFamily}`;
+        ctx.textBaseline = "middle";
+        ctx.textAlign = "left";
+      }
+      for (let k = 0; k < profile.rows.length; k += 1) {
+        const row = profile.rows[k];
+        const n = row.periods.length;
+        if (n <= 0) continue;
+        const yTop = Math.min(yEdges[k], yEdges[k + 1]);
+        const h = Math.max(1, Math.abs(yEdges[k + 1] - yEdges[k]) - 1);
+        const inVa = k >= profile.vaFrom && k <= profile.vaTo;
+        const ink = k === profile.poc && s.showPoc ? pocInk : inVa ? s.vaColor : s.color;
+        ctx.fillStyle = ink;
+        if (asLetters) {
+          for (let j = 0; j < n; j += 1) {
+            const x = grow === 1 ? anchorX + j * charW : anchorX - (j + 1) * charW;
+            ctx.fillText(tpoLetter(row.periods[j]), x, yTop + h / 2);
+          }
+        } else {
+          const w2 = n / profile.maxCount * maxW;
+          ctx.fillRect(grow === 1 ? anchorX : anchorX - w2, yTop, w2, h);
+        }
+      }
+      ctx.restore();
+      const w = d.style.lineWidth;
+      const hLine = (show, color, style, y) => {
+        if (!show || y == null || isTransparent(color)) return;
+        this.stroke(ctx, { lineColor: color, lineWidth: w, lineStyle: style }, () => {
+          ctx.moveTo(L.x0, y);
+          ctx.lineTo(L.x1, y);
+        });
+      };
+      hLine(s.showVah, s.vahColor, s.vahStyle, L.vahY);
+      hLine(s.showVal, s.valColor, s.valStyle, L.valY);
+      hLine(s.showPoc, pocInk, s.pocStyle, L.pocY);
     }
     /** Paint an anchored VWAP: the shaded band between the upper/lower σ curves, the two band
      *  edges (transparent by default), then the VWAP midline on top. All three are polylines that
@@ -31000,6 +31322,7 @@ ${overlayScrollbarCss(".vela-sd-pane")}
   var TITLES = {
     position: "Position size",
     frvp: "Volume profile",
+    frtpo: "TPO profile",
     levels: "Levels"
   };
   var DrawingSettingsDialog = class {
@@ -31027,6 +31350,7 @@ ${overlayScrollbarCss(".vela-sd-pane")}
       grid.style.flex = "1 1 auto";
       if (kind === "position" && drawing instanceof PositionTool) this.buildPosition(grid, drawing, actions);
       else if (kind === "frvp" && drawing instanceof FixedRangeVolumeProfile) this.buildFrvp(grid, drawing, actions);
+      else if (kind === "frtpo" && drawing instanceof FixedRangeTpoProfile) this.buildFrtpo(grid, drawing, actions);
       else if (kind === "levels") this.buildLevels(grid, drawing, actions);
       else return;
       const ui = new Dialog({
@@ -31288,6 +31612,103 @@ ${overlayScrollbarCss(".vela-sd-pane")}
       levelRow("Developing POC", "showDevelopingPoc", "developingPocColor", "developingPocStyle");
       levelRow("Developing VA", "showDevelopingVa", "developingVaColor", "developingVaStyle");
     }
+    buildFrtpo(grid, drawing, actions) {
+      const styleOf = () => {
+        const d = actions.resolve();
+        return d instanceof FixedRangeTpoProfile ? d.frtpo : drawing.frtpo;
+      };
+      const s = styleOf();
+      const numberRow = (label, path, min2, max2) => {
+        grid.appendChild(fieldRow({
+          label,
+          control: buildFieldControl({
+            kind: "number",
+            value: s[path],
+            min: min2,
+            max: max2,
+            step: 1,
+            integer: true,
+            fill: false,
+            commit: "blur",
+            onChange: (n) => actions.patch({ [`frtpo.${path}`]: n })
+          }).el
+        }));
+      };
+      numberRow("Rows", "rows", 1, 500);
+      numberRow("Period (min)", "periodMin", 1, 1440);
+      numberRow("Value Area", "valueAreaPct", 0, 100);
+      numberRow("Width %", "widthPct", 0, 100);
+      const selectRow = (label, path, options) => {
+        grid.appendChild(fieldRow({
+          label,
+          control: buildFieldControl({
+            kind: "select",
+            options,
+            value: s[path],
+            fill: false,
+            theme: this.theme,
+            onChange: (v) => actions.patch({ [`frtpo.${path}`]: v })
+          }).el
+        }));
+      };
+      selectRow("Anchor", "anchor", FRVP_ANCHOR);
+      selectRow("Display", "display", [
+        { value: "letters", label: "Letters" },
+        { value: "blocks", label: "Blocks" }
+      ]);
+      const colorRow = (label, path) => {
+        grid.appendChild(fieldRow({
+          label,
+          fit: true,
+          control: buildFieldControl({
+            kind: "color",
+            theme: this.theme,
+            get: () => styleOf()[path],
+            onChange: (v) => actions.patch({ [`frtpo.${path}`]: v })
+          }).el
+        }));
+      };
+      colorRow("TPO", "color");
+      colorRow("Value Area", "vaColor");
+      const styles = LINE_STYLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
+      const levelRow = (label, showPath, colorPath, stylePath) => {
+        const row = document.createElement("div");
+        row.className = "vela-field-span";
+        row.style.cssText = "display:flex;align-items:center;gap:8px;";
+        const sw = buildFieldControl({
+          kind: "switch",
+          checked: Boolean(s[showPath]),
+          onChange: (v) => actions.patch({ [`frtpo.${showPath}`]: v })
+        });
+        const lbl = document.createElement("span");
+        lbl.className = "vela-field-label";
+        lbl.style.flex = "1";
+        lbl.textContent = label;
+        let cur = s[colorPath] ?? contrastColor(this.theme.background);
+        const col = buildFieldControl({
+          kind: "color",
+          theme: this.theme,
+          get: () => cur,
+          onChange: (v) => {
+            cur = v;
+            actions.patch({ [`frtpo.${colorPath}`]: v });
+          }
+        });
+        const style = buildFieldControl({
+          kind: "select",
+          options: styles,
+          value: s[stylePath],
+          fill: false,
+          theme: this.theme,
+          onChange: (v) => actions.patch({ [`frtpo.${stylePath}`]: v })
+        });
+        row.append(sw.el, lbl, col.el, style.el);
+        grid.appendChild(row);
+      };
+      levelRow("VAH", "showVah", "vahColor", "vahStyle");
+      levelRow("VAL", "showVal", "valColor", "valStyle");
+      levelRow("POC", "showPoc", "pocColor", "pocStyle");
+    }
     buildLevels(grid, drawing, actions) {
       const levels = drawing.editableLevels();
       if (!levels) return;
@@ -31494,6 +31915,7 @@ ${overlayScrollbarCss(".vela-sd-pane")}
       if (paths.has("style.lineStyle")) bar.appendChild(this.dropdown("Line style", LINE_STYLE_OPTIONS.map((o) => o.value), drawing.style.lineStyle, (s) => lineIcon(2, s), (v) => actions.patch({ "style.lineStyle": v }), { label: styleLabel2 }));
       if (paths.has("style.fillColor")) bar.appendChild(this.colorButton("Fill", BUCKET_ICON, effectiveFillColor(drawing, this.theme) ?? drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR, (v) => actions.patch({ "style.fillColor": v })));
       const isFrvp = paths.has("frvp.rows") && drawing instanceof FixedRangeVolumeProfile;
+      const isFrtpo = paths.has("frtpo.rows") && drawing instanceof FixedRangeTpoProfile;
       const isPosition = paths.has("riskPercent") && drawing instanceof PositionTool;
       if (isPosition) {
         const pos = drawing;
@@ -31573,6 +31995,7 @@ ${overlayScrollbarCss(".vela-sd-pane")}
       }
       bar.appendChild(this.divider());
       if (isFrvp) bar.appendChild(this.iconBtn("Settings", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "frvp")));
+      if (isFrtpo) bar.appendChild(this.iconBtn("Settings", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "frtpo")));
       if (isPosition) bar.appendChild(this.iconBtn("Position size", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "position")));
       if (editableLevels) bar.appendChild(this.iconBtn("Levels", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "levels")));
       bar.appendChild(this.toggle("Lock", LOCK_ICON, drawing.locked, (v) => actions.setLocked(v)));
@@ -34856,12 +35279,12 @@ ${overlayScrollbarCss(".vela-sd-pane")}
       const side = b.close >= b.open ? "up" : "down";
       const span = b.high - b.low;
       if (span <= 0) {
-        const k = clampIndex2(Math.floor((b.low - min2) / rowH), n);
+        const k = clampIndex3(Math.floor((b.low - min2) / rowH), n);
         rows[k][side] += v;
         continue;
       }
-      const kFirst = clampIndex2(Math.floor((b.low - min2) / rowH), n);
-      const kLast = clampIndex2(Math.floor((b.high - min2) / rowH - 1e-9), n);
+      const kFirst = clampIndex3(Math.floor((b.low - min2) / rowH), n);
+      const kLast = clampIndex3(Math.floor((b.high - min2) / rowH - 1e-9), n);
       for (let k = kFirst; k <= kLast; k += 1) {
         const rowBot = min2 + k * rowH;
         const overlap = Math.min(b.high, rowBot + rowH) - Math.max(b.low, rowBot);
@@ -34897,7 +35320,7 @@ ${overlayScrollbarCss(".vela-sd-pane")}
     }
     return { rows, rowH, min: min2, maxTotal, poc, vaFrom, vaTo };
   }
-  function clampIndex2(k, n) {
+  function clampIndex3(k, n) {
     return k < 0 ? 0 : k >= n ? n - 1 : k;
   }
 

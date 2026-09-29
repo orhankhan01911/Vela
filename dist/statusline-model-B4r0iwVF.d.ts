@@ -1,6 +1,6 @@
-import { D as DataProvider } from './DataProvider-B-Jz59Rf.js';
-import { S as ScriptingEngine, V as Vela } from './contributions-Swzz10fG.js';
-import { V as VisibleRangePreset } from './options-CX1lSYWA.js';
+import { D as DataProvider } from './DataProvider-DpHYU09I.js';
+import { S as ScriptingEngine, V as Vela } from './contributions-Dh-sIeCK.js';
+import { V as VisibleRangePreset } from './options-DrZmLS1p.js';
 
 /** The linkable dimensions. `crosshair` mirrors the pointer time onto same-group
  *  cells as GHOST crosshairs (renderers without the optional `setExternalCrosshair`
