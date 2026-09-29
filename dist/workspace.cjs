@@ -8071,7 +8071,7 @@ function defaultFrtpStyle() {
     rows: 30,
     periodMin: 30,
     valueAreaPct: 70,
-    widthPct: 35,
+    widthPct: 50,
     anchor: "left",
     display: "letters",
     color: `${NEUTRAL}CC`,
@@ -29954,15 +29954,21 @@ var DrawingPainter = class {
     const { profile, maxW, anchorX, grow, yEdges } = L;
     if (profile.maxCount <= 0 || maxW <= 0) return;
     const rowPx = Math.abs(yEdges[1] - yEdges[0]);
-    const fontPx = Math.min(12, Math.floor(rowPx) - 1);
-    const charW = Math.min(fontPx * 0.72, maxW / profile.maxCount);
-    const asLetters = s.display === "letters" && fontPx >= 7 && charW >= 5;
     const pocInk = s.pocColor ?? contrastColor(theme.background);
+    let fontPx = Math.min(12, Math.floor(rowPx) - 1);
+    let cellW = 0;
+    if (s.display === "letters" && fontPx >= 7) {
+      ctx.font = `${fontPx}px ${theme.fontFamily}`;
+      const em = ctx.measureText("W").width / fontPx;
+      fontPx = Math.min(fontPx, Math.floor(maxW / profile.maxCount / em));
+      if (fontPx >= 7) cellW = em * fontPx;
+    }
+    const asLetters = cellW > 0;
     ctx.save();
     if (asLetters) {
       ctx.font = `${fontPx}px ${theme.fontFamily}`;
       ctx.textBaseline = "middle";
-      ctx.textAlign = "left";
+      ctx.textAlign = "center";
     }
     for (let k = 0; k < profile.rows.length; k += 1) {
       const row = profile.rows[k];
@@ -29971,11 +29977,10 @@ var DrawingPainter = class {
       const yTop = Math.min(yEdges[k], yEdges[k + 1]);
       const h = Math.max(1, Math.abs(yEdges[k + 1] - yEdges[k]) - 1);
       const inVa = k >= profile.vaFrom && k <= profile.vaTo;
-      const ink = k === profile.poc && s.showPoc ? pocInk : inVa ? s.vaColor : s.color;
-      ctx.fillStyle = ink;
+      ctx.fillStyle = k === profile.poc && s.showPoc ? pocInk : inVa ? s.vaColor : s.color;
       if (asLetters) {
         for (let j = 0; j < n; j += 1) {
-          const x = grow === 1 ? anchorX + j * charW : anchorX - (j + 1) * charW;
+          const x = grow === 1 ? anchorX + (j + 0.5) * cellW : anchorX - (j + 0.5) * cellW;
           ctx.fillText(tpoLetter(row.periods[j]), x, yTop + h / 2);
         }
       } else {

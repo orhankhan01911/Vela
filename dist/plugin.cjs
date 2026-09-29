@@ -2219,7 +2219,7 @@ function defaultFrtpStyle() {
     rows: 30,
     periodMin: 30,
     valueAreaPct: 70,
-    widthPct: 35,
+    widthPct: 50,
     anchor: "left",
     display: "letters",
     color: `${NEUTRAL}CC`,

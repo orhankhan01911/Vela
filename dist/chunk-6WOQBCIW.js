@@ -1,4 +1,4 @@
-import { deserializeDrawing, chartTypes, rendererLayers, foldBaseModulation, registerChartType, rendererDefaults, getDrawingType, settingsRowVisible, normalizeSettingsRow, Magnifier, TextLabel, Callout, resetDrawingSettings, registerNativeIndicator, chartType, getNativeIndicator, nativeIndicatorDescriptors, drawingTypes, settingsRowValueKeys, formatDuration, RegressionChannel, FixedRangeVolumeProfile, FixedRangeTpoProfile, SegmentDrawing, ArrowMark, GlyphStamp, RadialFib, FibSpiral, DedekindTessellation, MachFigure, GannSquare, FibRatios, MeasureBox, PositionTool, AnchoredVwap, PatternDrawing, Comment, PriceNote, Signpost, Note, PriceLabel, GANN_SQUARE_ARCS, magnifierTimeframeLabel, tpoLetter, lineSegmentIntersection, DEFAULT_DRAWING_COLOR, MAGNIFIER_TIMEFRAME_OPTIONS, GLYPH_OPTIONS, STAMP_SIZE_OPTIONS, LINE_STYLE_OPTIONS, DEDEKIND_CURVATURE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, TEXT_SIZE_OPTIONS, createDrawing, inputVisible, tickerModifierIds, CalloutBase, DIRECTION_OPTIONS, stableSeriesId } from './chunk-BCTY4FPM.js';
+import { deserializeDrawing, chartTypes, rendererLayers, foldBaseModulation, registerChartType, rendererDefaults, getDrawingType, settingsRowVisible, normalizeSettingsRow, Magnifier, TextLabel, Callout, resetDrawingSettings, registerNativeIndicator, chartType, getNativeIndicator, nativeIndicatorDescriptors, drawingTypes, settingsRowValueKeys, formatDuration, RegressionChannel, FixedRangeVolumeProfile, FixedRangeTpoProfile, SegmentDrawing, ArrowMark, GlyphStamp, RadialFib, FibSpiral, DedekindTessellation, MachFigure, GannSquare, FibRatios, MeasureBox, PositionTool, AnchoredVwap, PatternDrawing, Comment, PriceNote, Signpost, Note, PriceLabel, GANN_SQUARE_ARCS, magnifierTimeframeLabel, tpoLetter, lineSegmentIntersection, DEFAULT_DRAWING_COLOR, MAGNIFIER_TIMEFRAME_OPTIONS, GLYPH_OPTIONS, STAMP_SIZE_OPTIONS, LINE_STYLE_OPTIONS, DEDEKIND_CURVATURE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, TEXT_SIZE_OPTIONS, createDrawing, inputVisible, tickerModifierIds, CalloutBase, DIRECTION_OPTIONS, stableSeriesId } from './chunk-LEBUXP57.js';
 import { themeTokens, Dialog, closeOpenPopovers, closeWidthPopover, fieldSection, buildFieldControl, fieldSeparator, fieldGrid, fieldRow, blendOver, splitColor, CalloutBubble, Menu, TextArea, Popover, NumberInput, buildColorPicker, isPopoverOpen, eventDismissedPopover, toggleSelectList, openPopoverTrigger, fieldGridColumns, FIELD_GAP_PX, STATIC_TOKENS } from './chunk-T5Z5YUCF.js';
 import { icon, iconAt, withAlpha, WARNING, ACCENT, NEUTRAL, BEARISH, BULLISH, isDarkColor, SERIES_LINE, CHIP_PLATE, CROSSHAIR, TRADE_EXIT, TRADE_SHORT, TRADE_LONG, overlayScrollbarCss, SLATE_DEEP, VALID, INVALID, SLATE, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, INFO, svg24, svg24Solid } from './chunk-CAFCLMPF.js';
 
@@ -12264,15 +12264,21 @@ var DrawingPainter = class {
     const { profile, maxW, anchorX, grow, yEdges } = L;
     if (profile.maxCount <= 0 || maxW <= 0) return;
     const rowPx = Math.abs(yEdges[1] - yEdges[0]);
-    const fontPx = Math.min(12, Math.floor(rowPx) - 1);
-    const charW = Math.min(fontPx * 0.72, maxW / profile.maxCount);
-    const asLetters = s.display === "letters" && fontPx >= 7 && charW >= 5;
     const pocInk = s.pocColor ?? contrastColor(theme.background);
+    let fontPx = Math.min(12, Math.floor(rowPx) - 1);
+    let cellW = 0;
+    if (s.display === "letters" && fontPx >= 7) {
+      ctx.font = `${fontPx}px ${theme.fontFamily}`;
+      const em = ctx.measureText("W").width / fontPx;
+      fontPx = Math.min(fontPx, Math.floor(maxW / profile.maxCount / em));
+      if (fontPx >= 7) cellW = em * fontPx;
+    }
+    const asLetters = cellW > 0;
     ctx.save();
     if (asLetters) {
       ctx.font = `${fontPx}px ${theme.fontFamily}`;
       ctx.textBaseline = "middle";
-      ctx.textAlign = "left";
+      ctx.textAlign = "center";
     }
     for (let k = 0; k < profile.rows.length; k += 1) {
       const row = profile.rows[k];
@@ -12281,11 +12287,10 @@ var DrawingPainter = class {
       const yTop = Math.min(yEdges[k], yEdges[k + 1]);
       const h = Math.max(1, Math.abs(yEdges[k + 1] - yEdges[k]) - 1);
       const inVa = k >= profile.vaFrom && k <= profile.vaTo;
-      const ink = k === profile.poc && s.showPoc ? pocInk : inVa ? s.vaColor : s.color;
-      ctx.fillStyle = ink;
+      ctx.fillStyle = k === profile.poc && s.showPoc ? pocInk : inVa ? s.vaColor : s.color;
       if (asLetters) {
         for (let j = 0; j < n; j += 1) {
-          const x = grow === 1 ? anchorX + j * charW : anchorX - (j + 1) * charW;
+          const x = grow === 1 ? anchorX + (j + 0.5) * cellW : anchorX - (j + 0.5) * cellW;
           ctx.fillText(tpoLetter(row.periods[j]), x, yTop + h / 2);
         }
       } else {
