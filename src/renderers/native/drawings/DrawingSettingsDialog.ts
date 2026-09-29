@@ -1,8 +1,9 @@
 import type { VelaTheme } from '../../../core/options';
-import type { Drawing, FrvpStyle, PositionLevelMode, SerializedDrawing } from '../../../core/drawings';
+import type { Drawing, FrtpStyle, FrvpStyle, PositionLevelMode, SerializedDrawing } from '../../../core/drawings';
 import {
     DIRECTION_OPTIONS,
     FixedRangeVolumeProfile,
+    FixedRangeTpoProfile,
     LINE_STYLE_OPTIONS,
     MachFigure,
     PositionTool,
@@ -16,7 +17,7 @@ import { fieldGrid, fieldRow, fieldSection, buildFieldControl } from '../../../u
 import type { SelectOption } from '../../../ui/components/select';
 import type { SettingsActions } from './DrawingSettingsPopup';
 
-export type DrawingDialogKind = 'position' | 'frvp' | 'levels';
+export type DrawingDialogKind = 'position' | 'frvp' | 'frtpo' | 'levels';
 
 const LEVEL_UNITS: readonly SelectOption[] = [
     { value: 'price', label: 'Price' },
@@ -30,6 +31,7 @@ const FRVP_ANCHOR: readonly SelectOption[] = [
 const TITLES: Record<DrawingDialogKind, string> = {
     position: 'Position size',
     frvp: 'Volume profile',
+    frtpo: 'TPO profile',
     levels: 'Levels',
 };
 
@@ -68,6 +70,7 @@ export class DrawingSettingsDialog {
         grid.style.flex = '1 1 auto';
         if (kind === 'position' && drawing instanceof PositionTool) this.buildPosition(grid, drawing, actions);
         else if (kind === 'frvp' && drawing instanceof FixedRangeVolumeProfile) this.buildFrvp(grid, drawing, actions);
+        else if (kind === 'frtpo' && drawing instanceof FixedRangeTpoProfile) this.buildFrtpo(grid, drawing, actions);
         else if (kind === 'levels') this.buildLevels(grid, drawing, actions);
         else return;
 
@@ -346,6 +349,107 @@ export class DrawingSettingsDialog {
         levelRow('POC', 'showPoc', 'pocColor', 'pocStyle');
         levelRow('Developing POC', 'showDevelopingPoc', 'developingPocColor', 'developingPocStyle');
         levelRow('Developing VA', 'showDevelopingVa', 'developingVaColor', 'developingVaStyle');
+    }
+
+    private buildFrtpo(grid: HTMLElement, drawing: FixedRangeTpoProfile, actions: SettingsActions): void {
+        const styleOf = (): FrtpStyle => {
+            const d = actions.resolve();
+            return d instanceof FixedRangeTpoProfile ? d.frtpo : drawing.frtpo;
+        };
+        const s = styleOf();
+
+        const numberRow = (label: string, path: keyof FrtpStyle, min: number, max: number): void => {
+            grid.appendChild(fieldRow({
+                label,
+                control: buildFieldControl({
+                    kind: 'number',
+                    value: s[path] as number,
+                    min,
+                    max,
+                    step: 1,
+                    integer: true,
+                    fill: false,
+                    commit: 'blur',
+                    onChange: (n) => actions.patch({ [`frtpo.${path}`]: n }),
+                }).el,
+            }));
+        };
+        numberRow('Rows', 'rows', 1, 500);
+        numberRow('Period (min)', 'periodMin', 1, 1440);
+        numberRow('Value Area', 'valueAreaPct', 0, 100);
+        numberRow('Width %', 'widthPct', 0, 100);
+        const selectRow = (label: string, path: 'anchor' | 'display', options: readonly SelectOption[]): void => {
+            grid.appendChild(fieldRow({
+                label,
+                control: buildFieldControl({
+                    kind: 'select',
+                    options,
+                    value: s[path],
+                    fill: false,
+                    theme: this.theme,
+                    onChange: (v) => actions.patch({ [`frtpo.${path}`]: v }),
+                }).el,
+            }));
+        };
+        selectRow('Anchor', 'anchor', FRVP_ANCHOR);
+        selectRow('Display', 'display', [
+            { value: 'letters', label: 'Letters' },
+            { value: 'blocks', label: 'Blocks' },
+        ]);
+
+        const colorRow = (label: string, path: 'color' | 'vaColor'): void => {
+            grid.appendChild(fieldRow({
+                label,
+                fit: true,
+                control: buildFieldControl({
+                    kind: 'color',
+                    theme: this.theme,
+                    get: () => styleOf()[path],
+                    onChange: (v) => actions.patch({ [`frtpo.${path}`]: v }),
+                }).el,
+            }));
+        };
+        colorRow('TPO', 'color');
+        colorRow('Value Area', 'vaColor');
+
+        const styles = LINE_STYLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
+        const levelRow = (label: string, showPath: keyof FrtpStyle, colorPath: keyof FrtpStyle, stylePath: keyof FrtpStyle): void => {
+            const row = document.createElement('div');
+            row.className = 'vela-field-span';
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+            const sw = buildFieldControl({
+                kind: 'switch',
+                checked: Boolean(s[showPath]),
+                onChange: (v) => actions.patch({ [`frtpo.${showPath}`]: v }),
+            });
+            const lbl = document.createElement('span');
+            lbl.className = 'vela-field-label';
+            lbl.style.flex = '1';
+            lbl.textContent = label;
+            let cur = (s[colorPath] as string | undefined) ?? contrastColor(this.theme.background);
+            const col = buildFieldControl({
+                kind: 'color',
+                theme: this.theme,
+                get: () => cur,
+                onChange: (v) => {
+                    cur = v;
+                    actions.patch({ [`frtpo.${colorPath}`]: v });
+                },
+            });
+            const style = buildFieldControl({
+                kind: 'select',
+                options: styles,
+                value: s[stylePath] as string,
+                fill: false,
+                theme: this.theme,
+                onChange: (v) => actions.patch({ [`frtpo.${stylePath}`]: v }),
+            });
+            row.append(sw.el, lbl, col.el, style.el);
+            grid.appendChild(row);
+        };
+        levelRow('VAH', 'showVah', 'vahColor', 'vahStyle');
+        levelRow('VAL', 'showVal', 'valColor', 'valStyle');
+        levelRow('POC', 'showPoc', 'pocColor', 'pocStyle');
     }
 
     private buildLevels(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {

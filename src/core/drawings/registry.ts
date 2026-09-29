@@ -26,6 +26,7 @@ import { FlatTopBottom } from './types/FlatTopBottom';
 import { RegressionChannel } from './types/RegressionChannel';
 import { AnchoredVwap } from './types/AnchoredVwap';
 import { FixedRangeVolumeProfile } from './types/FixedRangeVolumeProfile';
+import { FixedRangeTpoProfile } from './types/FixedRangeTpoProfile';
 import { Pitchfork } from './types/Pitchfork';
 import { SchiffPitchfork } from './types/SchiffPitchfork';
 import { ModifiedSchiffPitchfork } from './types/ModifiedSchiffPitchfork';
@@ -973,4 +974,18 @@ registerDrawingType({
     icon: FRVP_ICON,
     defaultStyle: { lineColor: BULLISH, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new FixedRangeVolumeProfile(init),
+});
+
+// ── fixed-range TPO profile ──
+const FRTPO_ICON = svg24(
+    '<path d="M4 4v16"/><path d="M7 7h2M11 7h2"/><path d="M7 11h2M11 11h2M15 11h2"/><path d="M7 15h2M11 15h2"/><path d="M7 19h2"/>',
+);
+
+registerDrawingType({
+    type: 'fixedrangetpo',
+    group: 'measure',
+    label: 'Fixed Range TPO Profile',
+    icon: FRTPO_ICON,
+    defaultStyle: { lineColor: ACCENT, lineWidth: 1, lineStyle: 'solid' },
+    create: (init) => new FixedRangeTpoProfile(init),
 });

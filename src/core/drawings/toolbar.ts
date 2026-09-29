@@ -73,6 +73,7 @@ const HARMONIC_TYPES: DrawingTypeKey[] = ['gartley', 'bat', 'butterfly', 'crab',
 
 const MEASUREMENT_TYPES: DrawingTypeKey[] = ['position', 'datepricerange', 'magnifier'];
 const VOLUME_TYPES: DrawingTypeKey[] = ['anchoredvwap', 'fixedrangevp'];
+const TIME_PRICE_TYPES: DrawingTypeKey[] = ['fixedrangetpo'];
 
 const BRUSH_TYPES: DrawingTypeKey[] = ['freehand', 'highlighter'];
 const ARROW_TYPES: DrawingTypeKey[] = ['arrow', 'arrowmarkup', 'arrowmarkdown'];
@@ -124,6 +125,7 @@ const TOOLBAR_LAYOUT: readonly ToolbarGroupLayout[] = [
         sections: [
             { label: 'Measurements', types: MEASUREMENT_TYPES },
             { label: 'Volume', types: VOLUME_TYPES },
+            { label: 'Time and Price', types: TIME_PRICE_TYPES },
         ],
     },
     {

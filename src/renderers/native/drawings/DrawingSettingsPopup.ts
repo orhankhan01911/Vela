@@ -11,6 +11,7 @@ import {
     MACH_NUMBER_OPTIONS,
     MachFigure,
     FixedRangeVolumeProfile,
+    FixedRangeTpoProfile,
     PositionTool,
     Magnifier,
     MAGNIFIER_TIMEFRAME_OPTIONS,
@@ -210,6 +211,7 @@ export class DrawingSettingsPopup {
         if (paths.has('style.fillColor')) bar.appendChild(this.colorButton('Fill', BUCKET_ICON, effectiveFillColor(drawing, this.theme) ?? drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'style.fillColor': v })));
         // Fixed-range VP: all settings live in the gear panel (nothing inline on the quick bar).
         const isFrvp = paths.has('frvp.rows') && drawing instanceof FixedRangeVolumeProfile;
+        const isFrtpo = paths.has('frtpo.rows') && drawing instanceof FixedRangeTpoProfile;
         // Position tool: zone colors sit on the bar; risk/reward numbers + display toggles live
         // in the gear panel (they drive the loss/size labels).
         const isPosition = paths.has('riskPercent') && drawing instanceof PositionTool;
@@ -300,6 +302,7 @@ export class DrawingSettingsPopup {
         // and a kebab overflow (z-order + reset) sits just right of delete.
         bar.appendChild(this.divider());
         if (isFrvp) bar.appendChild(this.iconBtn('Settings', GEAR_ICON, () => this.settingsDialog.open(drawing, actions, 'frvp')));
+        if (isFrtpo) bar.appendChild(this.iconBtn('Settings', GEAR_ICON, () => this.settingsDialog.open(drawing, actions, 'frtpo')));
         if (isPosition) bar.appendChild(this.iconBtn('Position size', GEAR_ICON, () => this.settingsDialog.open(drawing, actions, 'position')));
         if (editableLevels) bar.appendChild(this.iconBtn('Levels', GEAR_ICON, () => this.settingsDialog.open(drawing, actions, 'levels')));
         bar.appendChild(this.toggle('Lock', LOCK_ICON, drawing.locked, (v) => actions.setLocked(v)));

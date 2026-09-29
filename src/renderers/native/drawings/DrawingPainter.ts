@@ -1,5 +1,5 @@
 import type { Drawing, Projector, DrawingStyle } from '../../../core/drawings';
-import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, Note, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR } from '../../../core/drawings';
+import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, Note, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP } from '../../../core/palette';
@@ -115,7 +115,7 @@ export class DrawingPainter {
         ctx.globalAlpha = GHOST_ALPHA;
         // Two-time-anchor tools (regression channel, fixed-range VP) preview their TIME SPAN while
         // placing (two vertical guides + a connecting line) rather than the finished shape.
-        if (ghost instanceof RegressionChannel || ghost instanceof FixedRangeVolumeProfile) {
+        if (ghost instanceof RegressionChannel || ghost instanceof FixedRangeVolumeProfile || ghost instanceof FixedRangeTpoProfile) {
             this.paintTimeSpanGhost(ctx, ghost, proj);
         } else if (ghost instanceof Magnifier) {
             // Outline only while dragging — the finished shape fetches series data, and a
@@ -127,7 +127,7 @@ export class DrawingPainter {
 
     /** Placement preview for two time-anchor tools: a full-height dashed vertical guide at each
      *  anchor (the left/right time bounds) + a line from the first anchor to the cursor. */
-    private paintTimeSpanGhost(ctx: CanvasRenderingContext2D, d: RegressionChannel | FixedRangeVolumeProfile, proj: Projector): void {
+    private paintTimeSpanGhost(ctx: CanvasRenderingContext2D, d: RegressionChannel | FixedRangeVolumeProfile | FixedRangeTpoProfile, proj: Projector): void {
         const a = d.anchors[0];
         const b = d.anchors[1];
         if (!a) return;
@@ -256,6 +256,11 @@ export class DrawingPainter {
         }
         if (d instanceof FixedRangeVolumeProfile) {
             this.paintFixedRangeVp(ctx, d, proj, theme);
+            this.paintLabel(ctx, d, proj, theme);
+            return;
+        }
+        if (d instanceof FixedRangeTpoProfile) {
+            this.paintFixedRangeTpo(ctx, d, proj, theme);
             this.paintLabel(ctx, d, proj, theme);
             return;
         }
@@ -1128,6 +1133,62 @@ export class DrawingPainter {
             this.strokePolyline(ctx, L.developingVaHigh, devStyle);
             this.strokePolyline(ctx, L.developingVaLow, devStyle);
         }
+    }
+
+    /** Paint a fixed-range TPO profile: one letter per period stacked left-to-right in every price
+     *  row the period traded through (or solid blocks when the rows / letters get too small), the
+     *  value-area rows in their own color, and VAH / VAL / POC lines across the range. */
+    private paintFixedRangeTpo(ctx: CanvasRenderingContext2D, d: FixedRangeTpoProfile, proj: Projector, theme: VelaTheme): void {
+        const L = d.layout(proj);
+        if (!L) return;
+        const s = d.frtpo;
+        const { profile, maxW, anchorX, grow, yEdges } = L;
+        if (profile.maxCount <= 0 || maxW <= 0) return;
+
+        const rowPx = Math.abs(yEdges[1]! - yEdges[0]!);
+        const fontPx = Math.min(12, Math.floor(rowPx) - 1);
+        const charW = Math.min(fontPx * 0.72, maxW / profile.maxCount);
+        const asLetters = s.display === 'letters' && fontPx >= 7 && charW >= 5;
+        const pocInk = s.pocColor ?? contrastColor(theme.background);
+
+        ctx.save();
+        if (asLetters) {
+            ctx.font = `${fontPx}px ${theme.fontFamily}`;
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'left';
+        }
+        for (let k = 0; k < profile.rows.length; k += 1) {
+            const row = profile.rows[k]!;
+            const n = row.periods.length;
+            if (n <= 0) continue;
+            const yTop = Math.min(yEdges[k]!, yEdges[k + 1]!);
+            const h = Math.max(1, Math.abs(yEdges[k + 1]! - yEdges[k]!) - 1);
+            const inVa = k >= profile.vaFrom && k <= profile.vaTo;
+            const ink = k === profile.poc && s.showPoc ? pocInk : inVa ? s.vaColor : s.color;
+            ctx.fillStyle = ink;
+            if (asLetters) {
+                for (let j = 0; j < n; j += 1) {
+                    const x = grow === 1 ? anchorX + j * charW : anchorX - (j + 1) * charW;
+                    ctx.fillText(tpoLetter(row.periods[j]!), x, yTop + h / 2);
+                }
+            } else {
+                const w = (n / profile.maxCount) * maxW;
+                ctx.fillRect(grow === 1 ? anchorX : anchorX - w, yTop, w, h);
+            }
+        }
+        ctx.restore();
+
+        const w = d.style.lineWidth;
+        const hLine = (show: boolean, color: string, style: DrawingStyle['lineStyle'], y: number | null): void => {
+            if (!show || y == null || isTransparent(color)) return;
+            this.stroke(ctx, { lineColor: color, lineWidth: w, lineStyle: style }, () => {
+                ctx.moveTo(L.x0, y);
+                ctx.lineTo(L.x1, y);
+            });
+        };
+        hLine(s.showVah, s.vahColor, s.vahStyle, L.vahY);
+        hLine(s.showVal, s.valColor, s.valStyle, L.valY);
+        hLine(s.showPoc, pocInk, s.pocStyle, L.pocY);
     }
 
     /** Paint an anchored VWAP: the shaded band between the upper/lower σ curves, the two band

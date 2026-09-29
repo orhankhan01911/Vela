@@ -79,7 +79,7 @@ describe('drawings/AnchoredVwap', () => {
     it('appears under a Volume section in the Measurements toolbar group', () => {
         const { definition } = buildToolbar(true);
         const measure = definition.groups.find((g) => g.id === 'measurements');
-        expect(measure?.sections?.map((s) => s.label)).toEqual(['Measurements', 'Volume']);
+        expect(measure?.sections?.map((s) => s.label)).toEqual(['Measurements', 'Volume', 'Time and Price']);
         expect(measure?.sections?.find((s) => s.label === 'Volume')?.tools.map((t) => t.type)).toEqual([
             'anchoredvwap',
             'fixedrangevp',

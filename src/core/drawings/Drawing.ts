@@ -30,6 +30,7 @@ export type DrawingTypeKey =
     | 'regressionchannel'
     | 'anchoredvwap'
     | 'fixedrangevp'
+    | 'fixedrangetpo'
     | 'pitchfork'
     | 'schiffpitchfork'
     | 'modifiedschiffpitchfork'

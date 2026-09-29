@@ -43,6 +43,16 @@ export {
     type FrvpCompute,
     type FrvpDevelopingPoint,
 } from './types/FixedRangeVolumeProfile';
+export {
+    FixedRangeTpoProfile,
+    buildTpoProfile,
+    tpoLetter,
+    type FrtpBar,
+    type FrtpRow,
+    type FrtpProfile,
+    type FrtpStyle,
+    type FrtpLayout,
+} from './types/FixedRangeTpoProfile';
 export { Pitchfork } from './types/Pitchfork';
 export { PitchforkVariant } from './types/PitchforkVariant';
 export { SchiffPitchfork } from './types/SchiffPitchfork';
