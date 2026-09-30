@@ -31,6 +31,7 @@ export type DrawingTypeKey =
     | 'anchoredvwap'
     | 'fixedrangevp'
     | 'fixedrangetpo'
+    | 'pricealert'
     | 'pitchfork'
     | 'schiffpitchfork'
     | 'modifiedschiffpitchfork'

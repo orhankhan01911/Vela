@@ -76,6 +76,7 @@ import { Cypher } from './types/Cypher';
 import { DatePriceRange } from './types/DatePriceRange';
 import { PositionTool } from './types/PositionTool';
 import { Magnifier } from './types/Magnifier';
+import { PriceAlert } from './types/PriceAlert';
 
 /** What a drawing type contributes to the toolbar + factory (renderer-neutral). */
 export interface DrawingTypeMeta {
@@ -980,6 +981,17 @@ registerDrawingType({
 const FRTPO_ICON = svg24(
     '<path d="M4 4v16"/><path d="M7 7h2M11 7h2"/><path d="M7 11h2M11 11h2M15 11h2"/><path d="M7 15h2M11 15h2"/><path d="M7 19h2"/>',
 );
+
+// Host-created alert marker (never armed from the toolbar: it is in no TOOLBAR_LAYOUT section).
+registerDrawingType({
+    type: 'pricealert',
+    group: 'measure',
+    label: 'Price Alert',
+    icon: svg24('<path d="M12 4a5 5 0 0 0-5 5v3l-1.5 3h13L17 12V9a5 5 0 0 0-5-5Z"/><path d="M10 18a2 2 0 0 0 4 0"/>'),
+    defaultStyle: { lineColor: '', lineWidth: 1, lineStyle: 'dashed' },
+    coversSeries: true, // paint over the candles and the price axis strip, never under them
+    create: (init) => new PriceAlert(init),
+});
 
 registerDrawingType({
     type: 'fixedrangetpo',

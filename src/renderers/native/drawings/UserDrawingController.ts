@@ -12,7 +12,7 @@ import type {
     SnapMode,
     ToolbarDefinition,
 } from '../../../core/drawings';
-import { deserializeDrawing, getDrawingType, resetDrawingSettings, Callout, Magnifier, TextLabel } from '../../../core/drawings';
+import { deserializeDrawing, getDrawingType, resetDrawingSettings, Callout, Magnifier, PriceAlert, TextLabel } from '../../../core/drawings';
 import type { Unsubscribe } from '../../../core/util/types';
 import { contrastColor, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE } from '../../shared/drawing-geometry';
 import { withAlpha } from '../core/chartConfig';
@@ -363,6 +363,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
     claim(x: number, y: number): boolean {
         if (this.measureMode || this.eraserMode) return true; // these modes capture their clicks (no pan)
         if (this.magnifierChipAt(x, y)) return true; // the chip is a dropdown trigger, never a pan start
+        if (this.activeTool == null && this.alertTrashAt(x, y)) return true; // trash button: a click, never a pan
         return this.interaction.claim(x, y);
     }
 
@@ -451,7 +452,28 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 return;
             }
         }
+        // A price alert's trash button deletes it instead of starting a drag.
+        if (this.activeTool == null) {
+            const doomed = this.alertTrashAt(x, y);
+            if (doomed) {
+                this.popup.close();
+                this.emit({ kind: 'delete', ids: [doomed.id] });
+                return;
+            }
+        }
         this.interaction.down(x, y, snap, shift); // the popup self-dismisses on any outside press
+    }
+
+    /** The topmost visible, unlocked price alert whose trash button contains (x, y) (the rect the
+     *  painter measured last frame; only set while the alert's pill is showing). */
+    private alertTrashAt(x: number, y: number): PriceAlert | null {
+        for (let i = this.drawings.length - 1; i >= 0; i -= 1) {
+            const d = this.drawings[i]!;
+            if (!(d instanceof PriceAlert) || !d.visible || d.locked) continue;
+            const r = d.trashRect;
+            if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return d;
+        }
+        return null;
     }
 
     pointerMove(x: number, y: number, snap: SnapMode = 'off', shift = false): void {
@@ -710,7 +732,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
     /** Cursor hint while hovering — `'pointer'` over a drawing/handle, else null. */
     cursorAt(x: number, y: number): string | null {
         if (this.eraserMode) return 'pointer'; // signal "click to delete" while erasing
-        if (this.activeTool == null && this.magnifierChipAt(x, y)) return 'pointer'; // the chip is clickable
+        if (this.activeTool == null && (this.magnifierChipAt(x, y) || this.alertTrashAt(x, y))) return 'pointer'; // the chip / trash is clickable
         return this.interaction.cursorAt(x, y);
     }
 
@@ -851,6 +873,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
     /** Whether the drawing's z puts it INSIDE the series stack (per the last-known boundaries)
      *  rather than over it — i.e. its body belongs to an interleave layer, not the top canvas. */
     private isInterleaved(d: Drawing): boolean {
+        if (d instanceof PriceAlert) return false; // always over the stack: its chip sits on the price axis
         return sliceKeyFor(d.zIndex, this.lastBounds.get(d.paneId) ?? []) !== null;
     }
 
@@ -876,7 +899,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
         const theme = this.deps.theme();
         const buckets = new Map<string, { paneId: string; beforeZ: number; drawings: Drawing[] }>(); // keyed `paneId|beforeZ`
         for (const d of this.drawings) {
-            if (!d.visible) continue;
+            if (!d.visible || d instanceof PriceAlert) continue; // alerts always paint on the top canvas
             const beforeZ = sliceKeyFor(d.zIndex, this.lastBounds.get(d.paneId) ?? []);
             if (beforeZ === null) continue; // over the stack → top canvas
             const key = `${d.paneId}|${beforeZ}`;
