@@ -5731,12 +5731,12 @@ var PriceAlert = class extends Drawing {
     if (r && px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return true;
     return px >= proj.width - ALERT_STUB_PX - 12 && Math.abs(py - y) <= tol;
   }
-  handlePoints(proj) {
-    const y = this.y(proj);
-    return y == null ? [] : [[proj.width - 6, y]];
+  /** No selection handles: the marker's own dot is the grab point and the body drags it. */
+  handlePoints(_proj) {
+    return [];
   }
-  hitHandle(px, py, proj, tol) {
-    return handleAt(px, py, this.handlePoints(proj), tol + 3);
+  hitHandle() {
+    return -1;
   }
   bounds(proj) {
     const y = this.y(proj);
