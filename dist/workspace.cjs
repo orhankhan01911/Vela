@@ -24930,7 +24930,10 @@ var InputController = class {
         this.el.style.cursor = drawCursor ?? (r === "price" ? "ns-resize" : r === "time" ? "ew-resize" : r === "separator" ? "row-resize" : "");
         this.deps.drawingsPointerMove?.(x, y, this.snapMode(e), e.shiftKey);
       }
-      if (e.pointerType !== "touch") this.deps.onPointerMove(x, y);
+      if (e.pointerType !== "touch") {
+        if (this.deps.drawingsOverAlertTag?.(x, y)) this.deps.onPointerMove(null, null);
+        else this.deps.onPointerMove(x, y);
+      }
     };
     this.onUp = (e) => {
       if (e.pointerType === "touch") this.touches.delete(e.pointerId);
@@ -30320,8 +30323,8 @@ var DrawingPainter = class {
       const trashW = 30;
       const pw = padL + bellW + gap + (label ? lw + gap : 0) + pwTxt + 8 + trashW;
       const ph = 28;
-      const px = W - ALERT_STUB_PX - 4 - pw;
-      const py = y - ph - 5;
+      const px = W - ALERT_STUB_PX - pw;
+      const py = y + 0.5 - ph / 2;
       const my = py + ph / 2;
       ctx.save();
       ctx.shadowColor = "rgba(0,0,0,0.5)";
@@ -30386,7 +30389,7 @@ var DrawingPainter = class {
       ctx.lineTo(cx + 3, my + 5);
       ctx.lineTo(cx + 3.6, my - 3);
       ctx.stroke();
-      d.pillRect = { x: px, y: py, w: W - px, h: ph + 8 };
+      d.pillRect = { x: px, y: py, w: W - px, h: ph };
       d.trashRect = { x: dx, y: py, w: trashW, h: ph };
     }
     ctx.restore();
@@ -32963,6 +32966,17 @@ var UserDrawingController = class {
     }
     this.interaction.down(x, y, snap, shift2);
   }
+  /** True while (x, y) is on a price alert's hover tag (only set while the tag is showing).
+   *  The crosshair steps aside there so its line does not strike through the tag. */
+  overAlertTag(x, y) {
+    for (let i = this.drawings.length - 1; i >= 0; i -= 1) {
+      const d = this.drawings[i];
+      if (!(d instanceof PriceAlert) || !d.visible) continue;
+      const r = d.pillRect;
+      if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return true;
+    }
+    return false;
+  }
   /** The topmost visible, unlocked price alert whose trash button contains (x, y) (the rect the
    *  painter measured last frame; only set while the alert's pill is showing). */
   alertTrashAt(x, y) {
@@ -33440,6 +33454,7 @@ var UserDrawingController = class {
     const live = () => this.drawings.find((d) => d.id === id);
     this.emit({ kind: "select", ids: [id] });
     this.emit({ kind: "settings", id });
+    if (drawing instanceof PriceAlert) return;
     const anchor = drawing.bounds(this.deps.projector());
     this.popup.open(drawing, anchor, {
       // Sync rebuilds instances, so a panel that reads values back after a patch (e.g. the
@@ -35704,6 +35719,7 @@ var NativeRenderer = class {
       drawingsPointerMove: (x, y, snap, shift2) => this.userDrawings?.pointerMove(x, y, snap, shift2),
       drawingsPointerUp: (x, y, snap) => this.userDrawings?.pointerUp(x, y, snap),
       drawingsCursor: (x, y) => this.userDrawings?.cursorAt(x, y) ?? null,
+      drawingsOverAlertTag: (x, y) => this.userDrawings?.overAlertTag(x, y) ?? false,
       drawingsDblClick: (x, y) => this.userDrawings?.dblClick(x, y) ?? false,
       drawingsClearTransient: () => this.userDrawings?.clearTransient()
     });
