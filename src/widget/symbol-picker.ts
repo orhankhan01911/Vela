@@ -149,7 +149,8 @@ const CSS = `
     text-transform: uppercase;
 }
 .vela-sp-input::placeholder { text-transform: none; }
-.vela-sp-tabs { display: flex; gap: 14px; margin: 12px 2px 0; border-bottom: 1px solid var(--vela-border); padding-bottom: 8px; }
+.vela-sp-tabs { display: flex; gap: 4px; margin: 12px 2px 0; border-bottom: 1px solid var(--vela-border); padding-bottom: 8px; overflow-x: auto; scrollbar-width: none; }
+.vela-sp-tabs::-webkit-scrollbar { display: none; }
 /* Mobile (fullscreen dialog): the asset-class strip scrolls sideways instead of
    overflowing the body, and the result list stops capping itself — it fills the
    rest of the screen. The bottom inset (+ safe area) is the kit's: every mobile
@@ -160,7 +161,8 @@ const CSS = `
 [data-layout='mobile'] .vela-sp-list { flex: 1 1 auto; max-height: none; margin-bottom: 0; }
 .vela-sp-tab {
     all: unset;
-    padding: 3px 10px;
+    flex: none;
+    padding: 3px 7px;
     border-radius: 5px;
     cursor: pointer;
     color: var(--vela-fg-muted);
@@ -290,7 +292,7 @@ export class SymbolPicker {
         this.tabs.className = 'vela-sp-tabs';
         const head = doc.createElement('div');
         head.className = 'vela-sp-head';
-        for (const t of ['All', 'Stocks', 'ETFs', 'Crypto', 'Futures', 'Forex', 'Commodities']) {
+        for (const t of ['All', 'Stocks', 'ETFs', 'Crypto', 'Aggregated', 'Futures', 'Forex', 'Commodities']) {
             const b = doc.createElement('button');
             b.className = 'vela-sp-tab';
             b.textContent = t;
@@ -468,7 +470,7 @@ export class SymbolPicker {
     }
 
     private computeRows(): SymbolDescriptor[] {
-        const TAB_TYPES: Record<string, string[]> = { Crypto: ['crypto'], Stocks: ['stock'], ETFs: ['etf'], Futures: ['futures', 'root'], Forex: ['forex'], Commodities: ['commodity'] };
+        const TAB_TYPES: Record<string, string[]> = { Crypto: ['crypto'], Aggregated: ['aggregated'], Stocks: ['stock'], ETFs: ['etf'], Futures: ['futures', 'root'], Forex: ['forex'], Commodities: ['commodity'] };
         const all = this.pool();
         const pool =
             this.activeTab === 'All'
