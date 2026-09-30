@@ -5698,6 +5698,70 @@ var Magnifier = class extends Drawing {
   }
 };
 
+// src/core/drawings/types/PriceAlert.ts
+var defaultPriceAlertState = () => ({
+  label: "",
+  direction: "Crosses",
+  trigger: "Only once",
+  message: "Price alert",
+  sound: true,
+  active: true
+});
+var ALERT_STUB_PX = 44;
+var PriceAlert = class extends Drawing {
+  constructor(init) {
+    super(init);
+    this.type = "pricealert";
+    /** Set by the painter each frame: the hover pill and its trash button (null when not shown). */
+    this.pillRect = null;
+    this.trashRect = null;
+    if (!this.alert) this.alert = defaultPriceAlertState();
+  }
+  anchorSchema() {
+    return { min: 1, max: 1, slots: [{ role: "p", free: "y" }] };
+  }
+  y(proj) {
+    const a = this.anchors[0];
+    return a ? proj.yOf(a.price, this.paneId) : null;
+  }
+  hitTest(px, py, proj, tol) {
+    const y = this.y(proj);
+    if (y == null) return false;
+    const r = this.pillRect;
+    if (r && px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return true;
+    return px >= proj.width - ALERT_STUB_PX - 12 && Math.abs(py - y) <= tol;
+  }
+  handlePoints(proj) {
+    const y = this.y(proj);
+    return y == null ? [] : [[proj.width - 6, y]];
+  }
+  hitHandle(px, py, proj, tol) {
+    return handleAt(px, py, this.handlePoints(proj), tol + 3);
+  }
+  bounds(proj) {
+    const y = this.y(proj);
+    return y == null ? null : { x: proj.width - ALERT_STUB_PX - 12, y: y - 10, w: ALERT_STUB_PX + 12, h: 20 };
+  }
+  /** Never widens the autoscale: an alert far from price must not squash the candles. */
+  priceRange() {
+    return null;
+  }
+  /** Pinned to the plot edge, so it is never culled by the visible time range. */
+  timeExtent() {
+    return null;
+  }
+  /** No settings popup: the host's own dialog edits an alert. */
+  schema() {
+    return { fields: [] };
+  }
+  writeProps() {
+    return { ...this.alert };
+  }
+  readProps(props) {
+    this.alert = { ...defaultPriceAlertState(), ...props };
+  }
+};
+
 // src/core/drawings/registry.ts
 var REGISTRY2 = /* @__PURE__ */ new Map();
 function registerDrawingType(meta) {
@@ -6370,6 +6434,16 @@ registerDrawingType({
 var FRTPO_ICON = svg24(
   '<path d="M4 4v16"/><path d="M7 7h2M11 7h2"/><path d="M7 11h2M11 11h2M15 11h2"/><path d="M7 15h2M11 15h2"/><path d="M7 19h2"/>'
 );
+registerDrawingType({
+  type: "pricealert",
+  group: "measure",
+  label: "Price Alert",
+  icon: svg24('<path d="M12 4a5 5 0 0 0-5 5v3l-1.5 3h13L17 12V9a5 5 0 0 0-5-5Z"/><path d="M10 18a2 2 0 0 0 4 0"/>'),
+  defaultStyle: { lineColor: "", lineWidth: 1, lineStyle: "dashed" },
+  coversSeries: true,
+  // paint over the candles and the price axis strip, never under them
+  create: (init) => new PriceAlert(init)
+});
 registerDrawingType({
   type: "fixedrangetpo",
   group: "measure",

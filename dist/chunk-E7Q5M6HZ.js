@@ -1,4 +1,4 @@
-import { deserializeDrawing, chartTypes, rendererLayers, foldBaseModulation, registerChartType, rendererDefaults, getDrawingType, settingsRowVisible, normalizeSettingsRow, Magnifier, TextLabel, Callout, resetDrawingSettings, registerNativeIndicator, chartType, getNativeIndicator, nativeIndicatorDescriptors, drawingTypes, settingsRowValueKeys, formatDuration, RegressionChannel, FixedRangeVolumeProfile, FixedRangeTpoProfile, SegmentDrawing, ArrowMark, GlyphStamp, RadialFib, FibSpiral, DedekindTessellation, MachFigure, GannSquare, FibRatios, MeasureBox, PositionTool, AnchoredVwap, PatternDrawing, Comment, PriceNote, Signpost, Note, PriceLabel, GANN_SQUARE_ARCS, magnifierTimeframeLabel, tpoLetter, lineSegmentIntersection, DEFAULT_DRAWING_COLOR, MAGNIFIER_TIMEFRAME_OPTIONS, GLYPH_OPTIONS, STAMP_SIZE_OPTIONS, LINE_STYLE_OPTIONS, DEDEKIND_CURVATURE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, TEXT_SIZE_OPTIONS, createDrawing, inputVisible, tickerModifierIds, CalloutBase, DIRECTION_OPTIONS, stableSeriesId } from './chunk-LEBUXP57.js';
+import { deserializeDrawing, chartTypes, rendererLayers, foldBaseModulation, registerChartType, rendererDefaults, getDrawingType, settingsRowVisible, normalizeSettingsRow, Magnifier, PriceAlert, TextLabel, Callout, resetDrawingSettings, registerNativeIndicator, chartType, getNativeIndicator, nativeIndicatorDescriptors, drawingTypes, settingsRowValueKeys, formatDuration, RegressionChannel, FixedRangeVolumeProfile, FixedRangeTpoProfile, SegmentDrawing, ArrowMark, GlyphStamp, RadialFib, FibSpiral, DedekindTessellation, MachFigure, GannSquare, FibRatios, MeasureBox, PositionTool, AnchoredVwap, PatternDrawing, Comment, PriceNote, Signpost, Note, PriceLabel, GANN_SQUARE_ARCS, magnifierTimeframeLabel, tpoLetter, ALERT_STUB_PX, lineSegmentIntersection, DEFAULT_DRAWING_COLOR, MAGNIFIER_TIMEFRAME_OPTIONS, GLYPH_OPTIONS, STAMP_SIZE_OPTIONS, LINE_STYLE_OPTIONS, DEDEKIND_CURVATURE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, TEXT_SIZE_OPTIONS, createDrawing, inputVisible, tickerModifierIds, CalloutBase, DIRECTION_OPTIONS, stableSeriesId } from './chunk-JFH3HO64.js';
 import { themeTokens, Dialog, closeOpenPopovers, closeWidthPopover, fieldSection, buildFieldControl, fieldSeparator, fieldGrid, fieldRow, blendOver, splitColor, CalloutBubble, Menu, TextArea, Popover, NumberInput, buildColorPicker, isPopoverOpen, eventDismissedPopover, toggleSelectList, openPopoverTrigger, fieldGridColumns, FIELD_GAP_PX, STATIC_TOKENS } from './chunk-T5Z5YUCF.js';
 import { icon, iconAt, withAlpha, WARNING, ACCENT, NEUTRAL, BEARISH, BULLISH, isDarkColor, SERIES_LINE, CHIP_PLATE, CROSSHAIR, TRADE_EXIT, TRADE_SHORT, TRADE_LONG, overlayScrollbarCss, SLATE_DEEP, VALID, INVALID, SLATE, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, INFO, svg24, svg24Solid } from './chunk-CAFCLMPF.js';
 
@@ -11292,6 +11292,7 @@ function handleIdsFor(targets) {
   if (targets.mutedLabel) ids.delete(targets.mutedLabel);
   return ids;
 }
+var ALERT_AXIS_OVERFLOW_PX = 120;
 var DrawingPainter = class {
   constructor() {
     /** The current `paintAll` call's interaction state, visible to the per-type painters. */
@@ -11341,7 +11342,7 @@ var DrawingPainter = class {
     if (!rect || rect.height <= 0) return;
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, rect.top, proj.width, rect.height);
+    ctx.rect(0, rect.top, d instanceof PriceAlert ? proj.width + ALERT_AXIS_OVERFLOW_PX : proj.width, rect.height);
     ctx.clip();
     paint();
     ctx.restore();
@@ -11484,6 +11485,10 @@ var DrawingPainter = class {
     if (d instanceof FixedRangeVolumeProfile) {
       this.paintFixedRangeVp(ctx, d, proj, theme);
       this.paintLabel(ctx, d, proj, theme);
+      return;
+    }
+    if (d instanceof PriceAlert) {
+      this.paintPriceAlert(ctx, d, proj, theme);
       return;
     }
     if (d instanceof FixedRangeTpoProfile) {
@@ -12499,6 +12504,76 @@ var DrawingPainter = class {
     ctx.arc(bx, by, 3.5, 0, Math.PI * 2);
     ctx.fill();
     this.paintTextPlate(ctx, d, theme, sx - w / 2, sy - h / 2, w, h, lines, lh, padX, padY);
+  }
+  /** A price alert: dashed stub + ring at the plot edge, a chip with the price on the axis, and
+   *  (when hovered/selected/dragged) a pill with the condition text and a trash button. */
+  paintPriceAlert(ctx, d, proj, theme) {
+    const a = d.anchors[0];
+    const y = d.handlePoints(proj)[0]?.[1];
+    d.pillRect = null;
+    d.trashRect = null;
+    if (!a || y == null) return;
+    const W = proj.width;
+    const ink = d.style.lineColor || theme.textColor;
+    const engaged = handleIdsFor(this.targets).has(d.id);
+    ctx.save();
+    ctx.globalAlpha *= d.alert.active ? 1 : 0.5;
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(W - ALERT_STUB_PX, y + 0.5);
+    ctx.lineTo(W - 10, y + 0.5);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(W - 6, y + 0.5, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = theme.background;
+    ctx.fill();
+    ctx.stroke();
+    const priceStr = a.price >= 100 ? a.price.toFixed(2) : formatPriceTag(a.price);
+    ctx.font = `11px ${theme.fontFamily}`;
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+    const chipW = Math.max(52, ctx.measureText(priceStr).width + 14);
+    roundRect(ctx, W + 1, y - 9, chipW, 18, 3);
+    ctx.fillStyle = ink;
+    ctx.fill();
+    ctx.fillStyle = contrastColor(ink);
+    ctx.fillText(priceStr, W + 8, y + 0.5);
+    if (engaged) {
+      const text = `${d.alert.label} ${priceStr}`.trim();
+      const tw = ctx.measureText(text).width;
+      const trashW = 22;
+      const pw = tw + 16 + trashW;
+      const ph = 22;
+      const px = W - ALERT_STUB_PX - 6 - pw;
+      const py = y - ph - 3;
+      roundRect(ctx, px, py, pw, ph, 4);
+      ctx.fillStyle = theme.background;
+      ctx.fill();
+      ctx.strokeStyle = ink;
+      ctx.stroke();
+      ctx.fillStyle = ink;
+      const my = py + ph / 2;
+      ctx.fillText(text, px + 8, my + 0.5);
+      const tx = px + pw - trashW + 5;
+      ctx.beginPath();
+      ctx.moveTo(tx, my - 3);
+      ctx.lineTo(tx + 12, my - 3);
+      ctx.moveTo(tx + 4, my - 3);
+      ctx.lineTo(tx + 4, my - 5.5);
+      ctx.lineTo(tx + 8, my - 5.5);
+      ctx.lineTo(tx + 8, my - 3);
+      ctx.moveTo(tx + 2, my - 3);
+      ctx.lineTo(tx + 3, my + 5.5);
+      ctx.lineTo(tx + 9, my + 5.5);
+      ctx.lineTo(tx + 10, my - 3);
+      ctx.stroke();
+      d.pillRect = { x: px, y: py, w: W - px, h: ph + 6 };
+      d.trashRect = { x: px + pw - trashW, y: py, w: trashW, h: ph };
+    }
+    ctx.restore();
   }
   /** A Price Label: a left-pointing tag at the anchor showing the auto-formatted price. */
   paintPriceLabel(ctx, d, proj, theme) {
@@ -14982,6 +15057,7 @@ var UserDrawingController = class {
   claim(x, y) {
     if (this.measureMode || this.eraserMode) return true;
     if (this.magnifierChipAt(x, y)) return true;
+    if (this.activeTool == null && this.alertTrashAt(x, y)) return true;
     return this.interaction.claim(x, y);
   }
   /** The topmost visible (unlocked) magnifier whose timeframe chip contains (x, y) —
@@ -15061,7 +15137,26 @@ var UserDrawingController = class {
         return;
       }
     }
+    if (this.activeTool == null) {
+      const doomed = this.alertTrashAt(x, y);
+      if (doomed) {
+        this.popup.close();
+        this.emit({ kind: "delete", ids: [doomed.id] });
+        return;
+      }
+    }
     this.interaction.down(x, y, snap, shift2);
+  }
+  /** The topmost visible, unlocked price alert whose trash button contains (x, y) (the rect the
+   *  painter measured last frame; only set while the alert's pill is showing). */
+  alertTrashAt(x, y) {
+    for (let i = this.drawings.length - 1; i >= 0; i -= 1) {
+      const d = this.drawings[i];
+      if (!(d instanceof PriceAlert) || !d.visible || d.locked) continue;
+      const r = d.trashRect;
+      if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return d;
+    }
+    return null;
   }
   pointerMove(x, y, snap = "off", shift2 = false) {
     if (this.eraserMode) {
@@ -15279,7 +15374,7 @@ var UserDrawingController = class {
   /** Cursor hint while hovering — `'pointer'` over a drawing/handle, else null. */
   cursorAt(x, y) {
     if (this.eraserMode) return "pointer";
-    if (this.activeTool == null && this.magnifierChipAt(x, y)) return "pointer";
+    if (this.activeTool == null && (this.magnifierChipAt(x, y) || this.alertTrashAt(x, y))) return "pointer";
     return this.interaction.cursorAt(x, y);
   }
   /** Right-click: an explicit escape back to the pointer. Cancels an in-progress
@@ -15412,6 +15507,7 @@ var UserDrawingController = class {
   /** Whether the drawing's z puts it INSIDE the series stack (per the last-known boundaries)
    *  rather than over it — i.e. its body belongs to an interleave layer, not the top canvas. */
   isInterleaved(d) {
+    if (d instanceof PriceAlert) return false;
     return sliceKeyFor(d.zIndex, this.lastBounds.get(d.paneId) ?? []) !== null;
   }
   /** A drawing that paints inside the series stack changed (content, not hover): its pixels
@@ -15435,7 +15531,7 @@ var UserDrawingController = class {
     const theme = this.deps.theme();
     const buckets = /* @__PURE__ */ new Map();
     for (const d of this.drawings) {
-      if (!d.visible) continue;
+      if (!d.visible || d instanceof PriceAlert) continue;
       const beforeZ = sliceKeyFor(d.zIndex, this.lastBounds.get(d.paneId) ?? []);
       if (beforeZ === null) continue;
       const key = `${d.paneId}|${beforeZ}`;
