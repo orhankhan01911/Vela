@@ -1420,7 +1420,7 @@ export class DrawingPainter {
      *  (when hovered/selected/dragged) a pill with the condition text and a trash button. */
     private paintPriceAlert(ctx: CanvasRenderingContext2D, d: PriceAlert, proj: Projector, theme: VelaTheme): void {
         const a = d.anchors[0];
-        const y = d.handlePoints(proj)[0]?.[1];
+        const y = a ? proj.yOf(a.price, d.paneId) : null;
         d.pillRect = null;
         d.trashRect = null;
         if (!a || y == null) return;
@@ -1429,7 +1429,7 @@ export class DrawingPainter {
         const engaged = handleIdsFor(this.targets).has(d.id);
         ctx.save();
         ctx.globalAlpha *= d.alert.active ? 1 : 0.5;
-        // dashed stub + ring
+        // dashed stub + solid dot with a background halo (reads on any candle behind it)
         ctx.strokeStyle = ink;
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 3]);
@@ -1439,57 +1439,110 @@ export class DrawingPainter {
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.beginPath();
-        ctx.arc(W - 6, y + 0.5, 3.5, 0, Math.PI * 2);
+        ctx.arc(W - 6, y + 0.5, 5.5, 0, Math.PI * 2);
         ctx.fillStyle = theme.background;
         ctx.fill();
-        ctx.stroke();
-        // axis chip
-        // Two decimals, no grouping: reads like the axis labels beside it.
+        ctx.beginPath();
+        ctx.arc(W - 6, y + 0.5, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = ink;
+        ctx.fill();
+        // axis chip: solid, price only (two decimals, no grouping: reads like the axis beside it)
         const priceStr = a.price >= 100 ? a.price.toFixed(2) : formatPriceTag(a.price);
-        ctx.font = `11px ${theme.fontFamily}`;
+        ctx.font = `600 11px ${theme.fontFamily}`;
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'left';
-        const chipW = Math.max(52, ctx.measureText(priceStr).width + 14);
-        roundRect(ctx, W + 1, y - 9, chipW, 18, 3);
+        const chipW = Math.max(54, ctx.measureText(priceStr).width + 14);
+        roundRect(ctx, W + 1, y - 9.5, chipW, 19, 4);
         ctx.fillStyle = ink;
         ctx.fill();
         ctx.fillStyle = contrastColor(ink);
         ctx.fillText(priceStr, W + 8, y + 0.5);
-        // hover pill: "<label> <price>  [trash]"
+        // hover pill: [bell] label  price | [trash]
         if (engaged) {
-            const text = `${d.alert.label} ${priceStr}`.trim();
-            const tw = ctx.measureText(text).width;
-            const trashW = 22;
-            const pw = tw + 16 + trashW;
-            const ph = 22;
-            const px = W - ALERT_STUB_PX - 6 - pw;
-            const py = y - ph - 3; // sits just above the level so the crosshair line never strikes through it
-            roundRect(ctx, px, py, pw, ph, 4);
+            const label = d.alert.label;
+            const padL = 10;
+            const bellW = 14;
+            const gap = 7;
+            ctx.font = `500 12px ${theme.fontFamily}`;
+            const lw = label ? ctx.measureText(label).width : 0;
+            ctx.font = `700 12px ${theme.fontFamily}`;
+            const pwTxt = ctx.measureText(priceStr).width;
+            const trashW = 30;
+            const pw = padL + bellW + gap + (label ? lw + gap : 0) + pwTxt + 8 + trashW;
+            const ph = 28;
+            const px = W - ALERT_STUB_PX - 4 - pw;
+            const py = y - ph - 5; // just above the level so the crosshair line never strikes through it
+            const my = py + ph / 2;
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetY = 2;
+            roundRect(ctx, px, py, pw, ph, 7);
             ctx.fillStyle = theme.background;
             ctx.fill();
+            ctx.restore();
+            ctx.globalAlpha *= 0.9;
             ctx.strokeStyle = ink;
+            ctx.lineWidth = 1;
+            roundRect(ctx, px + 0.5, py + 0.5, pw - 1, ph - 1, 7);
             ctx.stroke();
-            ctx.fillStyle = ink;
-            const my = py + ph / 2; // pill's own vertical centre
-            ctx.fillText(text, px + 8, my + 0.5);
-            // trash glyph
-            const tx = px + pw - trashW + 5;
+            ctx.globalAlpha /= 0.9;
+            // bell
+            const bx = px + padL;
+            ctx.strokeStyle = ink;
+            ctx.lineWidth = 1.3;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
             ctx.beginPath();
-            ctx.moveTo(tx, my - 3);
-            ctx.lineTo(tx + 12, my - 3);
-            ctx.moveTo(tx + 4, my - 3);
-            ctx.lineTo(tx + 4, my - 5.5);
-            ctx.lineTo(tx + 8, my - 5.5);
-            ctx.lineTo(tx + 8, my - 3);
-            ctx.moveTo(tx + 2, my - 3);
-            ctx.lineTo(tx + 3, my + 5.5);
-            ctx.lineTo(tx + 9, my + 5.5);
-            ctx.lineTo(tx + 10, my - 3);
+            ctx.moveTo(bx + 2.5, my + 3.5);
+            ctx.lineTo(bx + 11.5, my + 3.5);
+            ctx.lineTo(bx + 10.3, my + 1.6);
+            ctx.lineTo(bx + 10.3, my - 1.6);
+            ctx.arc(bx + 7, my - 1.6, 3.3, 0, Math.PI, true);
+            ctx.lineTo(bx + 3.7, my + 1.6);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(bx + 5.8, my + 5.6);
+            ctx.lineTo(bx + 8.2, my + 5.6);
+            ctx.stroke();
+            // text
+            let tx = bx + bellW + gap;
+            ctx.fillStyle = ink;
+            if (label) {
+                ctx.font = `500 12px ${theme.fontFamily}`;
+                ctx.globalAlpha *= 0.75;
+                ctx.fillText(label, tx, my + 0.5);
+                ctx.globalAlpha /= 0.75;
+                tx += lw + gap;
+            }
+            ctx.font = `700 12px ${theme.fontFamily}`;
+            ctx.fillText(priceStr, tx, my + 0.5);
+            // divider + trash
+            const dx = px + pw - trashW;
+            ctx.globalAlpha *= 0.35;
+            ctx.beginPath();
+            ctx.moveTo(dx + 0.5, py + 6);
+            ctx.lineTo(dx + 0.5, py + ph - 6);
+            ctx.stroke();
+            ctx.globalAlpha /= 0.35;
+            const cx = dx + trashW / 2;
+            ctx.beginPath();
+            ctx.moveTo(cx - 5, my - 3);
+            ctx.lineTo(cx + 5, my - 3);
+            ctx.moveTo(cx - 1.8, my - 3);
+            ctx.lineTo(cx - 1.8, my - 5);
+            ctx.lineTo(cx + 1.8, my - 5);
+            ctx.lineTo(cx + 1.8, my - 3);
+            ctx.moveTo(cx - 3.6, my - 3);
+            ctx.lineTo(cx - 3, my + 5);
+            ctx.lineTo(cx + 3, my + 5);
+            ctx.lineTo(cx + 3.6, my - 3);
             ctx.stroke();
             // Hit area = pill + the strip between it and the plot edge, down to the level, so the
             // pointer can travel from the stub to the trash button without losing the hover.
-            d.pillRect = { x: px, y: py, w: W - px, h: ph + 6 };
-            d.trashRect = { x: px + pw - trashW, y: py, w: trashW, h: ph };
+            d.pillRect = { x: px, y: py, w: W - px, h: ph + 8 };
+            d.trashRect = { x: dx, y: py, w: trashW, h: ph };
         }
         ctx.restore();
     }

@@ -1,7 +1,6 @@
 import { Drawing, type AnchorSlot } from '../Drawing';
 import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
-import { handleAt } from '../hittest';
 
 /** Per-alert state carried in the drawing's `props` (host-owned, painter-read). */
 export interface PriceAlertState {
@@ -66,13 +65,13 @@ export class PriceAlert extends Drawing {
         return px >= proj.width - ALERT_STUB_PX - 12 && Math.abs(py - y) <= tol;
     }
 
-    handlePoints(proj: Projector): Array<[number, number]> {
-        const y = this.y(proj);
-        return y == null ? [] : [[proj.width - 6, y]];
+    /** No selection handles: the marker's own dot is the grab point and the body drags it. */
+    handlePoints(_proj: Projector): Array<[number, number]> {
+        return [];
     }
 
-    hitHandle(px: number, py: number, proj: Projector, tol: number): number {
-        return handleAt(px, py, this.handlePoints(proj), tol + 3);
+    hitHandle(): number {
+        return -1;
     }
 
     bounds(proj: Projector): { x: number; y: number; w: number; h: number } | null {
