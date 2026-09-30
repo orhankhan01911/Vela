@@ -66,6 +66,8 @@ export interface InputControllerDeps {
     drawingsPointerMove?(x: number, y: number, snap: SnapMode, shift: boolean): void;
     /** Cursor to show while hovering the drawings layer (e.g. `'pointer'` over a drawing), or null. */
     drawingsCursor?(x: number, y: number): string | null;
+    /** Pointer is on a price alert's hover tag: the crosshair is hidden there. */
+    drawingsOverAlertTag?(x: number, y: number): boolean;
     /** The sticky magnet mode set on the toolbar (off/weak/strong) — Ctrl/Cmd overrides it to strong. */
     drawingsSnapMode?(): SnapMode;
     /** A claimed gesture ended. `snap` = effective magnet (the measure ruler finishes on
@@ -568,7 +570,10 @@ export class InputController {
         // Hover crosshair is a MOUSE affordance. A touch never hovers: its crosshair
         // comes only from the long-press inspect path (region 'crosshair' above) —
         // without this guard every panning finger paints the crosshair under itself.
-        if (e.pointerType !== 'touch') this.deps.onPointerMove(x, y);
+        if (e.pointerType !== 'touch') {
+            if (this.deps.drawingsOverAlertTag?.(x, y)) this.deps.onPointerMove(null, null);
+            else this.deps.onPointerMove(x, y);
+        }
     };
 
     private readonly onUp = (e: PointerEvent): void => {

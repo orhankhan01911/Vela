@@ -464,6 +464,18 @@ export class UserDrawingController implements IDrawingsRendererPort {
         this.interaction.down(x, y, snap, shift); // the popup self-dismisses on any outside press
     }
 
+    /** True while (x, y) is on a price alert's hover tag (only set while the tag is showing).
+     *  The crosshair steps aside there so its line does not strike through the tag. */
+    overAlertTag(x: number, y: number): boolean {
+        for (let i = this.drawings.length - 1; i >= 0; i -= 1) {
+            const d = this.drawings[i]!;
+            if (!(d instanceof PriceAlert) || !d.visible) continue;
+            const r = d.pillRect;
+            if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return true;
+        }
+        return false;
+    }
+
     /** The topmost visible, unlocked price alert whose trash button contains (x, y) (the rect the
      *  painter measured last frame; only set while the alert's pill is showing). */
     private alertTrashAt(x: number, y: number): PriceAlert | null {
@@ -1010,6 +1022,8 @@ export class UserDrawingController implements IDrawingsRendererPort {
         const live = (): Drawing | undefined => this.drawings.find((d) => d.id === id);
         this.emit({ kind: 'select', ids: [id] }); // editing this drawing → it stays highlighted while the popup is open
         this.emit({ kind: 'settings', id });
+        // An alert marker has its own hover tag (price + trash): no floating settings toolbar.
+        if (drawing instanceof PriceAlert) return;
         const anchor = drawing.bounds(this.deps.projector()); // float the toolbar clear of the drawing
         this.popup.open(drawing, anchor, {
             // Sync rebuilds instances, so a panel that reads values back after a patch (e.g. the

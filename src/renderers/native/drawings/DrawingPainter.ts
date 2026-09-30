@@ -1470,8 +1470,8 @@ export class DrawingPainter {
             const trashW = 30;
             const pw = padL + bellW + gap + (label ? lw + gap : 0) + pwTxt + 8 + trashW;
             const ph = 28;
-            const px = W - ALERT_STUB_PX - 4 - pw;
-            const py = y - ph - 5; // just above the level so the crosshair line never strikes through it
+            const px = W - ALERT_STUB_PX - pw; // flush with the stub: the tag sits ON the level (TradingView)
+            const py = y + 0.5 - ph / 2;
             const my = py + ph / 2;
             ctx.save();
             ctx.shadowColor = 'rgba(0,0,0,0.5)';
@@ -1539,9 +1539,9 @@ export class DrawingPainter {
             ctx.lineTo(cx + 3, my + 5);
             ctx.lineTo(cx + 3.6, my - 3);
             ctx.stroke();
-            // Hit area = pill + the strip between it and the plot edge, down to the level, so the
-            // pointer can travel from the stub to the trash button without losing the hover.
-            d.pillRect = { x: px, y: py, w: W - px, h: ph + 8 };
+            // Hit area = pill + the stub to the plot edge, so the pointer can travel from the dot
+            // to the trash button without losing the hover.
+            d.pillRect = { x: px, y: py, w: W - px, h: ph };
             d.trashRect = { x: dx, y: py, w: trashW, h: ph };
         }
         ctx.restore();
