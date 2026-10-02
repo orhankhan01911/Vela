@@ -24122,6 +24122,7 @@ var DrawingSettingsDialog = class {
   constructor(host, theme) {
     this.host = host;
     this.ui = null;
+    this.templateMenu = null;
     this.theme = theme;
   }
   setTheme(theme) {
@@ -24146,7 +24147,8 @@ var DrawingSettingsDialog = class {
     else if (kind === "frtpo" && drawing instanceof FixedRangeTpoProfile) this.buildFrtpo(grid, drawing, actions);
     else if (kind === "levels") this.buildLevels(grid, drawing, actions);
     else return;
-    const ui = new Dialog({
+    let ui;
+    ui = new Dialog({
       host: this.host,
       title: TITLES[kind],
       // Non-modal: live-edit dialog — a modal machine locks pointer events on the
@@ -24168,8 +24170,10 @@ var DrawingSettingsDialog = class {
           btn("Ok", true, () => this.close())
         );
       },
+      // Only the CURRENT dialog may close itself: a template apply / reset re-opens (destroying the old
+      // one), and the old one's async close notification must not take the new one down with it.
       onOpenChange: (open2) => {
-        if (!open2) this.close();
+        if (!open2 && this.ui === ui) this.close();
       }
     });
     applyChromeTokens(ui.panel, this.theme);
@@ -24241,7 +24245,8 @@ var DrawingSettingsDialog = class {
       wrap.append(input, save);
       input.focus();
     };
-    const menu2 = new Menu({
+    this.templateMenu?.destroy();
+    const menu2 = this.templateMenu = new Menu({
       host: this.host,
       trigger,
       placement: "top-start",
@@ -24277,6 +24282,8 @@ var DrawingSettingsDialog = class {
   close() {
     const ui = this.ui;
     this.ui = null;
+    this.templateMenu?.destroy();
+    this.templateMenu = null;
     ui?.destroy();
   }
   destroy() {
@@ -26320,6 +26327,8 @@ var UserDrawingController = class {
      *  frames split front/interleaved consistently instead of flickering a drawing onto the
      *  wrong layer for a frame. */
     this.lastBounds = /* @__PURE__ */ new Map();
+    /** Set by pointerDown when the current press landed on a price alert (see clearTransient). */
+    this.alertPressedOn = false;
     this.selectedIds = /* @__PURE__ */ new Set();
     // selected drawings (handles shown); [first] drives the popup
     this.hoveredId = null;
@@ -26606,9 +26615,15 @@ var UserDrawingController = class {
    *  hold focus (the settings popup can), so neither `pointerDown` nor blur would end the edit. */
   clearTransient() {
     if (this.textEditor) this.finishTextEditor(true);
-    if (this.measure.isFinished()) {
-      this.measure.clear();
-      this.render();
+    const isAlert = (id) => id != null && this.drawings.find((d) => d.id === id) instanceof PriceAlert;
+    if (isAlert(this.hoveredId) || [...this.selectedIds].some((id) => isAlert(id))) {
+      this.alertPressedOn = false;
+      queueMicrotask(() => {
+        if (this.alertPressedOn) return;
+        if (isAlert(this.hoveredId)) this.hoveredId = null;
+        if ([...this.selectedIds].some((id) => isAlert(id))) this.clearSelection();
+        else this.render();
+      });
     }
   }
   pointerDown(x, y, snap = "off", shift2 = false) {
@@ -26639,9 +26654,9 @@ var UserDrawingController = class {
         return;
       }
     }
-    if (this.activeTool == null && !shift2 && [...this.selectedIds].some((id) => this.drawings.find((d) => d.id === id) instanceof PriceAlert)) {
-      const hit = topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE);
-      if (!(hit instanceof PriceAlert) || !this.selectedIds.has(hit.id)) this.clearSelection();
+    if (this.activeTool == null) {
+      if (topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE) instanceof PriceAlert) this.alertPressedOn = true;
+      this.updateHover(x, y);
     }
     this.interaction.down(x, y, snap, shift2);
   }

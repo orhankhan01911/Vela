@@ -103,6 +103,8 @@ export class UserDrawingController implements IDrawingsRendererPort {
      *  frames split front/interleaved consistently instead of flickering a drawing onto the
      *  wrong layer for a frame. */
     private lastBounds = new Map<string, readonly number[]>();
+    /** Set by pointerDown when the current press landed on a price alert (see clearTransient). */
+    private alertPressedOn = false;
     private selectedIds = new Set<string>(); // selected drawings (handles shown); [first] drives the popup
     private hoveredId: string | null = null; // the drawing under the cursor (its handles show)
     private activeTool: DrawingTypeKey | null = null;
@@ -423,9 +425,19 @@ export class UserDrawingController implements IDrawingsRendererPort {
      *  hold focus (the settings popup can), so neither `pointerDown` nor blur would end the edit. */
     clearTransient(): void {
         if (this.textEditor) this.finishTextEditor(true); // clicking off the text keeps what was typed
-        if (this.measure.isFinished()) {
-            this.measure.clear();
-            this.render();
+        // A price alert has no settings popup to dismiss on an outside press, so its hover/selected pill
+        // would stay forever (touch has no hover to retire it). Every press runs through here first; a press
+        // that lands ON the alert re-engages it in pointerDown. The repaint is deferred so the drawings
+        // hit-test of THIS press still sees last frame's pill/trash rects.
+        const isAlert = (id: string | null): boolean => id != null && this.drawings.find((d) => d.id === id) instanceof PriceAlert;
+        if (isAlert(this.hoveredId) || [...this.selectedIds].some((id) => isAlert(id))) {
+            this.alertPressedOn = false;
+            queueMicrotask(() => {
+                if (this.alertPressedOn) return; // the press grabbed the alert (pill / trash / stub): keep it engaged
+                if (isAlert(this.hoveredId)) this.hoveredId = null;
+                if ([...this.selectedIds].some((id) => isAlert(id))) this.clearSelection();
+                else this.render();
+            });
         }
     }
 
@@ -461,11 +473,10 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 return;
             }
         }
-        // A price alert has no settings popup, so nothing else dismisses its pill: a press
-        // anywhere off the alert deselects it (on touch there is no hover to retire the pill).
-        if (this.activeTool == null && !shift && [...this.selectedIds].some((id) => this.drawings.find((d) => d.id === id) instanceof PriceAlert)) {
-            const hit = topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE);
-            if (!(hit instanceof PriceAlert) || !this.selectedIds.has(hit.id)) this.clearSelection();
+        // A tap lands with no preceding pointermove (touch), so refresh the hover target for THIS press.
+        if (this.activeTool == null) {
+            if (topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE) instanceof PriceAlert) this.alertPressedOn = true;
+            this.updateHover(x, y);
         }
         this.interaction.down(x, y, snap, shift); // the popup self-dismisses on any outside press
     }

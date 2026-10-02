@@ -44,6 +44,7 @@ const TITLES: Record<DrawingDialogKind, string> = {
  */
 export class DrawingSettingsDialog {
     private ui: Dialog | null = null;
+    private templateMenu: Menu | null = null;
     private theme: VelaTheme;
 
     constructor(private readonly host: HTMLElement, theme: VelaTheme) {
@@ -78,7 +79,8 @@ export class DrawingSettingsDialog {
         else if (kind === 'levels') this.buildLevels(grid, drawing, actions);
         else return;
 
-        const ui = new Dialog({
+        let ui: Dialog;
+        ui = new Dialog({
             host: this.host,
             title: TITLES[kind],
             // Non-modal: live-edit dialog — a modal machine locks pointer events on the
@@ -100,7 +102,9 @@ export class DrawingSettingsDialog {
                     btn('Ok', true, () => this.close()),
                 );
             },
-            onOpenChange: (open) => { if (!open) this.close(); },
+            // Only the CURRENT dialog may close itself: a template apply / reset re-opens (destroying the old
+            // one), and the old one's async close notification must not take the new one down with it.
+            onOpenChange: (open) => { if (!open && this.ui === ui) this.close(); },
         });
         applyChromeTokens(ui.panel, this.theme);
         ui.body.appendChild(grid);
@@ -168,7 +172,8 @@ export class DrawingSettingsDialog {
             wrap.append(input, save);
             input.focus();
         };
-        const menu = new Menu({
+        this.templateMenu?.destroy(); // a repaint rebuilds the footer: drop the previous menu's floating list
+        const menu = this.templateMenu = new Menu({
             host: this.host,
             trigger,
             placement: 'top-start',
@@ -206,6 +211,8 @@ export class DrawingSettingsDialog {
     close(): void {
         const ui = this.ui;
         this.ui = null;
+        this.templateMenu?.destroy();
+        this.templateMenu = null;
         ui?.destroy();
     }
 
