@@ -1,5 +1,5 @@
-import { parseSymbol, priceStyleIds, BUILTIN_PRICE_STYLES, tzButtonLabel, TIMEZONES, normalizeTimezone, tzMenuLabel, isGroupRow, defaultMemberOf, groupKeyOf, groupMembers, LEGEND_AT_TOP_ATTR, normalizeSession, Vela, TypedEventBus, MultiProviderFeed, registerBuiltinChartTypes, resolveTheme, buildToolbar, createCustomMark, createAttributionMark, DrawingToolbar, applyAttributionMarkTheme, sharedBarStore, timeframeToMs } from './chunk-2FWGDSAT.js';
-import { chartType, resolveTopbarComposition, topbarActionOverride, TOPBAR_BUILTIN_IDS, widgetActions, SidePanel, sidePanels, DEFAULT_PANEL_ORDER, symbolRanking, resolveEngines, legendActionsProviderFor, legendCalloutsProviderFor, statePersistenceHandlers, topbarHas, rendererDefaults, widgetAttachments, getDrawingType, inputDeltas } from './chunk-QEHGQC7M.js';
+import { parseSymbol, priceStyleIds, BUILTIN_PRICE_STYLES, tzButtonLabel, TIMEZONES, normalizeTimezone, tzMenuLabel, isGroupRow, defaultMemberOf, groupKeyOf, groupMembers, LEGEND_AT_TOP_ATTR, normalizeSession, Vela, TypedEventBus, MultiProviderFeed, registerBuiltinChartTypes, resolveTheme, buildToolbar, createCustomMark, createAttributionMark, DrawingToolbar, applyAttributionMarkTheme, sharedBarStore, timeframeToMs } from './chunk-FFYX4IEQ.js';
+import { chartType, resolveTopbarComposition, topbarActionOverride, TOPBAR_BUILTIN_IDS, widgetActions, SidePanel, sidePanels, DEFAULT_PANEL_ORDER, symbolRanking, resolveEngines, legendActionsProviderFor, legendCalloutsProviderFor, statePersistenceHandlers, topbarHas, rendererDefaults, widgetAttachments, getDrawingType, inputDeltas } from './chunk-CYQLUV4P.js';
 import { Tooltip, KeymapManager, isEditableTarget, Drawer } from './chunk-XCBJU674.js';
 import { Menu, Dialog, CalloutBubble, applyPlotOverlayTokens, ensureUIHost } from './chunk-T5Z5YUCF.js';
 import { registerIcon, svg16, injectStyles, iconEl, iconMarkup, iconAt, SESSION_OFF, SESSION_POST, SESSION_PRE, icon, categoricalColor } from './chunk-CAFCLMPF.js';
@@ -7130,7 +7130,7 @@ var CSS16 = `
 .vela-dd-star[data-on='1'] { color: var(--vela-highlight); }
 .vela-dd-empty { padding: 18px 2px; color: var(--vela-fg-muted); font-size: 13px; }
 `;
-var DrawingsDrawer = class {
+var _DrawingsDrawer = class _DrawingsDrawer {
   constructor(opts) {
     this.opts = opts;
     this.definition = { groups: [] };
@@ -7163,7 +7163,9 @@ var DrawingsDrawer = class {
   }
   open() {
     this.definition = this.opts.toolbar();
-    if (!this.definition.groups.some((g) => g.id === this.activeGroup)) this.activeGroup = this.definition.groups[0]?.id ?? "";
+    if (this.activeGroup !== _DrawingsDrawer.FAV && !this.definition.groups.some((g) => g.id === this.activeGroup)) {
+      this.activeGroup = this.definition.groups[0]?.id ?? "";
+    }
     this.input.value = "";
     this.renderTabs();
     this.renderList();
@@ -7179,7 +7181,7 @@ var DrawingsDrawer = class {
    *  shows the flattened results — no tabs to page through, so the swipe is inert. */
   stepGroup(step) {
     if (this.input.value.trim()) return;
-    const groups = this.definition.groups;
+    const groups = [{ id: _DrawingsDrawer.FAV }, ...this.definition.groups];
     const next = groups[groups.findIndex((g) => g.id === this.activeGroup) + step];
     if (!next) return;
     this.activeGroup = next.id;
@@ -7190,7 +7192,8 @@ var DrawingsDrawer = class {
   renderTabs() {
     const doc = this.tabs.ownerDocument;
     this.tabs.replaceChildren();
-    for (const group of this.definition.groups) {
+    const all = [{ id: _DrawingsDrawer.FAV, label: "\u2605 Favorites" }, ...this.definition.groups];
+    for (const group of all) {
       const tab = doc.createElement("button");
       tab.className = "vela-dd-tab";
       tab.textContent = group.label;
@@ -7239,6 +7242,7 @@ var DrawingsDrawer = class {
         const on = !this.opts.isFavorite(tool.type);
         this.opts.onFavorite(tool.type, on);
         paintStar(on);
+        if (this.activeGroup === _DrawingsDrawer.FAV && !query) this.renderList();
       });
       el.append(glyph, label, star);
       el.addEventListener("click", () => {
@@ -7264,6 +7268,23 @@ var DrawingsDrawer = class {
       }
       return;
     }
+    if (this.activeGroup === _DrawingsDrawer.FAV) {
+      const seen = /* @__PURE__ */ new Set();
+      for (const g of this.definition.groups) {
+        for (const tool of g.tools) {
+          if (seen.has(tool.type) || !this.opts.isFavorite(tool.type)) continue;
+          seen.add(tool.type);
+          row(tool);
+        }
+      }
+      if (seen.size === 0) {
+        const empty = doc.createElement("div");
+        empty.className = "vela-dd-empty";
+        empty.textContent = "No favorites yet. Tap a tool\u2019s star to pin it here.";
+        this.list.appendChild(empty);
+      }
+      return;
+    }
     const group = this.definition.groups.find((g) => g.id === this.activeGroup);
     if (!group) return;
     if (group.sections && group.sections.length > 0) {
@@ -7276,6 +7297,9 @@ var DrawingsDrawer = class {
     }
   }
 };
+/** Synthetic first tab: every starred tool, gathered across all groups. */
+_DrawingsDrawer.FAV = "__favorites";
+var DrawingsDrawer = _DrawingsDrawer;
 
 // src/widget/more-drawer.ts
 var STYLE_ID17 = "vela-widget-more-drawer";

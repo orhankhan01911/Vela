@@ -461,6 +461,12 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 return;
             }
         }
+        // A price alert has no settings popup, so nothing else dismisses its pill: a press
+        // anywhere off the alert deselects it (on touch there is no hover to retire the pill).
+        if (this.activeTool == null && !shift && [...this.selectedIds].some((id) => this.drawings.find((d) => d.id === id) instanceof PriceAlert)) {
+            const hit = topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE);
+            if (!(hit instanceof PriceAlert) || !this.selectedIds.has(hit.id)) this.clearSelection();
+        }
         this.interaction.down(x, y, snap, shift); // the popup self-dismisses on any outside press
     }
 

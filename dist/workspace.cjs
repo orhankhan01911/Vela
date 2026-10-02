@@ -11601,7 +11601,7 @@ var PriceAlert = class extends Drawing {
     if (y == null) return false;
     const r = this.pillRect;
     if (r && px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return true;
-    return px >= proj.width - ALERT_STUB_PX - 12 && Math.abs(py - y) <= tol;
+    return px >= proj.width - ALERT_STUB_PX - 12 && Math.abs(py - y) <= Math.max(tol, 16);
   }
   /** No selection handles: the marker's own dot is the grab point and the body drags it. */
   handlePoints(_proj) {
@@ -13974,14 +13974,14 @@ var ObjectTree = class extends SidePanel {
   groupingItems(b, id) {
     const items = [];
     const mine = groupOf(this.groups, id);
-    const pick = this.picked.has(id) && this.picked.size > 1 ? [...this.picked] : null;
-    if (pick && canGroup(pick, this.groups)) {
-      items.push(b.entry(`Group selection (${pick.length})`, "group", () => this.makeGroup(pick), true));
-    } else if (!pick && mine === null) {
+    const pick2 = this.picked.has(id) && this.picked.size > 1 ? [...this.picked] : null;
+    if (pick2 && canGroup(pick2, this.groups)) {
+      items.push(b.entry(`Group selection (${pick2.length})`, "group", () => this.makeGroup(pick2), true));
+    } else if (!pick2 && mine === null) {
       items.push(b.entry("New group", "group", () => this.makeGroup([id]), true));
     }
     const others = this.groups.filter((g) => g.id !== mine?.id);
-    if (!pick && others.length > 0) {
+    if (!pick2 && others.length > 0) {
       items.push(
         b.submenu(
           mine === null ? "Add to group" : "Move to group",
@@ -14584,8 +14584,8 @@ var SymbolPicker = class {
       if (e.key === "ArrowDown") this.moveHighlight(1);
       else if (e.key === "ArrowUp") this.moveHighlight(-1);
       else if (e.key === "Enter") {
-        const pick = this.rows[this.highlighted];
-        if (pick) this.pick(pick);
+        const pick2 = this.rows[this.highlighted];
+        if (pick2) this.pick(pick2);
         return;
       } else return;
       e.preventDefault();
@@ -15652,7 +15652,7 @@ var CSS15 = `
 .vela-dd-star[data-on='1'] { color: var(--vela-highlight); }
 .vela-dd-empty { padding: 18px 2px; color: var(--vela-fg-muted); font-size: 13px; }
 `;
-var DrawingsDrawer = class {
+var _DrawingsDrawer = class _DrawingsDrawer {
   constructor(opts) {
     this.opts = opts;
     this.definition = { groups: [] };
@@ -15685,7 +15685,9 @@ var DrawingsDrawer = class {
   }
   open() {
     this.definition = this.opts.toolbar();
-    if (!this.definition.groups.some((g) => g.id === this.activeGroup)) this.activeGroup = this.definition.groups[0]?.id ?? "";
+    if (this.activeGroup !== _DrawingsDrawer.FAV && !this.definition.groups.some((g) => g.id === this.activeGroup)) {
+      this.activeGroup = this.definition.groups[0]?.id ?? "";
+    }
     this.input.value = "";
     this.renderTabs();
     this.renderList();
@@ -15701,7 +15703,7 @@ var DrawingsDrawer = class {
    *  shows the flattened results — no tabs to page through, so the swipe is inert. */
   stepGroup(step) {
     if (this.input.value.trim()) return;
-    const groups = this.definition.groups;
+    const groups = [{ id: _DrawingsDrawer.FAV }, ...this.definition.groups];
     const next = groups[groups.findIndex((g) => g.id === this.activeGroup) + step];
     if (!next) return;
     this.activeGroup = next.id;
@@ -15712,7 +15714,8 @@ var DrawingsDrawer = class {
   renderTabs() {
     const doc = this.tabs.ownerDocument;
     this.tabs.replaceChildren();
-    for (const group of this.definition.groups) {
+    const all = [{ id: _DrawingsDrawer.FAV, label: "\u2605 Favorites" }, ...this.definition.groups];
+    for (const group of all) {
       const tab = doc.createElement("button");
       tab.className = "vela-dd-tab";
       tab.textContent = group.label;
@@ -15761,6 +15764,7 @@ var DrawingsDrawer = class {
         const on = !this.opts.isFavorite(tool.type);
         this.opts.onFavorite(tool.type, on);
         paintStar(on);
+        if (this.activeGroup === _DrawingsDrawer.FAV && !query) this.renderList();
       });
       el.append(glyph, label, star);
       el.addEventListener("click", () => {
@@ -15786,6 +15790,23 @@ var DrawingsDrawer = class {
       }
       return;
     }
+    if (this.activeGroup === _DrawingsDrawer.FAV) {
+      const seen = /* @__PURE__ */ new Set();
+      for (const g of this.definition.groups) {
+        for (const tool of g.tools) {
+          if (seen.has(tool.type) || !this.opts.isFavorite(tool.type)) continue;
+          seen.add(tool.type);
+          row(tool);
+        }
+      }
+      if (seen.size === 0) {
+        const empty = doc.createElement("div");
+        empty.className = "vela-dd-empty";
+        empty.textContent = "No favorites yet. Tap a tool\u2019s star to pin it here.";
+        this.list.appendChild(empty);
+      }
+      return;
+    }
     const group = this.definition.groups.find((g) => g.id === this.activeGroup);
     if (!group) return;
     if (group.sections && group.sections.length > 0) {
@@ -15798,6 +15819,9 @@ var DrawingsDrawer = class {
     }
   }
 };
+/** Synthetic first tab: every starred tool, gathered across all groups. */
+_DrawingsDrawer.FAV = "__favorites";
+var DrawingsDrawer = _DrawingsDrawer;
 
 // src/widget/more-drawer.ts
 var STYLE_ID15 = "vela-widget-more-drawer";
@@ -18673,7 +18697,7 @@ function summarizeModel(model) {
 }
 function inspectModels(models) {
   const indicators = models.map(summarizeModel);
-  const sum2 = (pick) => indicators.reduce((n, s) => n + pick(s), 0);
+  const sum2 = (pick2) => indicators.reduce((n, s) => n + pick2(s), 0);
   return {
     indicators,
     totals: {
@@ -21574,13 +21598,13 @@ var IndicatorInputsDialog = class {
       if (isPopoverOpen()) return;
       commitTyped();
     });
-    const pick = (v) => {
+    const pick2 = (v) => {
       value = v;
       input.value = v;
       onChange(v);
     };
     const openList = () => {
-      this.choicePop = toggleSelectList(wrap, TIME_OPTIONS, value, pick, {
+      this.choicePop = toggleSelectList(wrap, TIME_OPTIONS, value, pick2, {
         ...this.listPopover(),
         onClose: () => {
           this.choicePop = null;
@@ -21644,7 +21668,7 @@ var IndicatorInputsDialog = class {
       if (isPopoverOpen()) return;
       commitTyped();
     });
-    const pick = (v) => {
+    const pick2 = (v) => {
       value = v;
       input.value = v;
       onChange(v);
@@ -21657,7 +21681,7 @@ var IndicatorInputsDialog = class {
       }
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        this.openCalendar(wrap, value, pick);
+        this.openCalendar(wrap, value, pick2);
       }
     });
     const open2 = (e) => {
@@ -21667,7 +21691,7 @@ var IndicatorInputsDialog = class {
         closeOpenPopovers();
         return;
       }
-      this.openCalendar(wrap, value, pick);
+      this.openCalendar(wrap, value, pick2);
     };
     input.addEventListener("click", open2);
     chevron.addEventListener("mousedown", (e) => e.preventDefault());
@@ -31191,9 +31215,9 @@ var DrawingSettingsDialog = class {
   contains(node) {
     return this.ui?.contains(node) === true;
   }
-  open(drawing, actions, kind) {
+  open(drawing, actions, kind, keepSnapshot) {
     this.close();
-    const snapshot = clonePlain(drawing.serialize());
+    const snapshot = keepSnapshot ?? clonePlain(drawing.serialize());
     const grid = fieldGrid({ variant: "inputs" });
     grid.style.padding = "16px 20px";
     grid.style.overflowY = "auto";
@@ -31218,6 +31242,7 @@ var DrawingSettingsDialog = class {
       closeOnEscape: false,
       footer: (foot) => {
         foot.append(
+          this.buildTemplateButton(drawing, actions, kind, snapshot),
           btn("Cancel", false, () => {
             actions.restore?.(snapshot);
             this.close();
@@ -31250,6 +31275,86 @@ var DrawingSettingsDialog = class {
     });
     this.ui = ui;
     ui.show();
+  }
+  /** Bottom-left "Template ▾": save the current look under a name, re-apply a saved one,
+   *  or reset to the tool's factory defaults. Templates are per drawing type, kept in
+   *  localStorage, and carry style/text/props only — never anchors, so applying one
+   *  restyles a drawing without moving it. */
+  buildTemplateButton(drawing, actions, kind, snapshot) {
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "margin-right:auto;display:flex;align-items:center;gap:8px;min-width:0;";
+    const trigger = btn("Template \u25BE", false, () => {
+    });
+    trigger.setAttribute("aria-label", "Drawing template");
+    const type = drawing.type;
+    const live = () => actions.resolve() ?? drawing;
+    const repaint = () => this.open(live(), actions, kind, snapshot);
+    const applyLook = (look) => {
+      const d = live().serialize();
+      actions.restore?.({ ...d, style: { ...look.style }, text: look.text ? { ...look.text } : d.text, props: look.props ?? d.props });
+      repaint();
+    };
+    const showSaveRow = () => {
+      trigger.style.display = "none";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "Template name";
+      input.maxLength = 40;
+      input.style.cssText = "min-width:0;width:130px;padding:6px 10px;border-radius:8px;border:1px solid var(--vela-border);background:transparent;color:inherit;font:inherit;";
+      const save = btn("Save", true, () => {
+        const name = input.value.trim();
+        if (!name) {
+          input.focus();
+          return;
+        }
+        const d = live().serialize();
+        const all = readTemplates();
+        (all[type] ?? (all[type] = {}))[name] = clonePlain({ style: d.style, text: d.text, props: d.props });
+        writeTemplates(all);
+        repaint();
+      });
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          save.click();
+        }
+        e.stopPropagation();
+      });
+      wrap.append(input, save);
+      input.focus();
+    };
+    const menu2 = new Menu({
+      host: this.host,
+      trigger,
+      placement: "top-start",
+      items: [],
+      onSelect: (id) => {
+        if (id === "reset") {
+          const fresh = createDrawing(type, { paneId: live().paneId });
+          if (fresh) actions.restore?.({ ...live().serialize(), ...pick(fresh.serialize()) });
+          repaint();
+        } else if (id === "save") showSaveRow();
+        else if (id.startsWith("apply:")) {
+          const look = readTemplates()[type]?.[id.slice(6)];
+          if (look) applyLook(look);
+        } else if (id.startsWith("del:")) {
+          const all = readTemplates();
+          if (all[type]) delete all[type][id.slice(4)];
+          writeTemplates(all);
+        }
+      }
+    });
+    trigger.addEventListener("click", () => {
+      const saved = Object.keys(readTemplates()[type] ?? {}).sort((a, b) => a.localeCompare(b));
+      menu2.setItems([
+        { id: "save", label: "Save as\u2026" },
+        ...saved.map((n, i) => ({ id: `apply:${n}`, label: n, separatorBefore: i === 0 })),
+        ...saved.length ? [{ id: "del-root", label: "Delete template", separatorBefore: true, submenu: saved.map((n) => ({ id: `del:${n}`, label: n })) }] : [],
+        { id: "reset", label: "Reset to defaults", separatorBefore: true }
+      ]);
+    }, true);
+    wrap.appendChild(trigger);
+    return wrap;
   }
   close() {
     const ui = this.ui;
@@ -31630,6 +31735,24 @@ var DrawingSettingsDialog = class {
     });
   }
 };
+var TEMPLATE_KEY = "vela.drawingTemplates.v1";
+function readTemplates() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(TEMPLATE_KEY) ?? "{}");
+    return raw && typeof raw === "object" ? raw : {};
+  } catch {
+    return {};
+  }
+}
+function writeTemplates(all) {
+  try {
+    localStorage.setItem(TEMPLATE_KEY, JSON.stringify(all));
+  } catch {
+  }
+}
+function pick(d) {
+  return { style: d.style, text: d.text, props: d.props };
+}
 function btn(label, primary, onClick) {
   const b = document.createElement("button");
   b.type = "button";
@@ -32965,6 +33088,10 @@ var UserDrawingController = class {
         this.emit({ kind: "delete", ids: [doomed.id] });
         return;
       }
+    }
+    if (this.activeTool == null && !shift2 && [...this.selectedIds].some((id) => this.drawings.find((d) => d.id === id) instanceof PriceAlert)) {
+      const hit = topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE);
+      if (!(hit instanceof PriceAlert) || !this.selectedIds.has(hit.id)) this.clearSelection();
     }
     this.interaction.down(x, y, snap, shift2);
   }
@@ -40317,11 +40444,11 @@ var williamsFractal = {
   compute: (bars, inputs) => {
     const p = num3(inputs, "periods", 2);
     const markers = [];
-    const isExtreme = (i, pick, better) => {
-      const v = pick(bars[i]);
+    const isExtreme = (i, pick2, better) => {
+      const v = pick2(bars[i]);
       for (let k = i - p; k <= i + p; k++) {
         if (k === i) continue;
-        if (!better(v, pick(bars[k]))) return false;
+        if (!better(v, pick2(bars[k]))) return false;
       }
       return true;
     };

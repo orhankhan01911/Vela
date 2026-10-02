@@ -62,7 +62,8 @@ export class PriceAlert extends Drawing {
         if (y == null) return false;
         const r = this.pillRect;
         if (r && px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return true;
-        return px >= proj.width - ALERT_STUB_PX - 12 && Math.abs(py - y) <= tol;
+        // Fingertip-sized vertical grab: the stub is a 2px line, easy to miss with a thumb.
+        return px >= proj.width - ALERT_STUB_PX - 12 && Math.abs(py - y) <= Math.max(tol, 16);
     }
 
     /** No selection handles: the marker's own dot is the grab point and the body drags it. */

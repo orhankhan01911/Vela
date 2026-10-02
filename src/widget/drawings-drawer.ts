@@ -126,6 +126,8 @@ export class DrawingsDrawer {
     private readonly list: HTMLElement;
     private definition: ToolbarDefinition = { groups: [] };
     private activeGroup = '';
+    /** Synthetic first tab: every starred tool, gathered across all groups. */
+    private static readonly FAV = '__favorites';
 
     constructor(private readonly opts: DrawingsDrawerOptions) {
         const doc = opts.host.ownerDocument;
@@ -162,7 +164,9 @@ export class DrawingsDrawer {
 
     open(): void {
         this.definition = this.opts.toolbar();
-        if (!this.definition.groups.some((g) => g.id === this.activeGroup)) this.activeGroup = this.definition.groups[0]?.id ?? '';
+        if (this.activeGroup !== DrawingsDrawer.FAV && !this.definition.groups.some((g) => g.id === this.activeGroup)) {
+            this.activeGroup = this.definition.groups[0]?.id ?? '';
+        }
         this.input.value = '';
         this.renderTabs();
         this.renderList();
@@ -181,7 +185,7 @@ export class DrawingsDrawer {
      *  shows the flattened results — no tabs to page through, so the swipe is inert. */
     private stepGroup(step: number): void {
         if (this.input.value.trim()) return;
-        const groups = this.definition.groups;
+        const groups = [{ id: DrawingsDrawer.FAV }, ...this.definition.groups];
         const next = groups[groups.findIndex((g) => g.id === this.activeGroup) + step];
         if (!next) return;
         this.activeGroup = next.id;
@@ -193,7 +197,8 @@ export class DrawingsDrawer {
     private renderTabs(): void {
         const doc = this.tabs.ownerDocument;
         this.tabs.replaceChildren();
-        for (const group of this.definition.groups) {
+        const all = [{ id: DrawingsDrawer.FAV, label: '★ Favorites' }, ...this.definition.groups];
+        for (const group of all) {
             const tab = doc.createElement('button');
             tab.className = 'vela-dd-tab';
             tab.textContent = group.label;
@@ -244,6 +249,7 @@ export class DrawingsDrawer {
                 const on = !this.opts.isFavorite(tool.type);
                 this.opts.onFavorite(tool.type, on);
                 paintStar(on);
+                if (this.activeGroup === DrawingsDrawer.FAV && !query) this.renderList(); // un-starring drops the row
             });
             el.append(glyph, label, star);
             el.addEventListener('click', () => {
@@ -272,6 +278,23 @@ export class DrawingsDrawer {
             return;
         }
 
+        if (this.activeGroup === DrawingsDrawer.FAV) {
+            const seen = new Set<DrawingTypeKey>();
+            for (const g of this.definition.groups) {
+                for (const tool of g.tools) {
+                    if (seen.has(tool.type) || !this.opts.isFavorite(tool.type)) continue;
+                    seen.add(tool.type);
+                    row(tool);
+                }
+            }
+            if (seen.size === 0) {
+                const empty = doc.createElement('div');
+                empty.className = 'vela-dd-empty';
+                empty.textContent = 'No favorites yet. Tap a tool\u2019s star to pin it here.';
+                this.list.appendChild(empty);
+            }
+            return;
+        }
         const group = this.definition.groups.find((g) => g.id === this.activeGroup);
         if (!group) return;
         if (group.sections && group.sections.length > 0) {

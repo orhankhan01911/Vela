@@ -8,7 +8,9 @@ import {
     MachFigure,
     PositionTool,
     clonePlain,
+    createDrawing,
 } from '../../../core/drawings';
+import { Menu } from '../../../ui/components/menu';
 import { contrastColor } from '../../shared/drawing-geometry';
 import { applyChromeTokens } from '../../shared/theme-tokens';
 import { Dialog } from '../../../ui/components/dialog';
@@ -60,9 +62,11 @@ export class DrawingSettingsDialog {
         return this.ui?.contains(node) === true;
     }
 
-    open(drawing: Drawing, actions: SettingsActions, kind: DrawingDialogKind): void {
+    open(drawing: Drawing, actions: SettingsActions, kind: DrawingDialogKind, keepSnapshot?: SerializedDrawing): void {
         this.close();
-        const snapshot = clonePlain(drawing.serialize());
+        // Cancel restores the state from BEFORE the dialog first opened — a template apply /
+        // reset re-opens the dialog (to repaint its fields) but must keep that original.
+        const snapshot = keepSnapshot ?? clonePlain(drawing.serialize());
         const grid = fieldGrid({ variant: 'inputs' });
         grid.style.padding = '16px 20px';
         grid.style.overflowY = 'auto';
@@ -88,6 +92,7 @@ export class DrawingSettingsDialog {
             closeOnEscape: false,
             footer: (foot) => {
                 foot.append(
+                    this.buildTemplateButton(drawing, actions, kind, snapshot),
                     btn('Cancel', false, () => {
                         actions.restore?.(snapshot);
                         this.close();
@@ -120,6 +125,82 @@ export class DrawingSettingsDialog {
         });
         this.ui = ui;
         ui.show();
+    }
+
+    /** Bottom-left "Template ▾": save the current look under a name, re-apply a saved one,
+     *  or reset to the tool's factory defaults. Templates are per drawing type, kept in
+     *  localStorage, and carry style/text/props only — never anchors, so applying one
+     *  restyles a drawing without moving it. */
+    private buildTemplateButton(drawing: Drawing, actions: SettingsActions, kind: DrawingDialogKind, snapshot: SerializedDrawing): HTMLElement {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'margin-right:auto;display:flex;align-items:center;gap:8px;min-width:0;';
+        const trigger = btn('Template \u25BE', false, () => {});
+        trigger.setAttribute('aria-label', 'Drawing template');
+        const type = drawing.type;
+        const live = (): Drawing => actions.resolve() ?? drawing;
+        const repaint = (): void => this.open(live(), actions, kind, snapshot);
+        const applyLook = (look: TemplateLook): void => {
+            const d = live().serialize();
+            actions.restore?.({ ...d, style: { ...look.style }, text: look.text ? { ...look.text } : d.text, props: look.props ?? d.props });
+            repaint();
+        };
+        const showSaveRow = (): void => {
+            trigger.style.display = 'none';
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = 'Template name';
+            input.maxLength = 40;
+            input.style.cssText =
+                'min-width:0;width:130px;padding:6px 10px;border-radius:8px;border:1px solid var(--vela-border);background:transparent;color:inherit;font:inherit;';
+            const save = btn('Save', true, () => {
+                const name = input.value.trim();
+                if (!name) { input.focus(); return; }
+                const d = live().serialize();
+                const all = readTemplates();
+                (all[type] ??= {})[name] = clonePlain({ style: d.style, text: d.text, props: d.props });
+                writeTemplates(all);
+                repaint();
+            });
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); save.click(); }
+                e.stopPropagation(); // typing must not reach chart shortcuts
+            });
+            wrap.append(input, save);
+            input.focus();
+        };
+        const menu = new Menu({
+            host: this.host,
+            trigger,
+            placement: 'top-start',
+            items: [],
+            onSelect: (id) => {
+                if (id === 'reset') {
+                    const fresh = createDrawing(type, { paneId: live().paneId });
+                    if (fresh) actions.restore?.({ ...live().serialize(), ...pick(fresh.serialize()) });
+                    repaint();
+                } else if (id === 'save') showSaveRow();
+                else if (id.startsWith('apply:')) {
+                    const look = readTemplates()[type]?.[id.slice(6)];
+                    if (look) applyLook(look);
+                } else if (id.startsWith('del:')) {
+                    const all = readTemplates();
+                    if (all[type]) delete all[type][id.slice(4)];
+                    writeTemplates(all);
+                }
+            },
+        });
+        // Rebuild the list each time it opens so saves/deletes show immediately.
+        trigger.addEventListener('click', () => {
+            const saved = Object.keys(readTemplates()[type] ?? {}).sort((a, b) => a.localeCompare(b));
+            menu.setItems([
+                { id: 'save', label: 'Save as\u2026' },
+                ...saved.map((n, i) => ({ id: `apply:${n}`, label: n, separatorBefore: i === 0 })),
+                ...(saved.length ? [{ id: 'del-root', label: 'Delete template', separatorBefore: true, submenu: saved.map((n) => ({ id: `del:${n}`, label: n })) }] : []),
+                { id: 'reset', label: 'Reset to defaults', separatorBefore: true },
+            ]);
+        }, true);
+        wrap.appendChild(trigger);
+        return wrap;
     }
 
     close(): void {
@@ -521,6 +602,32 @@ export class DrawingSettingsDialog {
             grid.appendChild(row);
         });
     }
+}
+
+interface TemplateLook {
+    style: SerializedDrawing['style'];
+    text?: SerializedDrawing['text'];
+    props?: Record<string, unknown>;
+}
+const TEMPLATE_KEY = 'vela.drawingTemplates.v1';
+function readTemplates(): Record<string, Record<string, TemplateLook>> {
+    try {
+        const raw = JSON.parse(localStorage.getItem(TEMPLATE_KEY) ?? '{}') as unknown;
+        return raw && typeof raw === 'object' ? (raw as Record<string, Record<string, TemplateLook>>) : {};
+    } catch {
+        return {};
+    }
+}
+function writeTemplates(all: Record<string, Record<string, TemplateLook>>): void {
+    try {
+        localStorage.setItem(TEMPLATE_KEY, JSON.stringify(all));
+    } catch {
+        /* storage blocked (private mode) — templates simply don't persist */
+    }
+}
+/** Just the look fields of a serialized drawing (never anchors/ids). */
+function pick(d: SerializedDrawing): Pick<SerializedDrawing, 'style' | 'text' | 'props'> {
+    return { style: d.style, text: d.text, props: d.props };
 }
 
 function btn(label: string, primary: boolean, onClick: () => void): HTMLButtonElement {
