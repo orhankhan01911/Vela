@@ -130,6 +130,12 @@ export interface DataProvider {
     resolveSymbolIcon?(symbol: SymbolDescriptor): string | undefined;
 
     /**
+     * The venue's own logo (an exchange mark), shown beside the venue badge in the symbol
+     * picker. `undefined` or absent ⇒ the text badge alone. Same CORS note as above.
+     */
+    resolveVenueIcon?(): string | undefined;
+
+    /**
      * Open a true live stream for `ticker`/`timeframe`. Each call to `onBar` delivers
      * the forming candle (or a freshly-closed one). Returns an unsubscribe fn. Absent
      * ⇒ the feed polls `getBars` for ticks instead. `opts.session` names the trading

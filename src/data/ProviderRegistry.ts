@@ -312,6 +312,16 @@ export class ProviderRegistry {
         }
     }
 
+    /** The venue logo for a DESCRIPTOR — its owning provider's `resolveVenueIcon` (picker badge). */
+    venueIconOf(d: SymbolDescriptor): string | undefined {
+        const name = d.provider ? normName(d.provider) : [...this.entries.keys()][0];
+        try {
+            return (name !== undefined ? this.entries.get(name) : undefined)?.provider.resolveVenueIcon?.() ?? undefined;
+        } catch {
+            return undefined;
+        }
+    }
+
     /** The icon URL for a raw SYMBOL string (the statusline/object-tree path): resolve
      *  to the owning provider, find its descriptor, route to the resolver. Before the
      *  index settles (or for a lenient sole-provider resolution) a minimal synthetic

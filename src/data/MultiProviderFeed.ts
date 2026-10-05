@@ -92,6 +92,11 @@ export class MultiProviderFeed implements MarketDataFeed {
         return this.registry.symbolIconOf(d);
     }
 
+    /** The venue logo for a DESCRIPTOR — its owning provider's `resolveVenueIcon` (picker badge). */
+    venueIconOf(d: SymbolDescriptor): string | undefined {
+        return this.registry.venueIconOf(d);
+    }
+
     /** The icon URL for a raw SYMBOL string — resolve, then route (statusline, object tree). */
     symbolIcon(raw: string): string | undefined {
         return this.registry.symbolIcon(this.resolveSymbol(raw));

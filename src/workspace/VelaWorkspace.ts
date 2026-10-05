@@ -409,6 +409,7 @@ export class VelaWorkspace {
             host: this.root,
             // Row icons come from each descriptor's OWNING provider (resolveSymbolIcon).
             iconFor: (d) => this.feed.symbolIconOf(d),
+            venueIconFor: (d) => this.feed.venueIconOf(d),
             onSelect: (ticker) => this.active.setSymbol(ticker),
             onOpenChange: (open) => {
                 // In-chart dialogs (indicator inputs, chart settings) live inside a cell's

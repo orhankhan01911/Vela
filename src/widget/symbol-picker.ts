@@ -208,6 +208,7 @@ const CSS = `
 .vela-sp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .vela-sp-ticker { font-weight: 700; color: var(--vela-fg-bright); font-size: 14px; text-transform: uppercase; }
 .vela-sp-desc { color: var(--vela-fg-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vela-sp-badge-logo { width: 14px; height: 14px; border-radius: 50%; object-fit: cover; vertical-align: -3px; margin-right: 5px; }
 .vela-sp-badge {
     flex: none;
     padding: 2px 8px;
@@ -251,6 +252,8 @@ export interface SymbolPickerOptions {
     /** The row's icon URL — routed to the descriptor's OWNING provider
      *  (`resolveSymbolIcon`). Absent or `undefined` per row ⇒ the initials badge. */
     iconFor?: (d: SymbolDescriptor) => string | undefined;
+    /** The venue logo beside the badge text — routed to the owning provider (`resolveVenueIcon`). */
+    venueIconFor?: (d: SymbolDescriptor) => string | undefined;
 }
 
 /** Rows rendered per page — the list GROWS by this much every time the scroll nears the
@@ -561,7 +564,16 @@ export class SymbolPicker {
             badge.className = 'vela-sp-badge';
             // Brand colors key on the PROVIDER id; the visible text is the venue label.
             badge.dataset.p = s.provider ?? venue;
-            badge.textContent = venue;
+            const logo = this.opts.venueIconFor?.(s);
+            if (logo) {
+                const img = doc.createElement('img');
+                img.className = 'vela-sp-badge-logo';
+                img.src = logo;
+                img.alt = '';
+                img.addEventListener('error', () => img.remove());
+                badge.appendChild(img);
+            }
+            badge.appendChild(doc.createTextNode(venue));
             row.appendChild(badge);
         }
         return row;
