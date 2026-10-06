@@ -134,6 +134,17 @@ export class RendererControl {
     }
 
     /**
+     * Host hook for the price-axis countdown chip. Called on every paint with the end of
+     * the last bar and now (ms): return rows of text to show instead of the bar-close
+     * countdown (e.g. `['OPENS IN', '15:22:10']` while a market is shut), or null for the
+     * normal countdown. Pass null to remove it. No-op on a renderer without the hook.
+     */
+    setCountdownLines(fn: ((lastBarEndMs: number, nowMs: number) => string[] | null) | null): this {
+        this.renderer.setCountdownLines?.(fn);
+        return this;
+    }
+
+    /**
      * Subscribe to cosmetic-config changes (`applyConfig` — the in-chart settings dialog
      * commits through it). Host chrome that mirrors a config value (a bottom-bar timezone)
      * re-pulls {@link get}/{@link getConfig} here. Silent no-op unsubscribe on a renderer

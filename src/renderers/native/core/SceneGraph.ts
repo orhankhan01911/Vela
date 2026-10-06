@@ -160,6 +160,11 @@ export class SceneGraph {
      *  also shown, the two merge into one stacked block (countdown under the label);
      *  when either shows alone it's centered on the latest price level. */
     showCountdown = true;
+    /** Host hook for the countdown chip. Called each paint with the end of the last bar
+     *  (ms) and now (ms): return text rows (e.g. `['OPENS IN', '15:22:10']`) to show instead
+     *  of the bar-close countdown, or null to keep the normal countdown. Lets a host with
+     *  trading sessions show "market opens in ..." while the market is shut. */
+    countdownLines: ((lastBarEndMs: number, nowMs: number) => string[] | null) | null = null;
     /** Logarithmic price scale on the price pane. */
     logScale = false;
     /** Inverted price axis on the price pane (high at the bottom). Study panes carry their own. */

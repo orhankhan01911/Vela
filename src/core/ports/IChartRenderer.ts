@@ -434,6 +434,13 @@ export interface IChartRenderer {
      */
     applyConfig?(config: unknown): void;
     /**
+     * Optional host hook for the price-axis countdown chip. Called on each paint with the
+     * end of the last bar and the current time (ms); return rows of text to show instead of
+     * the bar-close countdown (e.g. `['OPENS IN', '15:22:10']` while a market is shut), or
+     * null to keep the normal countdown. Pass null to remove the hook.
+     */
+    setCountdownLines?(fn: ((lastBarEndMs: number, nowMs: number) => string[] | null) | null): void;
+    /**
      * The renderer's cosmetic config changed via {@link applyConfig} — the in-chart
      * settings dialog commits through it, so this is how host chrome mirroring a config
      * value (a bottom-bar timezone, a persisted template) learns about in-chart edits.

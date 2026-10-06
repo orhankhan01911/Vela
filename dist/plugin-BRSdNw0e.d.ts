@@ -1,9 +1,9 @@
-import { w as DrawingTypeKey, aa as DrawingStyle, S as SerializedDrawing, D as Drawing, aG as SeriesKind, O as OHLCV, c as VelaTheme } from './options-D5RC7FBd.cjs';
-import { c as DataControl } from './contributions-BLqg8g60.cjs';
-import './side-panel-HF0IAzwf.cjs';
-import './icons-BZYbJXSV.cjs';
-import './keymap-CGOz5F5f.cjs';
-import './DataProvider-DmWTTVjB.cjs';
+import { w as DrawingTypeKey, aa as DrawingStyle, S as SerializedDrawing, D as Drawing, aG as SeriesKind, O as OHLCV, c as VelaTheme } from './options-BtXL2DOs.js';
+import { c as DataControl } from './contributions-Cp-QPrOl.js';
+import './side-panel-HF0IAzwf.js';
+import './icons-BZYbJXSV.js';
+import './keymap-CGOz5F5f.js';
+import './DataProvider-D9I6PjMQ.js';
 
 /** What a drawing type contributes to the toolbar + factory (renderer-neutral). */
 interface DrawingTypeMeta {
@@ -121,6 +121,8 @@ declare class CoordinateSystem {
     get height(): number;
     get dpr(): number;
     get barCount(): number;
+    /** The loaded bar times (read-only view), for gap-aware time ticks. */
+    get barTimes(): readonly number[];
     get barInterval(): number;
     /** The logical index that sits exactly at the right pixel edge of the chart. */
     get rightEdgeLogical(): number;

@@ -119,6 +119,11 @@ export class CoordinateSystem {
         return this.times.length;
     }
 
+    /** The loaded bar times (read-only view), for gap-aware time ticks. */
+    get barTimes(): readonly number[] {
+        return this.times;
+    }
+
     get barInterval(): number {
         return this.intervalMs;
     }

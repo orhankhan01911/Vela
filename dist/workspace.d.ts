@@ -1,9 +1,9 @@
-import { O as OHLCV, V as VisibleRangePreset, a as VisibleRange, b as VelaOptions, I as InputValue, c as VelaTheme, N as NativeBackend, d as MarketSession } from './options-D5RC7FBd.js';
-import { S as SyncSetting, V as VelaStorage, C as CellState, W as WidgetHistory, R as ResolvedIndicator, a as StatuslinePart, b as RangePreset, T as TrackSizes, c as VelaShellOptions, d as SyncOptions, e as SyncKind, f as WorkspaceState } from './statusline-model-BMbaEJIZ.js';
-export { g as ChartState, P as PanelsState, h as decodeState, i as encodeState, s as sanitizeState } from './statusline-model-BMbaEJIZ.js';
+import { O as OHLCV, V as VisibleRangePreset, a as VisibleRange, b as VelaOptions, I as InputValue, c as VelaTheme, N as NativeBackend, d as MarketSession } from './options-BtXL2DOs.js';
+import { S as SyncSetting, V as VelaStorage, C as CellState, W as WidgetHistory, R as ResolvedIndicator, a as StatuslinePart, b as RangePreset, T as TrackSizes, c as VelaShellOptions, d as SyncOptions, e as SyncKind, f as WorkspaceState } from './statusline-model-CHjzVrGg.js';
+export { g as ChartState, P as PanelsState, h as decodeState, i as encodeState, s as sanitizeState } from './statusline-model-CHjzVrGg.js';
 import { K as KeymapManager } from './keymap-CGOz5F5f.js';
-import { I as IndicatorHandle, S as ScriptingEngine, W as WidgetContext, V as Vela, E as ExternalIndicatorEntry, a as ScriptRun } from './contributions-DrAJQvsz.js';
-import { M as MarketDataFeed } from './DataProvider-CY0IqCGk.js';
+import { I as IndicatorHandle, S as ScriptingEngine, W as WidgetContext, V as Vela, E as ExternalIndicatorEntry, a as ScriptRun } from './contributions-Cp-QPrOl.js';
+import { M as MarketDataFeed } from './DataProvider-D9I6PjMQ.js';
 
 /** The cells that follow `originId` under `setting` — PURE (never includes the origin). */
 declare function syncTargets(originId: string, setting: SyncSetting | undefined, cellIds: readonly string[]): string[];

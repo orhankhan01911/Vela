@@ -9359,6 +9359,16 @@ var RendererControl = class {
     return this;
   }
   /**
+   * Host hook for the price-axis countdown chip. Called on every paint with the end of
+   * the last bar and now (ms): return rows of text to show instead of the bar-close
+   * countdown (e.g. `['OPENS IN', '15:22:10']` while a market is shut), or null for the
+   * normal countdown. Pass null to remove it. No-op on a renderer without the hook.
+   */
+  setCountdownLines(fn) {
+    this.renderer.setCountdownLines?.(fn);
+    return this;
+  }
+  /**
    * Subscribe to cosmetic-config changes (`applyConfig` — the in-chart settings dialog
    * commits through it). Host chrome that mirrors a config value (a bottom-bar timezone)
    * re-pulls {@link get}/{@link getConfig} here. Silent no-op unsubscribe on a renderer
@@ -17078,6 +17088,10 @@ var CoordinateSystem = class {
   get barCount() {
     return this.times.length;
   }
+  /** The loaded bar times (read-only view), for gap-aware time ticks. */
+  get barTimes() {
+    return this.times;
+  }
   get barInterval() {
     return this.intervalMs;
   }
@@ -17973,6 +17987,11 @@ var SceneGraph = class {
      *  also shown, the two merge into one stacked block (countdown under the label);
      *  when either shows alone it's centered on the latest price level. */
     this.showCountdown = true;
+    /** Host hook for the countdown chip. Called each paint with the end of the last bar
+     *  (ms) and now (ms): return text rows (e.g. `['OPENS IN', '15:22:10']`) to show instead
+     *  of the bar-close countdown, or null to keep the normal countdown. Lets a host with
+     *  trading sessions show "market opens in ..." while the market is shut. */
+    this.countdownLines = null;
     /** Logarithmic price scale on the price pane. */
     this.logScale = false;
     /** Inverted price axis on the price pane (high at the bottom). Study panes carry their own. */
@@ -19795,8 +19814,11 @@ var STEP_LADDER = [
   DAY,
   2 * DAY,
   WEEK,
+  2 * WEEK,
   MONTH,
+  2 * MONTH,
   3 * MONTH,
+  6 * MONTH,
   YEAR
 ];
 var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -19808,43 +19830,105 @@ function formatTimeStamp(ms, timeZone, barIntervalMs) {
   if (barIntervalMs >= DAY) return date;
   return `${date} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
 }
-function pickStep(targetMs) {
-  for (const step of STEP_LADDER) if (step >= targetMs) return step;
-  return STEP_LADDER[STEP_LADDER.length - 1];
+function pickStepIndex(targetMs) {
+  for (let i = 0; i < STEP_LADDER.length; i += 1) if (STEP_LADDER[i] >= targetMs) return i;
+  return STEP_LADDER.length - 1;
 }
-function timeTicks(fromMs, toMs, target = 8, offsetMs = 0) {
-  const span = toMs - fromMs;
-  if (!(span > 0)) return [];
-  const step = pickStep(span / Math.max(1, target));
-  const zFrom = fromMs + offsetMs;
-  const zTo = toMs + offsetMs;
-  const first = Math.ceil(zFrom / step) * step;
+function ticksForStep(zFrom, zTo, step, offsetMs) {
   const out = [];
-  for (let zt = first; zt <= zTo; zt += step) {
-    const t = zt - offsetMs;
+  const push = (zt, label, major) => {
+    out.push({ time: zt - offsetMs, label, major });
+  };
+  if (step >= MONTH) {
+    const months = step >= YEAR ? 12 : Math.max(1, Math.round(step / MONTH));
+    const start = new Date(zFrom);
+    let y = start.getUTCFullYear();
+    let m = start.getUTCMonth();
+    if (Date.UTC(y, m, 1) < zFrom) m += 1;
+    m = Math.ceil(m / months) * months;
+    for (; ; ) {
+      const zt = Date.UTC(y, m, 1);
+      if (zt > zTo) break;
+      const d = new Date(zt);
+      if (months >= 12 || d.getUTCMonth() === 0) push(zt, String(d.getUTCFullYear()), true);
+      else push(zt, MONTHS[d.getUTCMonth()], true);
+      m += months;
+    }
+    return out;
+  }
+  if (step >= WEEK) {
+    const anchor = 4 * DAY;
+    for (let zt = Math.ceil((zFrom - anchor) / step) * step + anchor; zt <= zTo; zt += step) {
+      const d = new Date(zt);
+      push(zt, d.getUTCDate() === 1 ? MONTHS[d.getUTCMonth()] : `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`, d.getUTCDate() === 1);
+    }
+    return out;
+  }
+  for (let zt = Math.ceil(zFrom / step) * step; zt <= zTo; zt += step) {
     const d = new Date(zt);
-    let label;
-    let major = false;
     if (step < DAY) {
       const h = d.getUTCHours();
       const m = d.getUTCMinutes();
-      if (h === 0 && m === 0) {
-        label = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
-        major = true;
-      } else {
-        label = `${pad2(h)}:${pad2(m)}`;
-      }
-    } else if (step < YEAR) {
-      label = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
-      if (d.getUTCDate() === 1) {
-        label = MONTHS[d.getUTCMonth()];
-        major = true;
-      }
+      if (h === 0 && m === 0) push(zt, `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`, true);
+      else push(zt, `${pad2(h)}:${pad2(m)}`, false);
     } else {
-      label = String(d.getUTCFullYear());
-      major = true;
+      const first = d.getUTCDate() === 1;
+      push(zt, first ? MONTHS[d.getUTCMonth()] : `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`, first);
     }
-    out.push({ time: t, label, major });
+  }
+  return out;
+}
+function firstBarAtOrAfter(times, ms) {
+  const n = times.length;
+  if (n === 0 || ms < times[0] || ms > times[n - 1]) return -1;
+  let lo = 0;
+  let hi = n - 1;
+  while (lo < hi) {
+    const mid = lo + hi >> 1;
+    if (times[mid] < ms) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+function resolveGaps(ticks, bars, offsetMs) {
+  const { times, intervalMs: intervalMs2 } = bars;
+  if (times.length < 2 || !(intervalMs2 > 0)) return ticks;
+  const gapMs = intervalMs2 * 1.5;
+  const keep = [];
+  const lastInGap = /* @__PURE__ */ new Map();
+  for (const tick of ticks) {
+    const hi = firstBarAtOrAfter(times, tick.time);
+    if (hi <= 0 || times[hi] === tick.time || times[hi] - times[hi - 1] <= gapMs) {
+      keep.push(tick);
+      continue;
+    }
+    if (tick.major || !tick.label.includes(":")) lastInGap.set(hi, tick);
+  }
+  for (const [hi, tick] of lastInGap) {
+    let label = tick.label;
+    if (/^[A-Z][a-z]{2} \d+$/.test(label)) {
+      const d = new Date(times[hi] + offsetMs);
+      label = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
+    }
+    if (!keep.some((k) => k.label === label)) keep.push({ ...tick, label, time: times[hi] });
+  }
+  keep.sort((a, b) => a.time - b.time);
+  return keep;
+}
+function timeTicks(fromMs, toMs, target = 8, offsetMs = 0, bars) {
+  const span = toMs - fromMs;
+  if (!(span > 0)) return [];
+  const zFrom = fromMs + offsetMs;
+  const zTo = toMs + offsetMs;
+  let idx = pickStepIndex(span / Math.max(1, target));
+  let out = ticksForStep(zFrom, zTo, STEP_LADDER[idx], offsetMs);
+  const resolved = (t) => bars ? resolveGaps(t, bars, offsetMs) : t;
+  out = resolved(out);
+  const inset = span * 0.08;
+  const inView = (t) => t.filter((x) => x.time >= fromMs + inset && x.time <= toMs - inset).length;
+  while (inView(out) < 3 && idx > 0) {
+    idx -= 1;
+    out = resolved(ticksForStep(zFrom, zTo, STEP_LADDER[idx], offsetMs));
   }
   return out;
 }
@@ -20087,25 +20171,27 @@ var ChromeRenderer = class {
       setDash2(ctx, "solid");
     }
     const interval = coords.barInterval;
-    const showCountdown = scene.showCountdown && interval > 0;
+    const hostLines = scene.countdownLines ? scene.countdownLines(last.time + interval, Date.now()) : null;
+    const showCountdown = hostLines != null || scene.showCountdown && interval > 0;
     const showLabel = scene.showPriceLabel;
     if (!showLabel && !showCountdown) return;
     const priceText = formatAxisValue(pricePane.scale, pricePane.bounds.height, last.close, percentScaleFor(scene, pricePane), scene.priceMintick);
-    const cdText = showCountdown ? formatCountdown(last.time + interval - Date.now()) : "";
+    const cdLines = hostLines ?? (showCountdown ? [formatCountdown(last.time + interval - Date.now())] : []);
+    const cdText = cdLines[0] ?? "";
     const PAD = 8;
     const x = dataW + 1;
     const textColor = tagTextColor(color, theme.background);
     ctx.textBaseline = "middle";
     if (showLabel && showCountdown) {
-      const w2 = Math.max(this.measureCached(ctx, priceText), this.measureCached(ctx, cdText)) + PAD;
+      const rows = [priceText, ...cdLines];
+      const w2 = Math.max(...rows.map((r) => this.measureCached(ctx, r))) + PAD;
       const top = y - 8;
       const tx = x + PAD / 2;
       ctx.fillStyle = color;
-      ctx.fillRect(x, top, w2, 32);
+      ctx.fillRect(x, top, w2, 16 * rows.length);
       ctx.fillStyle = textColor;
       ctx.textAlign = "left";
-      ctx.fillText(priceText, tx, top + 8);
-      ctx.fillText(cdText, tx, top + 24);
+      rows.forEach((r, i) => ctx.fillText(r, tx, top + 8 + 16 * i));
       ctx.textAlign = "start";
       return;
     }
@@ -20192,7 +20278,7 @@ var ChromeRenderer = class {
     const tr = coords.visibleTimeRange();
     const offset = tzOffsetMs((tr.from + tr.to) / 2, scene.timezone);
     const target = Math.max(3, Math.min(8, Math.floor(dataW / 64)));
-    const ticks = timeTicks(tr.from, tr.to, target, offset).map((tick) => ({ ...tick, x: coords.timeToX(tick.time), half: this.measureCached(ctx, tick.label) / 2 })).filter((tick) => tick.x >= 20 && tick.x <= dataW - 20);
+    const ticks = timeTicks(tr.from, tr.to, target, offset, { times: coords.barTimes, intervalMs: coords.barInterval }).map((tick) => ({ ...tick, x: coords.timeToX(tick.time), half: this.measureCached(ctx, tick.label) / 2 })).filter((tick) => tick.x >= 20 && tick.x <= dataW - 20);
     const GAP = 12;
     const placed = [];
     const put = (tick) => {
@@ -27049,7 +27135,7 @@ var BackdropRenderer = class {
       const tr = coords.visibleTimeRange();
       const offset = tzOffsetMs((tr.from + tr.to) / 2, scene.timezone);
       ctx.beginPath();
-      for (const tick of timeTicks(tr.from, tr.to, 8, offset)) {
+      for (const tick of timeTicks(tr.from, tr.to, 8, offset, { times: coords.barTimes, intervalMs: coords.barInterval })) {
         const x = Math.round(coords.timeToX(tick.time)) + 0.5;
         if (x < 0 || x > dataW) continue;
         ctx.moveTo(x, 0);
@@ -29121,16 +29207,24 @@ var NativeRenderer = class {
    *  scales or repaint the geometry/volume/VPVR/SDK layers once a second (that cost
    *  multiplies by the cell count in a multi-chart workspace). */
   syncCountdownTimer() {
-    if (this.scene.showCountdown) {
+    if (this.scene.showCountdown || this.scene.countdownLines) {
       if (this.countdownTimer == null) {
         this.countdownTimer = setInterval(() => {
-          if (this.scene.showCountdown && this.scene.bars.length > 0) this.scheduler?.invalidate(2 /* Chrome */);
+          if ((this.scene.showCountdown || this.scene.countdownLines) && this.scene.bars.length > 0) this.scheduler?.invalidate(2 /* Chrome */);
         }, 1e3);
       }
     } else if (this.countdownTimer != null) {
       clearInterval(this.countdownTimer);
       this.countdownTimer = null;
     }
+  }
+  /** Host hook for the price-axis countdown chip: return rows of text to show instead of
+   *  the bar-close countdown (e.g. while the market is shut), or null for the normal one.
+   *  Pass null to remove the hook. See `SceneGraph.countdownLines`. */
+  setCountdownLines(fn) {
+    this.scene.countdownLines = fn;
+    this.syncCountdownTimer();
+    this.scheduler?.invalidate(2 /* Chrome */);
   }
   destroy() {
     if (this.introRaf != null) cancelAnimationFrame(this.introRaf);

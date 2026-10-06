@@ -223,7 +223,7 @@ const STEP_LADDER = [
     SEC, 5 * SEC, 15 * SEC, 30 * SEC,
     MIN, 5 * MIN, 15 * MIN, 30 * MIN,
     HOUR, 2 * HOUR, 4 * HOUR, 6 * HOUR, 12 * HOUR,
-    DAY, 2 * DAY, WEEK, MONTH, 3 * MONTH, YEAR,
+    DAY, 2 * DAY, WEEK, 2 * WEEK, MONTH, 2 * MONTH, 3 * MONTH, 6 * MONTH, YEAR,
 ];
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -243,51 +243,139 @@ export function formatTimeStamp(ms: number, timeZone: string, barIntervalMs: num
     return `${date} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
 }
 
-function pickStep(targetMs: number): number {
-    for (const step of STEP_LADDER) if (step >= targetMs) return step;
-    return STEP_LADDER[STEP_LADDER.length - 1]!;
+function pickStepIndex(targetMs: number): number {
+    for (let i = 0; i < STEP_LADDER.length; i += 1) if (STEP_LADDER[i]! >= targetMs) return i;
+    return STEP_LADDER.length - 1;
 }
 
-/**
- * UTC-aligned tick ladder for the time axis. `offsetMs` shifts alignment + labels into
- * a chosen time zone (0 ⇒ UTC): ticks land on local midnights/hours and the returned
- * `time` is the REAL epoch-ms (zoned alignment undone) so the X mapping stays correct.
- */
-export function timeTicks(fromMs: number, toMs: number, target = 8, offsetMs = 0): TimeTick[] {
-    const span = toMs - fromMs;
-    if (!(span > 0)) return [];
-    const step = pickStep(span / Math.max(1, target));
-    // Work in zoned space so `first`/steps align to local wall-clock, then undo the
-    // shift on each tick's `time` for pixel placement on the real (UTC) axis.
-    const zFrom = fromMs + offsetMs;
-    const zTo = toMs + offsetMs;
-    const first = Math.ceil(zFrom / step) * step;
+/** Bar times for gap handling: ticks that land where the market is closed (weekends, holidays,
+ *  overnight) have no bar under them, so they are dropped or snapped to the next session open. */
+export interface TickBars {
+    times: readonly number[];
+    intervalMs: number;
+}
+
+/** Raw ticks for one ladder step, in zoned space. `t` is the real epoch-ms. */
+function ticksForStep(zFrom: number, zTo: number, step: number, offsetMs: number): TimeTick[] {
     const out: TimeTick[] = [];
-    for (let zt = first; zt <= zTo; zt += step) {
-        const t = zt - offsetMs;
+    const push = (zt: number, label: string, major: boolean): void => {
+        out.push({ time: zt - offsetMs, label, major });
+    };
+    if (step >= MONTH) {
+        // Calendar months (the 1st), never 30-day blocks that drift onto odd dates like "Sep 4".
+        const months = step >= YEAR ? 12 : Math.max(1, Math.round(step / MONTH));
+        const start = new Date(zFrom);
+        let y = start.getUTCFullYear();
+        let m = start.getUTCMonth();
+        if (Date.UTC(y, m, 1) < zFrom) m += 1;
+        m = Math.ceil(m / months) * months; // align to Jan / (Mar) / Apr / Jul ... by step
+        for (;;) {
+            const zt = Date.UTC(y, m, 1);
+            if (zt > zTo) break;
+            const d = new Date(zt);
+            if (months >= 12 || d.getUTCMonth() === 0) push(zt, String(d.getUTCFullYear()), true);
+            else push(zt, MONTHS[d.getUTCMonth()]!, true);
+            m += months;
+        }
+        return out;
+    }
+    if (step >= WEEK) {
+        // Weeks start on Monday (epoch day 0 was a Thursday).
+        const anchor = 4 * DAY;
+        for (let zt = Math.ceil((zFrom - anchor) / step) * step + anchor; zt <= zTo; zt += step) {
+            const d = new Date(zt);
+            push(zt, d.getUTCDate() === 1 ? MONTHS[d.getUTCMonth()]! : `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`, d.getUTCDate() === 1);
+        }
+        return out;
+    }
+    for (let zt = Math.ceil(zFrom / step) * step; zt <= zTo; zt += step) {
         const d = new Date(zt);
-        let label: string;
-        let major = false;
         if (step < DAY) {
             const h = d.getUTCHours();
             const m = d.getUTCMinutes();
-            if (h === 0 && m === 0) {
-                label = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
-                major = true;
-            } else {
-                label = `${pad2(h)}:${pad2(m)}`;
-            }
-        } else if (step < YEAR) {
-            label = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
-            if (d.getUTCDate() === 1) {
-                label = MONTHS[d.getUTCMonth()]!;
-                major = true;
-            }
+            if (h === 0 && m === 0) push(zt, `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`, true);
+            else push(zt, `${pad2(h)}:${pad2(m)}`, false);
         } else {
-            label = String(d.getUTCFullYear());
-            major = true;
+            const first = d.getUTCDate() === 1;
+            push(zt, first ? MONTHS[d.getUTCMonth()]! : `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`, first);
         }
-        out.push({ time: t, label, major });
+    }
+    return out;
+}
+
+/** Index of the first bar at or after `ms`, or -1 when `ms` is outside the loaded bars. */
+function firstBarAtOrAfter(times: readonly number[], ms: number): number {
+    const n = times.length;
+    if (n === 0 || ms < times[0]! || ms > times[n - 1]!) return -1;
+    let lo = 0;
+    let hi = n - 1;
+    while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (times[mid]! < ms) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+}
+
+/**
+ * Handle ticks that fall in a closed-market gap (weekend, holiday, overnight): there is no bar
+ * there, so the axis maps them onto the one spot between two bars and "Oct 3 / Oct 4 / Oct 5"
+ * stack on top of each other. Per gap we keep ONLY the last date-style tick, snapped to the
+ * first bar after the gap, and drop time-of-day ticks that have no bar under them.
+ */
+function resolveGaps(ticks: TimeTick[], bars: TickBars, offsetMs: number): TimeTick[] {
+    const { times, intervalMs } = bars;
+    if (times.length < 2 || !(intervalMs > 0)) return ticks;
+    const gapMs = intervalMs * 1.5;
+    const keep: TimeTick[] = [];
+    const lastInGap = new Map<number, TimeTick>();
+    for (const tick of ticks) {
+        const hi = firstBarAtOrAfter(times, tick.time);
+        if (hi <= 0 || times[hi]! === tick.time || times[hi]! - times[hi - 1]! <= gapMs) {
+            keep.push(tick);
+            continue;
+        }
+        if (tick.major || !tick.label.includes(':')) lastInGap.set(hi, tick); // date-style only; later ticks in the same gap replace earlier ones
+    }
+    for (const [hi, tick] of lastInGap) {
+        // A snapped day tick takes the date of the bar it lands on (a 2-day step can sit on
+        // Sunday while the reopening bar is Monday). Month / year labels keep their text.
+        let label = tick.label;
+        if (/^[A-Z][a-z]{2} \d+$/.test(label)) {
+            const d = new Date(times[hi]! + offsetMs);
+            label = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
+        }
+        if (!keep.some((k) => k.label === label)) keep.push({ ...tick, label, time: times[hi]! });
+    }
+    keep.sort((a, b) => a.time - b.time);
+    return keep;
+}
+
+/**
+ * Calendar-aware tick ladder for the time axis. `offsetMs` shifts alignment + labels into
+ * a chosen time zone (0 ⇒ UTC): ticks land on local midnights/hours and the returned
+ * `time` is the REAL epoch-ms (zoned alignment undone) so the X mapping stays correct.
+ * Months land on the 1st and weeks on Mondays. When a step would leave fewer than three
+ * ticks in view (a narrow phone, a few weeks of daily bars) it steps down to a finer one so
+ * the axis is never left with one or no date. `bars` (optional) removes ticks that fall in
+ * closed-market gaps, see {@link resolveGaps}.
+ */
+export function timeTicks(fromMs: number, toMs: number, target = 8, offsetMs = 0, bars?: TickBars): TimeTick[] {
+    const span = toMs - fromMs;
+    if (!(span > 0)) return [];
+    const zFrom = fromMs + offsetMs;
+    const zTo = toMs + offsetMs;
+    let idx = pickStepIndex(span / Math.max(1, target));
+    let out = ticksForStep(zFrom, zTo, STEP_LADDER[idx]!, offsetMs);
+    const resolved = (t: TimeTick[]): TimeTick[] => (bars ? resolveGaps(t, bars, offsetMs) : t);
+    out = resolved(out);
+    // Count only ticks clear of the view edges: the renderer drops labels within ~20px of either
+    // edge, so on a phone a tick near the edge is as good as missing.
+    const inset = span * 0.08;
+    const inView = (t: TimeTick[]): number => t.filter((x) => x.time >= fromMs + inset && x.time <= toMs - inset).length;
+    while (inView(out) < 3 && idx > 0) {
+        idx -= 1;
+        out = resolved(ticksForStep(zFrom, zTo, STEP_LADDER[idx]!, offsetMs));
     }
     return out;
 }

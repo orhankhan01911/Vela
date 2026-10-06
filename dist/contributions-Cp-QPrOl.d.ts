@@ -1,5 +1,5 @@
-import { u as Millis, aj as InputSchema, ah as IndicatorMeta, P as PriceStyle, O as OHLCV, I as InputValue, l as IndicatorModel, k as MoveTarget, av as PaneAxis, aI as SeriesSpec, af as Fill, B as Background, aA as PriceLine, a2 as DrawingLine, _ as DrawingBox, a1 as DrawingLabel, a6 as DrawingPolyline, a3 as DrawingLinefill, ab as DrawingTable, h as IndicatorStatus, a as VisibleRange, c as VelaTheme, S as SerializedDrawing, w as DrawingTypeKey, v as SnapMode, a4 as DrawingMode, e as IChartRenderer, R as RendererCapabilities, o as LegendActionView, p as LegendCalloutView, U as Unsubscribe, C as CrosshairEvent, A as AxisLongPressEvent, s as DataWindowReadout, n as SymbolPickerFn, aX as PaneInfo, ae as DrawingsOption, a8 as DrawingSeriesGateway, D as Drawing, b as VelaOptions, y as AddIndicatorOptions, au as MarketSwitch, at as MarketSnapshot, V as VisibleRangePreset, T as ThemeName } from './options-D5RC7FBd.cjs';
-import { S as SymbolInfo, B as BarRange, M as MarketDataFeed, D as DataProvider, P as ProviderInfo, a as SymbolDescriptor, b as ProviderCapabilities } from './DataProvider-DmWTTVjB.cjs';
+import { u as Millis, aj as InputSchema, ah as IndicatorMeta, P as PriceStyle, O as OHLCV, I as InputValue, l as IndicatorModel, k as MoveTarget, av as PaneAxis, aI as SeriesSpec, af as Fill, B as Background, aA as PriceLine, a2 as DrawingLine, _ as DrawingBox, a1 as DrawingLabel, a6 as DrawingPolyline, a3 as DrawingLinefill, ab as DrawingTable, h as IndicatorStatus, a as VisibleRange, c as VelaTheme, S as SerializedDrawing, w as DrawingTypeKey, v as SnapMode, a4 as DrawingMode, e as IChartRenderer, R as RendererCapabilities, o as LegendActionView, p as LegendCalloutView, U as Unsubscribe, C as CrosshairEvent, A as AxisLongPressEvent, s as DataWindowReadout, n as SymbolPickerFn, aX as PaneInfo, ae as DrawingsOption, a8 as DrawingSeriesGateway, D as Drawing, b as VelaOptions, y as AddIndicatorOptions, au as MarketSwitch, at as MarketSnapshot, V as VisibleRangePreset, T as ThemeName } from './options-BtXL2DOs.js';
+import { S as SymbolInfo, B as BarRange, M as MarketDataFeed, D as DataProvider, P as ProviderInfo, a as SymbolDescriptor, b as ProviderCapabilities } from './DataProvider-D9I6PjMQ.js';
 
 /**
  * A strategy's broker state at ONE bar — the flat summary a host reads while a script
@@ -947,6 +947,13 @@ declare class RendererControl {
      * re-run. No-ops with a warning if the renderer has no rich config.
      */
     applyConfig(config: unknown): this;
+    /**
+     * Host hook for the price-axis countdown chip. Called on every paint with the end of
+     * the last bar and now (ms): return rows of text to show instead of the bar-close
+     * countdown (e.g. `['OPENS IN', '15:22:10']` while a market is shut), or null for the
+     * normal countdown. Pass null to remove it. No-op on a renderer without the hook.
+     */
+    setCountdownLines(fn: ((lastBarEndMs: number, nowMs: number) => string[] | null) | null): this;
     /**
      * Subscribe to cosmetic-config changes (`applyConfig` — the in-chart settings dialog
      * commits through it). Host chrome that mirrors a config value (a bottom-bar timezone)
