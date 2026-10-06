@@ -18,8 +18,9 @@ export interface NativeIndicatorOutput {
     /**
      * Value-axis override for the pane this native OWNS (see `IndicatorModel.paneAxis`):
      * `'none'` for content that is not value-mapped, or band labels for a categorical
-     * axis. Emitted per compute, so it can follow the inputs (e.g. row toggles relabel
-     * the axis). Absent ⇒ the pane derives a scale from its content as usual.
+     * axis; `'compact'` keeps the value axis but abbreviates its labels (K/M/B). Emitted per
+     * compute, so it can follow the inputs (e.g. row toggles relabel the axis). Absent ⇒ the
+     * pane derives a scale from its content as usual.
      */
     paneAxis?: PaneAxis;
     series?: SeriesSpec[];

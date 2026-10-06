@@ -25,8 +25,10 @@ export interface PaneAxisBand {
 }
 
 /** A pane's value-axis override (see {@link IndicatorModel.paneAxis}): `'none'` = a
- *  blank axis; band labels = a categorical axis, one label per content band/row. */
-export type PaneAxis = 'none' | { bands: PaneAxisBand[] };
+ *  blank axis; band labels = a categorical axis, one label per content band/row;
+ *  `'compact'` = a normal value axis whose labels and crosshair chip read `1.2M` / `300K`
+ *  instead of `1200000.00` (for panes of money or size, where raw digits are unreadable). */
+export type PaneAxis = 'none' | 'compact' | { bands: PaneAxisBand[] };
 
 /**
  * Everything one `addIndicator()` produces — the unit the orchestrator mounts

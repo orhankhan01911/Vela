@@ -53,7 +53,7 @@ import { IndicatorDrawingSlices, mergeSlices } from './drawings/IndicatorDrawing
 import { createProjector } from './drawings/Projector';
 import type { Projector, SnapMode } from '../../core/drawings';
 import type { IDrawingsRendererPort } from '../../core/drawings';
-import { formatPriceLabel } from './chrome/ticks';
+import { formatCompactValue, formatPriceLabel } from './chrome/ticks';
 import { zonedDate } from './chrome/tz';
 import { computePaneScale, expandScaleByPixels, overlaySeriesRange } from './core/autoscale';
 import { mergeTradeMarkersState, tradesPriceHints, type TradeMarkerHints } from '../shared/trade-markers';
@@ -2852,6 +2852,8 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     private dataWindowFmt(v: number, pane: PaneNode | null): string {
+        // A compact-axis pane (money or size) reads its legend values like its axis: 71M, not 71003053.00.
+        if (pane?.axisFormat === 'volume') return formatCompactValue(v);
         return pane ? formatPriceLabel(pane.scale, pane.bounds.height, v, this.scene.priceMintick) : String(v);
     }
 
@@ -3291,11 +3293,16 @@ export class NativeRenderer implements IChartRenderer {
                 // Content declaring a paneAxis override is not value-mapped: no price
                 // ticks, no horizontal gridlines, no crosshair chip — and band labels
                 // (a categorical axis) draw in the price ticks' place.
-                if (masterModels.every((m) => m.paneAxis != null)) {
+                if (masterModels.every((m) => m.paneAxis != null && m.paneAxis !== 'compact')) {
                     pane.axisFormat = 'none';
                     const banded = masterModels.find((m) => typeof m.paneAxis === 'object');
                     pane.axisBands = banded ? (banded.paneAxis as { bands: PaneAxisBand[] }).bands : undefined;
                 }
+            }
+            // Content that asks for a compact axis (`paneAxis: 'compact'`) keeps its own scale but reads
+            // its labels and crosshair chip as 300K / 1.2M, the same abbreviation a volume pane uses.
+            if (pane.kind !== 'price' && pane.axisFormat === undefined && masterModels.length > 0 && masterModels.every((m) => m.paneAxis === 'compact')) {
+                pane.axisFormat = 'volume';
             }
             // Strategy trade markers reserve their PIXEL headroom on the price pane, so a
             // marker stack under the lows (or above the highs) never clips at the pane edge.
