@@ -178,6 +178,13 @@ export class DrawingInteraction {
         return this.hitAt(x, y) != null;
     }
 
+    /** Like {@link claim}, for a press on an axis strip: only a drawing the caller accepts (e.g. a price alert,
+     *  whose tag sits in the price gutter) wins it. Everything else leaves the press to the axis scale. */
+    claimOnly(x: number, y: number, accept: (d: Drawing) => boolean): boolean {
+        const d = this.hitAt(x, y);
+        return d != null && accept(d);
+    }
+
     /** A cursor hint for hovering (pointer over a drawing/handle), or null off any drawing. */
     cursorAt(x: number, y: number): string | null {
         if (this.deps.activeTool() != null) return null; // armed → keep the crosshair

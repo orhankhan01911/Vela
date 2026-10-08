@@ -48,6 +48,8 @@ export interface InputControllerDeps {
     // ── user drawings (optional) — let the drawings layer claim a gesture before pan ──
     /** True when a press at (x,y) belongs to the drawings layer (armed tool, or over a drawing). */
     drawingsClaim?(x: number, y: number): boolean;
+    /** Same, for a press on an axis strip: only what lives in the gutter (alert tag, chip, trash) may claim it. */
+    drawingsClaimOnAxis?(x: number, y: number): boolean;
     /** Shift+press on empty plot: arm the measure ruler AND start it at (x,y). `snap` is
      *  the effective magnet. True when it started (the drawings layer then owns the rest
      *  of the gesture). */
@@ -408,7 +410,9 @@ export class InputController {
         this.lastPressDrawing = false;
         // The drawings layer gets first refusal: when a tool is armed or the press is
         // over a drawing/handle it claims the WHOLE gesture (no pan/fling), atomically.
-        if (this.drawings && this.deps.drawingsClaim?.(x, y)) {
+        const onAxis = this.regionAt(x, y);
+        const claim = onAxis === 'price' || onAxis === 'time' ? this.deps.drawingsClaimOnAxis : this.deps.drawingsClaim;
+        if (this.drawings && claim?.(x, y)) {
             this.region = 'drawing';
             this.lastPressDrawing = true;
             this.deps.drawingsPointerDown?.(x, y, this.snapMode(e), e.shiftKey, e.ctrlKey || e.metaKey);

@@ -1545,6 +1545,7 @@ export class NativeRenderer implements IChartRenderer {
             resetView: () => this.resetView(),
             // User drawings claim a gesture before pan when armed / over a drawing.
             drawingsClaim: (x, y) => this.userDrawings?.claim(x, y) ?? false,
+            drawingsClaimOnAxis: (x, y) => this.userDrawings?.claimOnAxis(x, y) ?? false,
             drawingsMeasureStart: (x, y, snap) => this.userDrawings?.beginMeasureAt(x, y, snap) ?? false,
             drawingsMarqueeStart: (x, y) => this.userDrawings?.beginMarqueeAt(x, y) ?? false,
             drawingsDeleteAt: (x, y) => this.userDrawings?.deleteAt(x, y, true) ?? false, // middle-click: a selected hit takes the whole selection

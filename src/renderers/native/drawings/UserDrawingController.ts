@@ -382,6 +382,17 @@ export class UserDrawingController implements IDrawingsRendererPort {
         return this.interaction.claim(x, y);
     }
 
+    /** Should the drawing layer win a press that lands on an axis strip (price or time scale)? Only what lives in
+     *  the gutter: the magnifier chip, the alert trash button and a price alert's tag. A tool's own handle or edge
+     *  that reaches the gutter (a position box runs to the scale) must not grab the press, or the scale can't be
+     *  dragged. An armed tool, the ruler and the eraser leave the axis to the scale as well. */
+    claimOnAxis(x: number, y: number): boolean {
+        if (this.magnifierChipAt(x, y)) return true;
+        if (this.activeTool == null && this.alertTrashAt(x, y)) return true;
+        if (this.activeTool != null || this.measureMode || this.eraserMode) return false;
+        return this.interaction.claimOnly(x, y, (d) => d instanceof PriceAlert);
+    }
+
     /** The topmost visible (unlocked) magnifier whose timeframe chip contains (x, y) —
      *  the chip's rect is what the painter measured last frame. */
     private magnifierChipAt(x: number, y: number): Magnifier | null {
