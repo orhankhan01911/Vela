@@ -425,6 +425,10 @@ export class UserDrawingController implements IDrawingsRendererPort {
      *  hold focus (the settings popup can), so neither `pointerDown` nor blur would end the edit. */
     clearTransient(): void {
         if (this.textEditor) this.finishTextEditor(true); // clicking off the text keeps what was typed
+        if (this.measure.isFinished()) {
+            this.measure.clear();
+            this.render();
+        }
         // A price alert has no settings popup to dismiss on an outside press, so its hover/selected pill
         // would stay forever (touch has no hover to retire it). Every press runs through here first; a press
         // that lands ON the alert re-engages it in pointerDown. The repaint is deferred so the drawings
