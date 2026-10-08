@@ -103,7 +103,7 @@ ws.setTheme('light');    // re-skins the shared chrome + EVERY cell live (also r
 ws.maximizeCell('sol');  // one cell over the whole grid (null restores) — pure presentation,
 ws.maximizedCell;        //  the other cells keep everything; layout/state changes restore
 ws.swapCells('btc', 'eth'); // the two cells trade SLOTS (arrangement only — cells untouched)
-ws.on('cell:active' | 'layout:changed' | 'cell:maximized' | 'cell:created' | 'cell:destroyed' | 'state:changed', cb);
+ws.on('cell:active' | 'layout:changed' | 'cell:maximized' | 'cell:created' | 'cell:destroyed' | 'cell:priceStyle' | 'state:changed', cb);
 ```
 
 **Rule of thumb:** hold the cell (or its identity), read `cell.chart` at the point of
@@ -172,16 +172,28 @@ linked earlier in the session. Drawings created while the link was off stay
 independent — re-enabling never copies or pairs them. A reload (or `applyState`)
 drops the pairs, so previously synced drawings are independent again.
 
+Cells a later layout change adds to a linked group arrive with every drawing of the
+active cell (or of another group member when the active cell is outside the group),
+including drawings made while the link was off or on a one-chart layout. The copies
+are linked like any synced drawing and add no undo steps on the new cell. A cell
+returning to the grid refreshes the linked copies it already holds instead of
+duplicating them.
+
 `style` mirrors the chart's presentation across same-group cells: the settings
-dialog's **Canvas** tab (background and text, grid, pane separators), its **Scales
-and lines** tab (price-scale mode, last-price line and labels, crosshair style), and
-its **Status line** tab (segment toggles, indicator titles and values). Editing any
-of them on one cell applies the same change to its group, and enabling the link
-aligns the group to the active cell once. Cells a later layout change adds to a
-linked group inherit the group's presentation on arrival (from the active cell when
-it belongs to the group). Candle colors, line width, and other series settings stay
-per cell, and the display timezone and theme are already workspace-global, so
-neither rides this link.
+dialog's **Symbol** tab looks (candle body, border and wick colors, the bar, line,
+area and baseline styles, bar spacing, the animation switches and the watermark
+toggles), its **Canvas** tab (background and text, grid, pane separators, margins),
+its **Scales and lines** tab (price-scale mode, last-price line and labels, crosshair
+style), its **Status line** tab (segment toggles, indicator titles and values), and
+the session shading colors. A candle-based chart type registered by a plugin shares
+the candle colors it stores; its own settings section stays per cell, because those
+settings can depend on the cell's market. Editing any of them on one cell applies
+the same change to its group, and enabling the link aligns the group to the active
+cell once. Cells a later layout change adds to a linked group inherit the group's
+presentation on arrival (from the active cell when it belongs to the group). The
+chart type itself stays per cell — a candles cell and a line cell keep their types
+and share their colors — and so do the baseline price and the **Events** tab. The
+display timezone and theme are already workspace-global, so neither rides this link.
 
 **Symbol**, **Interval** (timeframe), **Crosshair** and **Style** are also switches
 in the topbar's layout dropdown (its SYNC section), and **Drawings** is a toggle on
@@ -194,7 +206,7 @@ ws.sync.set('viewport', true); // aligns followers to the active cell, then foll
 ws.sync.set('symbol', { btc: 'watch', eth: 'watch' });
 ws.sync.set('crosshair', true); // hover any cell → ghost time-line on all the others
 ws.sync.set('drawings', true); // draw on any cell → the same drawing on all the others
-ws.sync.set('style', true); // canvas/scales/status-line settings mirror on all the others
+ws.sync.set('style', true); // every look in the settings dialog mirrors on all the others
 ws.sync.get('viewport'); // true
 ws.sync.state(); // { viewport: true, symbol: {...}, crosshair: true, drawings: true, style: true }
 ```
@@ -216,6 +228,65 @@ ws.on('script:run', (run) => {
 The payload is the chart-level [`ScriptRun`](./api-reference.md#capturing-what-a-script-computes)
 plus `cell`; everything there — `cause`, `forming`, `plots`, `vars`, `strategy`, `trades()` —
 applies unchanged.
+
+## Following price-style switches
+
+A cell's style switch (candles → line, area, a chart type, …) is relayed the same way:
+`cell:priceStyle` carries the cell identity with the chart-level
+[`priceStyle:change`](./api-reference.md#chart-level-events) payload. Only the cell whose
+style changes emits, whatever the path — the topbar style menu, `ctx.setPriceStyle`,
+`chart.renderer.set('priceStyle', …)`, the chart settings dialog, a config template, or a
+state document applied in place. The event is synchronous and fires before that cell
+repaints, so the cell still shows the outgoing style while your listener runs:
+
+```ts
+ws.on('cell:priceStyle', ({ id, from, to }) => {
+    const cell = ws.cell(id)!;
+    cell.priceStyle; // still `from`
+    const outgoing = cell.chart.renderer.screenshotCanvas(); // the old frame, to animate from
+    animateSwitch(cell, outgoing, to);
+});
+```
+
+Don't change the style again from inside the listener.
+
+## Bar replay across the grid
+
+`ws.replay` rewinds **every cell at once** and replays them on one clock. It takes the same
+verbs as a chart's [`chart.replay`](./api-reference.md#chartreplay--the-bar-replay-control-surface):
+`start`, `step`, `stepUpdate`, `play`, `pause`, `stop`, `state`, `bounds`, plus `on` for the
+`replay:*` events.
+
+```ts
+await ws.replay.start({ from: Date.UTC(2024, 5, 3, 14), cell: 'btc' }); // read on the 'btc' cell (default: the active one)
+ws.replay.play(1000);
+ws.replay.on('replay:step', ({ cursorTime, remaining }) => updateUi(cursorTime, remaining));
+```
+
+- **One replay time, no look-ahead.** `from` is read on one cell the way `chart.replay.start`
+  reads it, and the close of that cell's last kept bar becomes the shared replay time. Every
+  other chart keeps exactly the bars that had **closed** by then: next to a 1h chart rewound to
+  10:00, a 15m chart shows its 10:45 bar and a daily chart ends on the day before. A market
+  closed over the weekend never shows Monday while the clock is still on Sunday.
+- **The finest timeframe sets the pace.** A step moves the clock to the next bar close on any
+  chart, and each chart reveals what closed by then, so a coarser chart shows its bar the
+  moment it completes. In a multi-chart layout, bars are revealed whole. A single-chart
+  layout hands every call to that chart's own replay, including
+  [tick replay](./api-reference.md#tick-replay).
+- **The grid can change underneath.** A cell added by a layout change joins at the shared
+  time; a cell switching symbol rejoins once its new bars load; a timeframe switch keeps the
+  cell's place.
+- **It ends everywhere together**, with `stop()` or when any chart reaches its last bar.
+- **The state follows the active cell.** `state.active`, `playing` and `intervalMs` describe
+  the whole workspace; `cursorTime`, `remaining` and `nextTime` (and `bounds`) read the
+  active cell's chart, and the `replay:step` / `replay:tick` events report it.
+
+A contribution drives it as `ctx.replay`. Driving one cell's `chart.replay` directly still
+replays that chart alone. The cut rule is exported for interfaces that preview it:
+`barClose(open, timeframe)` is when a bar closes (calendar months for month-based
+timeframes), and `lastOpenClosedBy(time, timeframe)` is the last bar open a chart keeps at a
+given replay time — for example, the spot for a ghost crosshair
+(`renderer.setExternalCrosshair`) marking where each chart would be cut.
 
 ## State & persistence
 
@@ -313,7 +384,7 @@ at the top level and are each cell's **default** — `symbol` (bare = first decl
 provider; an `EXCHANGE:` prefix pins a venue), `timeframe`, `bars`, `priceStyle`,
 `data`, `visibleRange`, `theme`, `live`, `volume`, `upColor`, `downColor`, `glow`,
 `animations`, `logScale`, `currentPriceLine`, `drawings` (toolbar excepted),
-`defaultLanguage`, `renderer`, `nativeBackend` (explicit value wins over the
+`priceAxis`, `defaultLanguage`, `renderer`, `nativeBackend` (explicit value wins over the
 `maxWebglCells` policy). `cells` overrides the market/view seeds per cell:
 `{ symbol, timeframe, bars, priceStyle, data, visibleRange }`.
 
@@ -333,7 +404,7 @@ silently reorder them).
 | `engines` | — | Factories; one instance per cell (merged over `registerDefaultEngine`). |
 | `indicators` | — | Shared manifest; `enabled` entries auto-add to fresh cells. |
 | `timeframes` | presets | Topbar timeframe presets. |
-| `timezone` | `'Etc/UTC'` | Display timezone (every cell). |
+| `timezone` | `'Etc/UTC'` | Display timezone (every cell): an IANA zone, or `'exchange'` — each cell renders in its own market's zone (Chicago for a CME future, New York for a US equity, UTC for crypto), as declared by its provider's symbol metadata. |
 | `statusline` / `watermark` / `bottombar` | `true` | Chrome toggles. |
 | `topbar` | defaults | Declarative topbar composition — `{ left, right }` lists of the VISIBLE entries, in order (see [Composing the topbar](#composing-the-topbar)). |
 | `indicatorPicker` | `true` | **Deprecated (removal in 0.7.0).** `false` removes the built-in indicator dialog's entry points. Replace it with the composition (omit `'indicators'` from `topbar.left` — same effect) or a plugin [slot override](../contributing/plugin-sdk.md#replacing-a-built-in-button--slot-overrides). |
@@ -354,7 +425,8 @@ silently reorder them).
 
 Contributed actions/attachments (`@luxalgo/vela/plugin`) work unchanged — `ctx.chart` resolves
 to the ACTIVE cell's chart; grid-aware plugins additionally get `ctx.cells`,
-`ctx.activeCellId`, and `ctx.setActiveCell(id)`.
+`ctx.activeCellId`, `ctx.setActiveCell(id)`, and `ctx.replay` (the
+[grid-wide replay](#bar-replay-across-the-grid)).
 
 ## The indicator manifest
 
@@ -378,9 +450,9 @@ wrapper) of entries, inline or fetched from a URL, shared by every cell:
 
 The shell is keyboard-first (bindings act on the **active cell**):
 
-- Type a **letter** anywhere on a chart → the symbol search opens, seeded with it.
-- Type a **digit** → the timeframe entry opens (`15`, `4h`, `D`, `3M`, … — a bare
-  number is minutes, a bare letter means one unit).
+- Type a **letter** or `0` anywhere on a chart → the symbol search opens, seeded with it.
+- Type a **digit from 1 to 9** → the timeframe entry opens (`15`, `4H`, `D`, `3M`, … — a
+  bare number is minutes, a bare letter means one unit; letters show in capitals).
 - `alt+S` → download a PNG of the visible layout (every chart, or the
   maximized one). `?` → the shortcuts panel.
 - `mod+↑/↓` glide-zoom, `mod+←/→` glide-pan with the exact feel and limits of a drag
@@ -424,7 +496,9 @@ they work from the very first keystroke, before any click.
   venue/timeframe beside it) plus hide/show for the chart's price series. In
   multi-cell grids it stays on one row — segments that don't fit the cell hide instead
   of wrapping (bar change first, then venue/timeframe, then the market badge; the logo
-  + ticker always stay).
+  + ticker always stay). While the chart replays past bars, the market badge gives way to
+  a replay badge (the replay icon on the inverse chip), and the market status returns when
+  the replay ends.
 - **Object tree** — a docked panel grouping every item under the pane it belongs to. Each pane is
   one column read top to bottom as front to back: its drawings, its indicators and, in the main
   pane, the price series, all in draw order — new indicators and new drawings both start under
@@ -438,7 +512,8 @@ they work from the very first keystroke, before any click.
   the stack together. Drawings can be multi-selected
   (Ctrl/Cmd-click) and bundled into a named group that hides, locks, deletes and drags as one
   block; groups live for as long as the chart and are not persisted. Kept in sync with the
-  chart's events.
+  chart's events — a selection made on the chart (Ctrl/Cmd-click, a marquee) lights up every
+  row it covers, and a pick made in the panel selects the same drawings on the chart.
 - **Data window** — the other docked panel: the date and time of the bar under the crosshair,
   its OHLCV tinted with the bar's direction, then one section per indicator showing each plot's
   value in its own color. It follows the crosshair and falls back to the latest bar when the
@@ -455,13 +530,87 @@ they work from the very first keystroke, before any click.
   the active chart's timeframe, **fetches the depth its window needs**, and frames it:
   `1D`→1m, `7D`→5m, `1M`→30m, `3M`→1h, `6M`→4h, `YTD`/`1Y`→1D, `5Y`/`ALL`→1W. Changing
   the timeframe by hand leaves range mode (the chip clears and the fetch depth returns
-  to the chart's own `bars` setting).
+  to the chart's own `bars` setting). The picker's **Exchange** row (right under UTC) follows each
+  chart's own market: a CME future renders in Chicago time, a US equity in New York, crypto
+  in UTC — and in a multi-chart grid every cell reads its own market's clock. The bar's
+  clock and offset show the active cell's zone. The chart settings' Time zone row (Symbol
+  tab) is the same picker, Exchange included; picking a fixed zone anywhere switches the
+  whole workspace back to that zone.
 - **Context menus** — right-click the chart body for reset view, removing all drawings or all
   indicators, and the settings dialog; the price axis for that pane's own scale (autoscale,
   invert, regular/percent/indexed/logarithmic, and the label and level toggles); the time axis
   for the display timezone. Every pane's price scale has its own menu, so a study pane's scale
   is independent of the main one. Each menu's settings entry opens the settings dialog on the
   tab that belongs to it — Canvas from the chart body, Scales and lines from either axis.
+  Rows a plugin adds sort in with the built-in ones: by default after the built-in actions and
+  before the settings entry at the bottom of the menu (see [Right-click menu
+  actions](../contributing/plugin-sdk.md#right-click-menu-actions)).
+
+### Following menus and panels
+
+Every menu, popover, dialog, drawer and side panel announces itself with a DOM event on its
+own element: `vela:surface-open` once it shows, and `vela:surface-close` as it starts to
+close, while it is still on screen and before it fades out or leaves the DOM. Both bubble, so
+one listener on the chart's container follows all of its chrome without watching the DOM:
+
+```ts
+import { SURFACE_OPEN_EVENT, SURFACE_CLOSE_EVENT, type SurfaceEventDetail } from '@luxalgo/vela/ui';
+
+container.addEventListener(SURFACE_OPEN_EVENT, (e) => {
+    const { kind, trigger } = (e as CustomEvent<SurfaceEventDetail>).detail;
+    // e.target is the surface: a .vela-menu, .vela-popover, .vela-dialog, .vela-drawer, .vela-panel …
+});
+```
+
+`kind` is `'menu'` (submenus and the drawing toolbar's flyouts included), `'popover'` (select
+lists, color pickers, mark cards, the layout picker), `'dialog'`, `'drawer'` or `'panel'`.
+`trigger` is the element that opened it — a menu's button, a submenu's row, the control that
+had focus when a dialog opened — or `null` when there is none (a right-click menu). A surface
+created without an explicit host portals to `<body>`; listen on `document` to catch those too.
+
+### Animating closes
+
+Surfaces leave the screen at once by default. To animate them out, style the `data-closing`
+attribute: as a surface starts to close (right after its `vela:surface-close`), Vela sets
+`data-closing` on it and keeps it displayed but inert — it takes no clicks and no focus — until
+every CSS animation or transition that the attribute started on it or inside it has finished,
+then hides or removes it. These elements get the attribute:
+
+| Element | Surface |
+| --- | --- |
+| `.vela-menu` | A dropdown or context menu, each submenu on its own. |
+| `.vela-popover` | Select lists, color pickers and other kit popovers. |
+| `.vela-dialog` and `.vela-dialog-backdrop` | A dialog and its scrim. |
+| `.vela-drawer` and `.vela-drawer-backdrop` | A bottom sheet (mobile chrome) and its scrim. |
+| `.vela-panel` | A side panel. |
+| `.vela-lp` | The layout picker. |
+| `.vela-dtb-flyout` | A drawing toolbar flyout. |
+
+```css
+@media (prefers-reduced-motion: no-preference) {
+    .vela-menu[data-closing],
+    .vela-popover[data-closing],
+    .vela-dialog[data-closing],
+    .vela-dialog-backdrop[data-closing] {
+        animation: host-fade-out 150ms ease forwards;
+    }
+}
+@keyframes host-fade-out {
+    to { opacity: 0; }
+}
+```
+
+- **Without exit CSS nothing changes**: no animation starts, so the surface closes at once.
+- **The wait is capped at 1 second**, and an infinite animation inside the surface (a spinner)
+  never holds it.
+- **Reopening during the exit cancels it**: the same element loses `data-closing` and is
+  interactive again. A surface its owner rebuilds on every open (the chart settings dialog)
+  lets the previous copy finish its exit beside the new one.
+- **A side panel reports closed at once** (its `open` state and the topbar button), but keeps
+  its column until the exit ends. A panel that hands the column to another one, or that a
+  restored state closes, leaves without an exit.
+- **Reduced motion is yours to honor**: Vela waits for whatever your stylesheet starts, so
+  guard the exit rules with `prefers-reduced-motion` as above.
 
 ## Composing the topbar
 

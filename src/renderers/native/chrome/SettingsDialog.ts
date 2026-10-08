@@ -33,9 +33,14 @@ import {
     filterHiddenHostRows,
     filterHiddenRows,
     hostSectionId,
+    markGroupSettingsId,
+    MARKS_GROUPS_SETTINGS_ID,
+    MARKS_SETTINGS_ID,
     settingsIdHidden,
     settingsIdSlug,
 } from './settings-visibility';
+import type { MarkGroup } from '../../../core/marks/types';
+import { markGroupRows } from '../../../core/marks/visibility';
 
 /** A nested partial of `ChartConfig` — what a single control edit emits. */
 type ConfigPatch = Record<string, unknown>;
@@ -60,7 +65,7 @@ type ConfigPatch = Record<string, unknown>;
 export type HostSettingsRow =
     | { kind: 'heading'; label: string; id?: string }
     | { kind: 'toggle'; label: string; get: () => boolean; set: (v: boolean) => void; id?: string }
-    | { kind: 'select'; label: string; options: readonly string[]; get: () => string; set: (v: string) => void; id?: string }
+    | { kind: 'select'; label: string; options: readonly SettingsSelectOption[]; get: () => string; set: (v: string) => void; id?: string }
     | { kind: 'color'; label: string; get: () => string; set: (v: string) => void; id?: string };
 
 /** A host-contributed settings tab (see `RendererControl.setSettingsSections`). */
@@ -88,7 +93,7 @@ function styleLabel(id: string): string {
 }
 
 const SD_STYLE_ID = 'vela-settings-controls';
-const SD_STYLE_REV = '5';
+const SD_STYLE_REV = '6';
 
 /**
  * The dialog's surface palette. It follows the STABLE chrome surface (the tokens written on
@@ -151,6 +156,10 @@ ${overlayScrollbarCss('.vela-sd-pane')}
    muted and non-interactive. Applied to each row's children so it survives display:contents;
    !important beats the inline opacity on labels. */
 .vela-sd-soft>*{opacity:0.4 !important;pointer-events:none !important;}
+/* A mark group nested under a parent group on the Events tab: indented one step per level
+   (--vela-sd-depth). The indent rides the first child (the switch) as a MARGIN — padding
+   would push the switch's own tick out of its box. */
+.vela-sd-nested>*:first-child{margin-left:calc(var(--vela-sd-depth,1)*24px);}
 /* ── mobile presentation (.vela-sd-mobile on the scrim; structural sizes are inline in open()) ──
    The tab rail becomes a burger-opened overlay sidebar; the group TOC becomes a sticky
    row of horizontally scrollable tabs; the instance strip scrolls instead of wrapping;
@@ -174,7 +183,15 @@ ${overlayScrollbarCss('.vela-sd-pane')}
 .vela-sd-mobile .vela-select-trigger,.vela-sd-mobile .vela-num input,.vela-sd-mobile .vela-width-field{height:34px;}
 .vela-sd-mobile .vela-sd-close{width:40px;height:40px;}
 .vela-sd-mobile .vela-sd-btn{height:38px;}
-.vela-sd-mobile .vela-sd-row span,.vela-sd-mobile .vela-sd-bool span,.vela-sd-mobile .vela-field-label{white-space:normal !important;}`;
+.vela-sd-mobile .vela-sd-row span,.vela-sd-mobile .vela-sd-bool span,.vela-sd-mobile .vela-field-label{white-space:normal !important;}
+/* The wrap rule above is for ROW LABELS only: a select's closed value must keep its
+   single-line ellipsis, or a long option wraps to several lines inside the 34px
+   trigger and spills over the rows around it. Three classes so it outranks the
+   two-classes-plus-element selector above. The kit's fixed 100px column is a desktop
+   alignment device; on mobile the trigger hugs its value instead (the grid's control
+   column is max-content), capped so a long option still ellipsizes before the label. */
+.vela-sd-mobile .vela-select-trigger .vela-select-label{white-space:nowrap !important;}
+.vela-sd-mobile .vela-select:not([data-fill]){width:auto;min-width:100px;max-width:min(220px,55vw);}`;
     if (!existing) document.head.appendChild(st);
 }
 
@@ -187,6 +204,11 @@ export class SettingsDialog {
     private config: ChartConfig | null = null;
     private syncTypeTabs: ((style: string) => void) | null = null;
     private hostSections: HostSettingsSection[] = [];
+    /** The timeline-mark groups (defined + named by marks) — one checkbox each on the Events tab. */
+    private markGroups: MarkGroup[] = [];
+    /** A group's OWN switch (what its checkbox shows) — a child under an off parent keeps its own state. */
+    private markGroupOwnVisible: (id: string) => boolean = () => true;
+    private markGroupVisible: (id: string) => boolean = () => true;
     /** The Canvas → Theme row: current app theme + where a pick is raised. The row is a
      *  host callback, NOT a config patch — the app theme stays out of the persisted
      *  `ChartConfig`, so exported templates never carry it. */
@@ -202,6 +224,9 @@ export class SettingsDialog {
     private activeSection: string | null = null;
     /** Mobile chrome: fullscreen card, burger-opened section sidebar, TOC as top tabs. */
     private mobileLayout = false;
+    /** Opens/closes the mobile section sidebar of the CURRENT build (the burger in the
+     *  shell header outlives pane rebuilds, so it reaches the rail through here). */
+    private toggleRail: ((open?: boolean) => void) | null = null;
 
     /** The visibility policy: setting ids hidden by the host (subtree semantics). */
     private hiddenSettings: ReadonlySet<string> = new Set();
@@ -209,6 +234,13 @@ export class SettingsDialog {
     /** Host-app sections (e.g. the widget's Status line tab) — re-shown on next open. */
     setHostSections(sections: HostSettingsSection[]): void {
         this.hostSections = sections;
+    }
+
+    /** The timeline-mark groups and their current visibility — the Events tab's rows on next open. */
+    setMarkGroups(groups: MarkGroup[], visible: (id: string) => boolean, ownVisible: (id: string) => boolean = visible): void {
+        this.markGroupOwnVisible = ownVisible;
+        this.markGroups = groups;
+        this.markGroupVisible = visible;
     }
 
     /** Replace the visibility policy — an open dialog rebuilds in place to honor it. */
@@ -295,7 +327,6 @@ export class SettingsDialog {
         // to catch the click-outside-to-close.
         ensureControlStyles();
         const mobile = this.mobileLayout;
-        let toggleRail: ((open?: boolean) => void) | null = null;
         let burger: HTMLButtonElement | undefined;
         if (mobile) {
             burger = document.createElement('button');
@@ -303,9 +334,85 @@ export class SettingsDialog {
             burger.className = 'vela-sd-burger';
             burger.innerHTML = iconAt('burger', 16);
             burger.title = 'Sections';
-            burger.addEventListener('click', () => toggleRail?.());
+            burger.addEventListener('click', () => this.toggleRail?.());
         }
+        const ui = new Dialog({
+            host: this.container,
+            title: 'Chart settings',
+            // Non-modal: a live-edit dialog must leave the page interactive — a modal
+            // machine locks pointer events on the whole body, killing the chart, the
+            // legend, and the body-portaled popovers (color picker, select lists).
+            modal: false,
+            contained: true,
+            align: 'top',
+            draggable: !mobile,
+            flush: true,
+            className: 'vela-dialog--settings',
+            headerStart: burger,
+            closeOnBackdrop: true,
+            footer: (foot) => {
+                foot.style.cssText = `padding:10px 14px;display:flex;align-items:center;justify-content:flex-start;gap:8px;`;
+                const resetBtn = document.createElement('button');
+                resetBtn.type = 'button';
+                resetBtn.textContent = 'Reset defaults';
+                resetBtn.className = 'vela-sd-btn';
+                resetBtn.addEventListener('click', () => this.onReset?.());
+                foot.appendChild(resetBtn);
+            },
+            // A close signal may only close ITS OWN dialog: the machine reports the exit
+            // asynchronously, so a close-then-reopen in one tick would otherwise see the
+            // old instance's signal tear down the freshly opened one.
+            onOpenChange: (open) => { if (!open && this.ui === ui) this.close(); },
+        });
+        if (mobile) ui.positioner.classList.add('vela-sd-mobile');
+        ui.positioner.style.paddingTop = mobile ? '0' : '8vh';
 
+        this.root = ui.positioner;
+        this.ui = ui;
+        const panes = this.buildContent(ui, config, section, mobile);
+        ui.show();
+        this.layoutPanes(panes);
+    }
+
+    /**
+     * Re-seed every control of an OPEN dialog from `config`, in place: the shell stays
+     * (no close/open transition), only the tab rail and panes rebuild, landing back on
+     * the current tab. The reset path — the restored values must show without the
+     * dialog re-entering. No-op while closed.
+     */
+    refresh(config: ChartConfig): void {
+        const ui = this.ui;
+        if (!ui) return;
+        closeOpenPopovers();
+        closeWidthPopover();
+        for (const dispose of this.hintTips) dispose();
+        this.hintTips = [];
+        this.config = config;
+        ui.body.replaceChildren();
+        this.layoutPanes(this.buildContent(ui, config, this.activeSection ?? undefined, this.mobileLayout));
+    }
+
+    /** Structured chart-type panes (instance strip / group TOC) own their layout and
+     *  tag their rows hosts instead; each host gets its own field grid. Runs on a SHOWN
+     *  dialog — the grids measure their labels. */
+    private layoutPanes(panes: readonly HTMLElement[]): void {
+        for (const el of panes) {
+            const hosts = [...el.querySelectorAll('[data-sd-rows-host]')] as HTMLElement[];
+            if (hosts.length === 0) {
+                this.layoutSettingsGrids(el);
+                continue;
+            }
+            for (const h of hosts) this.layoutSettingsGrids(h);
+        }
+    }
+
+    /**
+     * Build the tab rail + one pane per section into `ui.body` (the linear `body` of
+     * section markers and rows is split afterwards), select `section` (the active
+     * style's own tab when none is asked for), and return the pane elements for
+     * {@link layoutPanes}.
+     */
+    private buildContent(ui: Dialog, config: ChartConfig, section: string | undefined, mobile: boolean): HTMLElement[] {
         const body = document.createElement('div');
         body.style.cssText = 'display:flex;flex-direction:column;gap:0;';
 
@@ -425,14 +532,39 @@ export class SettingsDialog {
         }
         showActive(config.series.style);
 
-        // Style-independent (the glide applies to every price style), so it gets its own group.
+        // Style-independent (every motion applies to every price style), so it gets its own
+        // group. On/off switches only — the durations stay the host's.
         body.append(sid(this.sectionTitle('Animation'), 'symbol.animation'));
+        body.append(sid(this.boolRow(
+            'Animate zoom',
+            config.animations.zoom,
+            (v) => this.emit({ animations: { zoom: v } }),
+            this.hint('Glide the chart to each zoom step instead of jumping.'),
+        ), 'symbol.animation.zoom'));
+        body.append(sid(this.boolRow(
+            'Pan momentum',
+            config.animations.pan,
+            (v) => this.emit({ animations: { pan: v } }),
+            this.hint('Keep gliding briefly after a drag release, and ease scroll-to-latest and keyboard pans.'),
+        ), 'symbol.animation.pan'));
+        body.append(sid(this.boolRow(
+            'Animate price scale',
+            config.animations.autoscale,
+            (v) => this.emit({ animations: { autoscale: v } }),
+            this.hint('Glide the price scale to its new range while zooming or panning.'),
+        ), 'symbol.animation.autoscale'));
         body.append(sid(this.boolRow(
             'Animate price changes',
             config.priceScale.animateLastPrice,
             (v) => this.emit({ priceScale: { animateLastPrice: v } }),
             this.hint('Glide the live bar to each new price instead of snapping.'),
         ), 'symbol.animation.price-changes'));
+        body.append(sid(this.boolRow(
+            'Reveal on load',
+            config.animations.intro,
+            (v) => this.emit({ animations: { intro: v } }),
+            this.hint('Draw the candles in when a chart first loads. Takes effect on the next load.'),
+        ), 'symbol.animation.intro'));
 
         body.append(sid(this.sectionTitle('Time zone'), 'symbol.timezone'));
         body.append(sid(this.selectRowLabeled('Time zone', normalizeTimezone(config.timeScale.timezone), timezoneOptions(config.timeScale.timezone), (v) => this.emit({ timeScale: { timezone: v } })), 'symbol.timezone'));
@@ -454,7 +586,7 @@ export class SettingsDialog {
                     if (hr.kind === 'heading') body.append(this.sectionTitle(hr.label));
                     else if (hr.kind === 'toggle') body.append(this.boolRow(hr.label, hr.get(), (v) => hr.set(v)));
                     else if (hr.kind === 'color') body.append(this.colorRow(hr.label, hr.get(), (v) => hr.set(v)));
-                    else body.append(this.selectRowLabeled(hr.label, hr.get(), hr.options.map((o) => [o, o] as const), (v) => hr.set(v)));
+                    else body.append(this.selectRowLabeled(hr.label, hr.get(), normalizeSelectOptions(hr.options), (v) => hr.set(v)));
                 }
             }
         };
@@ -518,10 +650,44 @@ export class SettingsDialog {
         body.append(sid(this.toggleRow('Horizontal', config.grid.horzLines.visible, (v) => this.emit({ grid: { horzLines: { visible: v } } }), [
             this.swatch(config.grid.horzLines.color, (v) => this.emit({ grid: { horzLines: { color: v } } })),
         ]), 'canvas.grid.horizontal'));
+        body.append(sid(this.sectionTitle('Margins'), 'canvas.margins'));
+        body.append(sid(this.numberRow('Top', config.margins.top, 0, 40, 1, (v) => this.emit({ margins: { top: v } }), '%'), 'canvas.margins.top'));
+        body.append(sid(this.numberRow('Bottom', config.margins.bottom, 0, 40, 1, (v) => this.emit({ margins: { bottom: v } }), '%'), 'canvas.margins.bottom'));
+        body.append(sid(this.numberRow('Right', config.margins.right, 0, 200, 1, (v) => this.emit({ margins: { right: v } }), 'bars'), 'canvas.margins.right'));
         if (this.themeControl) {
             const tc = this.themeControl;
             body.append(sid(this.sectionTitle('Theme'), 'canvas.theme'));
             body.append(sid(this.selectRow('Color theme', tc.current === 'dark' ? 'Dark' : 'Light', ['Dark', 'Light'], (v) => tc.onSelect(v === 'Dark' ? 'dark' : 'light')), 'canvas.theme'));
+        }
+
+        // ══ EVENTS — timeline-mark group visibility, a tab of its own (present only while marks name groups) ══
+        if (this.markGroups.length > 0) {
+            body.append(sid(this.section('Events'), MARKS_SETTINGS_ID));
+            body.append(sid(this.sectionTitle('Visible events'), MARKS_GROUPS_SETTINGS_ID));
+            // Children list indented under their parent and dim while the parent is off — the
+            // parent is the master switch, the child keeps its own choice for when it returns.
+            const rowsById = new Map<string, HTMLElement>();
+            const rows = markGroupRows(this.markGroups);
+            const refreshDimming = (): void => {
+                for (const { group } of rows) {
+                    const el = rowsById.get(group.id);
+                    if (!el || group.parent === undefined) continue;
+                    el.classList.toggle('vela-sd-soft', !this.markGroupVisible(group.parent));
+                }
+            };
+            for (const { group: g, depth } of rows) {
+                const row = this.boolRow(g.label, this.markGroupOwnVisible(g.id), (v) => {
+                    this.emit({ marks: { groups: { [g.id]: v } } });
+                    refreshDimming();
+                });
+                if (depth > 0) {
+                    row.classList.add('vela-sd-nested');
+                    row.style.setProperty('--vela-sd-depth', String(depth));
+                }
+                rowsById.set(g.id, row);
+                body.append(sid(row, markGroupSettingsId(g.id)));
+            }
+            refreshDimming();
         }
 
         renderChartTypeSections('end');
@@ -565,8 +731,8 @@ export class SettingsDialog {
         if (mobile) {
             railScrim = document.createElement('div');
             railScrim.className = 'vela-sd-railscrim';
-            railScrim.addEventListener('click', () => toggleRail?.());
-            toggleRail = (open?: boolean) => {
+            railScrim.addEventListener('click', () => this.toggleRail?.());
+            this.toggleRail = (open?: boolean) => {
                 const on = open ?? !rail.classList.contains('open');
                 rail.classList.toggle('open', on);
                 railScrim?.classList.toggle('open', on);
@@ -613,33 +779,6 @@ export class SettingsDialog {
             });
             if (hidActive) activate(0);
         };
-        const ui = new Dialog({
-            host: this.container,
-            title: 'Chart settings',
-            // Non-modal: a live-edit dialog must leave the page interactive — a modal
-            // machine locks pointer events on the whole body, killing the chart, the
-            // legend, and the body-portaled popovers (color picker, select lists).
-            modal: false,
-            contained: true,
-            align: 'top',
-            draggable: !mobile,
-            flush: true,
-            className: 'vela-dialog--settings',
-            headerStart: burger,
-            closeOnBackdrop: true,
-            footer: (foot) => {
-                foot.style.cssText = `padding:10px 14px;display:flex;align-items:center;justify-content:flex-start;gap:8px;`;
-                const resetBtn = document.createElement('button');
-                resetBtn.type = 'button';
-                resetBtn.textContent = 'Reset defaults';
-                resetBtn.className = 'vela-sd-btn';
-                resetBtn.addEventListener('click', () => this.onReset?.());
-                foot.appendChild(resetBtn);
-            },
-            onOpenChange: (open) => { if (!open) this.close(); },
-        });
-        if (mobile) ui.positioner.classList.add('vela-sd-mobile');
-        ui.positioner.style.paddingTop = mobile ? '0' : '8vh';
 
         const activate = (idx: number): void => {
             panes.forEach((p, i) => {
@@ -649,7 +788,7 @@ export class SettingsDialog {
             this.activeSection = panes[idx]?.title ?? null;
             if (mobile) {
                 ui.titleEl.textContent = panes[idx]?.title ?? 'Chart settings';
-                toggleRail?.(false);
+                this.toggleRail?.(false);
             }
         };
         panes.forEach((p, i) => {
@@ -671,19 +810,7 @@ export class SettingsDialog {
         shell.append(rail, paneHost);
         if (railScrim) shell.append(railScrim);
         ui.body.appendChild(shell);
-        this.root = ui.positioner;
-        this.ui = ui;
-        ui.show();
-        // Structured chart-type panes (instance strip / group TOC) own their layout and
-        // tag their rows hosts instead; each host gets its own field grid.
-        for (const p of panes) {
-            const hosts = [...p.el.querySelectorAll('[data-sd-rows-host]')] as HTMLElement[];
-            if (hosts.length === 0) {
-                this.layoutSettingsGrids(p.el);
-                continue;
-            }
-            for (const h of hosts) this.layoutSettingsGrids(h);
-        }
+        return panes.map((p) => p.el);
     }
 
     close(): void {
@@ -692,6 +819,7 @@ export class SettingsDialog {
         const ui = this.ui;
         this.ui = null;
         this.root = null;
+        this.toggleRail = null;
         this.tabs = [];
         for (const dispose of this.hintTips) dispose(); // a tip open at close time must not outlive its row
         this.hintTips = [];
@@ -1209,23 +1337,16 @@ export class SettingsDialog {
         return el;
     }
 
-    private numberRow(label: string, value: number, min: number, max: number, step: number, onChange: (v: number) => void): HTMLElement {
-        return fieldRow({
-            label,
-            labelSize: 'sm',
-            className: 'vela-sd-row',
-            control: buildFieldControl({
-                kind: 'number',
-                value,
-                min,
-                max,
-                step,
-                fill: false,
-                commit: 'live',
-                steppers: true,
-                onChange,
-            }).el,
-        });
+    /** `unit` (optional) trails the input as muted text — "%", "bars". */
+    private numberRow(label: string, value: number, min: number, max: number, step: number, onChange: (v: number) => void, unit?: string): HTMLElement {
+        const controls = [buildFieldControl({ kind: 'number', value, min, max, step, fill: false, commit: 'live', steppers: true, onChange }).el];
+        if (unit) {
+            const u = document.createElement('span');
+            u.textContent = unit;
+            u.style.cssText = 'color:var(--vela-fg-muted);';
+            controls.push(u);
+        }
+        return this.rowWith(label, controls);
     }
 
     /** A dropdown whose option values differ from their display labels. */

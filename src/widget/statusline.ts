@@ -7,10 +7,10 @@ import { injectStyles } from '../ui/styles';
 import { Tooltip } from '../ui/components/tooltip';
 import { CalloutBubble } from '../ui/components/callout-bubble';
 import { Menu } from '../ui/components/menu';
-import { segmentVisibility, statuslineMenuItems, type StatuslinePart } from './statusline-model';
+import { segmentVisibility, statuslineMenuItems, STATUSLINE_LADDER, readoutCells, type StatuslinePart, type StatuslineLayout } from './statusline-model';
 import { SESSION_PRE, SESSION_POST, SESSION_OFF } from '../core/palette';
 import { iconAt } from '../core/icons';
-import { fmtPrice, fmtChange, decimalsFor } from './format';
+import { fmtPrice, fmtChange, fmtChangePct, decimalsFor } from './format';
 import { timeframeLabel } from './timeframe';
 import { tickerIconEl } from './symbol-icon';
 import { parseSymbol } from '../data/ProviderRegistry';
@@ -30,6 +30,11 @@ const CSS = `
     display: flex;
     align-items: baseline;
     gap: var(--vela-space-2);
+    /* The chip never grows past the plot: fit() measures overflow against this width to
+     * walk the layout ladder (stack, then shed values), so overflow:hidden only guards
+     * the transient between a resize and the next measure. */
+    max-width: calc(100% - var(--vela-toolbar-gutter, 0px) - var(--vela-scale-gutter, 0px) - 24px);
+    overflow: hidden;
     color: var(--vela-fg);
     font-size: var(--vela-font-size-md);
     /* Same chip treatment as the indicator legend rows (InputsUI): a translucent wash of
@@ -51,6 +56,31 @@ const CSS = `
 /* Chart hidden (the price series' eye — renderer 'candleVisible'): the line dims to
  * the same 0.5 wash a hidden indicator's legend row wears. */
 .vela-statusline.vela-sl-chart-hidden { opacity: 0.5; }
+/* Two rows inside the chip — the identity (logo / symbol / meta / market badge) and the
+ * value readout (O/H/L/C + change, or the show-chart eye). In the widest layout they sit
+ * side by side on one line; the STACKED layouts (fit() decides, see the ladder in
+ * statusline-model) turn the chip into a column so the values drop under the symbol. */
+.vela-statusline .vela-sl-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--vela-space-2);
+    white-space: nowrap;
+}
+.vela-statusline.vela-sl-stacked {
+    flex-direction: column;
+    align-items: flex-start;
+    /* The same air between the two rows as between the values row and the legend row
+     * that follows the chip (see the stacked legend shift below). */
+    row-gap: var(--vela-space-1);
+}
+/* Stacked, the identity row may shrink (the meta carries the ellipsis) — the values row
+ * never does, so its overflow is what fit() measures to keep descending the ladder. */
+.vela-statusline.vela-sl-stacked .vela-sl-identity { max-width: 100%; }
+.vela-statusline.vela-sl-stacked .vela-sl-meta {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .vela-statusline .vela-sl-avatar {
     width: 18px;
     height: 18px;
@@ -66,9 +96,18 @@ const CSS = `
 }
 .vela-statusline .vela-sl-symbol { font-weight: 600; font-size: var(--vela-font-size-lg); }
 .vela-statusline .vela-sl-meta { color: var(--vela-fg-muted); font-size: var(--vela-font-size-md); font-weight: 600; }
+/* The meta opens with "· " — sit its dot one space-width after the ticker, as far as the
+ * venue sits after it, not a full row gap away. */
+.vela-statusline .vela-sl-symbol + .vela-sl-meta { margin-left: calc(var(--vela-space-1) - var(--vela-space-2)); }
 /* Market status badge — a kit callout bubble (icon-only 16px circle, label on hover
- * via the kit tooltip); the session tint is applied per status in setMarketStatus. */
-.vela-statusline .vela-sl-market { align-self: center; }
+ * via the kit tooltip); the session tint is applied per status in setMarketStatus. While
+ * the chart replays past bars it wears the replay badge instead (the inverse chip). */
+.vela-statusline .vela-sl-market { align-self: center; display: inline-flex; }
+.vela-statusline .vela-sl-market > [hidden] { display: none !important; }
+.vela-statusline .vela-sl-replay-badge, .vela-statusline .vela-sl-replay-badge svg { display: block; width: 16px; height: 16px; }
+/* Tabular figures: every digit has one advance, so a readout whose text changes only in
+ * its digits keeps its width — render() skips the ladder for those (see widthKey). */
+.vela-statusline .vela-sl-values { font-variant-numeric: tabular-nums; }
 .vela-statusline .vela-sl-ohlc { display: flex; gap: var(--vela-space-1); color: var(--vela-fg-muted); }
 .vela-statusline .vela-sl-ohlc b { color: var(--vela-fg); font-weight: 500; }
 /* The change value wears the SAME ink as the OHLC values (set inline per render) —
@@ -102,59 +141,13 @@ const CSS = `
  * stylesheet is document-global, so a bare attribute selector here would shift every
  * chart on the page, including statusline-less ones. */
 .vela-has-statusline [${LEGEND_AT_TOP_ATTR}] { transform: translateY(26px); }
-/* Mobile: two-line chip — logo / symbol / meta / market status on one aligned row, the
- * bar change on the next. Full O/H/L/C stays hidden (too dense on a phone-width plot).
- * GRID, not a wrapping flexbox: an absolutely positioned wrapping flex container sizes
- * to the one-line sum of ALL segments (max-content), so its background used to stretch
- * far past the market badge; a grid hugs the widest actual row. The meta column may
- * shrink (it carries the ellipsis), the others wrap their content. */
-[data-layout='mobile'] .vela-statusline {
-    display: grid;
-    grid-template-columns: auto auto minmax(0, auto) auto;
-    justify-content: start;
-    align-items: center;
-    row-gap: 1px;
-    max-width: calc(100% - var(--vela-toolbar-gutter, 0px) - var(--vela-scale-gutter, 0px) - 24px);
-    font-size: var(--vela-font-size-sm);
-}
-[data-layout='mobile'] .vela-statusline .vela-sl-symbol {
-    font-size: var(--vela-font-size-md);
-    line-height: 1;
-}
-[data-layout='mobile'] .vela-statusline .vela-sl-meta {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    line-height: 1;
-}
-[data-layout='mobile'] .vela-statusline .vela-sl-avatar,
-[data-layout='mobile'] .vela-statusline .vela-sl-market { align-self: center; }
-[data-layout='mobile'] .vela-statusline .vela-sl-ohlc { display: none !important; }
-[data-layout='mobile'] .vela-statusline .vela-sl-change {
-    /* Second row, under the text column — the avatar keeps the first column. */
-    grid-column: 2 / -1;
-    font-size: var(--vela-font-size-sm);
-    line-height: 1.2;
-}
-[data-layout='mobile'] .vela-has-statusline [${LEGEND_AT_TOP_ATTR}] { transform: translateY(40px); }
-/* FIT mode (multi-chart cells — see setFitMode): the line never wraps; segments that
- * don't fit are HIDDEN by fit() (change first, then meta, then the market badge), so
- * overflow:hidden only guards the transient between a resize and the next measure.
- * Placed after the mobile block on purpose: same specificity, later wins. */
-.vela-statusline.vela-sl-fit {
-    display: flex; /* undo the mobile grid — fit mode is one flex row again */
-    flex-wrap: nowrap;
-    align-items: center;
-    max-width: calc(100% - var(--vela-toolbar-gutter, 0px) - var(--vela-scale-gutter, 0px) - 24px);
-    overflow: hidden;
-}
-.vela-statusline.vela-sl-fit .vela-sl-change {
-    flex-basis: auto;
-    padding-left: 0;
-}
-/* One row again — the mobile two-line shift doesn't apply in fit mode. */
-[data-layout='mobile'] .vela-sl-fit-host.vela-has-statusline [${LEGEND_AT_TOP_ATTR}] { transform: translateY(26px); }
+/* A stacked chip is two lines tall — the legend shifts one more line. fit() flags the
+ * host whenever the ladder lands on a stacked layout. */
+.vela-has-statusline.vela-sl-stacked-host [${LEGEND_AT_TOP_ATTR}] { transform: translateY(40px); }
+/* Mobile: the same ladder at the phone's type scale — the width alone decides how much
+ * of the readout fits, exactly as on a narrow desktop chart. */
+[data-layout='mobile'] .vela-statusline { font-size: var(--vela-font-size-sm); }
+[data-layout='mobile'] .vela-statusline .vela-sl-symbol { font-size: var(--vela-font-size-md); }
 `;
 
 interface BarLike {
@@ -192,6 +185,18 @@ const MARKET_LABELS: Record<MarketStatus, string> = {
     closed: 'Market Closed',
     holiday: 'Market Holiday',
 };
+const REPLAY_LABEL = 'Replay Mode';
+/**
+ * The replay badge: the circle and its glyph (two left-pointing triangles) in ONE drawing —
+ * a circle behind an icon element rounds to device pixels separately from it, so the glyph
+ * would sit a different fraction off-centre in every chart of a grid. The glyph sits 0.8px
+ * left of the geometric centre: triangles weigh at their flat edges.
+ */
+const REPLAY_BADGE_SVG =
+    '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">' +
+    '<circle cx="8" cy="8" r="8" style="fill: var(--vela-selected-bg)"/>' +
+    '<path d="M11.7 4.75v6.5L7.2 8zM7.2 4.75v6.5L2.7 8z" style="fill: var(--vela-selected-fg); stroke: var(--vela-selected-fg); stroke-width: 0.8; stroke-linejoin: round"/>' +
+    '</svg>';
 
 /** Session ink: open wears the theme's up color; the other sessions are meaning
  *  constants from the palette (amber pre, sky post and extended, gray closed/holiday).
@@ -269,9 +274,12 @@ export class Statusline {
     private readonly ohlcEl: HTMLElement;
     private readonly changeEl: HTMLElement;
     private readonly symbolEl: HTMLElement;
+    /** The badge slot — the market bubble, or the replay badge while replaying. */
     private readonly marketEl: HTMLElement;
-    /** The badge itself — a kit callout bubble (the same element as {@link marketEl}). */
+    /** The market status face — a kit callout bubble. */
     private readonly marketBubble: CalloutBubble;
+    /** The replay face — see {@link REPLAY_BADGE_SVG}. */
+    private readonly replayBadge: HTMLElement;
     private marketTip!: Tooltip;
     /** The show-chart eye — visible only while the chart is hidden. */
     private readonly eyeEl: HTMLButtonElement;
@@ -279,6 +287,9 @@ export class Statusline {
     private avatarEl: HTMLElement;
     private metaEl!: HTMLElement;
     private readonly parts: Record<StatuslinePart, boolean> = { logo: true, name: true, market: true, ohlc: true, change: true };
+    private marketStatus: MarketStatus = 'open';
+    /** The chart replays past bars — the badge shows the replay mode (see {@link setReplaying}). */
+    private replaying = false;
     /** The right-click action menu — present once a host wires it via {@link attachMenu}. */
     private menu: Menu | null = null;
     private menuHooks: StatuslineMenuHooks | null = null;
@@ -299,6 +310,16 @@ export class Statusline {
     /** Fit mode (multi-chart cells): one row, overflowing segments hidden — see {@link setFitMode}. */
     private fitMode = false;
     private fitRO: ResizeObserver | null = null;
+    /** The identity row (avatar / symbol / meta / market) and the values row (readout /
+     *  eye) — one line side by side, or a two-line column once the ladder stacks them. */
+    private readonly identityRow: HTMLElement;
+    private readonly valuesRow: HTMLElement;
+    /** The ladder rung currently applied — see {@link fit}. */
+    private layout: StatuslineLayout = { stacked: false, level: 'full' };
+    /** The readout {@link widthKey} the applied rung was fitted to. */
+    private fitKey: string | null = null;
+    /** Web fonts landing after the last fit change every width without a resize. */
+    private readonly onFontsLoaded = (): void => this.fit();
 
     constructor(
         private readonly host: HTMLElement,
@@ -332,8 +353,14 @@ export class Statusline {
             label: MARKET_LABELS.open,
             host,
         });
-        this.marketEl = this.marketBubble.el;
-        this.marketEl.classList.add('vela-sl-market');
+        this.replayBadge = doc.createElement('span');
+        this.replayBadge.className = 'vela-sl-replay-badge';
+        this.replayBadge.innerHTML = REPLAY_BADGE_SVG;
+        this.replayBadge.hidden = true;
+        // One slot, two faces: the market bubble, or the replay badge while replaying.
+        this.marketEl = doc.createElement('span');
+        this.marketEl.className = 'vela-sl-market';
+        this.marketEl.append(this.marketBubble.el, this.replayBadge);
         this.ohlcEl = doc.createElement('span');
         this.ohlcEl.className = 'vela-sl-ohlc';
         this.changeEl = doc.createElement('span');
@@ -351,8 +378,20 @@ export class Statusline {
             this.menuHooks?.setChartVisible(true);
             this.setChartHidden(false);
         });
-        this.el.append(this.avatarEl, this.symbolEl, this.metaEl, this.marketEl, this.ohlcEl, this.changeEl, this.eyeEl);
+        this.identityRow = doc.createElement('span');
+        this.identityRow.className = 'vela-sl-row vela-sl-identity';
+        this.identityRow.append(this.avatarEl, this.symbolEl, this.metaEl, this.marketEl);
+        this.valuesRow = doc.createElement('span');
+        this.valuesRow.className = 'vela-sl-row vela-sl-values';
+        this.valuesRow.append(this.ohlcEl, this.changeEl, this.eyeEl);
+        this.el.append(this.identityRow, this.valuesRow);
         host.appendChild(this.el);
+        // The ladder measures against the plot width — re-fit on every host resize.
+        if (typeof ResizeObserver !== 'undefined') {
+            this.fitRO = new ResizeObserver(() => this.fit());
+            this.fitRO.observe(host);
+        }
+        doc.fonts?.addEventListener('loadingdone', this.onFontsLoaded);
         // The tooltips portal to the nearest `.vela-ui` ancestor for theme tokens — resolve
         // them AFTER the statusline is in the DOM. The badge's content follows setMarketStatus.
         this.marketTip = new Tooltip(this.marketEl, { content: MARKET_LABELS.open, placement: 'bottom' });
@@ -372,27 +411,15 @@ export class Statusline {
     }
 
     /**
-     * Multi-chart cells: keep the line on ONE row whatever the cell width — never wrap.
-     * Segments that don't fit are hidden outright rather than clipped mid-glyph, least
-     * important first: OHLC, then the bar change, the venue/timeframe meta, and the
-     * market badge; the logo + ticker always stay. Re-fits live on host resizes.
+     * Multi-chart cells: the same width ladder as a single chart, plus a last resort for
+     * cells too narrow for even its bottom rung — whatever still overflows is hidden
+     * outright rather than clipped mid-glyph, least important first: the values, the
+     * venue/timeframe meta, then the market badge; the logo + ticker always stay.
      */
     setFitMode(on: boolean): void {
         if (on === this.fitMode) return;
         this.fitMode = on;
-        this.el.classList.toggle('vela-sl-fit', on);
-        this.host.classList.toggle('vela-sl-fit-host', on);
-        if (on) {
-            if (typeof ResizeObserver !== 'undefined' && !this.fitRO) {
-                this.fitRO = new ResizeObserver(() => this.fit());
-                this.fitRO.observe(this.host);
-            }
-            this.fit();
-        } else {
-            this.fitRO?.disconnect();
-            this.fitRO = null;
-            this.syncParts(); // restore whatever fit() had hidden
-        }
+        this.fit();
     }
 
     /** Project the parts config onto the segments (the baseline fit() prunes from). */
@@ -405,23 +432,49 @@ export class Statusline {
         this.ohlcEl.style.display = seg.ohlc ? '' : 'none';
         this.changeEl.style.display = seg.change ? '' : 'none';
         this.eyeEl.style.display = seg.eye ? 'inline-flex' : 'none';
+        // An empty values row must not hold a gap/padding of its own on the line.
+        this.valuesRow.style.display = seg.ohlc || seg.change || seg.eye ? '' : 'none';
     }
 
-    /** Hide overflowing segments until the row fits its max-width (fit mode only). */
+    /** Apply one ladder rung: the stacked/inline shape and the readout's level. */
+    private applyLayout(layout: StatuslineLayout): void {
+        this.layout = layout;
+        this.el.classList.toggle('vela-sl-stacked', layout.stacked);
+        this.host.classList.toggle('vela-sl-stacked-host', layout.stacked);
+        this.renderValues();
+    }
+
+    /**
+     * Walk the width ladder (see {@link STATUSLINE_LADDER}) until the chip fits its
+     * max-width: the full one-line readout, then the values stacked under the symbol
+     * line, then O/H/L shed, then the absolute change. In fit mode, when the last rung
+     * still overflows, whole segments hide, least important first. Without layout
+     * (detached host, node tests) nothing overflows, so the widest rung stays.
+     */
     private fit(): void {
-        if (!this.fitMode) return;
-        this.syncParts(); // start from the full (parts-allowed) row, then prune
+        this.fitKey = this.widthKey();
+        this.syncParts(); // start from the full (parts-allowed) row, then descend
         const seg = segmentVisibility(this.parts, this.chartHidden);
+        const overflows = (): boolean => this.el.scrollWidth > this.el.clientWidth;
+        // Only a value readout can stack or shed — with none showing the chip stays one line.
+        const hasValues = seg.ohlc || seg.change;
+        for (const rung of STATUSLINE_LADDER) {
+            this.applyLayout(rung);
+            if (!hasValues || !overflows()) break;
+        }
+        if (!this.fitMode) return;
         const order: Array<[HTMLElement, boolean]> = [
-            [this.ohlcEl, seg.ohlc],
-            [this.changeEl, seg.change],
+            [this.valuesRow, hasValues],
             [this.metaEl, seg.meta],
             [this.marketEl, seg.market],
         ];
         for (const [el, shown] of order) {
-            if (this.el.scrollWidth <= this.el.clientWidth) break;
+            if (!overflows()) break;
             if (shown) el.style.display = 'none';
         }
+        // With the values row gone the chip is one line again — un-stack so the legend
+        // shift drops back to a single line's.
+        if (this.valuesRow.style.display === 'none') this.applyLayout({ ...this.layout, stacked: false });
     }
 
     /** Shape + color the value readout after the active price style: its own up/down
@@ -448,6 +501,27 @@ export class Statusline {
     /** Dress the market badge for a session state: its icon, tinted circle, and the
      *  hover label. Callers with no session model leave the constructor's 'open'. */
     setMarketStatus(status: MarketStatus): void {
+        this.marketStatus = status;
+        this.dressBadge();
+    }
+
+    /** The chart entered or left a bar replay: the badge shows the replay mode meanwhile
+     *  (the session state of a past bar says nothing about the market now). */
+    setReplaying(replaying: boolean): void {
+        if (replaying === this.replaying) return;
+        this.replaying = replaying;
+        this.dressBadge();
+    }
+
+    private dressBadge(): void {
+        this.marketBubble.el.hidden = this.replaying;
+        this.replayBadge.hidden = !this.replaying;
+        if (this.replaying) {
+            this.marketEl.dataset.status = 'replay';
+            this.marketTip.setContent(REPLAY_LABEL);
+            return;
+        }
+        const status = this.marketStatus;
         this.marketEl.dataset.status = status;
         const ink = MARKET_INKS[status];
         this.marketBubble.set({
@@ -537,11 +611,23 @@ export class Statusline {
                 this.lastBar = b;
                 if (!this.hoverBar) this.render();
             }),
+            // A replay cut or restore replaces the newest bar without a `bar` event.
+            chart.on('replay:start', () => {
+                this.lastBar = null;
+                this.setReplaying(true);
+                this.render();
+            }),
+            chart.on('replay:end', () => {
+                this.lastBar = null;
+                this.setReplaying(false);
+                this.render();
+            }),
             chart.renderer.onCrosshairMove((e) => {
                 this.hoverBar = e.ohlc;
                 this.render();
             }),
         );
+        this.setReplaying(chart.replay.state.active);
         this.render();
     }
 
@@ -549,13 +635,14 @@ export class Statusline {
         this.detach();
         this.fitRO?.disconnect();
         this.fitRO = null;
+        this.el.ownerDocument.fonts?.removeEventListener('loadingdone', this.onFontsLoaded);
         this.el.removeEventListener('contextmenu', this.onContextMenu);
         this.menu?.destroy();
         this.menu = null;
         this.marketTip.destroy();
         this.eyeTip.destroy();
         this.marketBubble.destroy();
-        this.host.classList.remove('vela-has-statusline', 'vela-sl-fit-host'); // the legend shift leaves with the line
+        this.host.classList.remove('vela-has-statusline', 'vela-sl-stacked-host'); // the legend shift leaves with the line
         this.el.remove();
     }
 
@@ -569,6 +656,29 @@ export class Statusline {
         // renderer on every readout refresh (bar ticks, crosshair moves), so a toggle
         // made anywhere (the object tree's eye) reaches the status line.
         if (this.menuHooks) this.setChartHidden(!this.menuHooks.chartVisible());
+        // Crosshair moves land here at pointer rate. Walking the ladder forces a layout per
+        // rung, so only re-walk it when the readout's width can have changed.
+        if (this.widthKey() === this.fitKey) this.renderValues();
+        else this.fit();
+    }
+
+    /** Everything the readout's width depends on, at every rung: its shape, and each
+     *  value's sign, digit count and decimals (the digits themselves are tabular — see
+     *  the CSS; the grouping commas follow from the digit count). `toFixed` carries all
+     *  three at a fraction of the locale formatter's cost — this runs per pointer move.
+     *  The parts, the host's size and the fonts re-fit through their own paths. */
+    private widthKey(): string {
+        const bar = this.hoverBar ?? this.lastBar;
+        if (!bar) return this.readout;
+        const dp = decimalsFor(bar.close);
+        const diff = bar.close - bar.open;
+        const text = [bar.open, bar.high, bar.low, bar.close, diff].map((v) => v.toFixed(dp));
+        text.push(((diff / bar.open) * 100).toFixed(2));
+        return `${this.readout} ${text.join(' ')}`.replace(/\d/g, '0');
+    }
+
+    /** Write the value readout for the current bar at the current ladder level. */
+    private renderValues(): void {
         const bar = this.hoverBar ?? this.lastBar;
         if (!bar) {
             this.ohlcEl.replaceChildren();
@@ -590,13 +700,14 @@ export class Statusline {
             s.appendChild(b);
             return s;
         };
-        // Bar-shaped styles read out all four values; a one-line style (line/area/baseline)
-        // plots a single series, so its readout is just that value — the close.
-        if (this.readout === 'value') this.ohlcEl.replaceChildren(cell('', bar.close));
-        else this.ohlcEl.replaceChildren(cell('O', bar.open), cell('H', bar.high), cell('L', bar.low), cell('C', bar.close));
-        this.changeEl.textContent = fmtChange(bar.open, bar.close);
+        // Bar-shaped styles read out all four values at the full level and just the close
+        // below it; a one-line style (line/area/baseline) plots a single series, so its
+        // readout is that value — the close — at every level. The minimal level keeps the
+        // percent delta alone.
+        const { level } = this.layout;
+        this.ohlcEl.replaceChildren(...readoutCells(level, this.readout).map((c) => cell(c.label, bar[c.key])));
+        this.changeEl.textContent = level === 'minimal' ? fmtChangePct(bar.open, bar.close) : fmtChange(bar.open, bar.close);
         this.changeEl.dataset.dir = up ? 'up' : 'down';
         this.changeEl.style.color = ink;
-        this.fit(); // the readout's width just changed — cheap no-op outside fit mode
     }
 }

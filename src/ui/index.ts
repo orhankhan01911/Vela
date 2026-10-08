@@ -6,6 +6,7 @@ export { injectStyles, withAlpha, overlayScrollbarCss, FIELD_FOCUS_CSS, FIELD_FO
 export { applyThemeTokens, applyPlotOverlayTokens, ensureUIHost } from './tokens';
 export { registerIcon, iconMarkup, iconEl, svg16, svg24 } from './icons';
 export { runMachine, nextUid, normalizeProps, spreadProps, type MachineHandle } from './zag';
+export { SURFACE_OPEN_EVENT, SURFACE_CLOSE_EVENT, type SurfaceKind, type SurfaceEventDetail } from './surface-events';
 export { KeymapManager, type KeyBindingDescriptor, type ResolvedBinding, type KeymapOptions } from './keymap';
 export * from './components/tooltip';
 export * from './components/menu';
@@ -21,3 +22,4 @@ export * from './components/field';
 export * from './components/text-area';
 export * from './components/glyph-select';
 export * from './components/callout-bubble';
+export * from './components/date-picker';

@@ -19,10 +19,10 @@ import { withAlpha } from '../core/chartConfig';
 import { blendOver, splitColor } from '../../../ui/components/color-picker';
 import { DrawingPainter, handleIdsFor, type PaintTargets } from './DrawingPainter';
 import { DrawingInteraction } from './DrawingInteraction';
-import { DrawingSettingsPopup } from './DrawingSettingsPopup';
+import { DrawingSettingsPopup, type PopupAnchor } from './DrawingSettingsPopup';
 import { DrawingToolbar, TOOLBAR_WIDTH, TOOLBAR_COLLAPSED_WIDTH } from './DrawingToolbar';
 import { MeasureOverlay } from './MeasureOverlay';
-import { topDrawingAt, HIT_TOLERANCE } from './DrawingHitTester';
+import { topDrawingAt, deletableSelection, deleteTargets, HIT_TOLERANCE } from './DrawingHitTester';
 import { keyToDrawingAction, isEditingText } from './DrawingKeys';
 import type { DrawingSlice } from '../core/SceneGraph';
 
@@ -97,6 +97,8 @@ export class UserDrawingController implements IDrawingsRendererPort {
     private drawings: Drawing[] = [];
     /** Ids painted on an interleave layer this frame — the top canvas paints only their handles. */
     private sliced = new Set<string>();
+    /** Interleaved drawings mid-drag: painted on the top canvas, left out of their slice. */
+    private lifted = new Set<string>();
     /** Cached slice canvases, keyed `paneId|beforeZ`, reused across frames to avoid churn. */
     private readonly sliceCache = new Map<string, HTMLCanvasElement>();
     /** Series boundaries per pane as of the last `prepareSlices` — lets a repaint between data
@@ -138,6 +140,9 @@ export class UserDrawingController implements IDrawingsRendererPort {
     private readonly painter = new DrawingPainter();
     private readonly interaction: DrawingInteraction;
     private readonly popup: DrawingSettingsPopup;
+    /** The open popup is the multi-selection bar (vs one drawing's own) — decides what a
+     *  shrinking selection does with it. */
+    private popupMulti = false;
     private readonly toolbar: DrawingToolbar;
 
     constructor(
@@ -175,7 +180,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
             selectedIds: () => this.selectedIds,
             emit: (i) => this.emit(i),
             changed: () => {
-                this.invalidateSlices(); // a live drag can be moving a drawing that paints inside the stack
+                this.syncLift(); // a live drag paints its drawing on top, out of the series stack
                 this.render();
             },
             openSettings: (id, x, y) => this.openSettingsById(id, x, y),
@@ -345,6 +350,14 @@ export class UserDrawingController implements IDrawingsRendererPort {
 
     setSelection(ids: readonly string[]): void {
         this.selectedIds = new Set(ids);
+        // A multi-selection gets ONE bar for all of its drawings; when it shrinks back to a single
+        // drawing that drawing's own bar takes over, and an emptied selection takes the bar away.
+        if (ids.length >= 2) this.openSettingsForSelection(ids);
+        else if (this.popupMulti) {
+            this.popupMulti = false;
+            this.popup.close();
+            if (ids.length === 1) this.openSettingsById(ids[0]!, 0, 0);
+        }
         this.render();
     }
 
@@ -397,12 +410,16 @@ export class UserDrawingController implements IDrawingsRendererPort {
     }
 
     /** Delete the (unlocked) drawing under the cursor. True when one was removed.
-     *  Shared by the eraser (click + drag) and the middle-click shortcut. */
-    deleteAt(x: number, y: number): boolean {
+     *  Shared by the eraser (click + drag) and the middle-click shortcut; the latter passes
+     *  `withSelection` so a hit on a member of a multi-selection removes the selection's
+     *  unlocked members — whichever member was hit, locked or not. */
+    deleteAt(x: number, y: number, withSelection = false): boolean {
         const hit = topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE);
-        if (!hit || hit.locked) return false;
+        if (!hit) return false;
+        const ids = deleteTargets(hit, this.selectedIds, this.drawings, withSelection);
+        if (ids.length === 0) return false;
         this.popup.close();
-        this.emit({ kind: 'delete', ids: [hit.id] });
+        this.emit({ kind: 'delete', ids });
         return true;
     }
 
@@ -445,7 +462,15 @@ export class UserDrawingController implements IDrawingsRendererPort {
         }
     }
 
-    pointerDown(x: number, y: number, snap: SnapMode = 'off', shift = false): void {
+    /** Ctrl/Cmd+press on the empty plot: sweep a selection box (adds the drawings it touches to
+     *  the selection). Returns false when a mode/tool is active (the normal press path owns it). */
+    beginMarqueeAt(x: number, y: number): boolean {
+        if (this.measureMode || this.eraserMode || !this.interaction.beginMarquee(x, y)) return false;
+        this.render();
+        return true;
+    }
+
+    pointerDown(x: number, y: number, snap: SnapMode = 'off', shift = false, mod = false): void {
         if (this.eraserMode) {
             this.erasing = true; // hold to drag-erase across multiple drawings
             this.deleteAt(x, y);
@@ -482,7 +507,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
             if (topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE) instanceof PriceAlert) this.alertPressedOn = true;
             this.updateHover(x, y);
         }
-        this.interaction.down(x, y, snap, shift); // the popup self-dismisses on any outside press
+        this.interaction.down(x, y, snap, shift, mod); // the popup self-dismisses on any outside press
     }
 
     /** True while (x, y) is on a price alert's hover tag (only set while the tag is showing).
@@ -509,7 +534,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
         return null;
     }
 
-    pointerMove(x: number, y: number, snap: SnapMode = 'off', shift = false): void {
+    pointerMove(x: number, y: number, snap: SnapMode = 'off', shift = false, mod = false): void {
         if (this.eraserMode) {
             if (this.erasing) this.deleteAt(x, y); // erase only while the button is held (not on hover)
             return;
@@ -521,19 +546,28 @@ export class UserDrawingController implements IDrawingsRendererPort {
             return;
         }
         this.interaction.move(x, y, snap, shift);
-        this.updateHover(x, y); // show handles for the drawing under the cursor
+        this.updateHover(x, y, mod); // show handles for the drawing under the cursor
     }
 
-    /** Track which drawing is hovered so its handles appear on hover (and only then). */
-    private updateHover(x: number, y: number): void {
+    /** Track which drawing is hovered so its handles appear on hover (and only then). While
+     *  Ctrl/Cmd is held the cursor is picking a selection — handles then mark only what IS
+     *  selected, so a hovered candidate doesn't already read as selected. */
+    private updateHover(x: number, y: number, mod = false): void {
         let id: string | null = null;
-        if (this.activeTool == null && !this.interaction.isPlacing() && !this.interaction.isDragging()) {
+        if (!mod && this.activeTool == null && !this.interaction.isPlacing() && !this.interaction.isDragging()) {
             id = topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE)?.id ?? null;
         }
         if (id !== this.hoveredId) {
             this.hoveredId = id;
             this.render();
         }
+    }
+
+    /** Drop the hover (its handles) — the pointer no longer reaches the drawings. */
+    clearHover(): void {
+        if (this.hoveredId == null) return;
+        this.hoveredId = null;
+        this.render();
     }
 
     pointerUp(x: number, y: number, snap: SnapMode = 'off'): void {
@@ -548,7 +582,14 @@ export class UserDrawingController implements IDrawingsRendererPort {
             this.render();
             return;
         }
+        // A drag of a SELECTED drawing dismissed its bar on the press (but kept the selection —
+        // see onPopupDismissed); once the drag lands, bring the bar back over the moved drawings.
+        const dragged = this.interaction.isDragging() ? this.interaction.pressedId() : null;
         this.interaction.up(x, y); // commit a drag, or open settings on a no-move click
+        if (dragged && this.selectedIds.has(dragged) && !this.popup.isOpen()) {
+            if (this.selectedIds.size >= 2) this.openSettingsForSelection(this.selectionIds());
+            else this.openSettingsById(dragged, x, y);
+        }
     }
 
     /** Toggle the transient ruler. Arming it clears any drawing tool + selection. */
@@ -854,7 +895,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 this.emit({ kind: 'duplicate', ids: this.selectionIds() });
                 break;
             case 'delete': {
-                const ids = this.selectedIds.size ? this.selectionIds() : this.hoveredId ? [this.hoveredId] : [];
+                const ids = this.selectedIds.size ? this.deletableSelection() : this.hoveredId ? [this.hoveredId] : [];
                 if (ids.length) {
                     this.popup.close();
                     this.emit({ kind: 'delete', ids });
@@ -870,6 +911,10 @@ export class UserDrawingController implements IDrawingsRendererPort {
 
     private selectionIds(): string[] {
         return [...this.selectedIds];
+    }
+
+    private deletableSelection(): string[] {
+        return deletableSelection(this.selectedIds, this.drawings);
     }
 
     /** Move every selected (unlocked) drawing by a pixel delta — one edit/edit-many → one undo step. */
@@ -913,6 +958,19 @@ export class UserDrawingController implements IDrawingsRendererPort {
     /** A drawing that paints inside the series stack changed (content, not hover): its pixels
      *  live in the backend composite, so this layer alone can't show the change — ask for a
      *  data frame, which re-runs `prepareSlices` before the backend composites. */
+    /** A drawing being dragged leaves its interleave slice for the top canvas, so each pointer
+     *  move repaints one 2D layer instead of re-rasterizing and re-uploading a plot-sized slice
+     *  texture through the data frame. The slices rebuild once as the drag starts and once as it
+     *  ends (release, cancel), when the lifted set changes. */
+    private syncLift(): void {
+        const moving = this.interaction.movingIds();
+        let same = moving.size === this.lifted.size;
+        if (same) for (const id of moving) if (!this.lifted.has(id)) same = false;
+        if (same) return;
+        this.lifted = new Set(moving);
+        this.invalidateSlices();
+    }
+
     private invalidateSlices(): void {
         if (this.sliced.size > 0 || this.drawings.some((d) => this.isInterleaved(d))) this.deps.requestDataPaint();
     }
@@ -932,7 +990,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
         const theme = this.deps.theme();
         const buckets = new Map<string, { paneId: string; beforeZ: number; drawings: Drawing[] }>(); // keyed `paneId|beforeZ`
         for (const d of this.drawings) {
-            if (!d.visible || d instanceof PriceAlert) continue; // alerts always paint on the top canvas
+            if (!d.visible || d instanceof PriceAlert || this.lifted.has(d.id)) continue; // alerts always paint on the top canvas; a dragged drawing rides it too
             const beforeZ = sliceKeyFor(d.zIndex, this.lastBounds.get(d.paneId) ?? []);
             if (beforeZ === null) continue; // over the stack → top canvas
             const key = `${d.paneId}|${beforeZ}`;
@@ -990,8 +1048,13 @@ export class UserDrawingController implements IDrawingsRendererPort {
         // stack painted their bodies on the backend layers, so only their handles come back on top
         // — buried under the candles they'd be unusable.
         this.painter.seriesLook = this.deps.seriesLook();
-        this.painter.paintAll(ctx, this.drawings.filter((d) => !this.isInterleaved(d)), proj, this.deps.theme(), targets);
-        this.painter.paintHighlights(ctx, this.drawings.filter((d) => this.isInterleaved(d)), proj, handleIdsFor(targets));
+        const onTop = (d: Drawing) => !this.isInterleaved(d) || this.lifted.has(d.id);
+        this.painter.paintAll(ctx, this.drawings.filter(onTop), proj, this.deps.theme(), targets);
+        this.painter.paintHighlights(ctx, this.drawings.filter((d) => !onTop(d)), proj, handleIdsFor(targets));
+        // A Ctrl-drag moves COPIES that are not in the store yet: paint them here, in full and with
+        // handles, so they read as the real drawings they are about to become.
+        const clones = this.interaction.dragClones();
+        if (clones) this.painter.paintAll(ctx, clones, proj, this.deps.theme(), { selected: new Set(clones.map((c) => c.id)) });
         this.layoutTextEditor();
         const ghost = this.interaction.ghost();
         if (ghost) this.painter.paintGhost(ctx, ghost, proj, this.deps.theme());
@@ -1016,6 +1079,8 @@ export class UserDrawingController implements IDrawingsRendererPort {
         if (m && my != null) this.painter.paintSnapRing(ctx, proj.xOf(m.point.time), my, this.deps.theme());
         // The transient ruler paints on top of everything (until cleared on the next press/pan/zoom).
         if (this.measure.isActive()) this.measure.paint(ctx, proj, this.deps.theme());
+        const marquee = this.interaction.marqueeRect();
+        if (marquee) this.painter.paintMarquee(ctx, marquee);
     }
 
     destroy(): void {
@@ -1036,17 +1101,97 @@ export class UserDrawingController implements IDrawingsRendererPort {
         this.render();
     }
 
+    /** Dismiss-on-outside-press also clears the selection — except when the press is ABOUT the
+     *  selection: it carries a multi-select modifier (Shift / Ctrl / Cmd — it will add to the
+     *  selection or sweep a marquee onto it), or it landed on a drawing that is already selected
+     *  (the canvas handler ran first and is holding it for a drag or a click), so the drawings
+     *  whose bar just closed must stay selected. */
+    private readonly onPopupDismissed = (e?: PointerEvent): void => {
+        if (e && (e.shiftKey || e.ctrlKey || e.metaKey)) return;
+        const pressed = this.interaction.pressedId();
+        if (pressed && this.selectedIds.has(pressed)) return;
+        this.clearSelection();
+    };
+
+    /** Report the live drawings' current state as one edit (one undo step, however many). */
+    private emitEdits(drawings: readonly Drawing[]): void {
+        const docs = drawings.map((d) => d.serialize());
+        if (docs.length === 1) this.emit({ kind: 'edit', doc: docs[0]! });
+        else if (docs.length > 1) this.emit({ kind: 'edit-many', docs });
+    }
+
+    /** The one bar for a multi-selection: it shows the controls all of its drawings share and
+     *  every action applies to all of them. Floats clear of their combined bounds. */
+    private openSettingsForSelection(ids: readonly string[]): void {
+        const live = (): Drawing[] => ids.map((id) => this.drawings.find((d) => d.id === id)).filter((d): d is Drawing => d != null);
+        const drawings = live();
+        if (drawings.length < 2) return;
+        const proj = this.deps.projector();
+        let anchor: PopupAnchor | null = null;
+        for (const d of drawings) {
+            const b = d.bounds(proj);
+            if (!b) continue;
+            if (!anchor) anchor = { ...b };
+            else {
+                const right = Math.max(anchor.x + anchor.w, b.x + b.w);
+                const bottom = Math.max(anchor.y + anchor.h, b.y + b.h);
+                anchor.x = Math.min(anchor.x, b.x);
+                anchor.y = Math.min(anchor.y, b.y);
+                anchor.w = right - anchor.x;
+                anchor.h = bottom - anchor.y;
+            }
+        }
+        this.popupMulti = true;
+        this.emit({ kind: 'settings', id: drawings[0]!.id });
+        this.popup.open(drawings, anchor, {
+            resolve: () => live()[0] ?? null,
+            patch: (p) => {
+                const ds = live();
+                for (const d of ds) d.applySettings(p);
+                this.render();
+                this.emitEdits(ds);
+            },
+            setLocked: (v) => {
+                const ds = live();
+                for (const d of ds) d.locked = v;
+                this.emitEdits(ds);
+            },
+            reorder: (to) => {
+                for (const d of live()) this.emit({ kind: 'reorder', id: d.id, to });
+            },
+            duplicate: () => {
+                this.popup.close();
+                this.emit({ kind: 'duplicate', ids: live().map((d) => d.id) });
+            },
+            resetSettings: () => {
+                const ds = live();
+                for (const d of ds) resetDrawingSettings(d);
+                this.render();
+                this.emitEdits(ds);
+                this.openSettingsForSelection(ids); // rebuild so the controls reflect the restored defaults
+            },
+            remove: () => {
+                // Locked members are protected: they stay behind (still selected) while the rest go.
+                const ids = live().filter((d) => !d.locked).map((d) => d.id);
+                if (ids.length === 0) return;
+                this.popup.close();
+                this.emit({ kind: 'delete', ids });
+            },
+        }, this.onPopupDismissed);
+    }
+
     /** A click on a drawing opens its settings toolbar (text labels edit text here too). */
     private openSettingsById(id: string, _x: number, _y: number): void {
         const drawing = this.drawings.find((d) => d.id === id);
         if (!drawing) return;
         const live = (): Drawing | undefined => this.drawings.find((d) => d.id === id);
+        this.popupMulti = false;
         this.emit({ kind: 'select', ids: [id] }); // editing this drawing → it stays highlighted while the popup is open
         this.emit({ kind: 'settings', id });
         // An alert marker has its own hover tag (price + trash): no floating settings toolbar.
         if (drawing instanceof PriceAlert) return;
         const anchor = drawing.bounds(this.deps.projector()); // float the toolbar clear of the drawing
-        this.popup.open(drawing, anchor, {
+        this.popup.open([drawing], anchor, {
             // Sync rebuilds instances, so a panel that reads values back after a patch (e.g. the
             // position tool's price fields, where one edit can flip another level) resolves fresh.
             resolve: () => live() ?? null,
@@ -1064,6 +1209,13 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 this.emit({ kind: 'edit', doc: d.serialize() });
             },
             reorder: (to) => this.emit({ kind: 'reorder', id, to }),
+            duplicate: () => {
+                // The copy lands on its source and becomes the selection (same as Ctrl/Cmd+D) —
+                // ready to drag away; the source's popup would otherwise outlive its selection.
+                this.finishTextEditor(true); // typed text is part of what gets copied
+                this.popup.close();
+                this.emit({ kind: 'duplicate', ids: [id] });
+            },
             resetSettings: () => {
                 const d = live();
                 if (!d) return;
@@ -1087,7 +1239,14 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 this.popup.close();
                 this.emit({ kind: 'delete', ids: [id] });
             },
-        }, () => this.clearSelection()); // dismiss-on-outside-click also clears the selection/highlight
+        }, this.onPopupDismissed);
+    }
+
+    /** A plain click on the empty plot: drop the selection. The popup's dismiss-on-outside-press
+     *  does the same, but a selection can exist with no bar open (a lone Ctrl-click pick, a
+     *  selection whose bar was dismissed by a modifier press) — this covers those. */
+    deselect(): void {
+        this.clearSelection();
     }
 
     /** Report placement progress upstream (`draft` intent) so the drawings sync can
@@ -1125,6 +1284,16 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 this.openSettingsById(fresh.id, 0, 0);
                 if (isInlineEditable(fresh)) this.editTextInline(fresh.id); // focus lands in the editor, not the bar
             }, 0);
+            return;
+        }
+        if (i.kind === 'clone') {
+            // A drag-to-duplicate ends like a click on the copy: its settings bar opens so it can be
+            // restyled right away. Several copies need nothing here — the selection they become
+            // brings up the multi-selection bar on its own (see setSelection).
+            const before = new Set(this.drawings.map((d) => d.id));
+            this.intentCb?.(i);
+            const fresh = this.drawings.filter((d) => !before.has(d.id));
+            if (fresh.length === 1) this.openSettingsById(fresh[0]!.id, 0, 0);
             return;
         }
         this.intentCb?.(i);

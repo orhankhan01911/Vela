@@ -19,12 +19,16 @@ import { rendererDefaults } from './core/renderer-defaults';
 import { PanesControl } from './core/PanesControl';
 import { DataControl } from './core/DataControl';
 import { DrawingsControl } from './core/DrawingsControl';
+import { MarksControl } from './core/MarksControl';
+import { ReplayControl } from './core/ReplayControl';
 import { NativeRenderer } from './renderers/native/NativeRenderer';
 import { MultiProviderFeed } from './data/MultiProviderFeed';
 import { registerBuiltinChartTypes } from './chart-types/builtins';
 import { registerVolume } from './core/native-indicators/volume';
 import { registerVpvr } from './core/native-indicators/vpvr';
 import { registerClassicIndicators } from './core/native-indicators/classics';
+
+const asError = (err: unknown): Error => (err instanceof Error ? err : new Error(String(err)));
 
 /** Outcome of {@link Vela.runIndicator}: success carries the live handle, failure the error. */
 export interface RunIndicatorResult {
@@ -61,6 +65,8 @@ export class Vela {
     private readonly panesControl: PanesControl;
     private readonly dataControl: DataControl;
     private readonly drawingsControl: DrawingsControl;
+    private readonly marksControl: MarksControl;
+    private readonly replayControl: ReplayControl;
 
     constructor(container: HTMLElement | string, options: VelaOptions = {}, deps: VelaDeps = {}) {
         registerBuiltinChartTypes(); // built-in chart types through the public SDK registry (idempotent)
@@ -78,6 +84,7 @@ export class Vela {
             upColor: options.upColor ?? BULLISH,
             downColor: options.downColor ?? BEARISH,
             priceStyle: options.priceStyle ?? 'candles',
+            priceAxisTicks: options.priceAxis?.ticks ?? null,
         };
         const RendererClass = options.renderer ?? NativeRenderer;
         if (typeof RendererClass !== 'function') {
@@ -121,6 +128,8 @@ export class Vela {
         if (Object.keys(defaults).length > 0) this.rendererControl.set(defaults);
         this.panesControl = new PanesControl(this.orchestrator);
         this.drawingsControl = new DrawingsControl(this.orchestrator.drawings);
+        this.marksControl = new MarksControl(this.orchestrator.marks);
+        this.replayControl = new ReplayControl(this.orchestrator);
     }
 
     /**
@@ -199,7 +208,14 @@ export class Vela {
      * fetch from — the same relationship `script:run` has to `context:changed`.
      */
     runScript(source: string, options?: AddIndicatorOptions): Promise<ScriptRunResult> {
-        const handle = this.addIndicator(source, options);
+        let handle: IndicatorHandle;
+        try {
+            handle = this.addIndicator(source, options);
+        } catch (err) {
+            // A rejected `options.id` (already live) — the "never rejects" contract turns
+            // it into a structured failure, and nothing was mounted to remove.
+            return Promise.resolve({ ok: false, run: null, error: asError(err), onUpdate: () => () => undefined, remove: () => undefined });
+        }
         const updates = new Set<(run: ScriptRun) => void>();
         const drop = (): void => {
             try {
@@ -249,7 +265,12 @@ export class Vela {
     }
 
     runIndicator(source: string, options?: AddIndicatorOptions): Promise<RunIndicatorResult> {
-        const handle = this.addIndicator(source, options);
+        let handle: IndicatorHandle;
+        try {
+            handle = this.addIndicator(source, options);
+        } catch (err) {
+            return Promise.resolve({ ok: false, handle: null, error: asError(err), context: null });
+        }
         return new Promise((resolve) => {
             const offReady = handle.on('ready', () => {
                 offReady();
@@ -364,6 +385,29 @@ export class Vela {
      */
     get drawings(): DrawingsControl {
         return this.drawingsControl;
+    }
+
+    /**
+     * The chart's timeline-marks control surface: host events pinned to a bar and shown
+     * as glyphs on a lane above the time axis, each opening a popup on click —
+     * `chart.marks.add({ id, time, glyph, title, content })`, `chart.marks.set(list)`,
+     * `chart.marks.defineGroup({ id, label })`. Marks are data, not user state: re-supply
+     * them on `market:changed`. On a renderer without the `timelineMarks` capability the
+     * model still fills but nothing paints (`chart.marks.supported`).
+     */
+    get marks(): MarksControl {
+        return this.marksControl;
+    }
+
+    /**
+     * The chart's bar-replay control surface: rewind to a past bar and reveal the
+     * following ones by hand or on a timer, from the history already loaded —
+     * `await chart.replay.start({ from })`, `chart.replay.play(2000)`, `chart.replay.step()`,
+     * `chart.replay.stop()`. Revealed bars behave like live bars for indicators; live
+     * updates pause meanwhile. Follow it with the `replay:*` events.
+     */
+    get replay(): ReplayControl {
+        return this.replayControl;
     }
 
     on<K extends keyof VelaEventMap>(event: K, handler: (payload: VelaEventMap[K]) => void): () => void {

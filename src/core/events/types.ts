@@ -5,6 +5,8 @@ import type { DrawingTypeKey, SerializedDrawing } from "../drawings/Drawing";
 import type { VelaTheme } from "../options";
 import type { SnapMode } from "../drawings/geometry";
 import type { DrawingMode } from "../drawings/port";
+import type { MarkClickEvent } from "../marks/types";
+import type { ReplayEndReason } from "../ReplayControl";
 
 /** Chart-level events emitted on `chart.on(...)`. */
 export interface VelaEventMap extends Record<string, unknown> {
@@ -59,6 +61,18 @@ export interface VelaEventMap extends Record<string, unknown> {
    * leave the app theme alone.
    */
   "theme:changed": VelaTheme;
+  /**
+   * The base price style is switching `from` → `to` (candles, line, area, a chart-type
+   * id, …). Fires synchronously BEFORE the chart repaints in the new style, whatever
+   * the path: the topbar style menu, `ctx.setPriceStyle`,
+   * `chart.renderer.set('priceStyle', …)`, the settings dialog, `applyConfig` and
+   * config templates, or a state restore. Never fires for the style the chart was
+   * created with, nor for a set to the style already shown. While it runs the chart
+   * still shows `from`, so a listener can capture the outgoing frame
+   * (`chart.renderer.screenshotCanvas()`) to animate the switch. Listeners must not
+   * change the price style again from inside it.
+   */
+  "priceStyle:change": { from: string; to: string };
   /** A study pane was reordered one slot (`dir`) — carries enough to invert for undo/redo. */
   "pane:moved": { paneId: string; dir: "up" | "down" };
   /** A user drawing was created (interactively or via `chart.drawings.add`). */
@@ -70,8 +84,9 @@ export interface VelaEventMap extends Record<string, unknown> {
   "drawing:draft": { doc: SerializedDrawing | null };
   /** A user drawing's anchors/style/text changed. */
   "drawing:edited": { id: string };
-  /** Selection changed (`id` is null when nothing is selected). */
-  "drawing:selected": { id: string | null };
+  /** Selection changed. `ids` is every selected drawing in selection order; `id` is the
+   *  primary (`ids[0]`, the one a settings popup edits), null when nothing is selected. */
+  "drawing:selected": { id: string | null; ids: string[] };
   /** The favorite-tool set changed (star toggles or a bulk restore). */
   "drawing:favorites": { favorites: string[] };
   /** The armed drawing tool changed — toolbar click, one-shot tool finishing (back to
@@ -89,6 +104,9 @@ export interface VelaEventMap extends Record<string, unknown> {
   "drawing:removed": { id: string };
   /** The user requested a drawing's settings popup. */
   "drawing:settings": { id: string };
+  /** A timeline-mark glyph was clicked — `ids` lists every mark under it (a cluster). Fires
+   *  before the popup opens; a mark without content opens none, so this is the host's hook. */
+  "mark:click": MarkClickEvent;
   /**
    * A SCRIPT computed — the first run over the history, a live tick, a new bar, an input
    * edit, a viewport move, a market switch. The payload carries the run itself (title,
@@ -102,7 +120,7 @@ export interface VelaEventMap extends Record<string, unknown> {
    *  streaming) — re-pull `handle.context()` if you consume it. Prefer `script:run`,
    *  which delivers the data rather than a signal to go fetch it. */
   "context:changed": { id: string };
-  /** A live tick: the forming bar was updated or a new bar appended. */
+  /** A live tick: the forming bar was updated or a new bar appended (a bar revealed by replay included). */
   bar: OHLCV;
   /**
    * The visible time range moved (pan/zoom/fit — fires per applied change, NOT
@@ -123,8 +141,28 @@ export interface VelaEventMap extends Record<string, unknown> {
     oldestTime: number;
     barsLoaded: number;
   };
+  /** Replay mode began (or seeked): the chart shows history up to `cursorTime`, `remaining` bars are hidden. */
+  "replay:start": { cursorTime: number; remaining: number };
+  /** One hidden bar was revealed (it also fires `bar`, like a live bar). A bar played tick
+   *  by tick steps once, when its last tick settles it. */
+  "replay:step": { cursorTime: number; remaining: number };
+  /** An intrabar update of the bar forming at `cursorTime` (`chart.replay.setTicks`):
+   *  tick `index` of `count` is applied (batched updates report the last one). */
+  "replay:tick": { cursorTime: number; index: number; count: number };
+  /** Timed reveal started, or its pace changed. */
+  "replay:play": { intervalMs: number };
+  /** Timed reveal paused — `pause()`, or a seek (`start()` while playing). */
+  "replay:pause": undefined;
+  /**
+   * Replay mode ended: `'stopped'` = `chart.replay.stop()`, `'finished'` = the last hidden
+   * bar was revealed, `'market'` = a symbol switch replaced the history (a timeframe or
+   * session switch carries the replay over instead). The full history
+   * is back and live updates resumed.
+   */
+  "replay:end": { reason: ReplayEndReason };
   /** An indicator's script raised an alert. `indicator` names the source — the
-   *  indicator's display title (what its legend row shows). */
+   *  indicator's display title (what its legend row shows). Never fires for bars a
+   *  replay reveals (`chart.replay`). */
   alert: EngineAlert & { indicator?: string };
   warning: EngineWarning;
 }

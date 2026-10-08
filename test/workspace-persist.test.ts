@@ -98,6 +98,43 @@ describe('sanitizeState (the applyState gate)', () => {
         });
     });
 
+    it('native entries carry input deltas and the hidden flag; manifest entries carry hidden', () => {
+        const doc = sanitizeState({
+            version: 1,
+            layout: '1',
+            charts: [
+                {
+                    id: 'c1',
+                    indicators: {
+                        // Object natives: type required, inputs must be a plain bag, hidden must be TRUE.
+                        // A delta-less visible object collapses to the bare type; typeless entries vanish.
+                        natives: [
+                            'volume',
+                            { type: 'aroon', inputs: { length: 50 } },
+                            { type: 'vpvr', hidden: true },
+                            { type: 'sma', inputs: [9], hidden: false },
+                            { inputs: { length: 3 } },
+                        ],
+                        manifest: [{ name: 'RSI', hidden: true }, { name: 'MACD', hidden: 'yes' }],
+                    },
+                },
+            ],
+        });
+        expect(doc).toEqual({
+            version: 1,
+            layout: '1',
+            charts: [
+                {
+                    id: 'c1',
+                    indicators: {
+                        natives: ['volume', { type: 'aroon', inputs: { length: 50 } }, { type: 'vpvr', hidden: true }, 'sma'],
+                        manifest: [{ name: 'RSI', hidden: true }, 'MACD'],
+                    },
+                },
+            ],
+        });
+    });
+
     it('keeps a valid session value and drops anything else', () => {
         const doc = sanitizeState({
             version: 1,
@@ -189,11 +226,14 @@ describe('sanitizeState (the applyState gate)', () => {
             version: 1,
             layout: '1',
             favorites: ['trendline', 7, null, 'hline'],
-            charts: [{ id: 'c1', watermark: 'yes', indicatorTitles: 0 }, { id: 'c2', watermark: false, indicatorTitles: false }],
+            charts: [
+                { id: 'c1', watermark: 'yes', replayWatermark: 1, indicatorTitles: 0 },
+                { id: 'c2', watermark: false, replayWatermark: false, indicatorTitles: false },
+            ],
         });
         expect(doc!.favorites).toEqual(['trendline', 'hline']); // non-strings dropped
         expect(doc!.charts[0]).toEqual({ id: 'c1' }); // non-boolean toggles dropped
-        expect(doc!.charts[1]).toEqual({ id: 'c2', watermark: false, indicatorTitles: false });
+        expect(doc!.charts[1]).toEqual({ id: 'c2', watermark: false, replayWatermark: false, indicatorTitles: false });
         // an all-junk favorites array disappears entirely
         expect(sanitizeState({ version: 1, layout: '1', favorites: [1, 2], charts: [] })!.favorites).toBeUndefined();
     });

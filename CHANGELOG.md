@@ -2,7 +2,7 @@
 
 All notable changes to Vela, newest first.
 
-## [project-options fork, unreleased — perf-patch branch, off v0.6.17]
+## [project-options fork, unreleased — merged with upstream v0.8.3]
 
 Modified per Apache License 2.0 §4(b) — this is a fork of `luxalgo/vela`
 (`orhankhan01911/Vela`), not the upstream project. Changes made for
@@ -45,6 +45,712 @@ measured before/after and full investigation.
   changed nothing about the label text itself — pure Canvas2D/CPU cost,
   unrelated to WebGL.
 
+## [0.8.3]
+
+### Added
+
+- **Custom price-axis ticks.** The new `priceAxis.ticks` option lets you supply the
+  price-axis ladder yourself, for example denser minor levels or emphasized round numbers.
+  It is called for each pane with the visible range, the pane height and the axis mode,
+  along with the default ticks to build on, and the axis labels and horizontal gridlines
+  both follow what it returns. A tick can be marked major, for a semibold label, or minor,
+  for a muted one. Change or clear it at runtime with
+  `chart.renderer.set('priceAxisTicks', fn)`; returning nothing keeps the default ticks.
+- **The veiled side of a bar pick can be styled.** While a `crosshairOverride` veils the
+  bars after the picked one, the chart places an element with the class `vela-shade-right`
+  over exactly that area, under the crosshair and above the candles. Style it with CSS, for
+  example `backdrop-filter: grayscale(1)` to turn those bars grey. It changes nothing until
+  you style it.
+- **Bar picks leave drawings alone.** While your interaction asks the user to pick a point
+  on the chart, `chart.renderer.set('drawingsInteractive', false)` keeps the pointer away
+  from the drawings: a press on a drawing, or with a drawing tool selected, pans or clicks
+  as on an empty chart and reaches `onClick`, so no drawing is selected, moved, placed or
+  erased by accident. The drawings stay on screen, and `true` restores them. The setting
+  is never saved with the chart.
+- **Right-click actions know where you clicked.** An action added to a chart's right-click
+  menu now receives `ctx.pointer` in its `when` and `run`: the price under the pointer (an
+  indicator value on a study pane), the time of the bar under it and the kind of pane, as
+  they were when the menu opened. In a multi-chart workspace it describes the chart you
+  right-clicked, so a Copy price row no longer has to follow every chart's crosshair. The
+  built-in rows of the chart menu now show icons (a row without one keeps its label in line
+  with theirs), and added rows sort together with them by their `order`: the built-in rows
+  sit at fixed ranks, published as `CONTEXT_MENU_BUILTIN_ORDER`, so an action without an
+  `order` lands after the built-in actions and `order: -100` puts it at the top.
+- **Menus, panels and dialogs can animate out with plain CSS.** As a menu, popover, dialog,
+  drawer, side panel, the layout picker or a drawing toolbar flyout closes, it now carries a
+  `data-closing` attribute and stays on screen, ignoring clicks, until the exit animation or
+  transition your stylesheet gives that attribute has played (one second at most). Reopening
+  it meanwhile brings it straight back. Without such a rule nothing changes and surfaces close
+  at once, as before.
+- **Know when a chart's style is about to change.** A chart now raises a
+  `priceStyle:change` event just before it repaints in a new style, whichever way the style
+  was changed: the style menu, the chart settings, a template, a restored state or your own
+  code. The chart still shows the old style while your listener runs, so you can capture
+  that frame and animate the switch. A `VelaWorkspace` reports the same switch as
+  `cell:priceStyle`, naming the one chart that changed.
+
+### Changed
+
+- **Settings… is now the last row of the right-click menus.** In the chart, price-axis and
+  time-axis menus, the settings entry moves below the rows that plugins add instead of
+  sitting above them. An action that should come after it can ask for an `order` above 1000.
+- **The layout button draws your grid, and dropdown icons sit in badges.** In a
+  multi-chart workspace, the topbar's layout button now draws the arrangement on screen,
+  including uneven ones such as one large chart beside two small ones, and updates with
+  every layout change. Icons in the chart-style dropdown, the drawing tool menus, and the
+  chart's right-click menu now sit in small rounded tiles that brighten on hover, and the
+  selected entry's tile is filled. The drawing tool menus share the drawing toolbar's
+  background and open a little apart from it, like the topbar dropdowns, and the layout
+  dropdown matches the other topbar dropdowns in color and in its distance from the bar.
+  Your own menus can use the same tiles with the `iconBadges` menu option.
+- **Style sync covers every chart look.** In a multi-chart workspace, the **Style** link
+  now also mirrors the settings dialog's Symbol tab: candle body, border and wick colors,
+  the bar, line, area and baseline styles, bar spacing and the animation switches. It also
+  carries the Canvas tab's margins, the session shading colors and the watermark toggles.
+  A candle-based chart type added by a plugin shares its candle colors too, while its own
+  settings stay with each chart. The chart type itself stays individual, so a candle chart
+  and a line chart keep their types and share their colors.
+
+### Fixed
+
+- **Events and indicator values stay off the price scale.** A timeline mark on a bar at
+  the chart's right edge, which happens often on a narrow screen or after scrolling back in
+  time, is now cut at the price scale like the candle beneath it instead of being drawn over
+  the scale's labels. An indicator legend row too long for a narrow chart now ends before
+  the price scale: its values are cut short with an ellipsis, and a title that does not fit
+  even on its own is shortened the same way.
+- **Synced drawings reach the charts a layout change adds.** With drawings sync on,
+  switching to a layout with more charts now copies the drawings already on the active
+  chart onto the new ones. The copies are linked like any synced drawing, so moving,
+  restyling or deleting any of them follows on the others, and they add no steps to the
+  new chart's undo history. A chart that comes back after a smaller layout hid it catches
+  up on the edits made in the meantime instead of showing stale copies.
+- **A flat price pane no longer freezes the tab.** When every bar in a pane sits on the
+  same price except for a rounding-error sliver (for example an EMA converging on a flat
+  value), the price axis now renders without ticks instead of hanging the tab.
+- **Drawing settings keep your edits when you reopen them.** Reopening the Levels dialog
+  of a Fibonacci tool from the same drawing toolbar now shows every change you made
+  earlier, instead of putting some levels back to older values. Cancel in a reopened
+  Levels, position-size or volume-profile dialog now only undoes what you changed since it
+  opened, rather than earlier edits too. The label field of a drawing likewise reopens with
+  the full text you typed.
+
+## [0.8.2]
+
+### Added
+
+- **Side panels can be maximized.** A panel registered with `maximizable: true` gets a
+  Maximize button in its header that spreads it over every chart of the shell, and a
+  Restore button to bring it back. The panel can also do it from code through its
+  header (`setMaximized`). Closing the panel restores it, so it always reopens at its
+  own size.
+- **Menus and panels tell you when they open and close.** Every menu, popover, dialog,
+  drawer and side panel now raises a `vela:surface-open` event when it appears and a
+  `vela:surface-close` event as it starts to close, while it is still on screen. Both bubble,
+  so one listener on the chart's container can follow all of its chrome, for example to
+  animate a menu out or keep your own UI in step, without watching the page for changes.
+- **Fib retracement has a Reverse option.** The Levels dialog of a Fib retracement now
+  has a Reverse toggle that puts level 0 on the first point instead of the second.
+
+### Changed
+
+- **Updating an indicator's code tells you how it went, and never breaks a working
+  script.** `handle.updateCode(source)` now returns a promise that resolves `{ ok, error }`
+  once the new code has computed, so an editor can show a busy state and the result
+  without guessing from events. A hidden indicator resolves as soon as the code compiles.
+  If the new code fails, whether it doesn't compile or fails as it runs, the previous code
+  comes back with its settings and keeps painting, and the error is reported as before.
+  A setting you changed survives the update, while one still at its default follows the
+  script's new default. The new code computes once, with its final settings.
+- **Fib retracement measures from the second point.** Level 0 now sits on the point you
+  place last and level 1 on the first, so the levels read as the pullback from the latest
+  swing. Turn on Reverse in the Levels dialog to get the previous layout. Retracements
+  already saved on a chart keep their current layout.
+- **A mouse drag stops where you release it.** Letting go of the chart after a drag no
+  longer carries it on with momentum, so a quick scrub back and forth lands exactly where
+  the pointer stopped. A finger flick on a touch screen still glides to a stop, and the
+  `animations.pan` option now governs that touch glide alone.
+
+### Fixed
+
+- **Dragging the chart keeps up with the mouse on high-resolution displays.** On a 4K or
+  Retina-class screen a drag could repaint only every second or third frame, so the chart
+  trailed the pointer and looked jittery. The native renderer no longer multisamples its
+  geometry canvas: lines were already smoothed in the shader, dot markers and round line
+  ends are now smoothed there too, so the picture is unchanged and a drag now repaints on
+  every frame, including on 120 Hz and 240 Hz displays.
+- **"Edit code" on a legend row opens the code the indicator runs now.** After an in-place
+  code update, a legend action still received the code the indicator was added with.
+- **Refreshing actions keeps open side panels as they are.** `refreshActions()` rebuilt
+  every contributed side panel, losing whatever it held (an editor's undo history and
+  error markers, for example). Panels whose registration did not change now stay mounted.
+- **Dragging a drawing that sits under the candles keeps up with the mouse.** While you
+  drag such a drawing (or a selection that includes one) it rides the top drawing layer,
+  so each pointer move repaints one small layer instead of re-rasterizing and re-uploading
+  a plot-sized texture through the data frame. It settles back under the candles on
+  release. Placing a new drawing no longer triggers that data repaint on every move either.
+- **Moving the pointer over the chart costs less.** The status line above the chart used to
+  re-measure its layout every time the crosshair moved to another bar. It now re-measures
+  only when the new values could change its width, and its digits share one width, so the
+  readout no longer shifts sideways as you sweep across bars.
+- **Keyboard focus comes back after a dialog is torn down.** When a host removed an open
+  dialog or drawer instead of closing it, focus was left on nothing and the next Tab started
+  from the top of the page. Focus now returns to the button that opened it.
+
+## [0.8.1]
+
+### Changed
+
+- **Vela's home is velacharts.dev.** The attribution mark, the package homepage and the
+  project links now point to Vela's own site instead of a page on luxalgo.com. Nothing
+  changes in the API.
+- **The attribution mark is Vela's own.** The corner mark is now Vela's Morning Star V
+  instead of the LuxAlgo symbol, and hovering it reveals the rest of the Vela wordmark.
+  The size drops slightly (24 px instead of 28 px, 20 px on mobile) because the V is
+  wider than the old symbol. Hosts that pass their own mark through
+  `renderer.set('attribution', html)` are unaffected.
+- **The indicator picker lists the built-in indicators under "Built-in".** They were
+  grouped under "Vela", which reads as a product name now that charting apps carry it.
+- **Typing `0` opens the symbol search, and the timeframe entry shows capitals.** No
+  timeframe starts with 0, so typing `0` on a chart now opens the symbol search seeded
+  with it, the same as a letter; digits 1 to 9 still open the timeframe entry. Letters
+  in the timeframe entry now always display in capitals (`4H`, `3M`). What each entry
+  means is unchanged.
+
+### Fixed
+
+- **Double-clicking while drawing no longer collapses the sub panes.** Clicking twice in
+  quick succession with a drawing tool, the ruler, or the eraser active (or right after
+  finishing a placement) used to toggle the sub panes as if you had double-clicked in
+  cursor mode. That toggle now happens only from a plain double-click.
+- **The color picker's opacity percentage is editable.** The percentage next to the opacity
+  slider was a static label. You can now click it and type a value from 0 to 100 (with or
+  without the `%` sign), then press Enter or click away to apply it. Values outside the
+  range are clamped, and text that isn't a number restores the current opacity.
+- **Time-axis year and month labels sit on the calendar.** When zoomed out to month,
+  quarter or year spacing, axis labels and grid lines now land on the first of the month
+  and on January 1, so a year label marks the start of the year it names instead of a date
+  a couple of weeks before it.
+
+## [0.8.0]
+
+### Added
+
+- **Bar replay.** `chart.replay` rewinds the chart to any past bar and plays the following
+  bars back one at a time — by hand with `step()`, or on a timer with `play(intervalMs)` at
+  the pace you choose. Indicators update as each bar appears, exactly as they would live,
+  while their alerts stay quiet — a replayed bar is history, not a signal to act on —
+  and live updates wait until you `stop()` or the replay reaches the present; the chart then
+  shows the full history again and catches up on what it missed. Starting further back than
+  the loaded history loads the older bars first (the chart returns to its usual depth
+  afterwards), and calling `start()` again while replaying jumps backward or forward. A
+  start inside the bars already on screen is immediate, even while the source is still
+  streaming older history in; that history joins the replay as it lands. Switching the
+  timeframe keeps the replay going at the same point in time — without showing a coarser
+  bar that had not closed yet — and keeps playing if it was.
+  `chart.replay.bounds` tells how far back and forward a replay can go, and the `replay:*`
+  events let an interface follow along. In the widget and the workspace, a replaying chart
+  shows a "Replay" line under its symbol watermark (the new Replay watermark switch in
+  chart settings, next to Symbol watermark, turns it off), and its status line wears a
+  replay badge in place of the market status.
+- **Bar replay across a multi-chart layout.** `workspace.replay` rewinds every chart of a
+  workspace at once and plays them back on one clock: each chart shows exactly the bars that
+  had closed by the shared replay time, so charts on different timeframes or markets never
+  reveal the future to one another, and the finest timeframe sets the pace. Charts added to
+  the layout join the replay, a chart switching symbol rejoins it, and it ends on every
+  chart together. Contributions drive it as `ctx.replay`.
+- **Tick replay.** `chart.replay.setTicks(source)` plays each revealed bar the way a live
+  one forms: your source hands over the bar's intrabar updates, and the candle opens, moves
+  and stretches through them before settling exactly on the stored bar, with indicators
+  following every update. The play pace then counts updates, not bars. Updates can come
+  from anywhere; `lowerTimeframeTicks(chart, '1')` builds them from the chart's own
+  provider, one per finer bar. `stepUpdate()` reveals one update at a time, and the new
+  `replay:tick` event reports progress within a bar.
+- **Building blocks for pick-a-point interactions.** The UI kit gains `DatePicker`, the
+  month calendar with month and year jumps in its header that indicator date inputs
+  already use, now available to your own interfaces. The new `crosshairOverride` renderer
+  feature restyles the crosshair while the user picks something on the chart — a solid
+  line in your color, the horizontal level hidden, and optionally the area after it veiled
+  (`shadeRight`) — without touching the saved chart settings. A synced crosshair from
+  another chart takes the same look, so a pick can span several charts.
+- **Plugins can dock a strip under the charts.** `ctx.dockStrip(el)` on the widget context
+  places your element as a full-width strip between the charts and the bottom bar; the
+  charts shrink to make room, and the returned function takes it away again.
+- **Plugins choose where an action sits on mobile, and hear taps.** A topbar action's new
+  `mobile` option puts it on the bottom bar or in the three-dots menu (a primary action
+  lands right after Layout there). `chart.renderer.onClick` reports a click or a touch tap
+  on the plot with the bar under it — on touch, where a tap moves no crosshair, the way
+  to learn which bar was chosen.
+
+### Changed
+
+- **Reading history no longer gets interrupted by new bars.** When the newest bar is
+  scrolled off the right edge, a new bar (live or replayed) leaves the view on the bars
+  you were looking at; at the right edge, the chart keeps following the newest bar.
+
+### Fixed
+
+- **The status line's ticker no longer stands apart from its venue.** The dot after the
+  ticker now sits one space away from it, as far as the venue sits after the dot, instead
+  of a wide gap.
+
+## [0.7.8]
+
+### Fixed
+
+- **The RTH/ETH switch and the exchange time zone appear as the chart loads, not after it.**
+  Picking a market with trading sessions used to leave the bottom bar's session switch
+  hidden until the new candles had finished loading, plus a further round trip — the
+  metadata that decides it was fetched again, from scratch, once everything else was done.
+  The symbol's metadata is now read while the candles load, and the five things that need
+  it (the price scale's tick size, the market-status badge, the session shading, the
+  session switch, the time zone) share a single request whose answer is reused for ten
+  minutes. A switch that used to open five identical requests now opens one.
+
+### Added
+
+- **Exchange in the chart settings' Time zone row.** In the widget and workspace, the Symbol
+  tab's Time zone dropdown is now the same picker as the bottom bar — UTC, **Exchange**, then
+  the catalog — so following the market is one pick away from the settings dialog too. The
+  row writes the workspace choice (it never demotes the rule to a fixed zone); its
+  visibility id is `time-zone` (`settings.hidden`). Host settings sections
+  (`setSettingsSections`) may now give a `select` row `[value, label]` options.
+- **Every built-in indicator is now fully styleable.** Each study splits its settings into
+  a **Settings** and a **Style** section, and every element it draws gets its own color:
+  Bollinger Bands ink the basis, the bands and the fill separately, MACD's histogram has
+  four colors for rising and falling on each side of zero, and the moving averages,
+  channels and cumulative volume lines can be colored by their own slope or by which side
+  of the line price is trading. Every setting carries a tooltip explaining what it does.
+- **Overbought and oversold levels are inputs, not fixed lines.** RSI, Stochastic,
+  Stochastic RSI, Williams %R, Money Flow Index, Connors RSI, the Chande Momentum
+  Oscillator, the Ultimate Oscillator and the Relative Volatility Index all let you move
+  their thresholds, and the shaded zones, dashed level lines and line coloring follow. The
+  bounded oscillators blend their line from the oversold color through neutral to the
+  overbought color, and shade the region beyond each threshold; the centered ones wash the
+  area between the reading and the zero line, fading out where the two meet.
+- **More moving averages and more display modes.** The Moving Average study offers
+  thirteen smoothings — adding Hull, Arnaud Legoux, double and triple exponential,
+  Kaufman adaptive, least-squares, McGinley and Hamming — plus an optional second average
+  with its own type, length, source and color. Linear Regression can plot its curve or its
+  slope; Rate of Change can plot a percentage or a raw momentum difference; SMI Ergodic can
+  plot its lines or its histogram; Intraday Intensity can plot the normalized oscillator or
+  the cumulative line; Pivot Points offers Traditional, Fibonacci, Camarilla and Woodie
+  ladders on an automatic or explicit anchor; and the Average True Range, Volume Flow
+  Indicator, Relative Volatility Index and Price Volume Trend let you pick their smoothing.
+- **New options on the classics.** Chandelier Exit can ratchet its stops, Balance of Power
+  and On Balance Volume can be smoothed, Bollinger Bands Width marks its squeeze and bulge
+  references, the Ulcer Index can show the raw drawdown behind it, 52 Week High/Low can add
+  the all-time high and low, and VWAP offers percentage bands beside its deviation bands.
+
+### Changed
+
+- **The built-in indicators now match their reference builds.** Defaults, formulas and
+  looks were aligned study by study, so several read differently than before: Stochastic
+  smooths %K over 3 bars instead of 1, Zero-Lag EMA defaults to 21, Connors RSI flags
+  90/10 rather than 80/20, Historical Volatility annualizes over 252 periods on a sample
+  deviation, and SuperTrend, the Klinger Oscillator, the Ulcer Index, the Hull average and
+  Williams Fractal were corrected to their published definitions. Bollinger Bands Width and
+  TRIX are no longer rescaled, so their values are smaller than before.
+  _(Breaking: VWAP's per-band color and fill settings collapse into one bullish, one
+  bearish and one band color, its Day anchor is now called Session, and it hides itself on
+  daily and higher timeframes unless you turn that guard off. The Moving Average type
+  `RMA` is now listed as `RMA (SMMA)`, though charts saved with the old name still load.)_
+
+## [v0.7.7]
+
+### Added
+
+- **Exchange time zone.** The time-zone picker (bottom bar, time-axis menu, mobile sheet)
+  offers an **Exchange** row, right under UTC: pick it and every chart renders in its own market's
+  zone — Chicago for a CME future, New York for a US equity, UTC for crypto — as declared
+  by its provider. In a multi-chart grid each cell follows its own market, and the
+  bottom-bar clock shows the active chart's. The choice persists with the workspace and
+  can be set from code with `timezone: 'exchange'` or `setTimezone('exchange')`;
+  choosing a fixed zone anywhere returns the whole workspace to that zone.
+- **The date picker jumps to a month or year from its header.** In an indicator's time
+  input, the calendar month and year are buttons: click the month to pick from the twelve
+  months, or the year to pick from a decade. Choosing a year then a month returns you to
+  the days, so a far date is a few clicks instead of stepping month by month.
+- **Chart margins are now a setting.** The Canvas tab of the chart settings gains a
+  Margins group: the empty space kept above the highest and below the lowest visible
+  value (each as a percent of the pane's height, 0–40) and the whitespace after the
+  newest bar (in bars, 0–200). The vertical margins apply to every pane; the right
+  margin is where the chart lands on load, on a symbol or timeframe switch, and when you
+  scroll back to the latest bar — editing it moves the view there right away. The values
+  live in the chart config as `margins`, so saved templates and persisted charts carry
+  them. The defaults are 10 % / 10 % / 10 bars.
+
+### Changed
+
+- **Default chart margins.** The autoscaled window now keeps 10 % of the pane above and
+  below the data (previously 20 % above, 10 % below), and the chart lands 10 bars from
+  the right edge instead of 6. Set the Margins group on the Canvas tab to 20 / 10 / 6 to
+  restore the previous look.
+- **A strategy's round trips can now carry their own ledger.** Each trade an engine
+  reports through a script's execution context (`trades`) may include its realized
+  `pnl`, the `commission` charged, and its worst and best excursion from entry
+  (`maxDrawdown`, `maxRunup`) — the per-trade counterparts of the account-level
+  drawdown and run-up the strategy summary already exposed. All four are optional, so
+  an engine that tracks none of them keeps reporting trades exactly as before; a host
+  tabulating a backtest no longer has to reconstruct them from fills.
+
+### Fixed
+
+- **Dragging an indicator input's opacity slider commits once, on release.** The picker
+  emitted a new value on every pointer move, so an `input.color` slider drag in an
+  indicator's settings re-executed the script over its whole history once per frame —
+  the color looked frozen while the engine caught up, and a long drag on a deep history
+  could exhaust the tab's memory. Indicator inputs now hear the final value when the
+  pointer is released (the knob, gradient and percentage still follow it live; a plain
+  click on the track commits at the clicked position as before). Drawing styles and chart
+  settings keep their live preview: they only repaint. The policy is the new
+  `commit: 'live' | 'release'` option of `buildColorPicker` / `ColorField` / the
+  `color` field descriptor (default `'live'`), for hosts whose `onChange` recomputes
+  rather than repaints.
+
+## [v0.7.6]
+
+### Added
+
+- **Bring your own indicator ids.** `addIndicator`, `runIndicator` and `runScript` accept an
+  `id` option — an opaque string of your choosing (a document key, an editor tab, a UUID).
+  The indicator then runs under that id everywhere the chart reports one: the handle,
+  `chart.indicators()`, the `indicator:*` events, `script:run`, the legend and the pane
+  attributes — so a host that keys its own state on indicators no longer needs a side map
+  from its ids to the chart's. Leave it out and the chart mints an id as before; nothing
+  existing changes. An id already live on the chart is rejected rather than renamed:
+  `addIndicator` throws, `runIndicator`/`runScript` resolve `{ ok: false, error }`.
+  Removing the indicator frees its id. In the widget, `ctx.addIndicator({ id, … })` and
+  a persistence handler's `CellStateContext.addIndicator({ id, … })` take the same id,
+  so a plugin can store it in its document slot and restore the indicator under it —
+  and undo/redo re-add an indicator under the id it first ran with, supplied or minted.
+
+## [v0.7.5]
+
+### Added
+
+- **Timeline-mark groups can nest.** A group may name a `parent`: its checkbox lists indented
+  under the parent's on the Events tab and dims while the parent is off, and its marks paint
+  only while both are on. A host can now offer one master switch with sub-choices — News →
+  most recent / historical, Economic releases → high / medium / low — and a child keeps its
+  own choice for when the parent comes back.
+
+### Fixed
+
+- **Two-letter mark tokens stay inside their outline.** A timeline mark carrying two
+  characters (`US`, `EU`) drew them at the single-letter size, so on a 16 px pin the pair
+  ran over the head. Pairs now share the token's width at a smaller size, and are measured
+  as drawn so a wider pair or a wider host font never overflows either; a single letter is
+  unchanged.
+
+- **"Reset defaults" keeps the chart type you are on.** Resetting the chart settings
+  used to switch the chart back to the style it had when the page loaded — a line,
+  Heikin Ashi, or plugin chart type went back to candles, while the style button in the
+  toolbar still showed the old pick and the chart type's own settings tab vanished with
+  it. The reset now leaves the current chart type in place and returns everything else
+  to its defaults — every tab, the chart type's own settings, the candle look you gave
+  a plugin chart type from the Symbol tab, and the event groups you had hidden. The
+  dialog stays put and simply shows the restored values, instead of closing and
+  opening again. The toolbar's style button also follows a chart type that arrives
+  through an imported settings template.
+
+## [v0.7.4]
+
+### Changed
+
+- **The price scale stays on the price range while the chart is hidden.** Hiding the
+  chart from the symbol legend with nothing else on the price pane used to leave the
+  price axis on a 0–1 placeholder. The axis now keeps following the hidden bars as you
+  pan and zoom, so showing the chart again lands exactly where you left it. As before,
+  when overlay indicators remain on the pane they take the scale over and fill it.
+
+### Fixed
+
+- **Dense timeline marks fold into clusters as you zoom out.** Marks of one group used to
+  fold only when they landed on the same bar, so a busy feed on a fine timeframe drew a
+  solid band of overlapping glyphs. Neighbouring marks whose glyphs would overlap at the
+  current bar spacing now share one glyph: the tooltip carries the count, the popup lists
+  every mark, and zooming back in separates them again.
+
+## [v0.7.3]
+
+### Fixed
+
+- **Hiding the chart hides a plugin chart type whole.** With a plugin chart type
+  selected, hiding the chart from the symbol legend removed the candles but left the
+  chart type's own drawing on the pane. The chart type now disappears together with the
+  candles — everything the current chart type paints, its hover readouts included — and
+  comes back on show. Overlay plugin indicators that draw through a renderer layer are
+  unaffected: they stay visible while the chart is hidden, whatever the chart type.
+
+## [v0.7.2]
+
+### Fixed
+
+- **Hiding the chart no longer blanks plugin layers drawn at bar prices.** Hiding the
+  candles from the symbol legend used to empty the price pane whenever what remained on
+  it was drawn by a plugin renderer layer — a plugin chart type, or an overlay plugin
+  indicator painting through its own layer: with no series left to measure, the price
+  scale collapsed and those layers painted off-screen. The bars now keep driving the
+  price scale while such content is on the pane, so the candles disappear and everything
+  else stays exactly where it was.
+
+## [v0.7.1]
+
+### Added
+
+- **Replace an indicator's script in place.** `handle.updateCode(source)` re-runs an
+  indicator on new code without taking it off the chart: it keeps its identity, legend
+  row, pane placement, visibility and any handle you hold, and input values carry over
+  wherever the new script still declares them. The new source is compiled before the
+  running one is stopped, so a script that fails to compile leaves the current indicator
+  computing and painting and reports through the handle's `error` event. Runs caused this
+  way report `cause: 'code'` on `script:run`. Native indicators, which have no script,
+  ignore the call.
+- **Plugin indicators drawn by a renderer layer can now be added several times.** A
+  plugin native indicator that paints through its own renderer layer and allows several
+  instances (`multiInstance` on its descriptor) now gets one layer per instance: each
+  instance draws on its own canvas, on its own pane, with its own stacking order, and its
+  data never overwrites a sibling's. Previously such types had to stay single-instance.
+  Running native indicators also learn their own id (`ctx.id`), so an instance can
+  identify itself to host code — a picker or a drag handle — without ambiguity.
+- **A plot can show on some surfaces and not others.** An indicator series now carries
+  a per-surface `display`: painted in its pane, kept on the price scale, its value beside
+  the legend title, and its row in the data window are four independent switches. A
+  script can keep a helper value readable in the data window without drawing it, show a
+  value in the legend only, or paint a line that reports nowhere. The `visible: false`
+  shorthand still hides a series everywhere. Renderer and plugin authors resolve the
+  flags with `seriesShownOn` and `seriesInScale` from `@luxalgo/vela/plugin`.
+
+### Changed
+
+- **Hidden plots no longer stretch the price scale.** A series that is neither painted
+  in its pane nor shown on the price scale — a data-window-only or legend-only readout,
+  or a `visible: false` fill anchor — is left out of the pane's autoscale, so a helper
+  plot far from the drawn values no longer squashes what is actually visible. A plot
+  shown on the price scale keeps its values in view even when it is not painted.
+
+### Fixed
+
+- **Candle wicks keep their color when zoomed far out.** Once bars are packed tighter
+  than a pixel, the candles sharing a column are drawn as thin sticks; a stick used to
+  take one direction for all of its bars, so a bearish candle's long wick could turn
+  bullish green the moment the recovery candle next to it landed in the same column.
+  Each bar's range now keeps its own color — direction, `barcolor()` tint, or the
+  wick color from the candle settings, the same rules as at every other zoom level.
+- **A plugin indicator restored hidden no longer crashes the chart on load.** A saved
+  layout that carried a hidden plugin native indicator could throw while the chart was
+  being built, because the indicator was asked to suspend before it had ever started.
+  Such an indicator is now left alone until it is first shown, at which point it starts
+  as usual; removing it or closing the chart while it is still hidden is equally safe.
+- **Right-click menus and dropdowns follow the app theme, not the plot.** Changing the
+  chart background in settings used to recolor those panels with the plot. They now
+  use the same surface as the drawing toolbar and the chart settings dialog, and only
+  a theme switch restyles them.
+- **An edit made just before a workspace is torn down is no longer lost.** Changes are
+  batched for a moment before `state:changed` fires, and destroying the workspace inside
+  that window used to drop the pending change without telling anyone — so an app saving
+  from that event lost the user's last symbol change or added indicator. `destroy()` now
+  emits the pending `state:changed` before tearing anything down, and `getState()` called
+  during teardown still describes the charts that were on screen rather than the last
+  restored document.
+- **Timeline mark popups now toggle with a click.** Clicking the mark whose popup is
+  open closes it; previously that second click closed and immediately reopened the popup,
+  so it took a click elsewhere to dismiss it.
+- **Three-point tools preview their first line right away.** The pitchfork family
+  (Andrews', Schiff, modified Schiff, inside) and the triangle now draw a line from the
+  first placed point to the cursor as soon as the first click lands, instead of showing
+  only the anchor markers until the second point is placed. The Schiff and modified
+  Schiff pitchforks also keep that pivot line in the finished shape, so the pivot handle
+  no longer floats detached from the fork it defines.
+- **Indicator visuals no longer linger across a market switch.** Switching the symbol,
+  timeframe, or session now clears every indicator's painted output the moment the
+  switch starts, and each indicator repaints once its recomputation over the new market
+  completes. Previously, outputs that are not tied to the bar series — drawing objects
+  such as lines, boxes, labels, and polylines, plus background tints and horizontal
+  levels — could stay visible over the new market's candles until the script finished
+  recomputing, which for heavy scripts took many seconds.
+
+## [v0.7.0]
+
+### Added
+
+- **Timeline marks — events on the chart.** `chart.marks` pins host events (dividends,
+  splits, earnings, news, releases…) to the bar they belong to and shows them as small
+  outlined tokens — a letter or an icon in the event's color — on a lane just above the
+  time axis. A token swells briefly under the pointer and fills with its color while its
+  popup is open. Clicking one opens a popup centered on the token, with a short fade,
+  showing the event's title and details: plain text, formatted HTML (sanitized), or a
+  panel of fields and buttons — and the details can load on demand. Several events of
+  one kind on the same bar fold into one slightly larger token that lists them all;
+  events of different kinds on one bar stack into a small deck that fans out on hover
+  (or a tap) so each can be opened. Marks follow the bars: switch timeframes and they
+  re-snap and regroup. Every kind of event gets its own checkbox on a new **Events** tab
+  of the chart settings, and the choice is saved with the chart. Hosts hear every click
+  through the new `mark:click` event, and the playground pages carry a sample set.
+- **Popovers can center on their trigger and fade.** The UI kit's `Popover` accepts
+  `align: 'center'` and a `fadeMs` duration for a short fade in and out — what the
+  timeline-mark popup uses.
+- **Native indicators can opt out of the legend.** A native indicator registered with
+  `legend: false` paints its output with no in-chart chrome: no legend row (no title
+  chip, no eye/gear/✕, not counted by the fold chip) and no entry in `panes.list()`, so
+  the object tree shows nothing either. It is for host-owned overlays — journal trade
+  markers, event flags — whose on/off switch lives in the host's own UI; the host keeps
+  controlling the indicator through its handle. Hidden indicators are unchanged: they
+  keep their row so the user can unhide them.
+- **Every chart motion is now yours to tune or switch off.** The `animations` option
+  covers each eased motion on its own — the wheel zoom, the pan momentum after a drag
+  release, the scroll glide behind the scroll-to-latest button and keyboard pans, the
+  price scale's glide while zooming, the live-bar glide, and the candle reveal on first
+  load. Each accepts `true` (the built-in feel), `false` (instant), or a duration in
+  milliseconds; the reveal also takes a style (`'settle'` or `'grow'`) and a sweep
+  duration. Every one is also a live renderer feature (`chart.renderer.set('animZoom',
+150)`), and the settings dialog's _Symbol → Animation_ group gains on/off switches
+  for zoom, pan momentum, the price scale, and the reveal alongside the existing
+  _Animate price changes_ — switching a motion back on restores the duration you
+  configured, and the switches ride `getConfig()`/`applyConfig()` like every other
+  setting. Turning zoom animation off applies to the keyboard zoom keys too.
+
+### Changed
+
+- **`animZoom` and `animPan` now read back as durations.** The two renderer features
+  return their ease time in milliseconds (`0` = off) instead of a boolean, matching
+  `animLiveBar`; `true`/`false` are still accepted when setting them. _(Breaking: code
+  comparing the read value to `true`/`false` should test it for zero instead — a plain
+  truthiness check keeps working.)_ `animations: false` now also skips the first-load
+  candle reveal; pass `{ intro: true }` alongside the other switches to keep it.
+
+### Fixed
+
+- **Indicators restored hidden are reachable again.** An indicator added and hidden
+  before it ever ran (a restored ledger/ext entry — a hidden native, or a hidden
+  library/Pine script) mounted no legend row at all: invisible AND unreachable, with
+  no eye to unhide it. Hidden adds now mount a dimmed placeholder row (no spinner)
+  and announce immediately, so the legend eye and host UIs (object tree) can reach
+  them; showing starts the instance via the v0.6.21 `started` path and the first
+  computed model remounts over the placeholder.
+
+- **The countdown to bar close keeps step with the clock.** The price-axis countdown
+  chip and the workspace's bottom-bar clock now tick from one shared second pulse, so
+  the two can no longer read different seconds; the remaining time rounds up, so a
+  clock at `:54` sits beside `00:06` instead of `00:05`; and the chip disappears the
+  moment the bar closes rather than parking at `00:00` until the next bar arrives.
+  Hosts embedding a single chart can feed their own clock through
+  `chart.renderer.setWallClock` to get the same alignment.
+
+- **The mobile bar's maximize stop only shows when there is something to maximize.**
+  In a multi-chart workspace switched to a one-chart layout, the stop used to stay in
+  the bar as a dead press; it now disappears with the extra charts and returns when
+  the layout grows again.
+
+- **Chart-settings dropdowns no longer overflow on mobile.** A long option such as
+  `Regular hours (RTH)` or `(UTC-5) Chicago` wrapped onto several lines inside its
+  dropdown and spilled over the neighboring rows. The closed value now stays on one
+  line, and on mobile the dropdown widens to fit it (up to a cap) before ellipsizing.
+
+## [v0.6.21]
+
+### Fixed
+
+- Native indicators restored HIDDEN no longer crash (volume/VPVR `resume`/`setInputs`
+  dereferenced a null context before `start`) and now START on un-hide instead of
+  resuming a never-started instance — previously the show path either crashed or left
+  a permanently blank row. Same pre-start family as the classic-indicator guard in
+  v0.6.20.
+- The constructor's volume auto-add intent reads object-form ledger entries
+  (`{ type: 'volume', hidden: true }` was missed by the bare-string check).
+
+### Added
+
+- A ChartCell persistence regression harness (jsdom): boots a real cell with a fake
+  renderer/feed and locks the dehydrate/rehydrate round-trip — stored-input seeds,
+  delta/hidden capture, drifted-chart convergence, legacy-ledger resets, the
+  visibility save trigger, and un-hide starting never-started natives.
+
+## [v0.6.20]
+
+### Added
+
+- **Native indicator settings and visibility persist.** The workspace ledger's native
+  entries carry input DELTAS and a `hidden` flag (manifest entries carry `hidden` too),
+  the legend eye marks the state dirty, and `ctx.addIndicator` accepts `hidden` so
+  plugin restores can apply it. Restores converge kept indicators to the document's
+  values; legacy bare-string ledgers still restore unchanged. (#146, #149)
+
+### Fixed
+
+- Classic native indicators no longer compute against unloaded bars when a restore
+  applies stored inputs before the first data lands (a pre-start guard in
+  `ClassicIndicator`; the orchestrator replays the values at `start`). (#149)
+
+## [v0.6.19]
+
+## [v0.6.18]
+
+### Added
+
+- **Duplicate drawings by dragging, and select several at once.** Hold **Ctrl/Cmd** and
+  drag a drawing's body to pull a copy away from it: the original stays where it is, the
+  copy follows the cursor and is committed when you release — selected, with its
+  quick-settings popup open — as one undo step; press **Escape** mid-drag and nothing is
+  left behind. The quick-settings popup's overflow menu gains a **Duplicate** entry that
+  clones the drawing in place and hands it the selection, ready to drag. Selection also
+  grows beyond one drawing: **Ctrl/Cmd+click**
+  adds a drawing to (or removes it from) the selection, just as Shift+click does, and
+  **Ctrl/Cmd+drag on an empty spot** sweeps a selection box that picks up every drawing
+  it touches — successive boxes accumulate, and a click on an empty spot clears the
+  selection (while Ctrl/Cmd is held, handles mark only what is selected, not what the
+  cursor passes over). Dragging the body of any selected drawing then moves the whole
+  selection together (locked drawings stay put), Ctrl/Cmd+dragging it copies the whole
+  selection, and Delete, the arrow keys, copy, duplicate and a middle-click on a selected
+  drawing act on all of them, each as a single undo step. A lock protects a drawing inside
+  a group: deleting a multi-selection removes only its unlocked members and leaves the
+  locked ones in place, still selected. The object tree highlights every selected drawing,
+  not just the first, and the `drawing:selected` event now carries the full list as `ids`
+  alongside the primary `id`.
+- **One settings popup for a whole selection.** Selecting several drawings opens a single
+  quick-settings popup for all of them, showing only the controls every one of them
+  supports — three trend lines get the full trend-line bar; a trend line, a box and a text
+  annotation share just their common ground, and anything a member lacks disappears rather
+  than showing disabled. Where the drawings agree a control reads normally; where they
+  differ it reads as mixed — a swatch striped with every color in use, a dash in a
+  dropdown, a half-lit toggle. Any edit applies to every selected drawing as one undo step,
+  and opening a mixed swatch lists the colors currently in use first, so unifying onto one
+  of them is a single click.
+
+### Changed
+
+- **The status line adapts to the chart's width in steps.** On a wide chart the symbol,
+  venue, timeframe and market status share one line with the full O/H/L/C readout and
+  the bar change. As the chart narrows, the values first move to a second line under the
+  symbol, then drop the open, high and low to keep only the close and the change, and
+  finally keep just the close and its percent change — so the readout stays legible
+  instead of overflowing the plot. Multi-chart cells and phone-width charts follow the
+  same steps; a cell too narrow for even the shortest readout hides it rather than
+  clipping it.
+- **The built-in VWAP now carries standard-deviation bands.** Volume Weighted Average
+  Price draws up to three ±k·σ band pairs around the average — a Bands group gives each
+  band its own on/off toggle and multiplier on one row (band 1 is on by default at 1σ;
+  bands 2 and 3 wait at 2σ and 3σ) — with a soft fill between each pair. The reset
+  period gains **Quarter** and **Year** beside Day, Week and Month, and Source now
+  offers the same choices as the moving averages (Close, Open, High, Low, HL2, HLC3,
+  OHLC4, HLCC4). A Style group at the bottom of the settings holds the VWAP color and,
+  per band, its own color (each band starts in a distinct ink) with a Fill switch and the
+  fill's own color — opacity included — beside it. Existing saved VWAP settings keep
+  working: the period, source and line color keys are unchanged.
+- **The object tree names indicators by their compact title.** An indicator that
+  declares a short title now shows it on its row in the object tree, so the row reads
+  the same as its legend chip. Indicators without a short title keep their full name,
+  and a study pane's heading still carries the full name of the indicator that owns it.
+
+### Fixed
+
+- **The symbol menu and the timeframe menu no longer lose keystrokes when you type
+  fast.** Typing straight onto the chart opens the symbol menu (letters) or the
+  timeframe menu (digits) seeded with what you typed. The second key used to vanish
+  when it arrived before the menu's field had taken focus, leaving only the first
+  character; every key now reaches the menu.
+
 ## [v0.6.17]
 
 ### Changed
@@ -57,8 +763,8 @@ measured before/after and full investigation.
   show the real latest values. Set `liveBar: true` to bring the slide back, or give it
   a duration in milliseconds to make it as quick or as gentle as your feed calls for
   (a slow feed reads well with a longer glide; a busy one with a short one). The chart
-  settings dialog gets a matching **Animate price changes** switch in a new *Animation*
-  group of the *Symbol* tab (with a hint explaining it), saved with the rest of the chart's settings and templates; switching it back
+  settings dialog gets a matching **Animate price changes** switch in a new _Animation_
+  group of the _Symbol_ tab (with a hint explaining it), saved with the rest of the chart's settings and templates; switching it back
   on reuses the duration you configured. A new bar always opens without a glide, and
   the crosshair, legend and data window show the real values at all times.
   `animations: false` keeps disabling every animation at once.

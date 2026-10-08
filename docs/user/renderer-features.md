@@ -54,10 +54,18 @@ Available on every renderer:
 
 | Feature | Type | Default | Notes |
 |---|---|---|---|
-| `animZoom` | boolean | `true` | Eased wheel-zoom; takes effect on the next interaction. |
-| `animPan` | boolean | `true` | Inertial pan glide; takes effect on the next interaction. |
-| `animLiveBar` | number (ms) \| boolean | `0` | Glide of the forming bar on live ticks: the displayed high/low/close (and the current-price line and label) ease toward each new value instead of snapping. `0`/`false` = snap; `true` = the 90 ms default; a number = the ease duration in ms (visually settled in about three times that; capped at 1000). Reads back as a number. A new bar always snaps; the crosshair, legend and data window always show the real values. Takes effect on the next tick. The rich config carries only the on/off state (`priceScale.animateLastPrice`, the *Animate price changes* row of the settings dialog's Symbol → Animation group); turning it on there reuses the last non-zero duration set here. |
-| `intro` | `'settle' \| 'grow' \| false` | `'settle'` | Reveal animation on first paint. Setting it replays the intro (handy for comparing styles from the console). |
+| `animZoom` | number (ms) \| boolean | `70` | Eased wheel-zoom: the bar spacing glides toward each notch's target. `0`/`false` = instant; `true` = the 70 ms default; a number = the ease time-constant in ms (visually settled in about three times that; capped at 1000). Reads back as a number. Takes effect on the next interaction. Off, the widget's keyboard zoom keys jump too. |
+| `animPan` | number (ms) \| boolean | `110` | Pan momentum: the velocity a drag releases with decays over this time-constant. `0`/`false` = the chart stops dead on release. Reads back as a number. The umbrella for pan motion — setting it also switches `animScroll` on or off (at that glide's own duration). |
+| `animScroll` | number (ms) \| boolean | `130` | The programmatic scroll glide — the scroll-to-latest button, `panBy`, the keyboard pan keys — easing the view toward its target at constant zoom. `0`/`false` = those pans apply instantly. Reads back as a number. |
+| `animAutoscale` | number (ms) \| boolean | `80` | The price scale's glide toward its new range while a zoom or fling is in flight. `0`/`false` = it snaps every frame. Reads back as a number. |
+| `animLiveBar` | number (ms) \| boolean | `0` | Glide of the forming bar on live ticks: the displayed high/low/close (and the current-price line and label) ease toward each new value instead of snapping. `0`/`false` = snap; `true` = the 90 ms default; a number = the ease duration in ms (visually settled in about three times that; capped at 1000). Reads back as a number. A new bar always snaps; the crosshair, legend and data window always show the real values. Takes effect on the next tick. |
+| `intro` | `'settle' \| 'grow' \| { style?, duration? } \| false` | `'settle'` (650 ms) | Reveal animation on first paint; the object form also sets the sweep duration in ms (capped at 5000). Reads back as the style (`false` when off). Setting it replays the intro (handy for comparing styles from the console). |
+
+The `anim*` features and `intro` are what the `animations` option resolves to (see
+[Options](./options.md#the-animations-option)). The rich config carries only their on/off
+state — `animations.{zoom, pan, autoscale, intro}` and `priceScale.animateLastPrice`, the
+rows of the settings dialog's *Symbol → Animation* group; turning one on there reuses the
+last non-zero duration set through the option or the feature.
 | `zoomAnchor` | `'right' \| 'cursor'` | `'right'` | Wheel-zoom anchor: pin the right edge / latest bar, or the bar under the cursor. Affects the next wheel-zoom. Holding `Shift` (or a horizontal/trackpad swipe) makes the wheel **pan through history** instead of zooming. |
 | `axisDrag` | boolean | `true` | Drag the right price-axis strip to rescale vertically and the bottom time-axis strip to zoom horizontally; scrolling the wheel over the price-axis strip rescales the same way, gently (scroll up compresses the span, down expands it); double-clicking an axis strip resets it. |
 | `paneResize` | boolean | `true` | Drag the separator between panes to resize them; double-clicking a separator restores the two adjacent panes to an even split. |
@@ -82,7 +90,34 @@ Available on every renderer:
 | `axisLabels` | boolean | `true` | Draw the price/time axis tick labels. |
 | `priceLabel` | boolean | `true` | The last-price axis tag. Independent of `currentPriceLine` — either can show without the other. |
 | `countdown` | boolean | `true` | The bar-close countdown tag next to the price axis. |
+| `crosshairOverride` | `{ vertical?, horizontal?, color?, width?, style?, opacity?, shadeRight? } \| null` | `null` | A temporary restyle of the crosshair for interactions that ask the user to pick a point on the chart. Each field replaces the configured crosshair style while set; `horizontal: false` (or `vertical: false`) hides that line and its axis tag. `shadeRight: { color, opacity? }` veils the plot right of the bar under the vertical line (every pane, up to the price scale) — e.g. to hide what follows a time being picked. It styles and veils an external (synced) crosshair the same way (`renderer.setExternalCrosshair`), so a pick spanning several charts reads the same on each. Runtime-only: never part of `getConfig()`, so a reload can't leave it stuck. `null` restores the configured crosshair. The veiled area also carries a styleable element — see [Styling the `shadeRight` veil](#styling-the-shaderight-veil). |
+| `drawingsInteractive` | boolean | `true` | Whether the pointer reaches the user drawings. Set it to `false` while an interaction asks the user to pick a point on the chart (usually alongside a `crosshairOverride`): a press over a drawing, or with a drawing tool armed, then pans or clicks like one on the empty plot and reaches `onClick`, so nothing is selected, moved, placed or erased, and hovering shows no drawing handles. A drawing gesture already under way finishes first. The drawings still show, and `chart.drawings` keeps working. Runtime-only: never part of `getConfig()`, so a reload can't leave the drawings inert. `true` (or `null`) restores it. |
+| `priceAxisTicks` | `(ctx) => PriceAxisTick[] \| null` \| `null` | `null` | Your own price-axis ticks: called per pane, it returns `{ price, label, major? }` entries that replace the built-in ladder — the axis labels and the horizontal gridlines together. `null`/`undefined` from the function keeps the built-in ticks; `major: true` draws a semibold label, `major: false` a muted one. Seeded by the [`priceAxis.ticks` option](./options.md#the-priceaxis-option--custom-price-axis-ticks), which documents the context fields. It runs again only when a pane's range, height or mode changes — set the function again to recompute. Runtime-only: never part of `getConfig()`. `null` restores the built-in ticks. |
 | `autoScale` | boolean | `true` | Whether the price pane auto-scales to fit visible data. Setting it to `false` freezes the current window (unlocking vertical price pan/drag); setting it to `true` drops the freeze and resumes autoscale. |
+
+#### Styling the `shadeRight` veil
+
+While a `crosshairOverride` with `shadeRight` paints its veil, the chart also places an
+empty element with the class `vela-shade-right` over exactly the veiled area: from the
+right edge of the picked bar to the price scale, across the full plot height. It sits
+below the crosshair layer and above the candles, indicators and drawings, so a
+`backdrop-filter` on it reaches the bars under the veil but never the crosshair line or the
+veil color itself:
+
+```css
+.vela-shade-right { backdrop-filter: grayscale(1); }
+```
+
+```js
+chart.renderer.set('crosshairOverride', {
+  horizontal: false,
+  shadeRight: { color: 'rgba(0, 0, 0, 0)' }, // a transparent veil: grey bars, no darkening
+});
+```
+
+The element is transparent unless you style it, ignores the pointer, is hidden from
+assistive technology, and carries the `hidden` attribute whenever no veil is painted. It
+follows a synced crosshair's veil too.
 
 ### In-chart UI
 
@@ -90,6 +125,7 @@ Available on every renderer:
 |---|---|---|---|
 | `attribution` | boolean | `true` | The in-chart attribution mark (bottom-left logomark linking to the Vela™ project). Disabling it is allowed only when an equivalent visible attribution is displayed elsewhere on the page (see the repository's [`NOTICE`](../../NOTICE) file). |
 | `settings` | boolean | `false` | An in-chart gear button + dialog to edit a curated slice of the rich config (colors, fonts, scale, timezone) with export/import. |
+| `marks` | boolean or `{ visible?, groups? }` | everything on | The [timeline-mark](./api-reference.md#chartmarks--the-timeline-marks-control-surface) lane above the time axis. `false` hides the lane; `{ groups: { dividends: false } }` hides one group — the same switch as the Events tab's checkboxes, persisted with the config. Partial merge; malformed fields drop. |
 
 > **Pane controls.** Hovering a pane reveals a small button cluster in its top-right corner: move
 > the pane up/down, collapse/expand it, and maximize/restore it. Each indicator's legend row also
@@ -156,8 +192,9 @@ chart.renderer.applyConfig({ candles: { upColor: '#26a69a' } }); // partial patc
 
 The covered cosmetics include layout (background, text, font), grid colors/visibility,
 crosshair (color/width/style/opacity/label), price scale (mode, log, border, labels,
-current-price line, last-price animation on/off), time-scale timezone, candle border/wick, and per-style colors for
-bars / line / area / baseline.
+current-price line, last-price animation on/off), the animation switches (zoom, pan
+momentum, price-scale glide, first-load reveal), time-scale timezone, candle border/wick,
+and per-style colors for bars / line / area / baseline.
 
 ## Custom renderers
 

@@ -137,11 +137,26 @@ export const PREMARKET_SHADE = withAlpha(WARNING, 0.08);
 export const POSTMARKET_SHADE = withAlpha(ACCENT, 0.08);
 export const EXTENDED_SHADE = POSTMARKET_SHADE;
 
+/**
+ * Empty space kept around the data. `top` / `bottom` are the share of each pane's
+ * PIXEL height the autoscaled window reserves above the highest / below the lowest
+ * visible value (percent); `right` is the whitespace after the newest bar, in bars,
+ * that fit, re-frame and scroll-to-latest land on.
+ */
+export interface ChartMargins {
+    top: number;
+    bottom: number;
+    right: number;
+}
+
+export const DEFAULT_MARGINS: ChartMargins = { top: 10, bottom: 10, right: 10 };
+
 export interface ChartStyle {
     /** Per-chart-type settings (plugin SDK sections), keyed by type id then row key. */
     chartTypes: Record<string, Record<string, unknown>>;
     /** Axis/label font size in CSS px (the family stays on the theme). */
     fontSize: number;
+    margins: ChartMargins;
     gridVert: GridLineStyle;
     gridHorz: GridLineStyle;
     /** Axis frame lines (the right price-axis border); `null` ⇒ inherit `theme.borderColor`. */
@@ -162,6 +177,7 @@ export function defaultChartStyle(): ChartStyle {
     return {
         chartTypes: {},
         fontSize: 11,
+        margins: { ...DEFAULT_MARGINS },
         gridVert: { visible: true, color: null },
         gridHorz: { visible: true, color: null },
         borderColor: null,
@@ -228,10 +244,25 @@ export interface ChartConfig {
          *  `animLiveBar` feature; this is only the on/off switch the settings dialog shows. */
         animateLastPrice: boolean;
     };
+    /** Motion on/off switches (the settings dialog's Animation group). On/off only — each
+     *  motion's duration stays what the host configured (`animations` option / renderer
+     *  features); switching one back on restores that duration. `pan` covers both the
+     *  drag-release inertia and the programmatic scroll glide. The live-bar glide's switch
+     *  is `priceScale.animateLastPrice` (it predates this block). */
+    animations: {
+        zoom: boolean;
+        pan: boolean;
+        autoscale: boolean;
+        /** The first-paint candle reveal — takes effect on the next load. */
+        intro: boolean;
+    };
     /** Stacked-pane chrome — the draggable line between an indicator's pane and the one above it. */
     panes: {
         separatorColor: string;
     };
+    /** Whitespace around the data (the Canvas tab's Margins group): top/bottom in percent
+     *  of pane height, right in bars. See {@link ChartMargins}. */
+    margins: ChartMargins;
     /** Strategy trade markers (the `tradeMarkers` feature): the order-fill units on the price pane. */
     trades: {
         visible: boolean;
@@ -245,6 +276,12 @@ export interface ChartConfig {
     };
     timeScale: {
         timezone: string;
+    };
+    /** Timeline marks (the `marks` feature): the lane's master toggle + per-group visibility
+     *  (the Events tab's checkboxes). `groups` merges additively, like `stacking.series`. */
+    marks: {
+        visible: boolean;
+        groups: Record<string, boolean>;
     };
     /** Per-chart-type settings (plugin SDK sections), keyed by type id then row key. */
     chartTypes: Record<string, Record<string, unknown>>;
@@ -353,6 +390,20 @@ export function hasOwnCandlePaint(style: PriceStyle): boolean {
     return false;
 }
 
+/** The reserved per-type keys behind {@link CandlePaintOverride} — the Symbol tab's
+ *  Candles group writes them for a candle-based plugin style; `null` = inherit. */
+export const CANDLE_OVERRIDE_KEYS = [
+    'candleUpColor',
+    'candleDownColor',
+    'candleBodyVisible',
+    'candleBorderVisible',
+    'candleBorderUpColor',
+    'candleBorderDownColor',
+    'candleWickVisible',
+    'candleWickUpColor',
+    'candleWickDownColor',
+] as const;
+
 /** The candle override for a style, read from the per-type bags — null for built-ins
  *  and for `basePainting: 'none'` types (nothing of theirs is candle-painted). */
 export function candleOverrideFor(style: PriceStyle, bags: Record<string, Record<string, unknown>>): CandlePaintOverride | null {
@@ -405,6 +456,43 @@ export function priceStyleIds(): PriceStyle[] {
     return out;
 }
 const STAT_POSITIONS = ['above', 'below'] as const;
+
+/**
+ * A runtime override of the local crosshair (the `crosshairOverride` feature) — for an
+ * interaction that asks the user to pick something on the chart and wants the cursor to
+ * say so. Each field replaces the configured crosshair style while set; `horizontal` /
+ * `vertical: false` drop that line together with its axis chip. Never part of the
+ * saved config.
+ */
+export interface CrosshairOverride {
+    vertical?: boolean;
+    horizontal?: boolean;
+    color?: string;
+    width?: number;
+    style?: LineStyle;
+    opacity?: number;
+    /** Veil the plot right of the vertical line's bar (every pane, up to the price scale) —
+     *  e.g. to hide what comes after a time being picked. `opacity` defaults to 1. */
+    shadeRight?: { color: string; opacity?: number };
+}
+
+/** Keep the well-formed fields of a `crosshairOverride` value; anything else (or nothing left) ⇒ null. */
+export function sanitizeCrosshairOverride(value: unknown): CrosshairOverride | null {
+    if (!value || typeof value !== 'object') return null;
+    const v = value as Record<string, unknown>;
+    const out: CrosshairOverride = {};
+    if (isBool(v.vertical)) out.vertical = v.vertical;
+    if (isBool(v.horizontal)) out.horizontal = v.horizontal;
+    if (isColor(v.color)) out.color = v.color;
+    if (isNum(v.width)) out.width = Math.max(0.5, Math.min(8, v.width));
+    if (isLineStyle(v.style)) out.style = v.style;
+    if (isNum(v.opacity)) out.opacity = clampOpacity(v.opacity);
+    const shade = v.shadeRight as Record<string, unknown> | null | undefined;
+    if (shade && typeof shade === 'object' && isColor(shade.color)) {
+        out.shadeRight = isNum(shade.opacity) ? { color: shade.color, opacity: clampOpacity(shade.opacity) } : { color: shade.color };
+    }
+    return Object.keys(out).length > 0 ? out : null;
+}
 
 function isColor(v: unknown): v is string {
     return typeof v === 'string' && v.trim().length > 0;
@@ -460,6 +548,14 @@ function clampPercent(v: number): number {
 function clampFontPx(v: number): number {
     return v < 6 ? 6 : v > 40 ? 40 : v;
 }
+/** Vertical margin percent: 0–40 each, so the data always keeps at least a fifth of the pane. */
+function clampMarginPct(v: number): number {
+    return v < 0 ? 0 : v > 40 ? 40 : v;
+}
+/** Right margin in bars: a whole number, 0–200. */
+function clampMarginBars(v: number): number {
+    return Math.round(v < 0 ? 0 : v > 200 ? 200 : v);
+}
 /** A filter bound: explicit `null` clears it; a finite non-negative number sets it; else keep base. */
 function nullableBound(v: unknown, base: number | null): number | null {
     if (v === null) return null;
@@ -475,8 +571,14 @@ function nullableBound(v: unknown, base: number | null): number | null {
  * section can store (instances, subsections, range min/max, toggle swatches). The
  * registry is read at call time (types may register after mount), and values the
  * snapshot itself pinned win over the defvals — they ARE the first-run state.
+ *
+ * The reset restores SETTINGS, not the view: the price style is what the user picked
+ * to look at (topbar / style menu), and the snapshot only pins whichever style was
+ * active at mount. The caller passes the LIVE style so the document keeps the chart
+ * type the user is on while every one of its settings goes back to default; left
+ * out, the snapshot's own style applies (template semantics).
  */
-export function factoryResetConfig(factory: ChartConfig): ChartConfig {
+export function factoryResetConfig(factory: ChartConfig, priceStyle: PriceStyle = factory.series.style): ChartConfig {
     const bag: Record<string, Record<string, unknown>> = {};
     for (const t of chartTypes()) {
         const section = t.settings;
@@ -503,10 +605,20 @@ export function factoryResetConfig(factory: ChartConfig): ChartConfig {
         if (!section.instances) addRows(section.rows);
         bag[t.id] = defaults;
     }
+    // The Symbol tab's candle rows of a candle-based plugin style are not registry
+    // rows — they live on reserved `candle*` keys of the same bag, `null` meaning
+    // "inherit the shared candles block". Name them too, or a hidden/recolored candle
+    // set under a plugin style survives the reset.
+    for (const t of chartTypes()) {
+        if (!hasOwnCandlePaint(t.id)) continue;
+        const defaults = bag[t.id] ?? {};
+        for (const key of CANDLE_OVERRIDE_KEYS) defaults[key] = null;
+        bag[t.id] = defaults;
+    }
     for (const [typeId, vals] of Object.entries(factory.chartTypes)) {
         bag[typeId] = { ...(bag[typeId] ?? {}), ...vals };
     }
-    return { ...factory, chartTypes: bag };
+    return { ...factory, chartTypes: bag, series: { ...factory.series, style: priceStyle } };
 }
 
 /**
@@ -527,9 +639,13 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
     const gh = asObject(grid.horzLines);
     const cross = asObject(p.crosshair);
     const ps = asObject(p.priceScale);
+    const anim = asObject(p.animations);
     const panes = asObject(p.panes);
+    const margins = asObject(p.margins);
     const trades = asObject(p.trades);
     const ts = asObject(p.timeScale);
+    const marks = asObject(p.marks);
+    const markGroups = asObject(marks.groups);
     const candles = asObject(p.candles);
     const bars = asObject(p.bars);
     const line = asObject(p.line);
@@ -577,8 +693,19 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
             countdown: isBool(ps.countdown) ? ps.countdown : base.priceScale.countdown,
             animateLastPrice: isBool(ps.animateLastPrice) ? ps.animateLastPrice : base.priceScale.animateLastPrice,
         },
+        animations: {
+            zoom: isBool(anim.zoom) ? anim.zoom : base.animations.zoom,
+            pan: isBool(anim.pan) ? anim.pan : base.animations.pan,
+            autoscale: isBool(anim.autoscale) ? anim.autoscale : base.animations.autoscale,
+            intro: isBool(anim.intro) ? anim.intro : base.animations.intro,
+        },
         panes: {
             separatorColor: isColor(panes.separatorColor) ? panes.separatorColor : base.panes.separatorColor,
+        },
+        margins: {
+            top: isNum(margins.top) ? clampMarginPct(margins.top) : base.margins.top,
+            bottom: isNum(margins.bottom) ? clampMarginPct(margins.bottom) : base.margins.bottom,
+            right: isNum(margins.right) ? clampMarginBars(margins.right) : base.margins.right,
         },
         trades: {
             visible: isBool(trades.visible) ? trades.visible : base.trades.visible,
@@ -590,6 +717,15 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
         },
         timeScale: {
             timezone: typeof ts.timezone === 'string' && ts.timezone ? ts.timezone : base.timeScale.timezone,
+        },
+        marks: {
+            visible: isBool(marks.visible) ? marks.visible : base.marks.visible,
+            // Additive like `stacking.series`: a patch names only the groups it carries, so a
+            // choice stored for a group the host has not registered yet survives verbatim.
+            groups: {
+                ...base.marks.groups,
+                ...Object.fromEntries(Object.entries(markGroups).filter(([, v]) => isBool(v)) as Array<[string, boolean]>),
+            },
         },
         candles: {
             upColor: isColor(candles.upColor) ? candles.upColor : base.candles.upColor,

@@ -37,11 +37,11 @@ export type PaneAxis = 'none' | 'compact' | { bands: PaneAxisBand[] };
 export interface IndicatorModel {
     /** Per-instance id (stable). */
     id: string;
-    /** Full display name (settings dialog, object tree, inspect). */
+    /** Full display name (picker, inspect, and every surface with no {@link shorttitle}). */
     title: string;
     /**
-     * Compact label the legend chip and the settings dialog show instead of the full
-     * {@link title}. Absent ⇒ both use {@link title}. Mirrors Pine
+     * Compact label the legend chip, the settings dialog and the object tree's rows show
+     * instead of the full {@link title}. Absent ⇒ all use {@link title}. Mirrors Pine
      * `indicator(..., shorttitle=)`.
      */
     shorttitle?: string;
@@ -52,7 +52,19 @@ export interface IndicatorModel {
      * `'volume'`). Absent ⇒ an ordinary Pine indicator. Drives native-only legend styling
      * (distinct title color) + list ordering (native indicators pin to the top).
      */
-    native?: { type: string };
+    native?: {
+        type: string;
+        /**
+         * The renderer-layer data channel this instance's bespoke payload (`pushData`) lands
+         * on, when it differs from the type: set for an instance of a `multiInstance` type,
+         * so a renderer mounts a DEDICATED layer instance (own canvas, own pane, own stacking)
+         * reading this channel instead of the shared per-type layer. Absent ⇒ the type is the
+         * channel (single-instance natives, the built-in volume/VPVR).
+         */
+        channel?: string;
+    };
+    /** `false` ⇒ no legend row and no pane listing for this indicator (host-owned chrome); absent ⇒ a row. */
+    legend?: boolean;
     /**
      * Value-axis override for the pane this indicator OWNS — declared by content that is
      * not value-mapped (e.g. a bespoke renderer layer painting in pixel bands), where a

@@ -1,5 +1,6 @@
-import type { AxisLongPressEvent, CrosshairEvent, DataWindowReadout, IChartRenderer, LegendActionView, LegendCalloutView, RendererCapabilities } from './ports/IChartRenderer';
+import type { AxisLongPressEvent, ClickEvent, CrosshairEvent, DataWindowReadout, IChartRenderer, LegendActionView, LegendCalloutView, RendererCapabilities } from './ports/IChartRenderer';
 import type { Unsubscribe } from './util/types';
+import type { WallClock } from './util/wall-clock';
 import type { SymbolPickerFn } from './model/inputs';
 
 /**
@@ -152,6 +153,13 @@ export class RendererControl {
         return this.renderer.onCrosshairMove(cb);
     }
 
+    /** A click — or a touch tap — on the plot, never the end of a pan: the open time of
+     *  the bar under it (`null` off the bars). On touch, where a tap moves no crosshair,
+     *  this is how an interaction learns which bar was chosen. */
+    onClick(cb: (e: ClickEvent) => void): Unsubscribe {
+        return this.renderer.onClick(cb);
+    }
+
     /** Touch long-press on a price or time axis strip — silent no-op without the seam. */
     onAxisLongPress(cb: (e: AxisLongPressEvent) => void): Unsubscribe {
         return this.renderer.onAxisLongPress?.(cb) ?? (() => undefined);
@@ -255,6 +263,17 @@ export class RendererControl {
      *  Silent no-op on a renderer without adaptive chrome. */
     setLayoutMode(mode: 'mobile' | 'desktop'): this {
         this.renderer.setLayoutMode?.(mode);
+        return this;
+    }
+
+    /**
+     * Drive the renderer's time-of-day chrome (the countdown-to-bar-close chip) from the
+     * host's own second pulse, so it ticks in step with a host clock display instead of
+     * on a separate timer that can read a different second. `null` hands the pulse back
+     * to the renderer. Silent no-op on a renderer without time-of-day chrome.
+     */
+    setWallClock(clock: WallClock | null): this {
+        this.renderer.setWallClock?.(clock);
         return this;
     }
 }

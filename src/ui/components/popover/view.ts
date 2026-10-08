@@ -2,7 +2,9 @@
 // owns portal, placement, capture-phase outside-dismiss, and the single-open registry.
 import type { VelaTheme } from '../../../core/options';
 import { injectStyles } from '../../styles';
-import { ensureUIHost } from '../../tokens';
+import { ensureUIHost, floatingLayerHost } from '../../tokens';
+import { announceSurface } from '../../surface-events';
+import { holdForExit, type SurfaceExit } from '../../surface-exit';
 import {
     insetRect,
     intersectRects,
@@ -28,9 +30,13 @@ export interface PopoverOptions extends PopoverControllerOptions {
     zIndex?: string | number;
     /** Clamp rectangle. `'viewport'` (default) or an element (dialog / chart host). */
     boundary?: PopoverBoundary;
+    /** Fade the shell in on show and out on hide over this many ms (default 0 — instant). */
+    fadeMs?: number;
 }
 
 let open: Popover | null = null;
+/** Closed popovers still playing their exit animation. */
+const leaving = new Set<Popover>();
 
 /** Close whichever kit popover is showing (dialog teardown, a second trigger). */
 export function closeOpenPopovers(): void {
@@ -73,19 +79,30 @@ export class Popover {
     private readonly ctrl: ReturnType<typeof popoverController>;
     private readonly boundary: PopoverBoundary;
     private readonly theme?: VelaTheme;
+    /** Hosted under a `.vela-ui` we resolved ourselves — its tokens win over `theme`. */
+    private readonly inheritsTokens: boolean;
     private onOutside: ((e: Event) => void) | null = null;
     private onKey: ((e: KeyboardEvent) => void) | null = null;
     private onReflow: (() => void) | null = null;
     private shown = false;
+    private readonly fadeMs: number;
+    /** The pending removal of a fading-out shell; a show() that reuses the shell cancels it. */
+    private leaveTimer: ReturnType<typeof setTimeout> | null = null;
+    /** The shell's exit animation before it leaves the DOM; a show() that reuses the shell cancels it. */
+    private exit: SurfaceExit | null = null;
 
     constructor(opts: PopoverOptions) {
         const doc = opts.trigger.ownerDocument;
         injectStyles(POPOVER_STYLE_ID, POPOVER_CSS, doc);
         this.trigger = opts.trigger;
-        this.host = opts.host ?? doc.body;
+        // No explicit host: portal to the trigger's `.vela-ui` (app-theme tokens) rather
+        // than <body>. Explicit hosts (drawing chrome, mark popups) keep their own tokens.
+        this.host = opts.host ?? floatingLayerHost(opts.trigger, doc.body);
+        this.inheritsTokens = !opts.host && this.host !== doc.body;
         this.ctrl = popoverController(opts);
         this.boundary = opts.boundary ?? 'viewport';
         this.theme = opts.theme;
+        this.fadeMs = Math.max(0, opts.fadeMs ?? 0);
 
         this.el = doc.createElement('div');
         this.el.className = 'vela-popover vela-ui-layer' + (opts.className ? ` ${opts.className}` : '');
@@ -115,11 +132,31 @@ export class Popover {
             return;
         }
         if (open && open !== this) open.hide();
-        ensureUIHost(this.el, this.theme);
+        if (this.leaveTimer !== null) {
+            clearTimeout(this.leaveTimer);
+            this.leaveTimer = null;
+        }
+        this.exit?.cancel();
+        this.exit = null;
+        leaving.delete(this);
+        // Owners that build a fresh popover per open (color pickers, select lists): the new
+        // one takes the place of the one still leaving from the same trigger.
+        for (const p of [...leaving]) if (p.trigger === this.trigger) p.exit?.finish();
+        // A caller theme is often the live plot surface (settings dialogs pass
+        // `this.theme`); stamping it on a `.vela-ui`-hosted shell would recolor the
+        // list to layout.background.
+        ensureUIHost(this.el, this.inheritsTokens ? undefined : this.theme);
+        if (this.fadeMs > 0) {
+            this.el.style.transition = `opacity ${this.fadeMs}ms ease`;
+            this.el.style.opacity = '0';
+            this.el.style.pointerEvents = '';
+        }
         this.host.appendChild(this.el);
         this.shown = true;
         open = this;
         this.place();
+        // place() measured the shell (a style flush at opacity 0) — flipping it now runs the transition.
+        if (this.fadeMs > 0) this.el.style.opacity = '1';
         const onOutside = (ev: Event): void => {
             const t = ev.target as Node;
             if (this.el.contains(t) || this.trigger.contains(t)) return;
@@ -135,8 +172,12 @@ export class Popover {
             this.hide();
         };
         const onReflow = (): void => this.place();
-        // Capture phase, deferred so the opening click does not immediately dismiss.
-        setTimeout(() => document.addEventListener('pointerdown', onOutside, true), 0);
+        // Capture phase, deferred so the opening click does not immediately dismiss — and only
+        // if this show is still the live one: a hide (or hide + show) in the same tick cleared or
+        // replaced the handler, and attaching it then would leave it behind for good.
+        setTimeout(() => {
+            if (this.onOutside === onOutside) document.addEventListener('pointerdown', onOutside, true);
+        }, 0);
         document.addEventListener('keydown', onKey, true);
         window.addEventListener('resize', onReflow, true);
         // A scroll anywhere (dialog body, chart container) moves the trigger while the
@@ -145,10 +186,16 @@ export class Popover {
         this.onOutside = onOutside;
         this.onKey = onKey;
         this.onReflow = onReflow;
+        // Last: a listener may hide it again at once, and must find it fully open.
+        announceSurface(this.el, true, 'popover', this.trigger);
     }
 
     hide(): void {
         if (!this.shown) return;
+        // Closed before announcing (a listener's own hide() must not re-enter), but still
+        // attached — a fade-out or removal follows — so the close bubbles to the host.
+        this.shown = false;
+        announceSurface(this.el, false, 'popover', this.trigger);
         if (this.onOutside) document.removeEventListener('pointerdown', this.onOutside, true);
         if (this.onKey) document.removeEventListener('keydown', this.onKey, true);
         if (this.onReflow) {
@@ -158,8 +205,22 @@ export class Popover {
         this.onOutside = null;
         this.onKey = null;
         this.onReflow = null;
-        this.el.remove();
-        this.shown = false;
+        if (this.fadeMs > 0) {
+            // Fade out, then leave the DOM; the shell is inert meanwhile (no listeners, not `open`, no hits).
+            this.el.style.opacity = '0';
+            this.el.style.pointerEvents = 'none';
+            this.leaveTimer = setTimeout(() => {
+                this.leaveTimer = null;
+                this.el.remove();
+            }, this.fadeMs);
+        } else {
+            this.exit = holdForExit(this.el, () => {
+                this.exit = null;
+                leaving.delete(this);
+                this.el.remove();
+            });
+            if (this.exit) leaving.add(this);
+        }
         if (open === this) open = null;
         this.ctrl.onClose?.();
     }
@@ -172,6 +233,7 @@ export class Popover {
 
     destroy(): void {
         this.hide();
+        this.exit?.finish();
     }
 
     reposition(): void {

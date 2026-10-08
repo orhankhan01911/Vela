@@ -21,6 +21,7 @@ import { Menu } from '../ui/components/menu';
 import type { Vela } from '../Vela';
 import { Topbar, priceStyleLabel, priceStyleIcon } from '../widget/topbar';
 import { Bottombar, RANGE_PRESETS } from '../widget/bottombar';
+import { SecondClock } from '../core/util/wall-clock';
 import { ObjectTree } from '../widget/object-tree';
 import { DataWindow } from '../widget/data-window';
 import type { ScriptRun } from '../core/script-run';
@@ -32,7 +33,7 @@ import { ShortcutsHelp } from '../widget/shortcuts-help';
 import { Toast } from '../widget/toast';
 import { Glider, ZOOM_IN, ZOOM_OUT, PAN_FAST } from '../widget/glide';
 import { toolShortcutHints } from '../widget/tool-shortcuts';
-import { legendActionsProviderFor, legendCalloutsProviderFor, statePersistenceHandlers, topbarActionOverride, widgetActions, widgetAttachments, type WidgetActionDescriptor } from '../widget/contributions';
+import { legendActionsProviderFor, legendCalloutsProviderFor, mobilePlacement, statePersistenceHandlers, topbarActionOverride, widgetActions, widgetAttachments, type WidgetActionDescriptor } from '../widget/contributions';
 import { resolveTopbarComposition, topbarHas, TOPBAR_BUILTIN_IDS, type ResolvedTopbarComposition } from '../widget/topbar-composition';
 import { LayoutModeController, type LayoutMode } from '../widget/layout-mode';
 import { MobileBar } from '../widget/mobile-bar';
@@ -52,11 +53,12 @@ import { timeframeToMs } from '../data/timeframe';
 import { timeframeLabel } from '../widget/timeframe';
 import { registerBuiltinChartTypes } from '../chart-types/builtins';
 import { parseSymbol } from '../data/ProviderRegistry';
-import { syncTargets, rangesWithin, styleConfigSlice, SYNC_KINDS, type SyncKind, type SyncOptions, type SyncSetting } from './sync';
+import { syncTargets, rangesWithin, styleConfigPatch, SYNC_KINDS, type SyncKind, type SyncOptions, type SyncSetting } from './sync';
 import { encodeState, decodeState, sanitizeState, type WorkspaceState, type WorkspaceStorage } from './persist';
 import { localStorageAdapter } from '../widget/persist';
 import { ChartCell, seedDefaults, cellChartDefaults, type CellSeed, type CellBoot, type PooledCellState } from './ChartCell';
 import { buildContext, type WorkspaceWidgetContext } from './context';
+import { WorkspaceReplay } from './WorkspaceReplay';
 import {
     registerBuiltinLayouts,
     layouts,
@@ -66,6 +68,7 @@ import {
     ensureLayout,
     layoutForGrid,
     layoutShape,
+    layoutGlyph,
     occupancyGrid,
     type LayoutDefinition,
     type TrackSizes,
@@ -133,6 +136,15 @@ export interface WorkspaceEventMap extends Record<string, unknown> {
      * change included.
      */
     'script:run': WorkspaceScriptRun;
+    /**
+     * One cell's price style is switching `from` → `to` — the per-chart
+     * `priceStyle:change` relayed up with the cell's identity, so one subscription
+     * covers the whole grid, cells added by a later layout change included. Only the
+     * cell whose style changes emits. Same timing as the chart event: synchronous,
+     * before that cell repaints, so `ws.cell(id).priceStyle` and the cell's canvas
+     * still show `from` while the listener runs.
+     */
+    'cell:priceStyle': { id: string; from: string; to: string };
     /** The grid switched layouts (cells created/destroyed/restored around it). */
     'layout:changed': { layout: string };
     /** A cell was maximized over the whole grid, or the grid restored (`id: null`). */
@@ -155,6 +167,8 @@ const CSS = `
 .vela-workspace { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--vela-bg); }
 .vela-ws-main { position: relative; display: flex; flex-direction: row; flex: 1 1 auto; min-height: 0; }
 .vela-ws-toolbar { position: relative; flex: none; }
+.vela-ws-strips { position: relative; flex: none; display: flex; flex-direction: column; min-width: 0; }
+.vela-ws-strips:empty { display: none; }
 .vela-ws-grid { position: relative; flex: 1 1 auto; min-width: 0; display: grid; gap: ${GAP_PX}px; background: var(--vela-border-soft); }
 .vela-cell { background: var(--vela-bg); position: relative; }
 /* Active-cell highlight: an overlay ring ABOVE the chart's own canvas stack (a plain
@@ -222,15 +236,48 @@ export function nextAutoCellId(taken: ReadonlySet<string>): string {
     }
 }
 
+/** Which dialogs are up when a bare keystroke reaches the workspace root. */
+export interface TypingState {
+    dialogs: number;
+    symbolSearch: boolean;
+    timeframeEntry: boolean;
+}
+
+/**
+ * What a bare keystroke on the workspace root does. Nothing open: a letter or `0` seeds
+ * symbol search (no timeframe starts with 0), a digit 1–9 the timeframe entry. An ENTRY
+ * dialog open: its field takes focus a tick after the dialog reports open, so the next
+ * key of a fast typist (`NQ`, `15`) still lands on the root — it is handed to that
+ * dialog as more typed text instead of dropped. Any other open dialog swallows bare
+ * typing. Pure — unit-tested.
+ */
+export function resolveTyping(key: string, open: TypingState): { target: 'symbol' | 'timeframe'; text: string } | null {
+    if (open.dialogs > 0) {
+        if (key.length !== 1) return null; // a printable character, not a control key
+        if (open.symbolSearch) return { target: 'symbol', text: key.toUpperCase() };
+        if (open.timeframeEntry) return { target: 'timeframe', text: key.toUpperCase() };
+        return null;
+    }
+    if (/^[a-zA-Z0]$/.test(key)) return { target: 'symbol', text: key.toUpperCase() };
+    if (/^[1-9]$/.test(key)) return { target: 'timeframe', text: key };
+    return null;
+}
+
 export class VelaWorkspace {
     readonly root: HTMLElement;
     /** The shortcut system — one manager for the whole workspace, routed to the active cell. */
     readonly keymap: KeymapManager;
+    /** Bar replay across every cell on one clock (see {@link WorkspaceReplay}). */
+    readonly replay: WorkspaceReplay;
 
     private readonly gridEl: HTMLElement;
+    private readonly stripsEl: HTMLElement;
     private readonly events = new TypedEventBus<WorkspaceEventMap>();
     private readonly feed = new MultiProviderFeed();
     private readonly cellsById = new Map<string, ChartCell>();
+    /** The one second pulse behind every time display: the bottom-bar clock and each
+     *  cell's countdown chip subscribe to it, so they can never read different seconds. */
+    private readonly clock = new SecondClock();
     private readonly pool = new Map<string, PooledCellState>();
     private readonly trackSizes = new Map<string, TrackSizes>(); // per layout id (splitter drags)
     private readonly splitters: SplitterLayer;
@@ -289,7 +336,21 @@ export class VelaWorkspace {
     private readonly persistKey: string | null;
     private readonly storage: WorkspaceStorage;
     private stateTimer: ReturnType<typeof setTimeout> | null = null;
-    private readonly onUnload = (): void => this.persistNow();
+    /** Re-entrance guard for {@link flushPendingState}: a `state:changed` subscriber that
+     *  calls back into the workspace (`destroy()` on save is the obvious one) must not
+     *  re-enter the flush and recurse. */
+    private emitting = false;
+    /** False until the constructor finishes. Boot is not an edit: seeding the sync
+     *  settings marks state dirty, so without this a workspace mounted and torn down
+     *  inside the debounce window would flush and tell the host the user had changed
+     *  something — a save of the default document over whatever was stored. */
+    private booted = false;
+    /** A page unload gets the same flush as a teardown — the pending edit reaches the
+     *  host, the timer is cleared, and a `destroy()` that follows adds no second write. */
+    private readonly onUnload = (): void => {
+        this.flushPendingState();
+        this.persistNow();
+    };
     /** Re-entrance guard around one propagation tick: followers' synchronous echoes
      *  (their setVisibleRange re-emits viewport:changed) must not re-propagate. */
     private syncBusy = false;
@@ -351,6 +412,21 @@ export class VelaWorkspace {
         const hostEl = typeof container === 'string' ? document.querySelector<HTMLElement>(container) : container;
         if (!hostEl) throw new Error(`VelaWorkspace: container not found: ${String(container)}`);
         this.opts = opts;
+        // Before any cell exists: the replay watches every cell from its creation on.
+        this.replay = new WorkspaceReplay({
+            cells: () => this.cells(),
+            activeId: () => this.activeId,
+            onCells: (handler) => {
+                const offs = [
+                    this.events.on('cell:created', ({ id }) => handler({ kind: 'created', id })),
+                    this.events.on('cell:destroyed', ({ id }) => handler({ kind: 'destroyed', id })),
+                    this.events.on('cell:active', ({ id }) => handler({ kind: 'active', id })),
+                ];
+                return () => {
+                    for (const off of offs) off();
+                };
+            },
+        });
         // ── persistence boot: a SYNC storage restores before the first build (no flash
         // of defaults); an async adapter resolves later and late-applies via applyState.
         this.persistKey = opts.persist === undefined || opts.persist === false ? null : opts.persist === true ? 'vela-workspace' : opts.persist;
@@ -490,6 +566,7 @@ export class VelaWorkspace {
                     const kind = id as SyncKind;
                     this.sync.set(kind, this.syncOpts[kind] ? false : true);
                 },
+                glyph: () => layoutGlyph(this.def),
             },
             getContext: () => this.context(),
         });
@@ -531,6 +608,10 @@ export class VelaWorkspace {
         // Panels that are not registered yet keep their entry until they dock.
         if (boot?.panels) this.dock.applyState(boot.panels);
         this.root.appendChild(main);
+        // Docked strips (`ctx.dockStrip`) — before the bottom bar, which appends itself next.
+        this.stripsEl = doc.createElement('div');
+        this.stripsEl.className = 'vela-ws-strips';
+        this.root.appendChild(this.stripsEl);
         this.toastHost = new Toast(this.gridEl);
 
         // ONE attribution mark for the whole grid (bottom-left, floating above the
@@ -613,6 +694,7 @@ export class VelaWorkspace {
             opts.bottombar !== false
                 ? new Bottombar(this.root, {
                       timezone: this.timezone,
+                      clock: this.clock,
                       onRange: (preset) => {
                           this.active.applyRange(preset);
                           this.bottombar?.setActiveRange(preset.id);
@@ -705,6 +787,9 @@ export class VelaWorkspace {
         // is fully built (cells live, attachments mounted). The async-adapter boot and
         // host `applyState` calls reach the same handlers through applyState.
         this.restoreGlobalExt();
+        // Built. From here a dirty mark means the USER changed something, and a teardown
+        // is allowed to flush it; everything above was setup (see {@link booted}).
+        this.booted = true;
     }
 
     // ── access ──────────────────────────────────────────────────
@@ -828,9 +913,16 @@ export class VelaWorkspace {
             setActiveCell: (id) => this.setActiveCell(id),
             openSymbolSearch: (query) => this.symbolPicker.open(query ?? ''),
             togglePanel: (id, open) => this.dock.toggle(id, open),
+            dockStrip: (el) => {
+                this.stripsEl.appendChild(el);
+                return () => {
+                    if (el.parentElement === this.stripsEl) el.remove();
+                };
+            },
             root: this.root,
             toast: (message, kind) => this.toastHost.show(message, kind),
             stateDirty: () => this.markStateDirty(),
+            replay: this.replay,
         });
     }
 
@@ -1031,12 +1123,23 @@ export class VelaWorkspace {
         }
     }
 
-    /** Set the workspace-global display timezone — applied to EVERY cell. */
+    /**
+     * Set the workspace-global display timezone — applied to EVERY cell. An IANA zone,
+     * or `'exchange'` (the exchange rule): each cell then renders in its OWN market's
+     * zone (Chicago for a CME future, New York for a US equity, UTC for crypto), and the
+     * bottom bar follows the active cell's.
+     */
     setTimezone(zone: string): void {
         this.timezone = zone;
-        this.bottombar?.setTimezone(zone);
-        for (const cell of this.cellsById.values()) cell.chart.renderer.set('timezone', zone);
+        this.projectTimezone();
+        for (const cell of this.cellsById.values()) cell.applyTimezone();
         this.markStateDirty();
+    }
+
+    /** Bottom bar ⇐ the stored choice + the ACTIVE cell's market zone (labels the exchange row). */
+    private projectTimezone(): void {
+        const active = this.activeId ? this.cellsById.get(this.activeId) : undefined;
+        this.bottombar?.setTimezone(this.timezone, active?.exchangeTimezone);
     }
 
     /**
@@ -1083,7 +1186,7 @@ export class VelaWorkspace {
         const keep = new Set(this.order.slice(0, next.cells.length));
         // Identities live BEFORE the switch — cells that survive or round-trip through
         // the pool carry their own (already converged) state; only genuinely NEW slots
-        // need the style alignment below.
+        // need the style and drawings alignment below.
         const preexisting = new Set(this.cellsById.keys());
         for (const [id, cell] of [...this.cellsById]) {
             if (!keep.has(id) || rebuildAll) {
@@ -1098,6 +1201,7 @@ export class VelaWorkspace {
         this.applyGrid();
         this.buildCells();
         this.alignNewCellStyles(preexisting);
+        this.alignNewCellDrawings(preexisting);
         this.syncCellPresentation();
         this.refreshCellControls(); // the maximize gate follows the cell count
         this.topbar.setLayout(next.id);
@@ -1154,6 +1258,8 @@ export class VelaWorkspace {
         const cell = this.activeId ? this.cellsById.get(this.activeId) : undefined;
         const paneMax = cell ? cell.chart.panes.list().some((p) => p.maximized) : false;
         this.mobileBar.setMaximizeActive(this.maximizedId != null || paneMax);
+        // Same gate as the per-cell controls: a one-chart layout has nothing to isolate.
+        this.mobileBar.setMaximizeVisible(this.def.cells.length > 1);
     }
 
     /**
@@ -1190,13 +1296,28 @@ export class VelaWorkspace {
 
     destroy(): void {
         if (this.destroyed) return;
-        this.persistNow(); // snapshot while the cells are still alive
+        this.flushPendingState(); // the user's last edit, before anything is torn down
         this.destroyed = true;
-        if (this.stateTimer != null) clearTimeout(this.stateTimer);
+        this.replay.destroy();
         if (this.persistKey !== null && typeof window !== 'undefined') window.removeEventListener('beforeunload', this.onUnload);
         this.resizeObserver?.disconnect();
         this.splitters.destroy();
         for (const [id, cell] of [...this.cellsById]) {
+            // Dehydrate into the pool before tearing the cell down, exactly as a layout
+            // rebuild does. Without it `getState()` after `destroy()` rebuilds `charts`
+            // from the pool alone and reports the last APPLIED document rather than what
+            // was on screen — so a host reading state during its own teardown gets a
+            // stale document back and cannot tell that anything changed.
+            //
+            // Guarded like the attachment disposers below: `dehydrate()` reaches renderer
+            // and drawing state, and a snapshot for the host's benefit must never be able
+            // to abandon the teardown midway, leaking the remaining cells and their
+            // listeners. A cell that cannot be snapshotted keeps whatever the pool holds.
+            try {
+                this.poolSet(id, cell.dehydrate());
+            } catch (err) {
+                console.warn(`[vela] could not snapshot cell "${id}" while destroying:`, err);
+            }
             cell.destroy();
             this.cellsById.delete(id);
         }
@@ -1260,6 +1381,7 @@ export class VelaWorkspace {
         this.dock.onChart(cell.chart); // every docked panel follows the active cell
         this.bottombar?.setActiveRange(cell.activeRangeId);
         this.bottombar?.setSession({ session: cell.session, enabled: cell.sessionAvailable });
+        this.projectTimezone(); // under the exchange rule the bar's zone is the active cell's
         this.indicatorPicker?.sync(); // the dialog may be open while the active cell changes
         this.glider.stop(); // a mid-glide switch must not steer the next cell's viewport
         // Shared drawing toolbar ⇄ the active cell: re-apply the GLOBAL tool + magnet + stay
@@ -1288,13 +1410,53 @@ export class VelaWorkspace {
     /** Debounced dirty mark: one `state:changed` (+ one storage write in persist mode)
      *  per burst of edits, flushed hard on unload/destroy. */
     private markStateDirty(): void {
-        if (this.destroyed) return;
+        if (this.destroyed || !this.booted) return;
         if (this.stateTimer != null) clearTimeout(this.stateTimer);
         this.stateTimer = setTimeout(() => {
             this.stateTimer = null;
             this.events.emit('state:changed', undefined);
             this.persistNow();
         }, 500);
+    }
+
+    /**
+     * Push a pending debounced change out NOW, for a teardown or a page unload — the
+     * two moments the 500ms timer would otherwise never reach.
+     *
+     * Dropping it was a silent data loss: the timer carries BOTH halves of the dirty
+     * signal — the `state:changed` event and the storage write — so a host that saves
+     * from that event (a server-backed host, where `persistNow` is a no-op for want of
+     * a `persistKey`) simply never heard about the user's last edit.
+     *
+     * Idempotent and re-entrancy safe, which the ordering here buys:
+     *  - a no-op unless a timer is actually pending, so a teardown with nothing
+     *    outstanding stays silent and never invents an edit;
+     *  - the timer is cleared FIRST, so nothing survives this call and a second call
+     *    does nothing — `destroy()` after an unload flush adds no second write;
+     *  - the state is snapshotted BEFORE the handlers run, and that snapshot is what
+     *    gets persisted, so storage and the host are told the same thing even if a
+     *    handler mutates state while it runs;
+     *  - `emitting` is held across the emit, so a handler calling back in (a host that
+     *    tears down on save is the obvious one) cannot re-enter this and recurse.
+     */
+    private flushPendingState(): void {
+        if (this.stateTimer == null || this.emitting) return;
+        clearTimeout(this.stateTimer);
+        this.stateTimer = null;
+        const snapshot = this.persistKey !== null ? encodeState(this.getState()) : null;
+        this.emitting = true;
+        try {
+            this.events.emit('state:changed', undefined);
+        } finally {
+            this.emitting = false;
+        }
+        if (snapshot !== null && this.persistKey !== null) {
+            try {
+                void this.storage.set(this.persistKey, snapshot);
+            } catch {
+                /* best-effort — a failing adapter must never break the workspace */
+            }
+        }
     }
 
     /** Write the current state through the storage adapter now (fire-and-forget). */
@@ -1490,6 +1652,9 @@ export class VelaWorkspace {
             // A fresh renderer starts desktop — push the live mode so touch gestures,
             // fullscreen dialogs and the scroll-button sizing apply from the first frame.
             cell.chart.renderer.setLayoutMode(this.layoutCtl.current);
+            // The bottom-bar clock is authoritative: the cell's countdown chip ticks on the
+            // same pulse, never on a renderer-private timer that could read another second.
+            cell.chart.renderer.setWallClock(this.clock);
             cell.setControlsSuspended(this.layoutCtl.current === 'mobile');
             // The shared star set is a workspace pref — every newborn cell inherits it
             // silently (equal-set idempotence keeps the favorites event from echoing).
@@ -1520,6 +1685,7 @@ export class VelaWorkspace {
         // workspace covers a grid whose cells come and go. Each cell runs its own engine
         // session, so the `cell` field is what tells two identical scripts apart.
         chart.on('script:run', (run) => this.events.emit('script:run', { ...run, cell: cell.id }));
+        chart.on('priceStyle:change', ({ from, to }) => this.events.emit('cell:priceStyle', { id: cell.id, from, to }));
         chart.on('alert', (alert) => {
             // Provenance the way a user reads it — symbol, timeframe, and the indicator
             // that fired — captured at fire time (the cell may switch markets later).
@@ -1592,7 +1758,7 @@ export class VelaWorkspace {
         // Viewport sync: every applied pan/zoom/fit propagates to the same-group cells.
         chart.on('viewport:changed', (range) => this.propagateViewport(cell.id, range));
         // Style sync: any committed config edit (settings dialog, applyConfig) mirrors
-        // this cell's Canvas + Scales-and-lines slice onto its same-group followers.
+        // this cell's style-link slice onto its same-group followers.
         chart.renderer.onConfigChanged(() => this.propagateStylePrefs(cell.id));
         // A theme picked in ONE cell (its settings dialog's Canvas → Theme) re-skins the
         // WHOLE workspace — shared chrome plus every other cell.
@@ -1680,12 +1846,67 @@ export class VelaWorkspace {
     }
 
     /**
-     * Mirror an origin cell's presentation — the Canvas + Scales-and-lines slice of
-     * its renderer config plus its Status line tab prefs — onto its same-group
-     * followers (the style link). Loop-safe two ways: the busy guard eats the
-     * followers' SYNCHRONOUS echoes (their `applyConfig` re-fires `onConfigChanged`
-     * in the same tick), and the equality short-circuits leave already-converged
-     * followers untouched, so nothing re-emits once the group agrees.
+     * Bring cells minted by a layout change into their drawings group: with the link
+     * on, a NEW cell (fresh slot, or one returning from the pool that missed edits
+     * while dormant) receives the drawings of a pre-existing group peer — the active
+     * cell when it is one. A drawing the arriving cell already holds a linked copy of
+     * is refreshed in place; any other is copied and linked like a freshly synced
+     * drawing, so later edits and removals follow both ways. The arrival is the cell's
+     * starting state, not an edit: it stays out of the cell's undo timeline, and the
+     * busy guard keeps the copies' own events from fanning back out.
+     */
+    private alignNewCellDrawings(preexisting: ReadonlySet<string>): void {
+        const setting = this.syncOpts.drawings;
+        if (!setting) return;
+        const ids = [...this.cellsById.keys()];
+        for (const id of ids) {
+            if (preexisting.has(id)) continue;
+            const cell = this.cellsById.get(id);
+            if (!cell?.chart.drawings.supported) continue;
+            const peers = syncTargets(id, setting, ids).filter((p) => preexisting.has(p));
+            if (peers.length === 0) continue; // an unlinked or all-new group has no source to inherit
+            const sourceId = this.activeId && peers.includes(this.activeId) ? this.activeId : peers[0]!;
+            const source = this.cellsById.get(sourceId);
+            if (!source) continue;
+            const drawings = cell.chart.drawings;
+            this.drawingSyncBusy = true;
+            try {
+                cell.history.silently(() => {
+                    const held = new Set(drawings.all().map((d) => d.id));
+                    for (const doc of source.chart.drawings.all()) {
+                        const group = this.drawingLinks.get(`${sourceId}\u0000${doc.id}`) ?? new Map([[sourceId, doc.id]]);
+                        const peerId = group.get(id);
+                        if (peerId != null && held.has(peerId)) {
+                            drawings.update(peerId, { anchors: doc.anchors, style: doc.style, text: doc.text, props: doc.props });
+                            continue;
+                        }
+                        const copy = drawings.add(doc.type, {
+                            paneId: doc.paneId,
+                            anchors: doc.anchors,
+                            style: doc.style,
+                            text: doc.text,
+                            props: doc.props,
+                            zIndex: doc.zIndex,
+                        });
+                        if (!copy) continue;
+                        if (peerId != null) this.drawingLinks.delete(`${id}\u0000${peerId}`);
+                        group.set(id, copy.id);
+                        for (const [cellId, dId] of group) this.drawingLinks.set(`${cellId}\u0000${dId}`, group);
+                    }
+                });
+            } finally {
+                this.drawingSyncBusy = false;
+            }
+        }
+    }
+
+    /**
+     * Mirror an origin cell's presentation — the style-link slice of its renderer
+     * config ({@link styleConfigPatch}) plus its Status line and watermark prefs —
+     * onto its same-group followers (the style link). Loop-safe two ways: the busy
+     * guard eats the followers' SYNCHRONOUS echoes (their `applyConfig` re-fires
+     * `onConfigChanged` in the same tick), and the equality short-circuits leave
+     * already-converged followers untouched, so nothing re-emits once the group agrees.
      */
     private propagateStylePrefs(originId: string): void {
         if (this.styleSyncBusy || this.destroyed) return;
@@ -1693,18 +1914,16 @@ export class VelaWorkspace {
         if (targets.length === 0) return;
         const origin = this.cellsById.get(originId);
         if (!origin) return;
-        // A renderer without the config port yields no slice — the status prefs still mirror.
-        const slice = styleConfigSlice(origin.chart.renderer.getConfig());
-        const sliceJson = slice ? JSON.stringify(slice) : null;
+        // A renderer without the config port yields no patch — the cell prefs still mirror.
+        const config = origin.chart.renderer.getConfig();
         const prefs = origin.statusPrefs();
         this.styleSyncBusy = true;
         try {
             for (const id of targets) {
                 const cell = this.cellsById.get(id);
                 if (!cell) continue;
-                if (slice && sliceJson !== JSON.stringify(styleConfigSlice(cell.chart.renderer.getConfig()))) {
-                    cell.chart.renderer.applyConfig(slice);
-                }
+                const patch = styleConfigPatch(config, cell.chart.renderer.getConfig());
+                if (patch) cell.chart.renderer.applyConfig(patch);
                 cell.applyStatusPrefs(prefs);
             }
         } finally {
@@ -1897,6 +2116,7 @@ export class VelaWorkspace {
         this.mobileBar?.setTimeframe(cell.timeframe);
         this.objectTree.setSymbol(cell.symbol);
         this.bottombar?.setSession({ session: cell.session, enabled: cell.sessionAvailable });
+        this.projectTimezone(); // the new symbol's market zone, once its metadata lands
         // The chip highlight must track the cell through EVERY market path: a timeframe
         // change (cell API, contribution context, sync link) leaves range mode and a
         // direct `applyRange` enters it — the bar follows the cell's own record.
@@ -2023,16 +2243,13 @@ export class VelaWorkspace {
             panels: () => (has('panels') ? [...this.dock.list()] : []),
             onTogglePanel: (id) => this.dock.toggle(id),
             ...(has('alerts') ? { alerts: () => this.alerts.map((a) => ({ title: `${a.source} · ${a.title}`, message: a.message, time: a.time })) } : {}),
-            // Left-aligned actions have their own bottom-bar stop — only the rest
-            // lands in the drawer, or every left action would appear twice. Built-in-id
-            // actions are slot OVERRIDES: they reach the drawer through the slot's own
-            // routed button (screenshot) or stop (indicators), never as an extra row.
-            actions: () => {
-                const builtin = new Set<string>(TOPBAR_BUILTIN_IDS);
-                return widgetActions('topbar', this.context())
-                    .filter((a) => a.align !== 'left' && !builtin.has(a.id))
-                    .map((a) => ({ label: a.label, icon: a.icon, run: () => a.run(this.context()) }));
-            },
+            // Actions placed on the bottom bar (left-aligned by default) have their stop
+            // there — only the menu-placed ones land in the drawer, or they would appear
+            // twice: left (primary) ones with the primary rows, right ones at the end.
+            // Built-in-id actions are slot OVERRIDES: they reach the drawer through the
+            // slot's own routed button (screenshot) or stop (indicators), never as a row.
+            primaryActions: () => this.drawerActions('left'),
+            actions: () => this.drawerActions('right'),
             // The desktop layout dropdown's whole surface — the grid canvas, the
             // non-canvas presets and the sync switches — relocated into the kebab
             // drawer (the topbar is hidden on mobile). Same reads as the topbar block;
@@ -2055,10 +2272,19 @@ export class VelaWorkspace {
                     const kind = id as SyncKind;
                     this.sync.set(kind, this.syncOpts[kind] ? false : true);
                 },
+                glyph: () => layoutGlyph(this.def),
             },
             onOpenChange: (open) => this.trackDialog(open),
         });
         this.moreDrawer.open();
+    }
+
+    /** The contributed topbar actions the mobile menu lists, from one cluster. */
+    private drawerActions(cluster: 'left' | 'right'): Array<{ label: string; icon?: string; run: () => void }> {
+        const builtin = new Set<string>(TOPBAR_BUILTIN_IDS);
+        return widgetActions('topbar', this.context())
+            .filter((a) => mobilePlacement(a) === 'menu' && (a.align === 'left') === (cluster === 'left') && !builtin.has(a.id))
+            .map((a) => ({ label: a.label, icon: a.icon, run: () => a.run(this.context()) }));
     }
 
     private openTimezoneDrawer(): void {
@@ -2198,19 +2424,16 @@ export class VelaWorkspace {
         });
     }
 
-    /** Bare-typing router: letters → symbol search (seeded), digits → timeframe entry. */
+    /** Bare-typing router: letters and `0` → symbol search (seeded), digits 1–9 → timeframe entry. */
     private routeTyping(ev: KeyboardEvent): void {
-        if (this.destroyed || this.openDialogs > 0) return;
+        if (this.destroyed) return;
         if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
         if (isEditableTarget(ev)) return; // never hijack a keystroke someone is TYPING
-        const key = ev.key;
-        if (/^[a-zA-Z]$/.test(key)) {
-            ev.preventDefault();
-            this.symbolPicker.open(key.toUpperCase());
-        } else if (/^[0-9]$/.test(key)) {
-            ev.preventDefault();
-            this.tfQuick.open(key);
-        }
+        const hit = resolveTyping(ev.key, { dialogs: this.openDialogs, symbolSearch: this.symbolPicker.isOpen, timeframeEntry: this.tfQuick.isOpen });
+        if (!hit) return;
+        ev.preventDefault();
+        if (hit.target === 'symbol') this.symbolPicker.type(hit.text);
+        else this.tfQuick.type(hit.text);
     }
 
     private trackDialog(open: boolean): void {

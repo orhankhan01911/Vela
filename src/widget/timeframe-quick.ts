@@ -54,7 +54,12 @@ export class TimeframeQuick {
             content: (body) => body.append(this.input, this.hint),
             onOpenChange: (open) => opts.onOpenChange?.(open),
         });
-        this.input.addEventListener('input', () => this.renderHint());
+        this.input.addEventListener('input', () => {
+            const { selectionStart, selectionEnd } = this.input;
+            this.input.value = this.input.value.toUpperCase();
+            this.input.setSelectionRange(selectionStart, selectionEnd);
+            this.renderHint();
+        });
         this.input.addEventListener('keydown', (e) => {
             if (e.key !== 'Enter') return;
             const parsed = parseTimeframe(this.input.value);
@@ -67,12 +72,28 @@ export class TimeframeQuick {
 
     open(seed = ''): void {
         this.dialog.show();
-        this.input.value = seed;
+        this.input.value = seed.toUpperCase();
         this.renderHint();
         setTimeout(() => {
             this.input.focus();
             this.input.setSelectionRange(this.input.value.length, this.input.value.length);
         }, 0);
+    }
+
+    get isOpen(): boolean {
+        return this.dialog.open;
+    }
+
+    /** Text typed at the entry that never reached its field: closed, it opens seeded
+     *  with the text; open (the field takes focus a tick after the dialog does, and a
+     *  fast typist's next key lands in that tick), it extends the entry. */
+    type(text: string): void {
+        if (!this.isOpen) {
+            this.open(text);
+            return;
+        }
+        this.input.value += text.toUpperCase();
+        this.renderHint();
     }
 
     close(): void {
@@ -87,7 +108,7 @@ export class TimeframeQuick {
         const raw = this.input.value.trim();
         const parsed = parseTimeframe(raw);
         if (!raw) {
-            this.hint.textContent = 'e.g. 15, 4h, D, 3M';
+            this.hint.textContent = 'e.g. 15, 4H, D, 3M';
             delete this.hint.dataset.invalid;
         } else if (parsed.valid) {
             this.hint.textContent = parsed.label ?? '';

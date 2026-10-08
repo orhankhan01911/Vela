@@ -7,6 +7,7 @@ import type { LegendActionView, LegendCalloutView } from '../core/ports/IChartRe
 import type { ScriptingEngine } from '../core/ports/ScriptingEngine';
 import type { SymbolDescriptor } from '../core/ports/DataProvider';
 import type { InputValue } from '../core/model/inputs';
+import type { IndicatorHandle } from '../core/IndicatorHandle';
 import { TOPBAR_BUILTIN_IDS } from './topbar-composition';
 
 /** The runtime surface an action's `when`/`run` receives. */
@@ -30,6 +31,11 @@ export interface WidgetContext {
      *  it. The dock stays exclusive: opening one closes whichever was showing. Unknown ids
      *  are ignored. The seam a plugin uses to open ITS OWN panel programmatically. */
     togglePanel(id: string, open?: boolean): void;
+    /** Dock `el` as a full-width strip in the shell's layout, between the chart area and
+     *  the bottom bar — the charts shrink to make room. Strips stack in docking order.
+     *  Returns the undock (removes `el`; a no-op once it has left the strip area). The
+     *  caller owns `el`, its content and styling. */
+    dockStrip(el: HTMLElement): () => void;
     /** The widget's root element — pass it as `host` when mounting kit components
      *  (Dialog/Menu/Tooltip) from an action; without an explicit host they portal to
      *  the body, OUTSIDE the theme variables. A multi-chart shell hands its own root. */
@@ -50,6 +56,27 @@ export interface WidgetContext {
      *  `state:changed` + storage write follows). Only needed for state with no shell
      *  event of its own — indicator adds/removals already trigger the save cycle. */
     stateChanged(): void;
+    /** Where the right-click that opened a context menu landed. Set on the context handed
+     *  to `context:*` actions (`when` and `run`); absent everywhere else. */
+    pointer?: ContextMenuPointer;
+}
+
+/**
+ * What the chart's crosshair reported when a context menu opened ({@link WidgetContext.pointer}),
+ * on the chart that received the right-click — in a workspace, the cell under the pointer.
+ * Captured once at open: moving through the menu before picking a row does not change it.
+ * The axis menus get what the crosshair reports over the axis: off the plot, `price` and
+ * `paneKind` are null, while `time` still names the bar column under the pointer (on the
+ * time axis, the bar above the click; null past the last bar).
+ */
+export interface ContextMenuPointer {
+    /** The value under the pointer on the pane it landed on: a price on the price pane, an
+     *  indicator value on a study pane (see `paneKind`). Null off the plot. */
+    price: number | null;
+    /** Open time of the bar under the pointer; null off the bars. */
+    time: number | null;
+    /** The kind of pane the pointer is on; null off the plot. */
+    paneKind: 'price' | 'study' | null;
 }
 
 /** What {@link WidgetContext.addIndicator} takes: a named script, ready to run. */
@@ -57,12 +84,22 @@ export interface ExternalIndicatorEntry {
     name: string;
     /** The script source (the recorded undo/redo action re-adds from it). */
     script: string;
+    /** The indicator's id on the chart (see `AddIndicatorOptions.id`) — what a persistence
+     *  handler stores and hands back on restore so the indicator comes back under the id
+     *  its document knows. Omitted: the chart mints one. Either way undo/redo re-add the
+     *  indicator under the id it first ran with. An id already live on the cell's chart
+     *  is rejected (a warning; nothing is added). */
+    id?: string;
     /** Engine language (default: the chart's default engine). */
     language?: string;
     /** Input-value overrides applied at add time (what a persistence handler restores). */
     inputs?: Record<string, InputValue>;
     /** Declaration-prop overrides applied at add time. */
     props?: Record<string, InputValue>;
+    /** Restore hidden: the indicator is suspended right after the add (legend row
+     *  stays, marked hidden) — a persistence handler carrying a hidden flag applies
+     *  it here so the engine never spends anything on a tucked-away indicator. */
+    hidden?: boolean;
 }
 
 /** Where an action is projected. */
@@ -84,16 +121,31 @@ export interface WidgetActionDescriptor {
      *  one the flag is ignored (with a console warning) and the label renders. The piece
      *  that makes a `'screenshot'` slot override pixel-faithful to the native button. */
     iconOnly?: boolean;
-    /** Sort key within the contributed group (ascending; default 0). */
+    /** Sort key (ascending; default 0; ties keep registration order). On the topbar it orders
+     *  the contributed group. In a context menu (`context:*`) contributed rows sort TOGETHER
+     *  with the menu's built-in rows, which sit at the ranks of `CONTEXT_MENU_BUILTIN_ORDER`:
+     *  the built-in actions below 0 and the settings row at 1000. So an action without
+     *  `order` lands after the built-in actions and before the settings row, `order: -100`
+     *  leads the menu, and on a tie the built-in row comes first. */
     order?: number;
     /** Topbar only: which cluster the button joins. `'right'` (default) is the
      *  right-hand tools cluster; `'left'` puts it with the PRIMARY chrome buttons —
      *  right after the style/layout dropdowns, styled like them (the spot and look of
      *  the built-in Indicators button, for actions that replace it). */
     align?: 'left' | 'right';
+    /** Topbar only: where the action goes on the MOBILE layout (the topbar is hidden
+     *  there). `'bar'` is an icon stop on the bottom bar; `'menu'` is a row in the
+     *  three-dots menu — a left (primary) action right after Layout, a right one at the
+     *  end. Default: `'bar'` for `align: 'left'`, `'menu'` otherwise. */
+    mobile?: 'bar' | 'menu';
     /** Runtime gate — omitted ⇒ always shown. */
     when?: (ctx: WidgetContext) => boolean;
     run: (ctx: WidgetContext) => void;
+}
+
+/** Where a topbar action lands on the mobile layout (see {@link WidgetActionDescriptor.mobile}). */
+export function mobilePlacement(action: Pick<WidgetActionDescriptor, 'align' | 'mobile'>): 'bar' | 'menu' {
+    return action.mobile ?? (action.align === 'left' ? 'bar' : 'menu');
 }
 
 /**
@@ -134,6 +186,11 @@ export interface SidePanelHeader {
     /** Replace the header title (an empty string hides it). The topbar toggle keeps the
      *  DECLARED `title` as its tooltip. */
     setTitle(title: string): void;
+    /** Whether the panel covers every chart right now (see `maximizable`). */
+    readonly maximized: boolean;
+    /** Maximize the panel over the shell's charts, or restore it — what its header button
+     *  does. A no-op unless the descriptor is `maximizable`. Closing restores it too. */
+    setMaximized(maximized: boolean): void;
 }
 
 /**
@@ -166,6 +223,10 @@ export interface SidePanelDescriptor {
      *  column that shrinks the chart). For panels wide enough that a column would crush
      *  the plot. The dock stays exclusive either way. */
     overlay?: boolean;
+    /** A header button that maximizes the panel over every chart of the shell, and restores
+     *  it (default false). For panels that are sometimes the main work surface, like an
+     *  editor; the contribution can drive it too ({@link SidePanelHeader.setMaximized}). */
+    maximizable?: boolean;
     mount(ctx: WidgetContext, body: HTMLElement, header: SidePanelHeader): SidePanelHandle | void;
 }
 
@@ -271,8 +332,9 @@ export function widgetActions(target: WidgetActionTarget, ctx?: WidgetContext): 
 export interface LegendIndicatorInfo {
     id: string;
     title: string;
-    /** The script source the indicator was added with; undefined for a NATIVE
-     *  (core-computed) indicator. The usual `when` gate for source-centric actions. */
+    /** The script source the indicator runs NOW (read at click time, so an in-place code
+     *  update shows through); undefined for a NATIVE (core-computed) indicator. The usual
+     *  `when` gate for source-centric actions. */
     source?: string;
 }
 
@@ -322,12 +384,16 @@ export function legendActions(): LegendActionDescriptor[] {
  */
 export function legendActionsProviderFor(chart: Vela, context: () => WidgetContext): (indicatorId: string) => LegendActionView[] {
     return (indicatorId) => {
-        const handle = chart.indicators().find((h) => h.id === indicatorId);
+        const find = (): IndicatorHandle | undefined => chart.indicators().find((h) => h.id === indicatorId);
+        const infoOf = (h: IndicatorHandle): LegendIndicatorInfo => ({ id: h.id, title: h.title, ...(h.source !== undefined ? { source: h.source } : {}) });
+        const handle = find();
         if (!handle) return [];
-        const info: LegendIndicatorInfo = { id: handle.id, title: handle.title, ...(handle.source !== undefined ? { source: handle.source } : {}) };
+        const info = infoOf(handle);
+        // `run` reads the indicator AGAIN at click time: rows are built once, and an
+        // in-place code update since then must not hand the action the old source.
         return legendActions()
             .filter((d) => !d.when || d.when(info))
-            .map((d) => ({ id: d.id, icon: d.icon, tooltip: d.tooltip, run: () => d.run(context(), info) }));
+            .map((d) => ({ id: d.id, icon: d.icon, tooltip: d.tooltip, run: () => d.run(context(), infoOf(find() ?? handle)) }));
     };
 }
 

@@ -1,10 +1,22 @@
 import type { IndicatorModel } from '../model/indicator';
-import type { InputValue } from '../model/inputs';
+import type { InputSchema, InputValue } from '../model/inputs';
+import type { CodeUpdateResult } from '../IndicatorHandle';
 import type { PreparedScript, ScriptingEngine, ExecutionSession } from '../ports/ScriptingEngine';
 import type { IndicatorRenderHandle } from '../ports/IChartRenderer';
 import type { AddIndicatorOptions } from '../options';
 import type { ScriptRunCause } from '../script-run';
 import type { NativeIndicator, NativeIndicatorDescriptor } from '../native-indicators/NativeIndicator';
+
+/** Everything `updateCode` swaps — what a failed update restores. */
+export interface CodeSnapshot {
+    source: string;
+    engine?: ScriptingEngine;
+    prepared?: PreparedScript;
+    inputValues: Record<string, InputValue>;
+    propValues: Record<string, InputValue>;
+    inputs: InputSchema[];
+    props: InputSchema[];
+}
 
 /** Per-indicator instance state held by the orchestrator. */
 export interface IndicatorRecord {
@@ -18,7 +30,7 @@ export interface IndicatorRecord {
      * `stale` marks an instance re-created for a NEW market while the indicator was hidden —
      * showing it must START the fresh instance instead of resuming the old market's compute.
      */
-    native?: { type: string; instance: NativeIndicator; descriptor: NativeIndicatorDescriptor; stale?: boolean };
+    native?: { type: string; instance: NativeIndicator; descriptor: NativeIndicatorDescriptor; stale?: boolean; started?: boolean };
     /** Routing/inputs options from addIndicator (used to re-route on a fresh first model). */
     options?: AddIndicatorOptions;
     /** The engine selected for this indicator's language. */
@@ -30,6 +42,22 @@ export interface IndicatorRecord {
     /** Declaration-prop values (effective defaults merged with user/add-time overrides).
      *  Stays empty for engines without props support and for natives. */
     propValues: Record<string, InputValue>;
+    /**
+     * A source handed to `updateCode` that is still being prepared. The latest call wins:
+     * a prepare that resolves for any other source is discarded, so two quick edits never
+     * race the older one onto the chart.
+     */
+    pendingSource?: string;
+    /**
+     * Callers of `updateCode` awaiting the current chain of edits. One list on purpose:
+     * the latest edit's outcome settles every call it superseded.
+     */
+    codeWaiters?: Array<(result: CodeUpdateResult) => void>;
+    /**
+     * A swapped-in source whose first run has not landed yet, with the state a failure
+     * puts back — the last code KNOWN to run, kept across superseding edits.
+     */
+    codeTrial?: { previous: CodeSnapshot };
     /** The live execution session (static or streaming) — poked on input/viewport/bar changes. */
     session?: ExecutionSession;
     /**
@@ -71,10 +99,18 @@ export class IndicatorRegistry {
     private readonly records = new Map<string, IndicatorRecord>();
     private counter = 0;
 
-    /** Allocate a unique, stable per-instance id. */
-    nextId(prefix = 'ind'): string {
-        this.counter += 1;
-        return `${prefix}-${this.counter}`;
+    /**
+     * Mint a unique per-instance id. Host-supplied ids share the namespace, so a minted
+     * id skips anything already recorded — and anything `taken` reports live elsewhere
+     * (a handle the orchestrator holds outside the records, e.g. a fail-soft native).
+     */
+    nextId(prefix = 'ind', taken: (id: string) => boolean = () => false): string {
+        let id: string;
+        do {
+            this.counter += 1;
+            id = `${prefix}-${this.counter}`;
+        } while (this.records.has(id) || taken(id));
+        return id;
     }
 
     add(record: IndicatorRecord): void {

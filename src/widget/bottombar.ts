@@ -2,11 +2,13 @@
 // Range presets switch the timeframe AND frame the matching visible window; the widget
 // owns the rebuild, so the bar only reports the chosen preset upward.
 import type { VisibleRangePreset } from '../core/visible-range';
+import type { Unsubscribe } from '../core/util/types';
+import { SecondClock, type WallClock } from '../core/util/wall-clock';
 import { Menu } from '../ui/components/menu';
 import { Tooltip } from '../ui/components/tooltip';
 import { iconEl } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
-import { TIMEZONES, tzMenuLabel, tzButtonLabel, normalizeTimezone } from './timezones';
+import { timezoneMenuRows, tzButtonLabel, resolveTimezone } from './timezones';
 
 export interface RangePreset {
     /** Button label. */
@@ -114,7 +116,14 @@ const CSS = `
 `;
 
 export interface BottombarOptions {
+    /** The stored display-timezone choice — an IANA zone or the exchange rule. */
     timezone: string;
+    /** The active chart's market zone, resolving the exchange rule (see {@link Bottombar.setTimezone}). */
+    exchangeTimezone?: string;
+    /** The second pulse the clock ticks on. Share one with the charts' countdown chips
+     *  (`renderer.setWallClock`) so every time display reads the same second; omitted,
+     *  the bar runs its own second-aligned clock. */
+    clock?: WallClock;
     onRange: (preset: RangePreset) => void;
     onTimezone: (zone: string) => void;
     /** RTH/ETH toggled by the user. Fires only while the toggle is ENABLED (see {@link Bottombar.setSession}). */
@@ -133,10 +142,12 @@ export class Bottombar {
     private readonly sessionButtons = new Map<'regular' | 'extended', HTMLButtonElement>();
     private sessionEl: HTMLElement | null = null;
     private timezone: string;
-    private timer: ReturnType<typeof setInterval> | null = null;
+    private exchangeTimezone: string | undefined;
+    private readonly unsubClock: Unsubscribe;
 
     constructor(host: HTMLElement, opts: BottombarOptions) {
         this.timezone = opts.timezone;
+        this.exchangeTimezone = opts.exchangeTimezone;
         const doc = host.ownerDocument;
         injectStyles(STYLE_ID, CSS, doc);
 
@@ -163,7 +174,7 @@ export class Bottombar {
         this.clockEl = doc.createElement('span');
         this.clockEl.className = 'vela-bb-clock';
         this.tzLabelEl = doc.createElement('span');
-        this.tzLabelEl.textContent = tzButtonLabel(this.timezone);
+        this.tzLabelEl.textContent = tzButtonLabel(this.displayZone);
         this.tzButton.append(this.clockEl, this.tzLabelEl);
         const session = doc.createElement('span');
         session.className = 'vela-bb-session';
@@ -201,20 +212,34 @@ export class Bottombar {
             placement: 'top-end',
             items: this.tzItems(),
             onSelect: (zone) => {
-                this.setTimezone(zone);
+                this.setTimezone(zone, this.exchangeTimezone);
                 opts.onTimezone(zone);
             },
         });
 
         this.tick();
-        this.timer = setInterval(() => this.tick(), 1000);
+        this.unsubClock = (opts.clock ?? new SecondClock()).onTick(() => this.tick());
     }
 
-    setTimezone(zone: string): void {
+    /**
+     * Reflect the stored choice AND the active chart's market zone. The clock and the
+     * offset label read the RESOLVED zone, so a workspace on the exchange rule re-labels
+     * when the active cell (or its symbol) changes market — the host re-projects on
+     * both. Idempotent: unchanged inputs leave the menu alone.
+     */
+    setTimezone(zone: string, exchangeTimezone?: string): void {
+        if (zone === this.timezone && exchangeTimezone === this.exchangeTimezone) return;
+        const choiceChanged = zone !== this.timezone;
         this.timezone = zone;
-        this.tzLabelEl.textContent = tzButtonLabel(zone);
-        this.tzMenu.setItems(this.tzItems());
+        this.exchangeTimezone = exchangeTimezone;
+        this.tzLabelEl.textContent = tzButtonLabel(this.displayZone);
+        if (choiceChanged) this.tzMenu.setItems(this.tzItems()); // the rows only depend on the choice
         this.tick();
+    }
+
+    /** The zone the bar's clock and label render in. */
+    private get displayZone(): string {
+        return resolveTimezone(this.timezone, this.exchangeTimezone);
     }
 
     /** Highlight (or clear with null) the active range chip — cleared on manual tf changes. */
@@ -240,18 +265,14 @@ export class Bottombar {
     }
 
     destroy(): void {
-        if (this.timer !== null) clearInterval(this.timer);
+        this.unsubClock();
         this.tzMenu.destroy();
         this.settingsTip?.destroy();
         this.el.remove();
     }
 
     private tzItems() {
-        return TIMEZONES.map((t) => ({
-            id: t.value,
-            label: tzMenuLabel(t.value, t.label),
-            checked: t.value === normalizeTimezone(this.timezone),
-        }));
+        return timezoneMenuRows(this.timezone).map((r) => ({ id: r.value, label: r.label, checked: r.checked }));
     }
 
     private tick(): void {
@@ -261,7 +282,7 @@ export class Bottombar {
                 minute: '2-digit',
                 second: '2-digit',
                 hour12: false,
-                timeZone: this.timezone,
+                timeZone: this.displayZone,
             }).format(new Date());
         } catch {
             this.clockEl.textContent = '';

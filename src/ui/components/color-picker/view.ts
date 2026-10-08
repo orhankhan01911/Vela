@@ -27,11 +27,25 @@ function addRecent(hex6: string): void {
 }
 
 /**
+ * When the opacity slider hands its value to `onChange` during a drag: `'live'` on every
+ * pointer move (the consumer repaints cheaply, so the chart previews the drag), `'release'`
+ * once on pointerup/pointercancel (the consumer recomputes — a script re-runs over its whole
+ * history, so a per-move commit would queue seconds of work behind the pointer). The knob,
+ * gradient and percentage follow the pointer either way; swatch picks always emit at once.
+ */
+export type ColorCommit = 'live' | 'release';
+
+export interface ColorPickerOptions {
+    commit?: ColorCommit;
+}
+
+/**
  * A self-contained color picker: a swatch grid (grays + hue × shade), a
  * recents row with a custom "+" picker, and an opacity slider over a transparency checker.
  * Emits `#RRGGBB` / `#RRGGBBAA` through `onChange`.
  */
-export function buildColorPicker(color: string, theme: VelaTheme, onChange: (v: string) => void): HTMLElement {
+export function buildColorPicker(color: string, theme: VelaTheme, onChange: (v: string) => void, options: ColorPickerOptions = {}): HTMLElement {
+    const commit: ColorCommit = options.commit ?? 'live';
     const parsed = splitColor(color);
     let curHex = parsed.hex6;
     let curAlpha = parsed.alpha;
@@ -108,20 +122,66 @@ export function buildColorPicker(color: string, theme: VelaTheme, onChange: (v: 
     const knob = document.createElement('div');
     knob.style.cssText = 'position:absolute;top:50%;width:15px;height:15px;border-radius:50%;background:var(--vela-selected-bg);box-shadow:0 1px 3px rgba(0,0,0,0.55);transform:translate(-50%,-50%);pointer-events:none;';
     track.appendChild(knob);
-    const pctBox = document.createElement('div');
-    pctBox.style.cssText = `min-width:42px;text-align:center;font:var(--vela-font-size-md) ${theme.fontFamily};color:var(--vela-fg);border:1px solid var(--vela-border);border-radius:5px;padding:3px 4px;`;
+    const pctBox = document.createElement('input');
+    pctBox.type = 'text';
+    pctBox.inputMode = 'numeric';
+    pctBox.title = 'Opacity (%)';
+    pctBox.style.cssText = `width:46px;box-sizing:border-box;text-align:center;font:var(--vela-font-size-md) ${theme.fontFamily};color:var(--vela-fg);background:transparent;border:1px solid var(--vela-border);border-radius:5px;padding:3px 4px;outline:none;`;
+    pctBox.addEventListener('focus', () => {
+        pctBox.style.borderColor = 'var(--vela-border-strong)';
+        pctBox.select();
+    });
     opRow.append(track, pctBox);
     const paintOpacity = (): void => {
         track.style.background = `linear-gradient(to right, ${curHex}00, ${curHex}ff), ${CHECKER}`;
         knob.style.left = `${curAlpha * 100}%`;
-        pctBox.textContent = `${Math.round(curAlpha * 100)}%`;
+        pctBox.value = `${Math.round(curAlpha * 100)}%`;
     };
+    // A typed value is one discrete edit, so it commits once under either `commit` policy.
+    // Unparseable input snaps back to the current opacity.
+    const commitTyped = (): void => {
+        pctBox.style.borderColor = 'var(--vela-border)';
+        const n = parseFloat(pctBox.value.replace('%', ''));
+        if (Number.isFinite(n)) {
+            const next = Math.max(0, Math.min(100, n)) / 100;
+            if (Math.round(next * 100) !== Math.round(curAlpha * 100)) {
+                curAlpha = next;
+                paintOpacity();
+                emit();
+                return;
+            }
+        }
+        paintOpacity();
+    };
+    pctBox.addEventListener('change', commitTyped);
+    pctBox.addEventListener('blur', () => {
+        // `change` does not fire when the text is unchanged; still restore the "%" readout.
+        pctBox.style.borderColor = 'var(--vela-border)';
+        paintOpacity();
+    });
+    pctBox.addEventListener('keydown', (e) => {
+        // Typing must not reach chart/dialog shortcuts; Escape stays with the popover.
+        if (e.key === 'Escape') return;
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            commitTyped();
+            pctBox.blur();
+        }
+    });
+    // The drag always previews (knob, readout, gradient); whether each move also COMMITS is
+    // the `commit` option — see {@link ColorCommit}.
     let dragging = false;
     const onDrag = (clientX: number): void => {
         const r = track.getBoundingClientRect();
         curAlpha = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
         paintOpacity();
-        emit();
+        if (commit === 'live') emit();
+    };
+    const endDrag = (): void => {
+        if (!dragging) return;
+        dragging = false;
+        if (commit === 'release') emit();
     };
     track.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
@@ -132,7 +192,8 @@ export function buildColorPicker(color: string, theme: VelaTheme, onChange: (v: 
     track.addEventListener('pointermove', (e) => {
         if (dragging) onDrag(e.clientX);
     });
-    track.addEventListener('pointerup', () => (dragging = false));
+    track.addEventListener('pointerup', endDrag);
+    track.addEventListener('pointercancel', endDrag);
 
     function emit(): void {
         onChange(combineColor(curHex, curAlpha));
@@ -164,12 +225,19 @@ export interface ColorFieldOpts {
     onVal: (v: string) => void;
     id?: string;
     popover?: Pick<PopoverOptions, 'host' | 'position' | 'boundary' | 'zIndex' | 'gap' | 'align'>;
+    /** Opacity-drag commit policy of the popover picker (default `'live'`) — see {@link ColorCommit}. */
+    commit?: ColorCommit;
 }
 
 /** Closed-state swatch shape. `circle` is the settings-dialog preview (a square chip
  *  inset from a matching field border); `square` is the compact drawing-chrome swatch. */
-export function colorField(theme: VelaTheme, getVal: () => string, onVal: (v: string) => void, opts?: { shape?: ColorFieldShape; id?: string; popover?: ColorFieldOpts['popover'] }): HTMLElement {
-    return new ColorField({ theme, getVal, onVal, shape: opts?.shape, id: opts?.id, popover: opts?.popover }).el;
+export function colorField(
+    theme: VelaTheme,
+    getVal: () => string,
+    onVal: (v: string) => void,
+    opts?: { shape?: ColorFieldShape; id?: string; popover?: ColorFieldOpts['popover']; commit?: ColorCommit },
+): HTMLElement {
+    return new ColorField({ theme, getVal, onVal, shape: opts?.shape, id: opts?.id, popover: opts?.popover, commit: opts?.commit }).el;
 }
 
 export class ColorField {
@@ -179,6 +247,7 @@ export class ColorField {
     private readonly onVal: (v: string) => void;
     private readonly theme: VelaTheme;
     private readonly popoverOpts: ColorFieldOpts['popover'];
+    private readonly commit: ColorCommit | undefined;
 
     constructor(opts: ColorFieldOpts) {
         injectStyles(COLOR_STYLE_ID, COLOR_CSS, document);
@@ -186,6 +255,7 @@ export class ColorField {
         this.getVal = opts.getVal;
         this.onVal = opts.onVal;
         this.popoverOpts = opts.popover;
+        this.commit = opts.commit;
 
         const trigger = document.createElement('button');
         trigger.type = 'button';
@@ -230,10 +300,15 @@ export class ColorField {
             boundary: this.popoverOpts?.boundary as PopoverBoundary | undefined,
             zIndex: this.popoverOpts?.zIndex,
             className: 'vela-color-field-pop',
-            content: buildColorPicker(this.getVal(), this.theme, (val) => {
-                this.onVal(val);
-                this.paint();
-            }),
+            content: buildColorPicker(
+                this.getVal(),
+                this.theme,
+                (val) => {
+                    this.onVal(val);
+                    this.paint();
+                },
+                { commit: this.commit },
+            ),
         });
         pop.show();
     }

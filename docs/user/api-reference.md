@@ -87,9 +87,9 @@ What `addIndicator` returns. Usable immediately.
 
 | Member | Description |
 |---|---|
-| `id` | Stable, content-addressed identity for this indicator. |
+| `id` | This instance's identity on the chart — the `id` you passed in the options, else one the chart minted. Stable for as long as the indicator stays on it (input edits, hide/show and `updateCode` all keep it). See the `id` option in [options.md](./options.md#per-indicator-options). |
 | `title` | Display title (overridable via the `title` option). |
-| `source` | The script source the indicator was added with; `undefined` for a native indicator. |
+| `source` | The script source the indicator currently runs — the one it was added with, until `updateCode` replaces it; `undefined` for a native indicator. |
 | `nativeType` | The registered type of a native indicator (`'volume'`, `'sma'`, …); `undefined` for a script indicator. A handle has one of `source` or `nativeType`, never both. |
 | `inputs` | The inputs parsed from the script source — each with a `key`, `title`, `type`, `defval`, and optional `min`/`max`/`step`/`options`/`group`/`inline`/`tab`/`tooltip`. Populated once the script is prepared. |
 | `props` | The script's declaration properties (a strategy's `initial_capital`, an indicator's `precision`, …) in the same schema shape as `inputs`. Empty when the engine exposes none. |
@@ -98,6 +98,7 @@ What `addIndicator` returns. Usable immediately.
 | `setInputs(values)` | Change several inputs at once, keyed by input key or title. |
 | `setProp(key, value)` | Override one declaration property (e.g. `initial_capital`). A prop change replays the whole script. |
 | `setProps(values)` | Override several declaration properties at once. |
+| `updateCode(source)` | Replace the script and re-run it **in place** — same `id`, legend row, pane placement, visibility and handle. The new source is compiled first; only then is the running script stopped and the new one started. Until the new code's first run lands, any failure — at compile time or at run time — puts the previous code back with its input and prop values, keeps its visuals painting throughout, and reports through `error`. An input or prop the user edited survives where the new script still declares its key; one still at its old declared default takes the new default; the new code computes once, with its final values. Returns a `Promise<{ ok, error }>`: resolved once the new code's first run has landed, right after the compile check for a hidden indicator, at once for an unchanged source, and with `ok: false` after a failure. A call superseded by a later one resolves with that later call's outcome. Never rejects; a native indicator resolves `ok: false`. |
 | `setVisible(visible)` | Hide or show the indicator. Hiding suspends it — its visuals are dropped and its computation stops; showing re-runs it over the current bars. |
 | `on(event, handler)` | Per-indicator events — `ready`, `error` (`{ error }`), `alert` (`{ id, message, title?, time }`). Returns an unsubscribe function. |
 | `context(select?)` | `Promise` of a **read-only, serializable snapshot** of the engine's execution context — see [below](#capturing-what-a-script-computes). `null` when the engine lacks the capability or nothing ran yet. |
@@ -115,6 +116,11 @@ macd.on('error', ({ error }) => console.error('MACD failed:', error.message));
 // Retune inputs — each change triggers a re-run.
 macd.setInput('fast', 8);
 macd.setInputs({ slow: 21, signal: 5 });
+
+// Swap the code under the same row — an editor's "run my edit". A source that fails
+// (to compile, or as it runs) puts the current MACD back and fires `error` instead.
+const { ok, error } = await macd.updateCode(editedMacdSource);
+if (!ok) console.warn('kept the previous MACD:', error?.message);
 
 // Hiding suspends it (visuals dropped, computation stopped); showing re-runs it.
 macd.setVisible(false);
@@ -160,6 +166,7 @@ and nothing to await.
 | `'tick'` | The forming bar changed — **values can still move**. |
 | `'bar'` | A new bar opened, so the one before it is **final**. |
 | `'inputs'` | An input was edited. |
+| `'code'` | The script was replaced in place (`handle.updateCode`). |
 | `'viewport'` | The visible range moved (viewport-aware scripts only). |
 | `'market'` | The chart's market changed and the script re-executed. |
 
@@ -243,10 +250,17 @@ Subscribe with `chart.on(event, handler)`; every subscription returns an unsubsc
 | `indicator:error` | `{ id, error }` | An indicator failed. |
 | `script:run` | the [`ScriptRun`](#capturing-what-a-script-computes) | A script computed — the first pass over the history, a live tick, a new bar, an input edit, a viewport move, a market switch. Carries the run itself (title, cause, the plots/variables/broker state at the computed bar), so a listener reads it instead of resolving a handle and pulling a snapshot. Forming-bar (`'tick'`) runs are throttled to ~1/s; every other cause fires unconditionally. Never fires for native indicators — they run no script. |
 | `context:changed` | `{ id }` | An indicator's execution context advanced (run finished; throttled to ~1/s while streaming). Re-pull `handle.context()` if you consume it. Fires only for context-capable engines. **Prefer `script:run`**, which delivers the data rather than a signal to go fetch it. |
-| `bar` | the bar (OHLCV) | A live tick — the forming bar updated or a new bar appended. |
+| `bar` | the bar (OHLCV) | A live tick — the forming bar updated or a new bar appended. A bar revealed by a [replay](#chartreplay--the-bar-replay-control-surface) fires it too. |
+| `replay:start` | `{ cursorTime, remaining }` | Replay began (or seeked): the chart shows history up to `cursorTime`, `remaining` bars are hidden. |
+| `replay:step` | `{ cursorTime, remaining }` | Replay revealed one bar (a bar played tick by tick steps when it settles). |
+| `replay:tick` | `{ cursorTime, index, count }` | [Tick replay](#tick-replay) applied tick `index` of `count` to the bar forming at `cursorTime`. |
+| `replay:play` · `replay:pause` | `{ intervalMs }` · — | Timed reveal started (or changed pace) · paused (`pause()`, or a seek while playing). |
+| `replay:end` | `{ reason }` | Replay ended and the full history is back: `'stopped'` (`stop()`), `'finished'` (the last bar was revealed), or `'market'` (a symbol switch replaced the history — a timeframe or session switch keeps the replay). |
 | `viewport:changed` | `{ from, to }` (epoch-ms) | The visible time range moved (pan/zoom/fit) — fires per applied change, not debounced. The seam viewport-sync links between charts build on. |
 | `theme:changed` | the resolved theme object | The app theme changed — `setTheme(...)` or the in-chart settings dialog (Canvas → Theme). Host chrome around the chart (toolbars, panels, page shells) re-skins from the payload. Plot-only cosmetic edits (a `layout.background` set through the config) do **not** fire it. |
-| `alert` | engine alert | A script raised an alert. |
+| `priceStyle:change` | `{ from, to }` | The base price style is switching (candles, line, area, a chart-type id, …). Fires **synchronously, before the chart repaints** in the new style, whatever the path: the topbar style menu, `ctx.setPriceStyle`, `chart.renderer.set('priceStyle', …)`, the settings dialog, `applyConfig` and config templates, or a state restore. Never fires for the style the chart was created with, nor for a set to the style already shown. While it runs the chart still shows `from`, so a listener can capture the outgoing frame (`chart.renderer.screenshotCanvas()`) to animate the switch. Don't change the style again from inside the listener. A workspace relays it per cell as `cell:priceStyle`. |
+| `mark:click` | `{ id, ids, time, group? }` | A [timeline mark](#chartmarks--the-timeline-marks-control-surface) glyph was clicked — `ids` lists every mark under it (several marks of one group on one bar fold into a cluster), `id`/`time` its first. Fires before the popup opens; a mark without content opens none, so this is where a host shows its own UI. |
+| `alert` | engine alert | A script raised an alert. Never fires for bars a [replay](#chartreplay--the-bar-replay-control-surface) reveals. |
 | `warning` | engine warning | A script raised a warning. |
 
 ---
@@ -269,10 +283,12 @@ chart is never left half-changed.
 | `applyConfig(config)` | Apply a full or partial config document from `getConfig()`; malformed/unknown fields are ignored. |
 | `onConfigChanged(cb)` | Subscribe to cosmetic-config changes — the in-chart settings dialog commits through `applyConfig`, so this is how host chrome mirroring a config value (a time-zone display, a saved template) learns about in-chart edits. Re-pull `get(…)`/`getConfig()` in the callback. Returns an unsubscribe fn; silent no-op unsubscribe on a renderer without a rich config. |
 | `onCrosshairMove(cb)` | Subscribe to crosshair movement — `time`/`price` under the cursor, per-series values, and the hovered bar's OHLC (null fields when the cursor leaves the chart). Returns an unsubscribe fn. The public seam for host status lines and data windows. |
+| `onClick(cb)` | Subscribe to clicks — and touch taps — on the plot (never the end of a pan): `{ time }` is the open time of the bar under it (`null` off the bars). On touch a tap moves no crosshair, so this is how an interaction learns which bar was chosen. A press on a drawing belongs to the drawing and reports no click: set [`drawingsInteractive`](./renderer-features.md) to `false` while picking. Returns an unsubscribe fn. |
 | `dataWindowReadout()` | The bar under the crosshair (or the latest bar when the cursor is off the plot) as a display-ready snapshot: `date`, `time`, an `ohlc` block, and one `groups` entry per indicator with a row per plot in its own color. Values are pre-formatted on their pane's scale. `null` on a renderer without the seam — see [renderer features](./renderer-features.md#data-window-readout). |
-| `setExternalCrosshair(time, price?)` | Show (or clear, with `null`) a **ghost crosshair** at a data-space position driven from OUTSIDE this chart — the multi-chart crosshair-sync seam ([the workspace](./workspace.md) drives it from the linked cells' pointers). A ghost never re-emits `onCrosshairMove` (one-way by contract — no echo loops). Silent no-op on a renderer without the optional port seam; feature-detect with `supportsExternalCrosshair`. |
+| `setExternalCrosshair(time, price?)` | Show (or clear, with `null`) a **ghost crosshair** at a data-space position driven from OUTSIDE this chart — the multi-chart crosshair-sync seam ([the workspace](./workspace.md) drives it from the linked cells' pointers). A ghost never re-emits `onCrosshairMove` (one-way by contract — no echo loops). A [`crosshairOverride`](./renderer-features.md) applies to the ghost too — its line style and its `shadeRight` veil, which covers every bar in view when the ghost lies left of the window. Silent no-op on a renderer without the optional port seam; feature-detect with `supportsExternalCrosshair`. |
 | `set('dialogHost', el)` | Where the renderer mounts its MODAL dialogs (chart settings, indicator settings). Multi-chart shells pass their root element so dialogs center over the whole grid instead of clipping inside one cell — the workspace does this automatically for every cell. Runtime-only; never part of the config template. |
 | `supportsExternalCrosshair` (getter) | Whether the active renderer implements the optional `setExternalCrosshair` seam (the native renderer does). |
+| `setWallClock(clock)` | Drive the renderer's time-of-day chrome (the price-axis countdown to bar close) from the host's own second pulse — a `WallClock` (`SecondClock` is the exported second-aligned implementation) — so it ticks in step with a host clock display instead of on a separate timer that can read a different second. `null` hands the pulse back to the renderer. [The workspace](./workspace.md) does this for every cell with its bottom-bar clock. Silent no-op on a renderer without time-of-day chrome. |
 | `focus()` | Move keyboard focus back onto the chart's interactive surface — call after a host control (e.g. a shared toolbar button) stole focus, so chart/drawing shortcuts keep working. Silent no-op on a renderer without a focusable surface. |
 
 Feature-detect, read, and change how the chart is drawn at runtime — with no indicator re-run:
@@ -367,9 +383,165 @@ can't paint drawings — `chart.drawings.supported` reports this), while the **m
 | `getConfig()` / `applyConfig(doc)` | no | Aliases of `toJSON` / `fromJSON`, mirroring `chart.renderer`. |
 
 Drawing lifecycle is also surfaced as chart events (`drawing:created` / `drawing:edited` /
-`drawing:removed` / `drawing:selected` / `drawing:settings`), and the tool/mode state as
+`drawing:removed` / `drawing:selected` / `drawing:settings` — `drawing:selected` carries the
+primary `id` plus `ids`, every member of a multi-selection), and the tool/mode state as
 `drawing:tool` / `drawing:snap` / `drawing:stay` / `drawing:mode` — the seam an external toolbar mirrors. See
 [Drawing tools](./drawing-tools.md) for the tool catalogue, toolbar UX, and keyboard shortcuts.
+
+---
+
+## `chart.marks` — the timeline-marks control surface
+
+Host events pinned to a moment in time — dividends, splits, earnings, releases — shown as small
+colored **glyphs on a lane just above the time axis**, each opening a **popup** on click. The model
+is core-owned, so every method works on any renderer; on one without the `timelineMarks`
+capability nothing paints (`supported` reports it). Marks are **data, not user state**: the chart
+never persists them — re-supply them on `market:changed`. What *is* saved with the chart's config
+is each group's visibility (the checkboxes on the chart settings' **Events** tab, which
+appears once marks name groups). The [Timeline marks](./timeline-marks.md) guide walks through
+the whole surface with examples.
+
+| Member | Description |
+|---|---|
+| `supported` | Whether the active renderer paints timeline marks. |
+| `add(mark)` | Add one mark; an existing id is replaced in place. Chainable. |
+| `set(marks)` | Replace the whole set (a market switch). |
+| `remove(id)` · `clear()` | Drop one mark, or all of them. |
+| `all()` | Every mark, in insertion order. |
+| `defineGroup({ id, label, visible? })` | Name a visibility group: the label of its checkbox in settings and its default visibility. A mark may name a group that was never defined — it then shows its capitalized id. |
+| `groups()` | The defined groups, in definition order. |
+| `setGroupVisible(id, visible?)` · `isGroupVisible(id)` | The same switch as the settings checkbox; the choice is persisted with the chart's config. On a renderer without the `marks` feature the setter warns and no-ops. |
+
+A mark is `{ id, time, glyph, title?, tooltip?, group?, content? }`:
+
+- **`time`** is epoch-ms, but the glyph never sits at that exact pixel: it centers on **the bar whose
+  span contains the time**. A time in a gap (a weekend, a closed session) goes to the first bar that
+  follows; one past the newest bar projects onto the extrapolated grid in the right whitespace. Change
+  timeframe and the marks re-snap.
+- **`glyph`** is a colored token — `{ shape?, color, letter? }` (`'circle'` · `'square'` · `'diamond'` ·
+  `'pin'`, one or two characters in auto-contrasted ink) or `{ shape?, color, icon }` with an id from the
+  icon registry (`registerIcon` from `vela/ui`). Icons travel as ids, never inline markup, so a mark
+  payload can come from data.
+- **`content`** is what the popup shows under `title`: `{ text }` (escaped), `{ html }` (sanitized
+  through an allowlist — scripts, styles, frames, event handlers and `javascript:` URLs never reach the
+  page; links open in a new tab), or `{ panel: { items } }` — rows of `text`, `field` (label/value)
+  and `button` (`run`, optional `primary`, `close`). Pass a **function** (sync or async) instead and
+  it resolves when the popup needs it — details fetched on click, one entry at a time as the user
+  scrolls. Without `content` a click only emits `mark:click`.
+- **`group`** folds marks of one kind that land on the same bar into **one slightly larger glyph**
+  listing them all (earliest first); marks of *different* groups on one bar **stack** — a small deck
+  that fans out on hover (or a tap on touch) so each can be opened.
+
+```js
+import { registerIcon, svg16 } from '@luxalgo/vela/ui';
+
+registerIcon('myco.split', svg16('<path d="M8 2v12M3 5l5-3 5 3M3 11l5 3 5-3"/>'));
+
+chart.marks
+    .defineGroup({ id: 'dividends', label: 'Dividends' })
+    .defineGroup({ id: 'splits', label: 'Splits' })
+    .add({
+        id: 'div-2024-06-11',
+        time: Date.UTC(2024, 5, 11),
+        title: 'Dividends',
+        group: 'dividends',
+        glyph: { shape: 'circle', color: '#2962ff', letter: 'D' },
+        tooltip: 'Dividend · $0.01',
+        content: {
+            panel: {
+                items: [
+                    { type: 'field', label: 'Ex-dividend date', value: "Tue 11 Jun '24" },
+                    { type: 'field', label: 'Amount', value: '0.01' },
+                    { type: 'button', label: 'More NVDA dividends', primary: true, run: () => openDividends('NVDA') },
+                ],
+            },
+        },
+    })
+    .add({
+        id: 'split-2024-06-10',
+        time: Date.UTC(2024, 5, 10),
+        title: 'Stock split',
+        group: 'splits',
+        glyph: { icon: 'myco.split', color: '#ff9800' },
+        content: async () => ({ html: await fetchSplitDetails('NVDA') }),
+    });
+
+chart.on('mark:click', ({ id, ids, time }) => { /* ids = every mark under the clicked glyph */ });
+chart.on('market:changed', ({ symbol }) => chart.marks.set(marksFor(symbol)));
+chart.renderer.set('marks', false); // hide the whole lane (`{ groups: { splits: false } }` hides one group)
+```
+
+---
+
+## `chart.replay` — the bar-replay control surface
+
+Rewind the chart to a past bar and reveal the bars that followed, one at a time, by hand or on a
+timer. The replay walks the history **already loaded** — nothing is refetched per bar. Each revealed
+bar travels the same path as a live bar: indicators update as if it had just closed (a script sees
+it as a real-time bar), chart-type data engines are told through `onBars`, and the `bar` event
+fires. While replaying, live updates are paused; stopping (or revealing the last bar) restores the
+full history, resumes them, and fetches the bars that closed in the meantime. Switching the
+timeframe (or session) keeps the replay going on the new bars, at the same point in time: the
+chart keeps the bars that had closed by the end of what was revealed (a coarser bar still open at
+that point stays hidden), and playback carries on if it was on. Switching the symbol ends the replay.
+Script alerts stay quiet while a replay runs: a replayed bar is history, so it never raises the
+`alert` event (on the chart or on an indicator handle). In a multi-chart workspace,
+[`workspace.replay`](./workspace.md#bar-replay-across-the-grid) replays every chart together on
+one clock.
+
+| Member | Description |
+|---|---|
+| `start({ from })` | Enter replay at epoch-ms `from`: the chart keeps every bar that opened at or before it and hides the rest. Resolves once the rewound history is on screen — at once when `from` falls inside the loaded bars, even while older history is still streaming in (it joins the replay as it lands). An older `from` than the loaded history deepens it first (`from: 0` loads everything the source has), and the chart returns to its previous depth when the replay ends; a `from` with no bar after it warns and does nothing. Called while replaying, it **seeks** — backward or forward — and pauses. Every indicator re-runs over the rewound history. |
+| `step()` | Reveal the next bar — or, mid-way through a bar played tick by tick, complete it. Returns `false` when replay is off. |
+| `stepUpdate()` | Reveal the next update: with [tick replay](#tick-replay), the forming bar's next tick, or the next bar opened at its first tick (once its ticks are in); otherwise the next whole bar. Returns `false` when nothing is left. |
+| `play(intervalMs?)` | Reveal one bar every `intervalMs` — one update, with [tick replay](#tick-replay) (default: the last pace, initially 1000). Calling it again while playing changes the pace. |
+| `pause()` | Stop the timer; the replay stays where it is. |
+| `stop()` | Leave replay: full history back, live updates resumed. Called while a `start()` is still loading older history, it cancels that load instead (the chart returns to its previous depth, the pending `start()` resolves without replaying). |
+| `state` | `{ active, playing, cursorTime, remaining, nextTime, intervalMs }` — `cursorTime` is the newest bar on screen (`null` when off, and while a timeframe switch reloads the bars — `active` stays `true` through it); `nextTime` is the open time of the next bar a step completes (`null` when nothing is left). |
+| `bounds` | `{ first, last }` — the open times of the oldest and newest bar a replay can start from (hidden bars included while replaying), or `null` before any bar loaded. A random start, or a "start from the first bar" button, reads it. |
+| `setTicks(source \| null)` | Play each revealed bar as intrabar updates instead of whole (see below); `null` goes back to whole bars. |
+
+```js
+await chart.replay.start({ from: Date.UTC(2024, 5, 3, 14) });
+chart.replay.play(2000);                 // one bar every 2 s
+chart.on('replay:step', ({ cursorTime, remaining }) => updateUi(cursorTime, remaining));
+chart.on('replay:end', ({ reason }) => hideUi(reason));
+```
+
+### Tick replay
+
+`setTicks(source)` makes a playing replay build each bar the way a live one forms: `source(bar,
+{ end, signal })` returns the bar's intrabar updates, oldest first — `{ price, high?, low?, open?,
+volume? }[]`, or a promise of it — covering `[bar.time, end)`. The forming candle opens at the
+first update (`open`, else its price), every update moves its close to `price` and stretches its
+high and low to include `high`/`low`, and the last one settles it on the stored bar, so indicators
+end exactly where a whole-bar replay leaves them. Each update travels the live-tick path
+(indicators, chart types and the `bar` event follow) and fires `replay:tick`; the bar still fires
+`replay:step` once, when it settles.
+
+- The play interval becomes the time between two **updates**: a bar lasts as many intervals as it
+  has ticks (a 15m bar from 1m updates takes 15 intervals). Below ~16 ms, updates are batched.
+- Volume adds up from the ticks' own; when none carries one, the bar's volume is spread evenly.
+- The next bar's ticks are requested while the current one plays; playback waits for them if they
+  are late. An empty answer, or a failure, reveals that bar whole.
+- A seek, a stop or a new source aborts the requests in flight (`signal`) and puts a half-formed
+  bar back in its stored form.
+
+The source decides where the prices come from — trades, a synthetic path, or finer bars.
+`lowerTimeframeTicks(chart, timeframe)` covers the last case from the chart's own provider: it
+fetches the `timeframe` bars inside each replayed bar and makes each one update — its close, its
+high and low, its volume (`barsToTicks` does that step on bars you already have).
+
+```js
+import { lowerTimeframeTicks } from '@luxalgo/vela';
+
+chart.replay.setTicks(lowerTimeframeTicks(chart, '1'));   // replay 1h bars through their 1m bars
+chart.replay.play(1000);                                  // one 1m update per second: 60 s per bar
+chart.on('replay:tick', ({ index, count }) => showProgress(index / count));
+```
+
+The price-axis countdown to bar close reads the real clock, so it stays hidden while replaying —
+every bar on screen closed long ago.
 
 ---
 

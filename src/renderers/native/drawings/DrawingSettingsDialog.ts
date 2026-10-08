@@ -2,6 +2,7 @@ import type { VelaTheme } from '../../../core/options';
 import type { Drawing, FrtpStyle, FrvpStyle, PositionLevelMode, SerializedDrawing } from '../../../core/drawings';
 import {
     DIRECTION_OPTIONS,
+    FibRetracement,
     FixedRangeVolumeProfile,
     FixedRangeTpoProfile,
     LINE_STYLE_OPTIONS,
@@ -65,18 +66,20 @@ export class DrawingSettingsDialog {
 
     open(drawing: Drawing, actions: SettingsActions, kind: DrawingDialogKind, keepSnapshot?: SerializedDrawing): void {
         this.close();
+        // `drawing` is the instance the toolbar opened on; every edit since has replaced it.
+        const live = actions.resolve() ?? drawing;
         // Cancel restores the state from BEFORE the dialog first opened — a template apply /
         // reset re-opens the dialog (to repaint its fields) but must keep that original.
-        const snapshot = keepSnapshot ?? clonePlain(drawing.serialize());
+        const snapshot = keepSnapshot ?? clonePlain(live.serialize());
         const grid = fieldGrid({ variant: 'inputs' });
         grid.style.padding = '16px 20px';
         grid.style.overflowY = 'auto';
         grid.style.overflowX = 'hidden';
         grid.style.flex = '1 1 auto';
-        if (kind === 'position' && drawing instanceof PositionTool) this.buildPosition(grid, drawing, actions);
-        else if (kind === 'frvp' && drawing instanceof FixedRangeVolumeProfile) this.buildFrvp(grid, drawing, actions);
-        else if (kind === 'frtpo' && drawing instanceof FixedRangeTpoProfile) this.buildFrtpo(grid, drawing, actions);
-        else if (kind === 'levels') this.buildLevels(grid, drawing, actions);
+        if (kind === 'position' && live instanceof PositionTool) this.buildPosition(grid, live, actions);
+        else if (kind === 'frvp' && live instanceof FixedRangeVolumeProfile) this.buildFrvp(grid, live, actions);
+        else if (kind === 'frtpo' && live instanceof FixedRangeTpoProfile) this.buildFrtpo(grid, live, actions);
+        else if (kind === 'levels') this.buildLevels(grid, live, actions);
         else return;
 
         let ui: Dialog;
@@ -552,6 +555,17 @@ export class DrawingSettingsDialog {
                 toggle: {
                     checked: mach.showRatios !== false,
                     onChange: (v) => actions.patch({ showRatios: v }),
+                },
+            }));
+        }
+        if (drawing instanceof FibRetracement) {
+            const fib = drawing;
+            grid.appendChild(fieldRow({
+                label: 'Reverse',
+                bool: true,
+                toggle: {
+                    checked: fib.reverse,
+                    onChange: (v) => actions.patch({ reverse: v }),
                 },
             }));
         }

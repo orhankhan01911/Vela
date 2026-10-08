@@ -5,7 +5,7 @@ import { parseTimeframe, timeframeMs, timeframeLabel, favoriteTimeframeChips } f
 import { inputDeltas } from '../src/core/model/inputs';
 import { indicatorLedger, resolveIndicators } from '../src/widget/indicators';
 import { fmtPrice, fmtChange, decimalsFor } from '../src/widget/format';
-import { tzMenuLabel, tzButtonLabel } from '../src/widget/timezones';
+import { tzMenuLabel, tzButtonLabel, resolveTimezone, timezoneMenuRows, EXCHANGE_TIMEZONE, TIMEZONES } from '../src/widget/timezones';
 import { priceStyleLabel } from '../src/widget/topbar';
 import { RANGE_PRESETS } from '../src/widget/bottombar';
 import { filterSymbols } from '../src/widget/symbol-picker';
@@ -124,6 +124,27 @@ describe('widget chrome pure helpers', () => {
         expect(tzMenuLabel('Europe/Paris', 'Paris')).toMatch(/^\(UTC\+[12]\) Paris$/); // CET/CEST
         expect(tzButtonLabel('Etc/UTC')).toBe('UTC');
         expect(tzButtonLabel('Asia/Tokyo')).toBe('UTC+9');
+    });
+
+    it('the exchange rule resolves to the market zone, UTC while unknown; fixed zones pass through', () => {
+        expect(resolveTimezone(EXCHANGE_TIMEZONE, 'America/Chicago')).toBe('America/Chicago');
+        expect(resolveTimezone(EXCHANGE_TIMEZONE, undefined)).toBe('Etc/UTC');
+        expect(resolveTimezone(EXCHANGE_TIMEZONE, '')).toBe('Etc/UTC');
+        expect(resolveTimezone('Europe/Paris', 'America/Chicago')).toBe('Europe/Paris');
+        expect(resolveTimezone('UTC', 'America/Chicago')).toBe('UTC'); // the renderer's alias is left alone
+    });
+
+    it('picker rows: UTC, then a plain "Exchange" rule row, then the catalog with one check', () => {
+        const rows = timezoneMenuRows(EXCHANGE_TIMEZONE);
+        expect(rows).toHaveLength(TIMEZONES.length + 1);
+        expect(rows[0]!.value).toBe('Etc/UTC');
+        expect(rows[1]).toEqual({ value: 'exchange', label: 'Exchange', checked: true });
+        expect(rows.filter((r) => r.checked)).toHaveLength(1);
+        expect(rows.filter((r) => r.value !== 'exchange').map((r) => r.value)).toEqual(TIMEZONES.map((t) => t.value));
+
+        const fixed = timezoneMenuRows('UTC');
+        expect(fixed[1]!.checked).toBe(false);
+        expect(fixed.filter((r) => r.checked).map((r) => r.value)).toEqual(['Etc/UTC']);
     });
 
     it('price-style labels: built-ins + registry labels + raw id fallback', () => {
@@ -288,8 +309,18 @@ describe('indicatorLedger', () => {
     it('reports the volume INTENT until the auto-add had its chance, never duplicating', () => {
         expect(indicatorLedger({ ...base, volumePending: true })).toEqual({ manifest: [], natives: ['volume'] });
         expect(indicatorLedger({ ...base, volumePending: true, present: ['volume'] })).toEqual({ manifest: [], natives: ['volume'] });
+        // ...including when the present volume travels as a VALUE-carrying entry.
+        expect(indicatorLedger({ ...base, volumePending: true, present: [{ type: 'volume', hidden: true }] })).toEqual({
+            manifest: [],
+            natives: [{ type: 'volume', hidden: true }],
+        });
         // After the first load the registry is the whole truth: no intent padding.
         expect(indicatorLedger({ ...base, volumePending: false, present: ['vpvr'] })).toEqual({ manifest: [], natives: ['vpvr'] });
+    });
+
+    it('native entries carry input deltas and hidden flags verbatim', () => {
+        const present = ['volume', { type: 'aroon', inputs: { length: 50 } }, { type: 'vpvr', hidden: true }];
+        expect(indicatorLedger({ ...base, present }).natives).toEqual(present);
     });
 });
 
@@ -389,6 +420,18 @@ describe('legend action contributions', () => {
         expect(ctxs).toEqual([{ built: 1 }, { built: 2 }]); // never a cached context
 
         unregisterLegendAction('src-only');
+    });
+
+    it('a click reads the indicator AGAIN — a code update since the row was built shows through', () => {
+        const seen: LegendIndicatorInfo[] = [];
+        registerLegendAction({ id: 'src-live', icon: 'code', tooltip: 'Open source', run: (_ctx, ind) => void seen.push(ind) });
+        const handle = { id: 'ind-1', title: 'EMA', source: 'v1' };
+        const chart = { indicators: () => [handle] } as never;
+        const [view] = legendActionsProviderFor(chart, () => ({}) as never)('ind-1');
+        handle.source = 'v2'; // updateCode landed after the row was built
+        view!.run();
+        expect(seen[0]?.source).toBe('v2');
+        unregisterLegendAction('src-live');
     });
 });
 

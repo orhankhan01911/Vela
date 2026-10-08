@@ -42,12 +42,17 @@ registerChartType({
         resume() {},    // style switched back
         stop() {},      // chart destroyed
         onViewport?(range) {},  // debounced visible-range pokes (backfill on scroll)
+        onBars?() {},           // the chart's bars changed: tick, new bar, prepended history
     }),
 });
 ```
 
 Lifecycle: the engine is created lazily the first time the chart enters the style
-(after `chart.ready()`), suspended/resumed on style flips, stopped at destroy.
+(after `chart.ready()`), suspended/resumed on style flips, stopped at destroy. A market
+switch, or entering/leaving a [bar replay](../user/api-reference.md#chartreplay--the-bar-replay-control-surface),
+stops it and builds a fresh one — during a replay `host.live` is `false` and `host.bars()`
+ends at the replay cursor, so an engine that keys its fetches off `host.bars()` never sees
+past it; `onBars` tells it when the cursor advanced.
 
 Two more levers for full-replacement types:
 
@@ -90,7 +95,7 @@ registerRendererLayer({
     id: 'mytype',                    // = the `setNativeData` channel it receives
     placement: 'above-data',         // or 'below-data' (behind the candles)
     repaintOnCursor: true,           // opt-in: pointer moves repaint this layer too
-    create: () => ({
+    create: () => ({                 // once per mounted renderer (+ once per instance of a multi-instance owner)
         mount(canvas) { /* keep the canvas reference */ },
         render({ bars, data, pending, coords, scale, bounds, theme, priceStyle, nowMs, cursor }) {
             // Always clear + repaint your own canvas. Gate on `priceStyle` if the
@@ -127,6 +132,13 @@ normal object model instead of sitting outside it:
   collapsed host pane blanks the layer, and `modulateBase` is consulted only while the
   owner sits on the price pane.
 
+- **Multi-instance owners:** when the owning type allows several instances
+  (`multiInstance: true` on its descriptor), each instance owns a layer of its own — the
+  definition's `create()` runs once per mounted renderer for the base layer AND once per
+  such instance, each on its own canvas, fed by that instance's channel, stacked and
+  paned by that instance. The base layer of such a type receives no data (every instance
+  has its own channel) and paints nothing.
+
 Chart-type channels (no owning indicator) keep the declared `placement` and the price
 pane, exactly as before.
 
@@ -153,8 +165,30 @@ volume and VPVR ride this seam. See `NativeIndicator` types in `@luxalgo/vela/pl
 A type is **single-instance** by default: a second `addNativeIndicator` of the same type
 returns the existing handle. Set `multiInstance: true` on the descriptor when a chart may
 carry several instances (a study users stack at different settings); every add then
-creates a fresh instance. A type that pushes a bespoke layer payload through `pushData`
-must stay single-instance — the renderer's native layer is keyed by type.
+creates a fresh instance. This holds for layer-backed types too: each instance of a
+multi-instance type that paints through a registered renderer layer gets its **own layer
+instance** — the layer's `create()` runs once more per instance, on its own canvas,
+reading that instance's own data channel (the channel is stamped on the model as
+`native.channel`; `pushData` routes there automatically) and following that instance's
+pane and stacking. Nothing changes for the layer code: `args.data` is still "my payload".
+Every running instance also knows its own id (`ctx.id` — the same id its handle and
+`inspect()` report), so an instance can name itself to host code and tell itself apart
+from its siblings.
+
+A [bar replay](../user/api-reference.md#chartreplay--the-bar-replay-control-surface)
+restarts every native when it starts and when it ends, the way a market switch does. While
+it runs, `ctx.live` is `false` and `ctx.bars()` ends at the replay cursor, so a native that
+opens its own live feed when `ctx.live` is set never streams the present into a past chart.
+Each revealed bar reaches it through `onBars()`.
+
+A native that is really **host-owned chrome** — trade markers from a journal, event flags,
+anything whose on/off switch lives in the host's own UI — can opt out of in-chart chrome with
+`legend: false` on the descriptor. Its output still computes and paints, but the chart mounts
+no legend row for it (no title chip, no eye/gear/✕, not counted by the fold chip) and
+`panes.list()` does not report it, so the object tree shows nothing either. The host controls
+it through the `IndicatorHandle` it got from `addNativeIndicator` (`remove()`, `setVisible()`).
+This is different from hiding: a hidden indicator keeps its row so the user can unhide it; a
+legend-less one has no row to begin with.
 
 A native whose visuals come entirely from a bespoke renderer layer (its `type` equals a
 registered layer id) can override the axis of the pane it OWNS by emitting **`paneAxis`**
@@ -191,21 +225,32 @@ registerWidgetAction({
                                  //  tooltip; mobile surfaces keep their text). Requires
                                  //  `icon`. The piece that makes a 'screenshot' slot
                                  //  override pixel-faithful to the button it replaces.
-    order: 10,                   // sort key within the contributed group
+    order: 10,                   // sort key: within the contributed group on the topbar;
+                                 //  among the built-in rows in a right-click menu (see below)
     align: 'left',               // topbar only: 'left' joins the primary chrome cluster
                                  //  (after the style/layout dropdowns, styled like them);
                                  //  'right' (default) the right-hand tools cluster
+    mobile: 'menu',              // topbar only: on the mobile layout, 'bar' (a bottom-bar
+                                 //  stop) or 'menu' (a three-dots row); default: 'bar'
+                                 //  for align: 'left', 'menu' otherwise
     when: (ctx) => ctx.priceStyle === 'mytype',   // optional runtime gate
     run: (ctx) => {
         // ctx.chart (the CURRENT inner chart) · ctx.symbol / timeframe / priceStyle
         // ctx.setSymbol / setTimeframe / setPriceStyle / openSymbolSearch(query?)
         // ctx.togglePanel(id, open?) — open/close a docked side panel (dock stays exclusive)
-        // ctx.addIndicator({ name, script, language? }) — add a script indicator THROUGH
-        //   the shell: recorded in the unified undo/redo timeline and the indicator count
+        // ctx.dockStrip(el) — dock an element as a full-width strip between the charts and
+        //   the bottom bar (the charts shrink); returns the undock
+        // ctx.replay (workspace) — bar replay across every cell on one clock; drive it
+        //   rather than one cell's chart.replay so every chart replays together
+        // ctx.addIndicator({ name, script, id?, language? }) — add a script indicator
+        //   THROUGH the shell: recorded in the unified undo/redo timeline and the
+        //   indicator count. `id` is the indicator's id on the chart (omit: minted);
+        //   undo/redo re-add under the same id
         // ctx.addNativeIndicator(type) — same, for native (core-computed) indicators
         // ctx.stateChanged() — persistable third-party state changed (debounced save)
         // ctx.host  — mount host for kit components (Dialog/Menu/Tooltip)
         // ctx.toast(message, kind?) — the widget's feedback pill
+        // ctx.pointer (context:* only) — where the right-click landed: { price, time, paneKind }
     },
 });
 ```
@@ -216,9 +261,12 @@ dropdowns, wearing the same height/typography as the built-in buttons there (tha
 the built-in Indicators button's exact spot and look, for actions that replace it).
 On the mobile chrome the split carries over: left-aligned actions get their own
 icon-only stop in the bottom bar (the built-in indicators slot), while right-aligned
-ones stay in the three-dots sheet. `context:*` actions are appended to the matching
-right-click menu zone. Register at import time — a widget constructed later picks them
-up; after late registrations call `widget.refreshActions()`.
+ones stay in the three-dots sheet. `mobile` overrides it per action: a left action with
+`mobile: 'menu'` becomes a three-dots row with the primary rows (right after Layout),
+and a right action with `mobile: 'bar'` gets a bottom-bar stop. `context:*` actions become
+rows of the matching right-click menu zone (see [Right-click menu
+actions](#right-click-menu-actions)). Register at import time — a widget constructed later
+picks them up; after late registrations call `widget.refreshActions()`.
 
 `align`/`order` are the action's *suggestion* — the HOST has the last word: the shell's
 `topbar: { left, right }` option (see [Composing the
@@ -241,6 +289,58 @@ Two rules keep actions portable:
 - **Kit components get `ctx.host`.** Mounting a `Dialog`/`Menu`/`Tooltip` without an
   explicit host portals it to `<body>`, outside the theme's CSS variables (invisible
   backgrounds). Pass `host: ctx.host`.
+
+### Right-click menu actions
+
+The three `context:*` targets add rows to the chart's right-click menus: `context:body` (the
+plot), `context:price-axis` (a pane's price scale) and `context:time-axis`. The context
+handed to their `when` and `run` carries **`ctx.pointer`**, where the right-click landed,
+read from the crosshair of the chart that received it (in a workspace, the cell under the
+pointer, which the right-click also makes active):
+
+- `price` — the value under the pointer on its pane: a price on the price pane, an
+  indicator value on a study pane. `null` off the plot.
+- `time` — the open time of the bar under the pointer; `null` off the bars.
+- `paneKind` — `'price'` or `'study'`; `null` off the plot.
+
+`ctx.pointer` is captured when the menu opens, so `run` sees the right-clicked spot even
+though the mouse moved through the menu to pick the row. The axis menus get what the
+crosshair reports over the axis: `price` and `paneKind` are `null` there, while `time`
+still names the bar column under the pointer (on the time axis, the bar above the click).
+Every other context (topbar actions, attachments, panels) has no `pointer`.
+
+```ts
+import { registerWidgetAction } from '@luxalgo/vela/plugin';
+
+registerWidgetAction({
+    id: 'mytool.copy-price',
+    target: 'context:body',
+    label: 'Copy price',
+    icon: 'clone',
+    order: -100,                                   // lead the menu
+    when: (ctx) => ctx.pointer?.paneKind === 'price',
+    run: (ctx) => void navigator.clipboard.writeText(String(ctx.pointer!.price)),
+});
+```
+
+Contributed rows sort **together** with the built-in rows by `order` (ascending, default
+0). The built-in rows sit at fixed ranks, exported as `CONTEXT_MENU_BUILTIN_ORDER`:
+
+| Menu | Built-in rows and ranks |
+| --- | --- |
+| `body` | Reset chart view −30 · Remove drawings −20 · Remove indicators −10 · Settings… 1000 |
+| `price-axis` | Auto −80 · Invert scale −70 · Regular −60 · Percent −50 · Indexed to 100 −40 · Logarithmic −30 · Labels −20 · Levels −10 · More settings… 1000 |
+| `time-axis` | Time zone −10 · More settings… 1000 |
+
+So an action without `order` lands after the built-in actions and before the settings row,
+`order: -100` leads the menu, and `order: 1001` follows the settings row. On a tie the
+built-in row comes first, then the actions in registration order. Separators split the menu
+into groups and never open or close it: the built-in groups (body: Reset chart view | the
+two removals | Settings…; price axis: Auto and Invert | the four scale modes | Labels and
+Levels | More settings…; time axis: Time zone | More settings…), and each run of
+consecutive contributed rows. An `order` that falls inside a built-in group
+splits it around your row. The built-in body rows carry icons; give yours an `icon` so it
+reads the same (an iconless row keeps its label aligned with the others).
 
 ## Widget attachments — `registerWidgetAttachment`
 
@@ -305,7 +405,7 @@ contributions above — **no shell option needed**:
   **attachment** owns the per-shell dialog. Everything a menu needs is public on the
   context — the native catalog via `ctx.chart.availableNativeIndicators()`, and
   **shell-routed adds** via `ctx.addNativeIndicator(type)` and
-  `ctx.addIndicator({ name, script, language? })`. Prefer these over the raw
+  `ctx.addIndicator({ name, script, id?, language? })`. Prefer these over the raw
   `ctx.chart.addNativeIndicator` / `ctx.chart.addIndicator`: the context forms enter
   the shell's unified **undo/redo timeline** and the topbar indicator count, exactly
   like an add from the built-in picker — the raw chart calls bypass the shell and stay
@@ -422,18 +522,22 @@ registerStatePersistence({
     serialize(ctx) {
         // Snapshot whatever your plugin needs to re-add its indicators later — refs
         // (slugs/ids) beat full sources: the document stays light. `undefined` = no entry.
+        // Storing each indicator's chart `id` lets the restore bring it back under the
+        // id your document already knows (`ctx.chart.indicators()` reads the live ones).
         const mine = trackedIndicators(ctx.cellId); // your bookkeeping
-        return mine.length > 0 ? mine.map((i) => ({ slug: i.slug })) : undefined;
+        return mine.length > 0 ? mine.map((i) => ({ slug: i.slug, id: i.id })) : undefined;
     },
     restore(payload, ctx) {
         // The payload is UNTRUSTED (the codec passes `ext` through opaquely) — validate.
         if (!Array.isArray(payload)) return;
         for (const item of payload) {
             if (typeof item?.slug !== 'string') continue;
+            const id = typeof item.id === 'string' && item.id ? item.id : undefined;
             void fetchSource(item.slug).then((script) =>
                 // Cell-bound adds: THIS chart (not the active one), and muted — a
-                // restore never pollutes the undo timeline.
-                ctx.addIndicator({ name: item.slug, script, language: 'pine' }),
+                // restore never pollutes the undo timeline. With `id`, the indicator
+                // comes back under the recorded id (undo/redo keep it too).
+                ctx.addIndicator({ name: item.slug, script, language: 'pine', id }),
             );
         }
     },
@@ -459,7 +563,7 @@ The resulting document (what `persist` writes and `getState()` returns):
     "version": 1,
     "layout": "4",
     "charts": [
-        { "id": "c1", "symbol": "BTCUSDT", /* … */ "ext": { "mytool.indicators": [{ "slug": "my-osc" }] } }
+        { "id": "c1", "symbol": "BTCUSDT", /* … */ "ext": { "mytool.indicators": [{ "slug": "my-osc", "id": "mytool:my-osc:1" }] } }
     ],
     "ext": { "mytool.prefs": { "starred": ["my-osc"] } }
 }
@@ -508,8 +612,9 @@ registerLegendAction({
 ```
 
 - `ind` is a {@link LegendIndicatorInfo}: `{ id, title, source? }` — `source` is the
-  script the indicator was added with (also exposed as `handle.source`), and is
-  `undefined` for native indicators, which is the usual `when` gate.
+  script the indicator runs NOW (the same as `handle.source`, read at click time, so an
+  in-place `updateCode` shows through), and is `undefined` for native indicators, which
+  is the usual `when` gate.
 - The descriptor resolves **per row, per click**: `when` re-evaluates as rows appear, and
   `run` receives a fresh context each time.
 - Register at import time; after a late registration call `refreshActions()` (both shells
@@ -585,6 +690,7 @@ registerSidePanel({
     minWidth: 240,
     maxWidth: 560,
     overlay: false,              // true floats the panel OVER the chart (with a pin to dock it)
+    maximizable: false,          // true adds a Maximize/Restore button to the header
     mount: (ctx, body, header) => {
         const list = document.createElement('div');
         body.appendChild(list);                       // `body` is the panel's scrolling area
@@ -616,12 +722,20 @@ registerSidePanel({
   after all (the chart makes room), released, it floats again — the user's choice, saved with
   the shell's state next to the widths. Resizing and width persistence work the same way in
   both placements.
+- **A panel can be maximized.** With `maximizable: true` the header carries a Maximize button
+  that spreads the panel over every chart of the shell, whatever its placement, and turns
+  into Restore. The contribution drives the same state from code — `header.setMaximized(on)`,
+  read back through `header.maximized`. It is a moment, not a placement: it is not
+  persisted, and closing the panel restores it. Pick it for panels that are sometimes the
+  main work surface (an editor).
 - **The dock is exclusive.** Opening a panel closes the one showing — the chart keeps its
   width, and only one column is ever docked. `onOpen` is where a lazy panel renders.
 - **`onChart` is the rebind hook**, not a one-shot: the widget hands over a new chart instance
   after a symbol/timeframe rebuild, and a workspace re-points the panel at the active cell.
-- Register at import time; after a late registration call `widget.refreshActions()` (an open
-  contributed panel stays open across the rebuild).
+- Register at import time; after a late registration call `widget.refreshActions()`. Only
+  what changed is rebuilt: a panel whose descriptor is still registered as it was stays
+  mounted as it is — content, state and open column included — while a re-registered
+  (replaced) descriptor is rebuilt, and an open one stays open.
 - A `mount` that throws is contained: the panel docks empty and the reason is logged, rather
   than taking the shell down.
 

@@ -24,7 +24,7 @@ import { CellControls } from '../widget/cell-controls';
 import { ChartContextMenu } from '../widget/context-menu';
 import { WidgetHistory } from '../widget/history';
 import type { RangePreset } from '../widget/bottombar';
-import { indicatorLedger, ledgerEntryName, type LedgerManifestEntry, type ResolvedIndicator } from '../widget/indicators';
+import { indicatorLedger, ledgerEntryName, ledgerNativeType, type LedgerManifestEntry, type LedgerNativeEntry, type ResolvedIndicator } from '../widget/indicators';
 import { inputDeltas, type InputValue } from '../core/model/inputs';
 import {
     legendActionsProviderFor,
@@ -37,7 +37,7 @@ import {
 } from '../widget/contributions';
 import { prefixedSymbol, type CellState } from '../state/document';
 import { parseSymbol } from '../data/ProviderRegistry';
-import { normalizeTimezone } from '../core/timezones';
+import { isExchangeTimezone, normalizeTimezone, resolveTimezone, timezoneMenuRows } from '../core/timezones';
 import { applyPlotOverlayTokens } from '../ui';
 
 /** The seed/mutable market state of one cell (all optional — an empty cell parks).
@@ -87,13 +87,13 @@ export function seedDefaults(opts: Pick<VelaOptions, 'symbol' | 'timeframe' | 'b
  *  sub-key (see {@link cellDrawings}). */
 export type CellChartDefaults = Pick<
     VelaOptions,
-    'renderer' | 'defaultLanguage' | 'currentPriceLine' | 'logScale' | 'animations' | 'glow' | 'upColor' | 'downColor' | 'drawings' | 'settings'
+    'renderer' | 'defaultLanguage' | 'currentPriceLine' | 'logScale' | 'animations' | 'glow' | 'upColor' | 'downColor' | 'drawings' | 'settings' | 'priceAxis'
 >;
 
 /** The {@link CellChartDefaults} pick of a workspace's options (pure, for the build). */
 export function cellChartDefaults(opts: CellChartDefaults): CellChartDefaults {
-    const { renderer, defaultLanguage, currentPriceLine, logScale, animations, glow, upColor, downColor, drawings, settings } = opts;
-    return { renderer, defaultLanguage, currentPriceLine, logScale, animations, glow, upColor, downColor, drawings, settings };
+    const { renderer, defaultLanguage, currentPriceLine, logScale, animations, glow, upColor, downColor, drawings, settings, priceAxis } = opts;
+    return { renderer, defaultLanguage, currentPriceLine, logScale, animations, glow, upColor, downColor, drawings, settings, priceAxis };
 }
 
 /** The cell form of the shell's `drawings` option: everything passes through EXCEPT the
@@ -105,13 +105,16 @@ export function cellDrawings(opt: DrawingsOption | undefined): DrawingsOption {
     return { ...opt, toolbar: false };
 }
 
-/** A cell's Status line tab prefs as one bundle — the segment toggles (null when the
- *  shell runs without status lines) plus the indicator legend's titles/values. What
- *  the workspace's STYLE link mirrors across same-group cells. */
+/** A cell's own look prefs as one bundle — the Status line tab's segment toggles (null
+ *  when the shell runs without status lines) and indicator legend titles/values, plus
+ *  the Symbol tab's watermark toggles. What the workspace's STYLE link mirrors across
+ *  same-group cells, next to the renderer config. */
 export interface CellStatusPrefs {
     parts: Record<StatuslinePart, boolean> | null;
     indicatorTitles: boolean;
     indicatorValues: boolean;
+    watermark: boolean;
+    replayWatermark: boolean;
 }
 
 /** One entry of the shared indicator picker's native catalog, per cell. */
@@ -141,7 +144,8 @@ export interface CellDeps {
     /** Where the renderer mounts its MODAL dialogs (chart/indicator settings) — the
      *  workspace root, so dialogs center over the whole grid instead of one cell. */
     dialogHost: HTMLElement;
-    /** The workspace-global display timezone (applied to every cell's renderer). */
+    /** The workspace-global display-timezone CHOICE — an IANA zone, or the exchange
+     *  rule, which each cell resolves to its own market's zone ({@link ChartCell.applyTimezone}). */
     timezone(): string;
     /** Switch the workspace-global display timezone (a cell's time-axis menu). */
     setTimezone(zone: string): void;
@@ -173,7 +177,7 @@ export interface CellDeps {
     onPriceStyleChanged(id: string): void;
     /** The cell's indicator ledger changed (count/picker refresh upstream). */
     onIndicatorsChanged(id: string): void;
-    /** A Status line tab pref changed on this cell (the style link mirrors upstream). */
+    /** A Status line tab or watermark pref changed on this cell (the style link mirrors upstream). */
     onStatusPrefsChanged(id: string): void;
     /** Persistable per-cell state changed outside the market/indicator channels
      *  (bars budget, watermark/titles toggles) — the workspace debounces a save. */
@@ -187,8 +191,19 @@ export interface CellDeps {
 interface CellInstance {
     entry: ResolvedIndicator;
     handle: IndicatorHandle | null;
+    /** The id the indicator runs under on the chart — recorded on the first add (host-
+     *  supplied or minted) so an undo/redo resurrection re-adds it under the SAME id:
+     *  whatever a host keyed on it (a document, an editor tab) keeps pointing at it. */
+    id?: string;
     external?: boolean;
     values?: { inputs?: Record<string, InputValue>; props?: Record<string, InputValue> };
+}
+
+/** A native handle's ledger entry: the bare type, or type + input deltas + hidden flag. */
+function nativeLedgerEntry(handle: IndicatorHandle): LedgerNativeEntry {
+    const inputs = inputDeltas(handle.inputs, handle.inputValues());
+    const hidden = !handle.visible;
+    return inputs || hidden ? { type: handle.nativeType!, ...(inputs ? { inputs } : {}), ...(hidden ? { hidden: true } : {}) } : handle.nativeType!;
 }
 
 /** The handle's current input/prop DELTAS against declaration defaults (see `inputDeltas`). */
@@ -219,9 +234,14 @@ export class ChartCell {
     activeRangeId: string | null = null;
     /** Latched verdict of {@link sessionAvailable} (async metadata, sticky per symbol). */
     private sessionAvailableFlag = false;
+    /** The symbol of the most recent metadata probe — an older one landing late is dropped. */
+    private metadataProbeSymbol: string | null = null;
     /** Latched: the symbol's extended tape wraps midnight (an overnight roll market) —
      *  one extended-hours shading phase instead of the pre/post split. */
     private sessionOvernightFlag = false;
+    /** Latched: the symbol's own trading zone (`SymbolInfo.timezone`) — what the exchange
+     *  rule resolves to on this cell. Undefined until metadata lands or when none is declared. */
+    private exchangeZone: string | undefined;
 
     private inner: Vela | null;
     /** The live app theme — seeded from deps, updated on `theme:changed` (the base the
@@ -264,6 +284,7 @@ export class ChartCell {
      *  verbatim, so a document never loses a plugin's state in the plugin's absence. */
     private extState: Record<string, unknown> = {};
     private watermarkOn: boolean;
+    private replayWatermarkOn: boolean;
     /** Indicator titles (this cell's in-chart legend rows) shown. */
     private indicatorTitlesOn = true;
     /** Plot values beside this cell's legend titles shown. */
@@ -315,11 +336,15 @@ export class ChartCell {
                 // A RESTORED ledger is authoritative for the auto-added volume too: a
                 // slot persisted without it must come back without it (fresh slots
                 // keep the workspace default).
-                volume: seed.indicators ? seed.indicators.natives.includes('volume') : deps.volume,
+                volume: seed.indicators ? (seed.indicators.natives as LedgerNativeEntry[]).some((e) => ledgerNativeType(e) === 'volume') : deps.volume,
                 nativeBackend: deps.nativeBackend,
                 // The user's drawings option minus its toolbar: one SHARED bar serves
                 // the whole workspace (per-cell bars would cost a 44px gutter each).
                 drawings: cellDrawings(deps.chartDefaults.drawings),
+                // The renderer's own Time zone row edits a resolved IANA zone; the cell
+                // contributes the workspace picker instead (`time-zone`, with the
+                // exchange rule — see pushSettingsSections).
+                settings: { ...deps.chartDefaults.settings, hidden: [...(deps.chartDefaults.settings?.hidden ?? []), 'symbol.timezone'] },
             },
             { dataFeed: deps.feed },
         );
@@ -341,14 +366,25 @@ export class ChartCell {
         // keymap pops an unrelated cell entry).
         if (this.inner.renderer.supports('historyChords')) this.inner.renderer.set('historyChords', false);
         this.history.onChart(this.inner);
-        // The renderer's settings dialog owns a Time zone row too (it commits through
+        // A config document can carry a time zone too (a template import, a headless
         // applyConfig) — mirror it back so the workspace bottom bar, the other cells and
         // the persisted state never disagree with this cell's axis. `renderer.set` is a
-        // feature write, not an applyConfig, so adopting the value cannot loop.
+        // feature write, not an applyConfig, so adopting the value cannot loop. The
+        // comparison is against the RESOLVED zone: under the exchange rule the renderer
+        // legitimately holds the market's zone, and that must not read as a user edit
+        // (which would demote the rule to that fixed zone).
         this.inner.renderer.onConfigChanged(() => {
             const zone = this.inner?.renderer.get('timezone');
-            if (typeof zone === 'string' && normalizeTimezone(zone) !== normalizeTimezone(this.deps.timezone())) {
+            if (typeof zone === 'string' && normalizeTimezone(zone) !== normalizeTimezone(this.displayTimezone)) {
                 this.deps.setTimezone(normalizeTimezone(zone));
+            }
+            // A document can carry the price style too (a template import): the renderer
+            // is already showing it, so adopt it and re-project the chrome (topbar icon,
+            // persisted state) — the `setPriceStyle` path never ran for it.
+            const style = this.priceStyle;
+            if (style !== (this.state.priceStyle ?? 'candles')) {
+                this.state.priceStyle = style;
+                this.deps.onPriceStyleChanged(this.id);
             }
             this.syncStatuslineColors(); // a settings edit may have recolored the active style
             this.syncPlotOverlayTokens(); // a background edit may have flipped the plot's luminance
@@ -368,10 +404,13 @@ export class ChartCell {
         // resolving) and stay reported by `dehydrate` until then, so an early snapshot
         // (persist flush racing the resolution) never wipes them.
         if (seed.indicators) {
-            for (const type of seed.indicators.natives) this.inner.addNativeIndicator(type);
+            for (const entry of seed.indicators.natives as LedgerNativeEntry[]) {
+                const handle = this.inner.addNativeIndicator(ledgerNativeType(entry));
+                this.applyNativeLedgerEntry(handle, entry);
+            }
             this.pendingManifestNames = [...seed.indicators.manifest] as LedgerManifestEntry[];
         }
-        this.volumeIntent = seed.indicators ? seed.indicators.natives.includes('volume') : deps.volume;
+        this.volumeIntent = seed.indicators ? seed.indicators.natives.some((e) => ledgerNativeType(e as LedgerNativeEntry) === 'volume') : deps.volume;
         // Third-party state rides in verbatim; the workspace triggers the handlers'
         // `restore` AFTER wiring the cell (restorePersistedExt) — a restore that adds
         // indicators must not call back into a workspace that doesn't know the cell yet.
@@ -390,22 +429,32 @@ export class ChartCell {
             this.deps.toast(`No registered provider serves "${symbol}" (registered: ${list})`, 'error', 6000);
         });
         // The loading affordance and the watermark never share the canvas.
-        this.inner.on('load:start', () => this.watermark?.setLoading(true));
+        this.inner.on('load:start', ({ symbol }) => {
+            this.watermark?.setLoading(true);
+            // Probe the new symbol's metadata HERE rather than waiting for `market:changed`
+            // (which fires only once the new bars are painted): the session toggle and the
+            // exchange zone then settle while the bars load instead of a beat after them.
+            // The committed pass below re-runs idempotently and remains the backstop.
+            this.refreshSymbolMetadata(symbol);
+        });
         this.inner.on('load:end', () => {
             this.watermark?.setLoading(false);
             this.refreshSessionShading(); // the first painted bars now define the exact range
         });
         this.inner.on('viewport:changed', (range) => this.sessionShading.updateRange(range));
-        const tz = deps.timezone();
-        if (tz !== 'Etc/UTC') this.inner.renderer.set('timezone', tz);
+        this.applyTimezone();
 
         this.indicatorTitlesOn = seed.indicatorTitles ?? true;
         if (!this.indicatorTitlesOn) this.inner.renderer.set('indicatorTitles', false);
         this.indicatorValuesOn = seed.indicatorValues ?? true;
         if (!this.indicatorValuesOn) this.inner.renderer.set('indicatorValues', false);
         this.watermarkOn = seed.watermark ?? deps.watermark;
+        this.replayWatermarkOn = seed.replayWatermark ?? true;
         this.watermark = deps.watermark ? new Watermark(this.host, symbol ?? '', seed.timeframe ?? '60') : null;
         if (!this.watermarkOn) this.watermark?.setVisible(false);
+        if (!this.replayWatermarkOn) this.watermark?.setReplayVisible(false);
+        this.inner.on('replay:start', () => this.watermark?.setReplaying(true));
+        this.inner.on('replay:end', () => this.watermark?.setReplaying(false));
         this.statusline = deps.statusline ? new Statusline(this.host, symbol ?? '', (sym) => this.inner?.data.symbolIcon(sym)) : null;
         this.statusline?.setMeta(seed.timeframe ?? '60', this.state.provider ?? '');
         this.statusline?.onChart(this.inner);
@@ -426,7 +475,7 @@ export class ChartCell {
                 this.statusline?.setSymbol(this.state.symbol);
                 this.statusline?.setMeta(this.state.timeframe ?? '60', this.inner.data.displayPrefix(this.state.symbol) ?? this.state.provider ?? '');
             }
-            this.refreshSessionAvailable();
+            this.refreshSymbolMetadata();
             if (this.inner && this.state.symbol) this.marketStatus?.track(this.inner.data, this.state.symbol);
         });
         this.syncStatuslineColors();
@@ -458,6 +507,9 @@ export class ChartCell {
             this.refreshNativeCatalog();
         });
         this.inner.on('indicator:inputs', () => this.deps.onStateDirty());
+        // A legend-eye toggle is a persistable choice like an input edit — without this
+        // a hidden indicator came back visible on reload (nothing marked the doc dirty).
+        this.inner.on('indicator:visibility', () => this.deps.onStateDirty());
         this.inner.on('indicator:removed', ({ id }) => {
             if (this.destroyed) return;
             // Out-of-band removals (legend ✕, object tree, middle-click, handle.remove())
@@ -519,7 +571,7 @@ export class ChartCell {
         this.offMarket = this.inner.on('market:changed', ({ symbol, timeframe }) => {
             this.projectMarket(symbol, timeframe);
             this.refreshNativeCatalog(); // per-symbol support flags may differ
-            this.refreshSessionAvailable(); // the new symbol may (not) have sessions
+            this.refreshSymbolMetadata(); // the new symbol may (not) have sessions, and its own zone
             if (this.inner) this.marketStatus?.track(this.inner.data, symbol); // …and its own market clock
             this.deps.onMarketChanged(this.id);
         });
@@ -565,18 +617,71 @@ export class ChartCell {
         void this.inner?.setMarket({ session });
     }
 
-    private refreshSessionAvailable(): void {
+    /**
+     * The symbol's own trading zone, once its metadata has landed — what the exchange
+     * rule resolves to on this cell (the workspace labels the shared bottom bar with the
+     * ACTIVE cell's). Undefined = unknown or undeclared (the rule then renders UTC).
+     */
+    get exchangeTimezone(): string | undefined {
+        return this.exchangeZone;
+    }
+
+    /** The IANA zone this cell's axis renders in: the workspace choice, resolved. */
+    get displayTimezone(): string {
+        return resolveTimezone(this.deps.timezone(), this.exchangeZone);
+    }
+
+    /**
+     * Push the resolved zone to the renderer — on the workspace choice changing, and on
+     * this cell's market zone changing under the exchange rule. Skips the write when the
+     * renderer already holds it (its config default is the bare `'UTC'` alias).
+     */
+    applyTimezone(): void {
         const chart = this.inner;
-        const symbol = this.state.symbol;
+        if (!chart) return;
+        const zone = this.displayTimezone;
+        const current = chart.renderer.get('timezone');
+        // A renderer without the feature reads `undefined` — treat it as the default so a
+        // UTC workspace never issues a write it would only warn about.
+        const held = typeof current === 'string' && current ? current : 'UTC';
+        if (normalizeTimezone(held) === normalizeTimezone(zone)) return;
+        chart.renderer.set('timezone', zone);
+    }
+
+    /** Re-read the symbol's metadata: session posture (RTH/ETH toggle, shading) and its
+     *  trading zone (the exchange rule). Async — the workspace re-projects when a verdict lands. */
+    private refreshSymbolMetadata(symbol = this.state.symbol, retry = true): void {
+        const chart = this.inner;
         if (!chart || !symbol) return;
+        this.metadataProbeSymbol = symbol; // last ask wins — a slow probe must not overwrite a newer verdict
         void chart.data.symbolInfo(symbol).then((si) => {
-            if (this.inner !== chart) return;
+            if (this.inner !== chart || this.metadataProbeSymbol !== symbol) return;
+            if (si === undefined && retry) {
+                // Nothing resolved the symbol yet: the EARLY pass can precede the provider
+                // indexes (the bar load itself awaits them, which is why the committed pass
+                // never saw this). Ask again once they settle, then give up — the
+                // `market:changed` pass is the backstop.
+                void chart.data.ready().then(() => {
+                    if (this.inner === chart && this.metadataProbeSymbol === symbol) this.refreshSymbolMetadata(symbol, false);
+                });
+                return;
+            }
+            // The cell's own state may not carry this symbol yet — host code calling
+            // `chart.setMarket` directly projects it only at `market:changed`, and the
+            // overlays below (shading, settings) read the cell state. That pass follows.
+            if (this.state.symbol !== symbol) return;
             const available = typeof si?.session === 'string' && si.session !== '' && si.session !== '24x7';
             const overnight = parseSessionSpec(si)?.overnight === true;
-            if (available !== this.sessionAvailableFlag || overnight !== this.sessionOvernightFlag) {
+            const zone = typeof si?.timezone === 'string' && si.timezone !== '' ? si.timezone : undefined;
+            const zoneChanged = zone !== this.exchangeZone;
+            if (zoneChanged) {
+                this.exchangeZone = zone;
+                this.applyTimezone(); // a no-op unless the workspace follows the exchange
+            }
+            if (available !== this.sessionAvailableFlag || overnight !== this.sessionOvernightFlag || zoneChanged) {
                 this.sessionAvailableFlag = available;
                 this.sessionOvernightFlag = overnight;
-                this.deps.onMarketChanged(this.id); // re-project the shared bottombar toggle
+                this.deps.onMarketChanged(this.id); // re-project the shared bottombar toggle + zone label
                 this.pushSettingsSections(); // the Trading session group follows the symbol
             }
             this.refreshSessionShading();
@@ -687,6 +792,27 @@ export class ChartCell {
                 },
             ],
         };
+        // Replaces the renderer's Time zone group (hidden at construction): the same rows
+        // as the bottom bar — UTC, the exchange rule, the catalog — writing the workspace
+        // CHOICE, so picking Exchange never reaches the renderer as a zone.
+        const timezoneSection = {
+            title: 'Time zone',
+            id: 'time-zone',
+            placement: 'symbol' as const,
+            rows: [
+                {
+                    kind: 'select' as const,
+                    label: 'Time zone',
+                    id: 'zone',
+                    options: timezoneMenuRows(this.deps.timezone()).map((r) => [r.value, r.label] as const),
+                    get: () => {
+                        const choice = this.deps.timezone();
+                        return isExchangeTimezone(choice) ? choice : normalizeTimezone(choice);
+                    },
+                    set: (v: string) => this.deps.setTimezone(v),
+                },
+            ],
+        };
         const watermarkSection = {
             title: 'Watermark',
             id: 'watermark',
@@ -698,6 +824,13 @@ export class ChartCell {
                     id: 'visible',
                     get: () => this.watermarkOn,
                     set: (v: boolean) => this.setWatermarkVisible(v),
+                },
+                {
+                    kind: 'toggle' as const,
+                    label: 'Replay watermark',
+                    id: 'replay',
+                    get: () => this.replayWatermarkOn,
+                    set: (v: boolean) => this.setReplayWatermarkVisible(v),
                 },
             ],
         };
@@ -755,7 +888,7 @@ export class ChartCell {
                 ],
             });
         }
-        sections.push(advanced);
+        sections.push(advanced, timezoneSection);
         if (this.sessionAvailableFlag) sections.push(sessionSection);
         sections.push(watermarkSection);
         chart.renderer.setSettingsSections(sections);
@@ -766,6 +899,15 @@ export class ChartCell {
         this.watermarkOn = visible;
         this.watermark?.setVisible(visible);
         this.deps.onStateDirty();
+        this.deps.onStatusPrefsChanged(this.id);
+    }
+
+    /** Show/hide the "Replay" line under this cell's watermark while it replays (persisted per cell). */
+    setReplayWatermarkVisible(visible: boolean): void {
+        this.replayWatermarkOn = visible;
+        this.watermark?.setReplayVisible(visible);
+        this.deps.onStateDirty();
+        this.deps.onStatusPrefsChanged(this.id);
     }
 
     /** Show/hide this cell's indicator titles — the in-chart legend rows (persisted per cell). */
@@ -790,7 +932,7 @@ export class ChartCell {
         this.deps.onStatusPrefsChanged(this.id);
     }
 
-    /** This cell's Status line tab prefs as one bundle (see {@link CellStatusPrefs}). */
+    /** This cell's Status line tab and watermark prefs as one bundle (see {@link CellStatusPrefs}). */
     statusPrefs(): CellStatusPrefs {
         const sl = this.statusline;
         return {
@@ -799,12 +941,14 @@ export class ChartCell {
                 : null,
             indicatorTitles: this.indicatorTitlesOn,
             indicatorValues: this.indicatorValuesOn,
+            watermark: this.watermarkOn,
+            replayWatermark: this.replayWatermarkOn,
         };
     }
 
-    /** Converge this cell's Status line tab prefs to `prefs` — the follower half of
-     *  the workspace's style link. Idempotent: matching values change nothing, so a
-     *  propagated echo dies on its own. */
+    /** Converge this cell's Status line tab and watermark prefs to `prefs` — the
+     *  follower half of the workspace's style link. Idempotent: matching values change
+     *  nothing, so a propagated echo dies on its own. */
     applyStatusPrefs(prefs: CellStatusPrefs): void {
         if (prefs.parts && this.statusline) {
             for (const part of Object.keys(prefs.parts) as StatuslinePart[]) {
@@ -813,6 +957,8 @@ export class ChartCell {
         }
         if (prefs.indicatorTitles !== this.indicatorTitlesOn) this.setIndicatorTitlesVisible(prefs.indicatorTitles);
         if (prefs.indicatorValues !== this.indicatorValuesOn) this.setIndicatorValuesVisible(prefs.indicatorValues);
+        if (prefs.watermark !== this.watermarkOn) this.setWatermarkVisible(prefs.watermark);
+        if (prefs.replayWatermark !== this.replayWatermarkOn) this.setReplayWatermarkVisible(prefs.replayWatermark);
     }
 
     /** The LIVE chart of this cell — never cache it across a layout change (the cell's
@@ -884,7 +1030,8 @@ export class ChartCell {
     }
 
     /** The workspace shell keeps the app theme; the cell host's tokens re-derive from
-     *  the LIVE plot surface (see {@link applyPlotOverlayTokens}). */
+     *  the LIVE plot surface for overlay ink (statusline, watermark). Menus portal to
+     *  `.vela-ui` and keep the app-theme surface (see {@link applyPlotOverlayTokens}). */
     private syncPlotOverlayTokens(): void {
         applyPlotOverlayTokens(this.host, this.appTheme, this.inner?.renderer.getConfig() ?? null);
     }
@@ -965,7 +1112,7 @@ export class ChartCell {
             if (list.length === 0) return; // the manifest hasn't resolved yet — keep waiting
             for (const led of this.pendingManifestNames) {
                 const entry = list.find((e) => e.name === ledgerEntryName(led));
-                if (entry) this.addManifestInstance(entry, { record: false, ...(typeof led === 'object' ? { inputs: led.inputs, props: led.props } : {}) });
+                if (entry) this.addManifestInstance(entry, { record: false, ...(typeof led === 'object' ? { inputs: led.inputs, props: led.props, hidden: led.hidden } : {}) });
             }
             this.pendingManifestNames = null;
             return;
@@ -982,29 +1129,42 @@ export class ChartCell {
      * resolves. Convergence is state application, not user edits — nothing enters the
      * undo timeline.
      */
-    private applyIndicatorLedger(led: { manifest: LedgerManifestEntry[]; natives: string[] }): void {
+    private applyIndicatorLedger(led: { manifest: LedgerManifestEntry[]; natives: LedgerNativeEntry[] }): void {
         const chart = this.inner;
         if (!chart) return;
-        this.volumeIntent = led.natives.includes('volume');
+        this.volumeIntent = led.natives.some((e) => ledgerNativeType(e) === 'volume');
         this.history.silently(() => {
             // Converge as a MULTISET: a multi-instance type is listed once per instance.
-            // Existing instances are kept while the ledger still owes their type; the
-            // surplus goes, the shortfall is added.
-            const owed = new Map<string, number>();
-            for (const type of led.natives) owed.set(type, (owed.get(type) ?? 0) + 1);
+            // Existing instances are kept while the ledger still owes their type — each
+            // consumes one owed ENTRY and converges to its values/visibility — the
+            // surplus goes, the shortfall is added with the entry's values.
+            const owed = new Map<string, LedgerNativeEntry[]>();
+            for (const e of led.natives) {
+                const type = ledgerNativeType(e);
+                const queue = owed.get(type);
+                if (queue) queue.push(e);
+                else owed.set(type, [e]);
+            }
             for (const h of this.nativeHandles()) {
-                const type = h.nativeType!;
-                const n = owed.get(type) ?? 0;
-                if (n > 0) owed.set(type, n - 1);
+                const entry = owed.get(h.nativeType!)?.shift();
+                if (entry !== undefined) this.applyNativeLedgerEntry(h, entry);
                 else h.remove();
             }
-            for (const [type, n] of owed) for (let i = 0; i < n; i++) chart.addNativeIndicator(type);
+            for (const queue of owed.values()) {
+                for (const e of queue) {
+                    const h = chart.addNativeIndicator(ledgerNativeType(e));
+                    this.applyNativeLedgerEntry(h, e);
+                }
+            }
             for (const it of [...this.instances]) this.dropInstance(it);
             if (this.manifest.length > 0) {
                 for (const item of led.manifest) {
                     const entry = this.manifest.find((e) => e.name === ledgerEntryName(item));
                     if (entry)
-                        this.addManifestInstance(entry, { record: false, ...(typeof item === 'object' ? { inputs: item.inputs, props: item.props } : {}) });
+                        this.addManifestInstance(entry, {
+                            record: false,
+                            ...(typeof item === 'object' ? { inputs: item.inputs, props: item.props, hidden: item.hidden } : {}),
+                        });
                 }
                 this.pendingManifestNames = null;
             } else if (!this.deps.manifestSettled()) {
@@ -1029,7 +1189,7 @@ export class ChartCell {
      *  then the manifest in the host's own order. */
     libraryRows(): Array<{ name: string; language?: string; category?: string; native?: boolean; nativeType?: string; beta?: boolean }> {
         return [
-            ...this.supportedNatives().map((n) => ({ name: n.title, category: 'Vela', native: true, nativeType: n.type, beta: n.beta })),
+            ...this.supportedNatives().map((n) => ({ name: n.title, category: 'Built-in', native: true, nativeType: n.type, beta: n.beta })),
             ...this.manifest.map((e) => ({ name: e.name, language: e.language, category: e.category })),
         ];
     }
@@ -1067,20 +1227,29 @@ export class ChartCell {
      * a persistence handler's `restore` runs silently, a user-driven call records.
      */
     addExternalIndicator(entry: ExternalIndicatorEntry): void {
+        const { id, inputs, props, hidden, ...script } = entry;
         this.addManifestInstance(
-            { ...entry, enabled: true },
-            { external: true, ...(entry.inputs ? { inputs: entry.inputs } : {}), ...(entry.props ? { props: entry.props } : {}) },
+            { ...script, enabled: true },
+            { external: true, ...(id !== undefined ? { id } : {}), ...(inputs ? { inputs } : {}), ...(props ? { props } : {}), ...(hidden ? { hidden: true } : {}) },
         );
     }
 
     /** Add ONE instance of a manifest entry (repeatable — duplicates are legitimate). */
     addManifestInstance(
         entry: ResolvedIndicator,
-        opts: { record?: boolean; external?: boolean; inputs?: Record<string, InputValue>; props?: Record<string, InputValue> } = {},
+        opts: { record?: boolean; external?: boolean; id?: string; inputs?: Record<string, InputValue>; props?: Record<string, InputValue>; hidden?: boolean } = {},
     ): void {
         if (this.destroyed) return;
         const values = opts.inputs || opts.props ? { inputs: opts.inputs, props: opts.props } : undefined;
-        const it: CellInstance = { entry, handle: this.addToChart(entry, values), ...(opts.external ? { external: true } : {}), ...(values ? { values } : {}) };
+        const handle = this.addToChart(entry, values, opts.id);
+        // The chart refused the add (a host id already live on it): no instance, no
+        // history entry — a ghost row with nothing behind it would be worse than nothing.
+        if (!handle) return;
+        const it: CellInstance = { entry, handle, id: handle.id, ...(opts.external ? { external: true } : {}), ...(values ? { values } : {}) };
+        // A restored `hidden` applies right after the add — the handle is usable
+        // synchronously, and hiding suspends the engine session before it spends
+        // anything on an indicator the user had tucked away.
+        if (opts.hidden) it.handle?.setVisible(false);
         this.instances.push(it);
         this.deps.onIndicatorsChanged(this.id);
         if (opts.record === false) return;
@@ -1088,7 +1257,7 @@ export class ChartCell {
         this.history.push({
             undo: () => this.dropInstance(snapshot),
             redo: () => {
-                snapshot.handle = this.addToChart(snapshot.entry, snapshot.values);
+                snapshot.handle = this.addToChart(snapshot.entry, snapshot.values, snapshot.id);
                 this.instances.push(snapshot);
                 this.deps.onIndicatorsChanged(this.id);
             },
@@ -1102,7 +1271,7 @@ export class ChartCell {
         const snapshot = it;
         this.history.push({
             undo: () => {
-                snapshot.handle = this.addToChart(snapshot.entry, snapshot.values);
+                snapshot.handle = this.addToChart(snapshot.entry, snapshot.values, snapshot.id);
                 this.instances.push(snapshot);
                 this.deps.onIndicatorsChanged(this.id);
             },
@@ -1130,6 +1299,31 @@ export class ChartCell {
     /** Add a native indicator. A multi-instance type gets a fresh instance every time; a
      *  single-instance type already on the chart hands back its existing one — nothing
      *  changed, so nothing enters the undo timeline. */
+    /**
+     * Converge one native handle to a restored ledger entry: every schema key gets the
+     * entry's value or its declaration default (the DOCUMENT is the truth — a live
+     * tweak must not survive a restore that says otherwise), and visibility follows
+     * the `hidden` flag. Skips the input write when nothing differs — `setInputs`
+     * re-runs the indicator, and a no-op restore must not flicker every native.
+     */
+    private applyNativeLedgerEntry(handle: IndicatorHandle, entry: LedgerNativeEntry): void {
+        const wanted = typeof entry === 'string' ? undefined : entry.inputs;
+        if (handle.inputs.length > 0) {
+            const current = handle.inputValues();
+            const next: Record<string, InputValue> = {};
+            for (const schema of handle.inputs) {
+                const target = wanted?.[schema.key] ?? schema.defval;
+                if (JSON.stringify(current[schema.key]) !== JSON.stringify(target)) next[schema.key] = target;
+            }
+            if (Object.keys(next).length > 0) handle.setInputs(next);
+        } else if (wanted) {
+            // Schema not exposed (nothing to diff against) — apply the stored values verbatim.
+            handle.setInputs(wanted);
+        }
+        const visible = !(typeof entry === 'object' && entry.hidden);
+        if (handle.visible !== visible) handle.setVisible(visible);
+    }
+
     addNative(type: string): void {
         const chart = this.inner;
         if (!chart) return;
@@ -1181,10 +1375,11 @@ export class ChartCell {
         });
     }
 
-    private addToChart(entry: ResolvedIndicator, values?: { inputs?: Record<string, InputValue>; props?: Record<string, InputValue> }): IndicatorHandle | null {
+    private addToChart(entry: ResolvedIndicator, values?: { inputs?: Record<string, InputValue>; props?: Record<string, InputValue> }, id?: string): IndicatorHandle | null {
         try {
             return (
                 this.inner?.addIndicator(entry.script, {
+                    ...(id !== undefined ? { id } : {}),
                     ...(entry.language !== undefined ? { language: entry.language } : {}),
                     ...(values?.inputs ? { inputs: values.inputs } : {}),
                     ...(values?.props ? { props: values.props } : {}),
@@ -1261,12 +1456,13 @@ export class ChartCell {
         if (!this.inner || this.destroyed) return;
         if (cs.priceStyle && cs.priceStyle !== this.priceStyle) this.setPriceStyle(cs.priceStyle);
         if (cs.watermark !== undefined && cs.watermark !== this.watermarkOn) this.setWatermarkVisible(cs.watermark);
+        if (cs.replayWatermark !== undefined && cs.replayWatermark !== this.replayWatermarkOn) this.setReplayWatermarkVisible(cs.replayWatermark);
         if (cs.indicatorTitles !== undefined && cs.indicatorTitles !== this.indicatorTitlesOn) this.setIndicatorTitlesVisible(cs.indicatorTitles);
         if (cs.indicatorValues !== undefined && cs.indicatorValues !== this.indicatorValuesOn) this.setIndicatorValuesVisible(cs.indicatorValues);
         // Cosmetics + drawings round-trip (both validate untrusted input).
         if (cs.rendererConfig != null) this.inner.renderer.applyConfig(cs.rendererConfig);
         if (cs.drawings != null) this.inner.drawings.fromJSON(cs.drawings);
-        if (cs.indicators) this.applyIndicatorLedger(cs.indicators as { manifest: LedgerManifestEntry[]; natives: string[] });
+        if (cs.indicators) this.applyIndicatorLedger(cs.indicators as { manifest: LedgerManifestEntry[]; natives: LedgerNativeEntry[] });
         // Third-party state converges to the document too: the restored bag REPLACES
         // the baseline (absent in the document = the document carries none), then the
         // registered handlers re-apply. After the ledger — a handler re-adding external
@@ -1305,6 +1501,7 @@ export class ChartCell {
             ...(live ? { symbol: live.symbol, provider: live.provider, timeframe: live.timeframe } : {}),
             priceStyle: this.priceStyle,
             watermark: this.watermarkOn,
+            replayWatermark: this.replayWatermarkOn,
             indicatorTitles: this.indicatorTitlesOn,
             indicatorValues: this.indicatorValuesOn,
             rendererConfig: this.inner?.renderer.getConfig() ?? undefined,
@@ -1316,14 +1513,17 @@ export class ChartCell {
             // (`ctx.addIndicator`) stay out: their names would never resolve against the
             // manifest — their plugin persists them via the `ext` seam instead.
             indicators: indicatorLedger({
-                present: this.inner ? this.inner.presentNativeIndicators() : [],
+                // Live handles carry what the registry read cannot: the input DELTAS and
+                // the hidden flag, so native settings/visibility survive the round-trip.
+                present: this.inner ? this.nativeHandles().map((h) => nativeLedgerEntry(h)) : [],
                 instanceEntries: this.instances
                     .filter((it) => !it.external)
                     .map((it) => {
                         // LIVE deltas from the handle; a handle-less instance (add failed)
                         // keeps whatever values it was restored with.
                         const d = it.handle ? instanceDeltas(it.handle) : it.values;
-                        return d ? { name: it.entry.name, ...d } : it.entry.name;
+                        const hidden = it.handle ? !it.handle.visible : false;
+                        return d || hidden ? { name: it.entry.name, ...(d ?? {}), ...(hidden ? { hidden: true } : {}) } : it.entry.name;
                     }),
                 pendingManifest: this.pendingManifestNames,
                 manifestSettled: this.deps.manifestSettled(),

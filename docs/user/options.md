@@ -60,13 +60,14 @@ chart.data.registerProvider('binance', new BinanceProvider());
 | `currentPriceLine` | boolean | `true` | Dashed line + axis label at the latest price. |
 | `logScale` | boolean | `false` | Logarithmic price scale. |
 | `nativeBackend` | `'auto' \| 'canvas2d' \| 'webgl2'` | `auto` | Native geometry backend. `auto` = WebGL2 if available, else canvas2d. Only applies to the native renderer. |
-| `animations` | boolean or `{ zoom?, pan?, liveBar? }` | **on** | `true`/`false` toggles all; an object configures each. Defaults: eased zoom on, inertial pan on (short snappy glide), live-bar glide **off**. `{ pan: false }` = instant pan. `liveBar` makes the forming candle (and the current-price line and label) slide toward each live tick instead of snapping: `true` = a 90 ms ease, a number = the ease duration in ms (settles in about three times that; capped at 1000), `false`/`0` = snap. A new bar always snaps. The settings dialog exposes an on/off switch for it (*Symbol → Animation → Animate price changes*; `priceScale.animateLastPrice` in the rich config); switching it back on reuses the duration set here. |
+| `animations` | boolean or `{ zoom?, pan?, scroll?, autoscale?, liveBar?, intro? }` | **on** | `true`/`false` toggles every motion; an object configures each on its own (see [The `animations` option](#the-animations-option) below). Defaults: eased zoom on, pan momentum on (short snappy glide), autoscale glide on, first-load reveal on, live-bar glide **off**. |
 | `glow` | number | `0` | Neon glow/bloom for line series (~0.6 = strong). **WebGL2 only** — ignored on canvas2d. |
 | `upColor` | string | `#089981` (green) | Bullish candle color (native renderer). |
 | `downColor` | string | `#f23645` (red) | Bearish candle color (native renderer). |
 | `priceStyle` | `'candles' \| 'bars' \| 'line' \| 'area' \| 'baseline'` | `'candles'` | How the base price series is drawn (native renderer). |
 | `drawings` | `boolean \| { toolbar?, tools?, groups? }` | **toolbar shown** | Interactive [drawing tools](./drawing-tools.md). `true`/omitted ⇒ toolbar visible; `false` ⇒ toolbar hidden (the `chart.drawings` API still works headlessly); object customizes it (see below). Capability-gated (native renderer only). |
 | `settings` | `{ hidden?: string[] }` | **all visible** | Chart-settings dialog visibility policy: setting ids to hide — a whole tab, a group, or a single row (see below). |
+| `priceAxis` | `{ ticks?: (ctx) => PriceAxisTick[] \| null }` | built-in ticks | Your own price-axis ladder (native renderer): `ticks` returns each pane's ticks, and the axis labels and horizontal gridlines both follow them (see below). |
 
 \* `defaultLanguage` falls back to the first injected engine's language if you don't set it.
 
@@ -92,6 +93,43 @@ new Vela('#chart', { data: bars, drawings: { tools: ['trendline', 'hline', 'box'
 ```
 
 See [Drawing tools](./drawing-tools.md) for the full catalogue and the `chart.drawings` API.
+
+### The `animations` option
+
+Every eased motion of the native renderer is configured on its own. Each field takes
+`true` (the built-in feel), `false` (instant — the motion is off), or a **duration in
+milliseconds**: the ease time-constant, after which the motion has covered about 63% of
+the remaining distance; it looks settled after roughly three of them. Durations are
+capped at 1000 ms.
+
+| Field | Default | What it eases |
+|---|---|---|
+| `zoom` | `true` (70 ms) | The wheel zoom: bar spacing glides toward each notch's target instead of jumping. Off, the keyboard zoom keys of the widget jump too. |
+| `pan` | `true` (110 ms) | Pan momentum on touch: the velocity a finger flick releases with decays over this time. `false` = the chart stops dead on release. A mouse release always stops dead. |
+| `scroll` | follows `pan` (130 ms) | The programmatic scroll glide — the scroll-to-latest button, `chart.panBy`, the keyboard pan keys — easing the view to its target at constant zoom. Left unset it is on whenever `pan` is on, so `{ pan: false }` still means an instant pan everywhere. |
+| `autoscale` | `true` (80 ms) | The price scale's glide toward its new range while a zoom or fling is in flight (off = it snaps every frame). |
+| `liveBar` | `false` | The forming candle (and the current-price line and label) slide toward each live tick instead of snapping: `true` = a 90 ms ease. A new bar always snaps; the crosshair, legend and data window always show the real values. |
+| `intro` | `true` (`'settle'`, 650 ms) | The first-load reveal: candles draw themselves in left to right. `'settle'` overshoots and eases back, `'grow'` eases out; `false` skips it; `{ style?, duration? }` sets the style and/or the sweep duration in ms (capped at 5000). |
+
+```js
+new Vela('#chart', {
+  animations: {
+    zoom: 150,          // a slower, softer zoom glide
+    pan: false,         // …but a drag release stops dead (and panBy is instant)
+    liveBar: true,      // the forming candle glides to each tick
+    intro: { style: 'grow', duration: 400 },
+  },
+});
+```
+
+Each motion is also a live renderer feature — `animZoom`, `animPan`, `animScroll`,
+`animAutoscale`, `animLiveBar`, `intro` — so `chart.renderer.set('animZoom', 0)` switches
+it off at runtime (see [Renderer features](./renderer-features.md#interaction)). The
+settings dialog's *Symbol → Animation* group carries on/off switches for zoom, pan
+momentum (inertia and scroll glide together), the price scale, price changes (the live
+bar) and the reveal; switching one back on restores the duration configured here. In the
+rich config they are `animations.{zoom, pan, autoscale, intro}` plus
+`priceScale.animateLastPrice`.
 
 ### The `settings` option — hiding settings-dialog entries
 
@@ -155,7 +193,11 @@ new VelaWorkspace('#chart', {
       'symbol.style.baseline.base-level',    //     Base level %
       'symbol.style.baseline.width',         //     Width
       'symbol.animation',                    //   Animation group
+      'symbol.animation.zoom',               //     Animate zoom (the wheel-zoom glide)
+      'symbol.animation.pan',                //     Pan momentum (drag-release inertia + scroll glide)
+      'symbol.animation.autoscale',          //     Animate price scale (the autoscale glide)
       'symbol.animation.price-changes',      //     Animate price changes (the live-bar glide)
+      'symbol.animation.intro',              //     Reveal on load (the first-paint candle reveal)
       'symbol.timezone',                     //   Time zone group
 
       // ══ Scales and lines tab ══════════════════════════════════════
@@ -183,7 +225,16 @@ new VelaWorkspace('#chart', {
       'canvas.grid',                         //   Grid group
       'canvas.grid.vertical',                //     Vertical lines toggle + color
       'canvas.grid.horizontal',              //     Horizontal lines toggle + color
+      'canvas.margins',                      //   Margins group
+      'canvas.margins.top',                  //     Top (% of pane height)
+      'canvas.margins.bottom',               //     Bottom (% of pane height)
+      'canvas.margins.right',                //     Right (bars after the newest bar)
       'canvas.theme',                        //   Theme group (Dark/Light)
+
+      // ══ Events tab (timeline marks — present once marks name groups) ═
+      'events',                              // the whole tab
+      'events.groups',                       //   Visible events (one checkbox per mark group)
+      'events.groups.<group-id>',            //     a group's checkbox (the group id, kebab-cased)
 
       // ══ Widget & workspace tabs (shell-contributed) ═══════════════
       'status-line',                         // the whole Status line tab
@@ -198,13 +249,17 @@ new VelaWorkspace('#chart', {
       'status-line.indicator-values',        //     Values
       'advanced',                            // the whole Advanced tab
       'advanced.bars',                       //   Bars to fetch
+      'time-zone',                           // the workspace Time zone group in the Symbol tab
+      'time-zone.zone',                      //   (same row — UTC, Exchange, then the catalog;
+                                             //    it replaces the renderer's `symbol.timezone`)
       'trading-session',                     // the RTH/ETH group in the Symbol tab
       'trading-session.session',             //   Session select
       'trading-session.premarket-color',     //   Pre-market shading color (day-split markets)
       'trading-session.postmarket-color',    //   Post-market shading color (day-split markets)
       'trading-session.extended-color',      //   Extended-hours shading color (overnight markets)
-      'watermark',                           // the Symbol watermark toggle
-      'watermark.visible',                   //   (same row — the group has one row)
+      'watermark',                           // the Watermark group (the two rows below)
+      'watermark.visible',                   //   Symbol watermark
+      'watermark.replay',                    //   Replay watermark (the line under it while replaying)
 
       // ══ Plugin chart types (registerChartType) ════════════════════
       'type:<chartTypeId>',                  // the type's settings tab (+ its subsections)
@@ -228,6 +283,74 @@ that have sessions, `status-line` only when the shell's status line is on,
 way. Host sections contributed through `setSettingsSections` need nothing from the
 contributor: the `id` fields are optional stability aids, label slugs are the
 fallback.
+
+### The `priceAxis` option — custom price-axis ticks
+
+`priceAxis.ticks` replaces the built-in tick ladder of the native renderer's price axes.
+It is called for each pane — the price pane and every study pane — and returns the ticks
+to draw. The axis labels and the horizontal gridlines both follow the same ticks, so they
+always line up.
+
+```js
+new Vela('#chart', {
+  data: bars,
+  priceAxis: {
+    // Emphasize the built-in levels and add a muted level between two of them
+    // wherever there is room.
+    ticks: ({ mode, defaults, priceToY }) => {
+      if (mode !== 'price') return null; // keep the built-in percent/indexed ticks
+      const out = [];
+      defaults.forEach((tick, i) => {
+        out.push({ ...tick, major: true });
+        const next = defaults[i + 1];
+        if (next && Math.abs(priceToY(next.price) - priceToY(tick.price)) > 40) {
+          const mid = (tick.price + next.price) / 2;
+          out.push({ price: mid, label: mid.toFixed(2), major: false });
+        }
+      });
+      return out;
+    },
+  },
+});
+```
+
+Each tick is `{ price, label, major? }`: `price` places the gridline and the label, `label`
+is drawn as given, and `major: true` draws the label semibold, `major: false` draws it
+muted, while leaving `major` out draws the regular label. Gridlines look the same either
+way. A label too close to the top or bottom edge of its pane is skipped, as with the
+built-in ticks.
+
+The function receives one context object per pane:
+
+| Field | Meaning |
+|---|---|
+| `pane` | `{ id, kind }` — `kind` is `'price'` or `'study'`. |
+| `min`, `max` | The pane's visible range, in prices (also in percent and indexed mode). |
+| `log` | Whether the pane's scale is logarithmic. |
+| `height` | The pane height in CSS pixels. |
+| `mode` | `'price'`, `'percent'` or `'indexed'` — how the axis labels read this frame. |
+| `baseline` | The percent/indexed baseline price (`undefined` in price mode). |
+| `mintick` | The symbol's tick size, when known. |
+| `fontSize` | The axis font size in pixels. |
+| `priceToY(price)` | A price's y within the pane, in CSS pixels (log and inverted scales included). |
+| `defaults` | The built-in ticks for this frame — return them, or a filtered or extended copy, to build on them. |
+
+- Return `null` or `undefined` to keep the built-in ticks, or an empty array to draw none.
+- Entries with a non-finite `price` or a non-string `label` are dropped.
+- If the function throws, the pane keeps its built-in ticks and the console shows one
+  warning for the chart.
+- A pane whose indicator declares its own axis (a blank or categorical axis) draws no
+  price ticks and never calls the function. The extra scale column of an indicator merged
+  onto its own scale keeps its built-in ticks.
+- The function runs again only when a pane's range, height, mode, baseline, tick size or
+  font size changes. If your ticks depend on your own state, set the function again to
+  recompute them.
+
+The option seeds the native renderer's runtime `priceAxisTicks` feature: change or clear
+it later with `chart.renderer.set('priceAxisTicks', fn)` or `null` (see
+[Renderer features](./renderer-features.md#axes--scale)). A function is never part of
+`getConfig()`. On a [workspace](./workspace.md), the top-level `priceAxis` is the default
+of every cell, including cells a later layout change creates.
 
 ### Non-obvious defaults, called out
 
@@ -281,10 +404,12 @@ new Vela('#chart', {
 
 ## Per-indicator options
 
-The optional second argument to `addIndicator(source, options)`:
+The optional second argument to `addIndicator(source, options)` — `runIndicator` and
+`runScript` take the same object:
 
 | Option | Type | Meaning |
 |---|---|---|
+| `id` | string | The indicator's id on the chart — an opaque, non-empty string you own (a document key, an editor tab, a UUID). It is what `handle.id`, `chart.indicators()`, the `indicator:*` events, `script:run` and the legend/pane surfaces carry, so you can address the indicator without keeping a side map. Omit it and the chart mints one — stable while the indicator stays on the chart, not across reloads. An id already live on the chart is rejected, never renamed: `addIndicator` throws, `runIndicator`/`runScript` resolve `{ ok: false, error }`. Removing the indicator frees its id. |
 | `language` | string | Which registered engine runs this script. Defaults to the chart's `defaultLanguage`. |
 | `inputs` | `Record<string, InputValue>` | Input overrides, keyed by input title or key. |
 | `props` | `Record<string, InputValue>` | Declaration-property overrides (a strategy's `initial_capital`, an indicator's `precision`, …), keyed like the engine's props schema. Ignored by engines without props support. |
