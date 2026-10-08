@@ -369,6 +369,9 @@ export class InputController {
         return effectiveSnapMode(e.ctrlKey || e.metaKey, this.deps.drawingsSnapMode?.() ?? 'off');
     }
 
+    /** A finger holding the bottom time axis pans the chart sideways (a mouse there still zooms the time scale). */
+    private timePan = false;
+
     private readonly onDown = (e: PointerEvent): void => {
         if (e.button === 1) {
             // Middle-click deletes the drawing under the cursor. The flag lets the
@@ -393,7 +396,7 @@ export class InputController {
             // A second finger during a pan (or long-press crosshair) escalates to a
             // pinch; during a claimed drawing/axis gesture — and beyond two contacts —
             // extra fingers are ignored so they can't corrupt the gesture in flight.
-            if (this.touches.size === 1 && this.dragging && (this.region === 'data' || this.region === 'crosshair')) {
+            if (this.touches.size === 1 && this.dragging && (this.region === 'data' || this.region === 'crosshair' || (this.region === 'time' && this.timePan))) {
                 this.touches.set(e.pointerId, { x, y });
                 this.beginPinch(e);
                 return;
@@ -440,6 +443,7 @@ export class InputController {
         this.startRightOffset = vp.rightOffset;
         this.startBarSpacing = vp.barSpacing;
         this.region = this.regionAt(x, y);
+        this.timePan = e.pointerType === 'touch' && this.region === 'time';
         this.verticalPan = false;
         if (this.region === 'price') this.deps.beginPriceScale(x, y);
         else if (this.region === 'separator') this.deps.beginPaneResize(y);
@@ -527,6 +531,30 @@ export class InputController {
         }
     }
 
+    /** Drag the chart sideways with the pointer (and, on the plot, vertically when the price pan is on), tracking the
+     *  release velocity for a flick. */
+    private panSideways(x: number, y: number, e: PointerEvent, slop: number): void {
+        const coords = this.deps.getCoords();
+        const vp = coords.getViewport();
+        const dx = x - this.startX;
+        if (Math.abs(dx) > slop) this.moved = true;
+        // Drag right → reveal earlier bars → rightOffset decreases. Track by the effective
+        // pitch (zoom × spacing multiplier) so the chart follows the cursor 1:1.
+        this.deps.apply({ barSpacing: vp.barSpacing, rightOffset: this.startRightOffset - dx / coords.pxPerBar() });
+        if (this.verticalPan) {
+            if (Math.abs(y - this.startY) > slop) this.moved = true;
+            this.deps.pricePanBy(y - this.startY);
+        }
+        // Track a low-passed pointer velocity for the release flick.
+        const dt = e.timeStamp - this.lastT;
+        if (dt > 0) {
+            const inst = (x - this.lastX) / dt;
+            this.vx = this.vx * 0.6 + inst * 0.4;
+            this.lastX = x;
+            this.lastT = e.timeStamp;
+        }
+    }
+
     private readonly onMove = (e: PointerEvent): void => {
         const { x, y } = this.local(e);
         this.cursorX = x;
@@ -558,6 +586,8 @@ export class InputController {
             } else if (this.region === 'separator') {
                 if (Math.abs(y - this.startY) > slop) this.moved = true;
                 this.deps.paneResizeBy(y - this.startY);
+            } else if (this.region === 'time' && this.timePan) {
+                this.panSideways(x, y, e, slop);
             } else if (this.region === 'time') {
                 if (Math.abs(x - this.startX) > slop) this.moved = true;
                 // Pin the right edge (keep rightOffset): logicalToX(rightEdge) == width for
@@ -568,25 +598,7 @@ export class InputController {
                 if (Math.abs(x - this.startX) > slop || Math.abs(y - this.startY) > slop) this.moved = true;
                 this.deps.drawingsPointerMove?.(x, y, this.snapMode(e), e.shiftKey, e.ctrlKey || e.metaKey);
             } else {
-                const coords = this.deps.getCoords();
-                const vp = coords.getViewport();
-                const dx = x - this.startX;
-                if (Math.abs(dx) > slop) this.moved = true;
-                // Drag right → reveal earlier bars → rightOffset decreases. Track by the effective
-                // pitch (zoom × spacing multiplier) so the chart follows the cursor 1:1.
-                this.deps.apply({ barSpacing: vp.barSpacing, rightOffset: this.startRightOffset - dx / coords.pxPerBar() });
-                if (this.verticalPan) {
-                    if (Math.abs(y - this.startY) > slop) this.moved = true;
-                    this.deps.pricePanBy(y - this.startY);
-                }
-                // Track a low-passed pointer velocity for the release flick.
-                const dt = e.timeStamp - this.lastT;
-                if (dt > 0) {
-                    const inst = (x - this.lastX) / dt;
-                    this.vx = this.vx * 0.6 + inst * 0.4;
-                    this.lastX = x;
-                    this.lastT = e.timeStamp;
-                }
+                this.panSideways(x, y, e, slop);
             }
         } else if (this.el) {
             // Cursor affordance: a drawing under the cursor wins (pointer), else the
@@ -651,7 +663,7 @@ export class InputController {
             this.deps.drawingsPointerUp?.(x, y, this.snapMode(e));
         } else if (tapRelease && this.region === 'data') {
             this.deps.onClick(x, y);
-        } else if (this.dragging && this.region === 'data' && wasTouch) {
+        } else if (this.dragging && (this.region === 'data' || (this.region === 'time' && this.timePan)) && wasTouch) {
             // Only a finger flicks: a mouse release stops dead, so a scrub lands exactly
             // where the pointer let go instead of coasting past it.
             const stale = e.timeStamp - this.lastT > FLING_STALE_MS;
