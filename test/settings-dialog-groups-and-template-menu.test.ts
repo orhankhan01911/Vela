@@ -73,7 +73,7 @@ describe('group heading `when`', () => {
         expect(sw).not.toBeNull();
         sw!.click();
         await settled();
-        expect(patches.at(-1)).toMatchObject({ chartTypes: { grouptest: { secondOn: false } } });
+        expect(patches[patches.length - 1]).toMatchObject({ chartTypes: { grouptest: { secondOn: false } } });
         expect(tocLabels()).toEqual(['Main', 'Colors']);
 
         sw!.click();
