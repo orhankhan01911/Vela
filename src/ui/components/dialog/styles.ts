@@ -1,6 +1,6 @@
 import { overlayScrollbarCss } from '../../styles';
 
-export const DIALOG_STYLE_ID = 'vela-ui-dialog-5';
+export const DIALOG_STYLE_ID = 'vela-ui-dialog-6';
 
 export const DIALOG_CSS = `
 .vela-dialog-backdrop {
@@ -73,7 +73,9 @@ export const DIALOG_CSS = `
 .vela-dialog-footer { flex: 0 0 auto; }
 .vela-dialog--settings {
     width: fit-content;
-    min-width: min(560px, 94vw);
+    /* One stable width: a fit-content card re-sized per tab/page, so the dialog jumped sideways
+       while clicking through the Footprint pages (their selects now show their full value). */
+    min-width: min(680px, 94vw);
     max-width: min(720px, 94vw);
     max-height: 70vh;
     font-size: 13px;

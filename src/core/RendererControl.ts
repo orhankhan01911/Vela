@@ -1,4 +1,4 @@
-import type { AxisLongPressEvent, ClickEvent, CrosshairEvent, DataWindowReadout, IChartRenderer, LegendActionView, LegendCalloutView, RendererCapabilities } from './ports/IChartRenderer';
+import type { AxisLongPressEvent, ClickEvent, CrosshairEvent, DataWindowReadout, IChartRenderer, LegendActionView, LegendCalloutView, RendererCapabilities, SettingsTemplateMenuView } from './ports/IChartRenderer';
 import type { Unsubscribe } from './util/types';
 import type { WallClock } from './util/wall-clock';
 import type { SymbolPickerFn } from './model/inputs';
@@ -228,6 +228,16 @@ export class RendererControl {
      */
     openSettings(section?: string): this {
         this.renderer.openSettingsDialog?.(section);
+        return this;
+    }
+
+    /**
+     * Give the settings dialog's footer the host's "Template ▾" menu (the shells route the
+     * plugin registry through this; see `registerSettingsTemplateMenu`). `null` restores the
+     * plain "Reset defaults" button. Silent no-op on a renderer without a settings dialog.
+     */
+    setSettingsTemplateMenu(provider: (() => SettingsTemplateMenuView | null) | null): this {
+        this.renderer.setSettingsTemplateMenu?.(provider);
         return this;
     }
 

@@ -135,11 +135,23 @@ export class ChromeRenderer {
         return dr;
     }
 
+    private gutterRamp: { key: string; fill: CanvasGradient } | null = null;
+
+    private gutterGradient(ctx: CanvasRenderingContext2D, g: { top: string; bottom: string }, height: number): CanvasGradient {
+        const key = `${g.top}|${g.bottom}|${height}`;
+        if (this.gutterRamp?.key === key) return this.gutterRamp.fill;
+        const fill = ctx.createLinearGradient(0, 0, 0, height);
+        fill.addColorStop(0, g.top);
+        fill.addColorStop(1, g.bottom);
+        this.gutterRamp = { key, fill };
+        return fill;
+    }
+
     /** Clear the chrome canvas and draw drawings + axes + current-price line.
      *  `surface` (background + text) paints the axis-scale gutters — the host passes the live
      *  chart background so the scales read as part of the plot, with contrast-corrected text.
      *  Falls back to the theme's own colors when no surface is supplied. */
-    render(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, surface?: { background: string; textColor: string }): void {
+    render(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, surface?: { background: string; textColor: string; gradient?: { top: string; bottom: string } }): void {
         const ctx = this.ctx;
         const canvas = this.canvas;
         if (!ctx || !canvas) return;
@@ -158,7 +170,11 @@ export class ChromeRenderer {
         // series pixels beneath never bleed into the scales. Data/drawings stay clear of
         // these strips, so this only ever covers the axis areas.
         if (surface && (fullW > dataW || fullH > dataH)) {
-            ctx.fillStyle = surface.background;
+            // A gradient background: the gutters repeat the SAME top-to-bottom ramp the wrapper's CSS
+            // paints behind the plot (both span the full canvas height), so the scales join it
+            // without a seam. The CanvasGradient is cached per (colors, height) — built on a
+            // resize or a setting change, not per frame.
+            ctx.fillStyle = surface.gradient ? this.gutterGradient(ctx, surface.gradient, fullH) : surface.background;
             if (fullW > dataW) ctx.fillRect(dataW, 0, fullW - dataW, fullH);
             if (fullH > dataH) ctx.fillRect(0, dataH, dataW, fullH - dataH);
         }

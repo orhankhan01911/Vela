@@ -3,7 +3,7 @@
 // chrome — topbar buttons, context-menu items — so any future view layer (React) can
 // project the same descriptors. Register at import time, before widgets are constructed.
 import type { Vela } from '../Vela';
-import type { LegendActionView, LegendCalloutView } from '../core/ports/IChartRenderer';
+import type { LegendActionView, LegendCalloutView, SettingsMenuRowView, SettingsTemplateMenuView } from '../core/ports/IChartRenderer';
 import type { ScriptingEngine } from '../core/ports/ScriptingEngine';
 import type { SymbolDescriptor } from '../core/ports/DataProvider';
 import type { InputValue } from '../core/model/inputs';
@@ -659,4 +659,55 @@ export function unregisterDefaultEngine(language: string): void {
  *  language. The shell layers (widget, workspace cell) register exactly this result. */
 export function resolveEngines(overrides?: Record<string, EngineFactory>): Record<string, EngineFactory> {
     return { ...Object.fromEntries(defaultEngines), ...overrides };
+}
+
+// ── Settings-dialog template menu ───────────────────────────────────────────────────
+
+/**
+ * The host's saved-template store, plugged into the chart settings dialog's footer as a
+ * "Template ▾" dropdown (what the drawing settings dialog already has): the host lists its
+ * templates and acts on a pick, the dialog adds its own "Reset defaults" as the LAST row.
+ * The core ships no template storage — `registerWidgetAction` buttons own it in a host app —
+ * so this is only the seam: register the same store the header "Templates" button uses and
+ * both surfaces stay one store.
+ *
+ * There is ONE such menu per page (re-registering replaces it); without one the footer is the
+ * plain "Reset defaults" button. Late registrations show on the next `refreshActions()`.
+ */
+export interface SettingsTemplateMenuDescriptor {
+    /** The rows above "Reset defaults". Called at EVERY open, so a save or delete shows at once.
+     *  An empty list leaves "Reset defaults" alone in the menu. */
+    items(ctx: WidgetContext): readonly SettingsMenuRowView[];
+    /** A leaf row was picked. `anchor` is the footer button — where a follow-up menu belongs. */
+    run(itemId: string, ctx: WidgetContext, anchor: HTMLElement): void;
+}
+
+let settingsTemplateMenu: SettingsTemplateMenuDescriptor | null = null;
+
+/** Register (or replace) the settings dialog's template menu. Returns a disposer. */
+export function registerSettingsTemplateMenu(desc: SettingsTemplateMenuDescriptor): () => void {
+    settingsTemplateMenu = desc;
+    return () => {
+        if (settingsTemplateMenu === desc) settingsTemplateMenu = null;
+    };
+}
+
+export function unregisterSettingsTemplateMenu(): void {
+    settingsTemplateMenu = null;
+}
+
+/**
+ * The provider a shell hands to `chart.renderer.setSettingsTemplateMenu` — binds the menu to a
+ * fresh context per read and per pick (never a cached one; the widget context rule). Both
+ * shells wire exactly this, beside {@link legendActionsProviderFor}.
+ */
+export function settingsTemplateMenuProviderFor(context: () => WidgetContext): () => SettingsTemplateMenuView | null {
+    return () => {
+        const desc = settingsTemplateMenu;
+        if (!desc) return null;
+        return {
+            items: () => desc.items(context()),
+            run: (itemId, anchor) => desc.run(itemId, context(), anchor),
+        };
+    };
 }

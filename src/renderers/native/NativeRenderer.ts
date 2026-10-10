@@ -11,6 +11,7 @@ import type {
     IndicatorStatus,
     LegendActionView,
     LegendCalloutView,
+    SettingsTemplateMenuView,
     PaneAction,
     DataWindowRow,
     DataWindowOHLC,
@@ -76,7 +77,7 @@ import { MARK_PULSE_MS } from './chrome/marks/paint';
 import type { MarkClickEvent, MarkGroup, TimelineMark } from '../../core/marks/types';
 import { rescaleAround, shiftScale } from './core/manualScale';
 import { resizeSplit, type PaneSplit } from './core/paneResize';
-import { type ChartConfig, CHART_CONFIG_VERSION, factoryResetConfig, mergeConfig, BASELINE_TOP_LINE, BASELINE_BOTTOM_LINE, BASELINE_FILL_ALPHA, BASELINE_FILL_ALPHA_FAR, withAlpha, priceStyleIds, basePaintingOf, candleOverrideFor, effectiveCandlePaint, sanitizeCrosshairOverride } from './core/chartConfig';
+import { type ChartConfig, CHART_CONFIG_VERSION, effectiveBackground, factoryResetConfig, gradientCss, mergeConfig, resolveGradient, BASELINE_TOP_LINE, BASELINE_BOTTOM_LINE, BASELINE_FILL_ALPHA, BASELINE_FILL_ALPHA_FAR, withAlpha, priceStyleIds, basePaintingOf, candleOverrideFor, effectiveCandlePaint, sanitizeCrosshairOverride } from './core/chartConfig';
 import { BackdropRenderer } from './backdrop/BackdropRenderer';
 import { VolumeRenderer, VOLUME_PANE_FILL_FRAC } from './volume/VolumeRenderer';
 import { rendererLayers, foldBaseModulation, type RendererLayerArgs, type RendererLayerDefinition, type RendererLayerInstance, type BasePaintingModulation } from './layers';
@@ -371,6 +372,8 @@ export class NativeRenderer implements IChartRenderer {
     /** First-run config snapshot — what "Reset defaults" restores. */
     private factoryConfig: ChartConfig | null = null;
     private hostSettingsSections: HostSettingsSection[] = [];
+    /** The host's "Template ▾" menu for the settings dialog footer (see `setSettingsTemplateMenu`). */
+    private settingsTemplateMenu: (() => SettingsTemplateMenuView | null) | null = null;
     private readonly clickCbs = new Set<(e: ClickEvent) => void>();
     private readonly axisLongPressCbs = new Set<(e: AxisLongPressEvent) => void>();
     private readonly inputChangeCbs = new Set<(e: InputChangeEvent) => void>();
@@ -757,11 +760,16 @@ export class NativeRenderer implements IChartRenderer {
         const s = this.scene.style;
         const chartTypesBag = Object.fromEntries(Object.entries(s.chartTypes).map(([k, v]) => [k, { ...v }]));
         const t = this.theme;
+        const solid = this.solidBackground();
+        const gradient = resolveGradient(solid, s.background);
         return {
             version: CHART_CONFIG_VERSION,
             chartTypes: chartTypesBag,
             layout: {
-                background: t.background,
+                background: solid,
+                backgroundType: s.background.type,
+                backgroundTop: gradient.top,
+                backgroundBottom: gradient.bottom,
                 textColor: t.textColor,
                 fontFamily: t.fontFamily,
                 fontSize: s.fontSize,
@@ -891,19 +899,30 @@ export class NativeRenderer implements IChartRenderer {
         const patchTextColor = layoutPatch && typeof layoutPatch === 'object' ? (layoutPatch as { textColor?: unknown }).textColor : undefined;
         const explicitTextColor = typeof patchTextColor === 'string' && patchTextColor.trim().length > 0;
         const prevTheme = this.theme;
-        let inks = { textColor: next.layout.textColor, gridColor: prevTheme.gridColor, borderColor: prevTheme.borderColor };
-        if (!explicitTextColor && isDarkColor(next.layout.textColor) === isDarkColor(next.layout.background)) {
-            const rebase = isDarkColor(next.layout.background) ? DARK_THEME : LIGHT_THEME;
-            inks = { textColor: rebase.textColor, gridColor: rebase.gridColor, borderColor: rebase.borderColor };
-        }
-        this.theme = { ...this.theme, background: next.layout.background, textColor: inks.textColor, gridColor: inks.gridColor, borderColor: inks.borderColor, fontFamily: next.layout.fontFamily };
-        s.fontSize = next.layout.fontSize;
         // `mergeConfig` runs over the RESOLVED getConfig(), so a live "inherit the theme"
         // sentinel (null) comes back as its concrete value even when the patch never named
         // the field. Writing that back would pin the old theme's color forever; keep the
         // sentinel whenever the merged value is just the resolved echo of it.
         const keepInherit = (cur: string | null, merged: string, resolved: string): string | null =>
             cur === null && merged === resolved ? null : merged;
+        // Solid or gradient. Contrast decisions (inks, chips, the attribution mark) read the color
+        // the plot actually shows — the solid, or the gradient's midpoint — never the unused one.
+        const prevBg = s.background;
+        const prevGradient = resolveGradient(this.solidBackground(), prevBg);
+        s.background = {
+            type: next.layout.backgroundType,
+            solid: keepInherit(prevBg.solid, next.layout.background, this.surfaceBackground),
+            top: keepInherit(prevBg.top, next.layout.backgroundTop, prevGradient.top),
+            bottom: keepInherit(prevBg.bottom, next.layout.backgroundBottom, prevGradient.bottom),
+        };
+        const plotBackground = effectiveBackground(next.layout.background, s.background);
+        let inks = { textColor: next.layout.textColor, gridColor: prevTheme.gridColor, borderColor: prevTheme.borderColor };
+        if (!explicitTextColor && isDarkColor(next.layout.textColor) === isDarkColor(plotBackground)) {
+            const rebase = isDarkColor(plotBackground) ? DARK_THEME : LIGHT_THEME;
+            inks = { textColor: rebase.textColor, gridColor: rebase.gridColor, borderColor: rebase.borderColor };
+        }
+        this.theme = { ...this.theme, background: plotBackground, textColor: inks.textColor, gridColor: inks.gridColor, borderColor: inks.borderColor, fontFamily: next.layout.fontFamily };
+        s.fontSize = next.layout.fontSize;
         // grid
         s.gridVert = { visible: next.grid.vertLines.visible, color: keepInherit(s.gridVert.color, next.grid.vertLines.color, prevTheme.gridColor) };
         s.gridHorz = { visible: next.grid.horzLines.visible, color: keepInherit(s.gridHorz.color, next.grid.horzLines.color, prevTheme.gridColor) };
@@ -1006,7 +1025,7 @@ export class NativeRenderer implements IChartRenderer {
         }
         this.inputsUI?.setTheme(this.theme);
         this.paneControls?.setTheme(this.theme);
-        this.axisScaleButtons?.setTheme(this.theme);
+        this.axisScaleButtons?.setTheme(this.axisButtonsTheme());
         // Re-theme the docked drawing toolbar on the STABLE chrome surface, so editing the
         // plot background (layout.background) never bleeds into the toolbar.
         this.userDrawings?.setTheme(this.chromeTheme());
@@ -1112,6 +1131,8 @@ export class NativeRenderer implements IChartRenderer {
         }
         this.settingsDialog.setTheme(this.theme);
         this.settingsDialog.setHostSections(this.hostSettingsSections);
+        this.settingsDialog.setTemplateMenu(this.settingsTemplateMenu);
+        this.settingsDialog.setLiveConfig(() => this.getConfig());
         this.settingsDialog.setMarkGroups(
             this.markGroupsForEventsTab(),
             (id) => markGroupVisible(this.scene.marks, id, this.scene.markGroups),
@@ -1287,7 +1308,16 @@ export class NativeRenderer implements IChartRenderer {
         out.height = this.dataCanvas.height;
         const ctx = out.getContext('2d');
         if (!ctx) return null;
-        ctx.fillStyle = this.theme.background;
+        const shotBg = this.scene.style.background;
+        if (shotBg.type === 'gradient') {
+            const g = resolveGradient(this.solidBackground(), shotBg);
+            const fill = ctx.createLinearGradient(0, 0, 0, out.height);
+            fill.addColorStop(0, g.top);
+            fill.addColorStop(1, g.bottom);
+            ctx.fillStyle = fill;
+        } else {
+            ctx.fillStyle = this.theme.background;
+        }
         ctx.fillRect(0, 0, out.width, out.height);
         // DOM replicas share the plot's coordinate space (the canvases fill it).
         const plotRect = this.plot?.getBoundingClientRect();
@@ -1408,8 +1438,45 @@ export class NativeRenderer implements IChartRenderer {
     /** The colors the axis-scale gutters (price + time) paint with: the LIVE chart background
      *  (`layout.background`) and its contrast-corrected text, so the scales read as part of the
      *  plot. Only the toolbar/dialog chrome stays on the stable app-theme surface. */
-    private axisSurface(): { background: string; textColor: string } {
-        return { background: this.theme.background, textColor: this.theme.textColor };
+    private axisSurface(): { background: string; textColor: string; gradient?: { top: string; bottom: string } } {
+        const bg = this.scene.style.background;
+        return {
+            background: this.theme.background,
+            textColor: this.theme.textColor,
+            ...(bg.type === 'gradient' ? { gradient: resolveGradient(this.solidBackground(), bg) } : {}),
+        };
+    }
+
+    /** The scale-button strip sits at the bottom of each pane's axis column and is painted SOLID so
+     *  the buttons cover the tick labels: on a gradient it takes the gradient's bottom color, the
+     *  nearest solid to where it sits. */
+    private axisButtonsTheme(): VelaTheme {
+        const bg = this.scene.style.background;
+        if (bg.type !== 'gradient') return this.theme;
+        return { ...this.theme, background: resolveGradient(this.solidBackground(), bg).bottom };
+    }
+
+    /** The Solid background color: the configured one, else the app theme's chart background. */
+    private solidBackground(): string {
+        return this.scene.style.background.solid ?? this.surfaceBackground;
+    }
+
+    /** The plot's background as the CSS `background` of the wrapper — solid, or the vertical
+     *  gradient (painted by the browser once per setting change, never per frame). */
+    private backgroundCss(): string {
+        const bg = this.scene.style.background;
+        if (bg.type !== 'gradient') return this.theme.background;
+        const g = resolveGradient(this.solidBackground(), bg);
+        return gradientCss(g.top, g.bottom);
+    }
+
+    /** A mount/theme swap re-bases the plot background to the app theme: drop the colors a config
+     *  set (`keepType`: the Solid/Gradient choice survives an app light/dark swap, only its colors
+     *  follow the new theme). */
+    private rebaseBackgroundToTheme(keepType: boolean): void {
+        const bg = this.scene.style.background;
+        this.scene.style.background = { type: keepType ? bg.type : 'solid', solid: null, top: null, bottom: null };
+        this.theme = { ...this.theme, background: effectiveBackground(this.surfaceBackground, this.scene.style.background) };
     }
 
     // ── lifecycle ──
@@ -1420,6 +1487,7 @@ export class NativeRenderer implements IChartRenderer {
         // provisional chrome surface (refined by the first applyConfig)
         this.surfaceBackground = theme.background;
         this.surfaceTextColor = theme.textColor;
+        this.rebaseBackgroundToTheme(false);
 
         this.wrapper = document.createElement('div');
         // user-select none: in-chart chrome text (legend, dialogs, axis buttons) is UI,
@@ -1813,11 +1881,12 @@ export class NativeRenderer implements IChartRenderer {
         // a full app-theme swap re-bases the chrome surface
         this.surfaceBackground = theme.background;
         this.surfaceTextColor = theme.textColor;
+        this.rebaseBackgroundToTheme(true);
         if (this.wrapper) applyChromeTokens(this.wrapper, this.chromeTheme());
         this.applyBackground();
         this.inputsUI.setTheme(theme);
         this.paneControls?.setTheme(this.theme);
-        this.axisScaleButtons?.setTheme(this.theme);
+        this.axisScaleButtons?.setTheme(this.axisButtonsTheme());
         // An open dialog rebuilds on setTheme — hand it the re-based config + the new
         // current of its Theme row first, so the rebuilt controls show live values.
         this.settingsDialog?.refreshConfig(this.getConfig());
@@ -2385,6 +2454,11 @@ export class NativeRenderer implements IChartRenderer {
     setSettingsSections(sections: HostSettingsSection[]): void {
         this.hostSettingsSections = sections;
         this.settingsDialog?.setHostSections(sections);
+    }
+
+    setSettingsTemplateMenu(provider: (() => SettingsTemplateMenuView | null) | null): void {
+        this.settingsTemplateMenu = provider;
+        this.settingsDialog?.setTemplateMenu(provider);
     }
 
     setSettingsVisibility(policy: { hidden?: readonly string[] }): void {
@@ -4313,7 +4387,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     private applyBackground(): void {
-        this.wrapper.style.background = this.theme.background;
+        this.wrapper.style.background = this.backgroundCss();
     }
 }
 

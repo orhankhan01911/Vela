@@ -70,6 +70,30 @@ export interface LegendActionView {
     run(): void;
 }
 
+/** One row of the settings dialog's footer menu, as the renderer consumes it (the shape the
+ *  kit `Menu` takes — plain data, so the core stays ignorant of the UI kit). */
+export interface SettingsMenuRowView {
+    id: string;
+    label: string;
+    hint?: string;
+    disabled?: boolean;
+    /** Draw a separator line above this row. */
+    separatorBefore?: boolean;
+    /** Nested rows — the row becomes a submenu opening to the side (a branch is not selectable). */
+    submenu?: readonly SettingsMenuRowView[];
+}
+
+/**
+ * The host's "Template" menu in the settings dialog's footer, as the renderer consumes it:
+ * the shell resolves the plugin descriptor (and its context) BEFORE it reaches the renderer.
+ * `items` is read at EVERY open, so a save or delete shows at once; `run` receives the picked
+ * leaf id and the footer button (an anchor for any follow-up menu the host opens).
+ */
+export interface SettingsTemplateMenuView {
+    items(): readonly SettingsMenuRowView[];
+    run(itemId: string, anchor: HTMLElement): void;
+}
+
 /** One block of a legend callout's deployed panel — plain text, or an action button. */
 export type LegendCalloutPanelItem =
     | { type: 'text'; text: string }
@@ -499,6 +523,9 @@ export interface IChartRenderer {
     /** A chart type's SDK settings changed (dialog edit / applyConfig) — the core forwards
      *  them to the type's data engine. */
     onChartTypeSettingsChange?(cb: (typeId: string, values: Record<string, unknown>) => void): Unsubscribe;
+    /** The host's "Template ▾" menu in the settings dialog's footer (`null` removes it, and the
+     *  footer keeps its plain "Reset defaults" button). The provider is read when the dialog opens. */
+    setSettingsTemplateMenu?(provider: (() => SettingsTemplateMenuView | null) | null): void;
     /** Host-app settings tabs (callback rows) shown by the renderer's settings dialog.
      *  `id` names a section for the visibility policy (defaults to the title's slug). */
     setSettingsSections?(sections: ReadonlyArray<{ title: string; rows: readonly unknown[]; id?: string }>): void;

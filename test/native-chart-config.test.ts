@@ -129,7 +129,16 @@ describe('NativeRenderer.getConfig — defaults resolve to concrete values', () 
     it('emits a complete, versioned document from the dark theme', () => {
         const cfg = new NativeRenderer().getConfig();
         expect(cfg.version).toBe(CHART_CONFIG_VERSION);
-        expect(cfg.layout).toEqual({ background: '#151619', textColor: '#b2b5be', fontFamily: 'sans-serif', fontSize: 11 });
+        // The gradient keys are always present and concrete; the default type is Solid, so they paint nothing.
+        expect(cfg.layout).toEqual({
+            background: '#151619',
+            backgroundType: 'solid',
+            backgroundTop: '#151619',
+            backgroundBottom: '#2c2d30',
+            textColor: '#b2b5be',
+            fontFamily: 'sans-serif',
+            fontSize: 11,
+        });
         expect(cfg.grid.vertLines).toEqual({ visible: true, color: '#20222c' });
         expect(cfg.grid.horzLines).toEqual({ visible: true, color: '#20222c' });
         expect(cfg.crosshair).toEqual({ color: '#9aa0ad', width: 1, style: 'dashed', opacity: 0.4, labelBackground: '#595959' });

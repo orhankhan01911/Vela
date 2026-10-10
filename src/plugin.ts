@@ -78,6 +78,8 @@ export {
     registerLegendCallout,
     unregisterLegendCallout,
     legendCallouts,
+    registerSettingsTemplateMenu,
+    unregisterSettingsTemplateMenu,
     registerDefaultEngine,
     unregisterDefaultEngine,
     resolveEngines,
@@ -99,6 +101,7 @@ export {
     type LegendCalloutContent,
     type LegendCalloutItem,
     type LegendIndicatorInfo,
+    type SettingsTemplateMenuDescriptor,
     type WidgetActionDescriptor,
     type WidgetActionTarget,
     type WidgetAttachment,
@@ -109,6 +112,7 @@ export {
     type SidePanelHeader,
     type SidePanelButton,
 } from './widget/contributions';
+export type { SettingsMenuRowView } from './core/ports/IChartRenderer';
 // Where the built-in right-click rows sit in the sort `context:*` actions share with them.
 export { CONTEXT_MENU_BUILTIN_ORDER } from './widget/context-menu-model';
 // A plugin panel gets the shell's own column; these bounds are what `resizable` clamps to.

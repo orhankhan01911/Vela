@@ -1,6 +1,6 @@
 import type { LineStyle } from '../../../core/model/series';
 import { chartTypes, settingsRowValueKeys, type SettingsRowDescriptor } from '../../../chart-types/registry';
-import { withAlpha } from '../../../core/color';
+import { isDarkColor, mix, parseRgb, toHex6, withAlpha } from '../../../core/color';
 import { ACCENT, BEARISH, BULLISH, CHIP_PLATE, CROSSHAIR, SERIES_LINE, WARNING } from '../../../core/palette';
 import type { PriceStyle } from '../../../core/options';
 import type { ScaleMode } from './SceneGraph';
@@ -151,11 +151,62 @@ export interface ChartMargins {
 
 export const DEFAULT_MARGINS: ChartMargins = { top: 10, bottom: 10, right: 10 };
 
+/**
+ * How the plot background is painted: one flat color (`layout.background`) or a vertical
+ * gradient from `top` (at the top of the chart) to `bottom`. Switching the type never loses
+ * the other mode's colors, so a Solid ⇄ Gradient toggle is lossless.
+ */
+export type BackgroundType = 'solid' | 'gradient';
+export const BACKGROUND_TYPES: readonly BackgroundType[] = ['solid', 'gradient'];
+
+export interface BackgroundStyle {
+    type: BackgroundType;
+    /** The Solid color; `null` ⇒ the app theme's chart background. */
+    solid: string | null;
+    /** Gradient top; `null` ⇒ the solid color. */
+    top: string | null;
+    /** Gradient bottom; `null` ⇒ the top color eased {@link GRADIENT_BOTTOM_EASE} toward black
+     *  (light top) or white (dark top), so a first switch to Gradient is already visible. */
+    bottom: string | null;
+}
+
+/** Share of the way the derived gradient bottom sits from the top color toward the contrast ink. */
+export const GRADIENT_BOTTOM_EASE = 0.1;
+
+/** A blend as `#rrggbb` (a swatch and a saved config read hex best); a color `mix` cannot parse
+ *  (a name, `hsl()`) passes through unchanged. */
+function blendHex(base: string, toward: string, amount: number): string {
+    const out = mix(base, toward, amount);
+    return parseRgb(out) ? toHex6(out) : out;
+}
+
+/** The gradient ends a `BackgroundStyle` paints with, every `null` resolved. */
+export function resolveGradient(solid: string, bg: Pick<BackgroundStyle, 'top' | 'bottom'>): { top: string; bottom: string } {
+    const top = bg.top ?? solid;
+    const ink = isDarkColor(top) ? '#ffffff' : '#000000';
+    return { top, bottom: bg.bottom ?? blendHex(top, ink, GRADIENT_BOTTOM_EASE) };
+}
+
+/** The single color contrast decisions (text/grid inks, attribution mark, chips) read: the solid
+ *  color, or the gradient's midpoint. */
+export function effectiveBackground(solid: string, bg: Pick<BackgroundStyle, 'type' | 'top' | 'bottom'>): string {
+    if (bg.type !== 'gradient') return solid;
+    const g = resolveGradient(solid, bg);
+    return blendHex(g.top, g.bottom, 0.5);
+}
+
+/** CSS for the gradient: top-to-bottom, painted once by the browser (no per-frame canvas work). */
+export function gradientCss(top: string, bottom: string): string {
+    return `linear-gradient(to bottom, ${top}, ${bottom})`;
+}
+
 export interface ChartStyle {
     /** Per-chart-type settings (plugin SDK sections), keyed by type id then row key. */
     chartTypes: Record<string, Record<string, unknown>>;
     /** Axis/label font size in CSS px (the family stays on the theme). */
     fontSize: number;
+    /** Solid or gradient plot background (see {@link BackgroundStyle}). */
+    background: BackgroundStyle;
     margins: ChartMargins;
     gridVert: GridLineStyle;
     gridHorz: GridLineStyle;
@@ -177,6 +228,7 @@ export function defaultChartStyle(): ChartStyle {
     return {
         chartTypes: {},
         fontSize: 11,
+        background: { type: 'solid', solid: null, top: null, bottom: null },
         margins: { ...DEFAULT_MARGINS },
         gridVert: { visible: true, color: null },
         gridHorz: { visible: true, color: null },
@@ -213,7 +265,12 @@ export function defaultChartStyle(): ChartStyle {
 export interface ChartConfig {
     version: number;
     layout: {
+        /** The Solid color. Kept while `backgroundType` is `'gradient'` so toggling back restores it. */
         background: string;
+        /** `'solid'` paints `background`; `'gradient'` paints `backgroundTop` → `backgroundBottom`. */
+        backgroundType: BackgroundType;
+        backgroundTop: string;
+        backgroundBottom: string;
         textColor: string;
         fontFamily: string;
         fontSize: number;
@@ -497,6 +554,12 @@ export function sanitizeCrosshairOverride(value: unknown): CrosshairOverride | n
 function isColor(v: unknown): v is string {
     return typeof v === 'string' && v.trim().length > 0;
 }
+/** A color that is safe to splice into the `linear-gradient(...)` string: a hex, a color name, or a
+ *  `rgb()/hsl()` call with plain numeric arguments. The gradient is built by string, so a value
+ *  carrying `)`/`,` pieces (`red), url(//host/x`) must never get that far from imported JSON. */
+export function isGradientColor(v: unknown): v is string {
+    return typeof v === 'string' && /^(?:#[0-9a-f]{3,8}|[a-z]{3,32}|(?:rgb|hsl)a?\([0-9a-z%.,\s/+-]*\))$/i.test(v.trim());
+}
 function isBool(v: unknown): v is boolean {
     return typeof v === 'boolean';
 }
@@ -661,6 +724,9 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
         chartTypes: chartTypesBag,
         layout: {
             background: isColor(layout.background) ? layout.background : base.layout.background,
+            backgroundType: isOneOf(BACKGROUND_TYPES, layout.backgroundType) ? layout.backgroundType : base.layout.backgroundType,
+            backgroundTop: isGradientColor(layout.backgroundTop) ? layout.backgroundTop : base.layout.backgroundTop,
+            backgroundBottom: isGradientColor(layout.backgroundBottom) ? layout.backgroundBottom : base.layout.backgroundBottom,
             textColor: isColor(layout.textColor) ? layout.textColor : base.layout.textColor,
             fontFamily: isColor(layout.fontFamily) ? layout.fontFamily : base.layout.fontFamily,
             fontSize: isNum(layout.fontSize) ? Math.max(6, Math.min(32, layout.fontSize)) : base.layout.fontSize,

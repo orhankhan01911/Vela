@@ -52,8 +52,12 @@ export function applyThemeTokens(el: HTMLElement, t: VelaTheme): void {
  *  Floating menus and dropdowns do NOT use this — they mount on {@link floatingLayerHost}
  *  so their surface follows the app theme alone. */
 export function applyPlotOverlayTokens(host: HTMLElement, base: VelaTheme, config: unknown): void {
-    const layout = (config as { layout?: { background?: string; textColor?: string } } | null)?.layout;
-    const t = layout?.background && layout.textColor ? { ...base, background: layout.background, textColor: layout.textColor } : base;
+    const layout = (config as { layout?: { background?: string; backgroundType?: string; backgroundTop?: string; backgroundBottom?: string; textColor?: string } } | null)?.layout;
+    // A gradient plot: the overlays that carry their own fill (the legend, the status line) sit at
+    // the TOP of the chart, so their surface tokens take the gradient's top color — a flat plate
+    // that matches the ramp where it is drawn instead of a lighter box over it.
+    const background = layout?.backgroundType === 'gradient' && layout.backgroundTop ? layout.backgroundTop : layout?.background;
+    const t = background && layout?.textColor ? { ...base, background, textColor: layout.textColor } : base;
     applyThemeTokens(host, t);
 }
 

@@ -28,6 +28,7 @@ import { indicatorLedger, ledgerEntryName, ledgerNativeType, type LedgerManifest
 import { inputDeltas, type InputValue } from '../core/model/inputs';
 import {
     legendActionsProviderFor,
+    settingsTemplateMenuProviderFor,
     legendCalloutsProviderFor,
     resolveEngines,
     statePersistenceHandlers,
@@ -360,6 +361,8 @@ export class ChartCell {
         // context follows the workspace rule (built fresh per click, active-cell bound).
         this.inner.renderer.setLegendActions(legendActionsProviderFor(this.inner, () => deps.context()));
         this.inner.renderer.setLegendCallouts(legendCalloutsProviderFor(this.inner, () => deps.context()));
+        // The host's saved-template menu in this cell's settings dialog footer (a no-op when none is registered).
+        this.inner.renderer.setSettingsTemplateMenu(settingsTemplateMenuProviderFor(() => deps.context()));
         // The cell owns ONE unified undo timeline (drawings + indicator ops), driven by
         // the workspace keymap. The drawings layer must not self-serve Ctrl+Z/Y or the
         // two histories desync (its preempt would pop the core drawing stack while the

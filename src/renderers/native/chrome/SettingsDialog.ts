@@ -19,6 +19,7 @@ import { TIMEZONES, tzMenuLabel, normalizeTimezone } from '../../../core/timezon
 import { closeOpenPopovers } from '../../../ui/components/popover';
 import { closeWidthPopover } from '../../../ui/components/glyph-select';
 import { Dialog } from '../../../ui/components/dialog';
+import { Menu } from '../../../ui/components/menu';
 import { overlayScrollbarCss } from '../../../ui/styles';
 import {
     fieldGrid,
@@ -40,6 +41,7 @@ import {
     settingsIdSlug,
 } from './settings-visibility';
 import type { MarkGroup } from '../../../core/marks/types';
+import type { SettingsTemplateMenuView } from '../../../core/ports/IChartRenderer';
 import { markGroupRows } from '../../../core/marks/visibility';
 
 /** A nested partial of `ChartConfig` — what a single control edit emits. */
@@ -92,8 +94,11 @@ function styleLabel(id: string): string {
     return chartType(id)?.label ?? BUILTIN_STYLE_LABELS[id] ?? id;
 }
 
+/** The footer menu's own row (never a host id: host ids reach the host, this one resets). */
+const RESET_ROW_ID = '__vela-reset-defaults';
+
 const SD_STYLE_ID = 'vela-settings-controls';
-const SD_STYLE_REV = '6';
+const SD_STYLE_REV = '7';
 
 /**
  * The dialog's surface palette. It follows the STABLE chrome surface (the tokens written on
@@ -191,7 +196,18 @@ ${overlayScrollbarCss('.vela-sd-pane')}
    alignment device; on mobile the trigger hugs its value instead (the grid's control
    column is max-content), capped so a long option still ellipsizes before the label. */
 .vela-sd-mobile .vela-select-trigger .vela-select-label{white-space:nowrap !important;}
-.vela-sd-mobile .vela-select:not([data-fill]){width:auto;min-width:100px;max-width:min(220px,55vw);}`;
+.vela-sd-mobile .vela-select:not([data-fill]){width:auto;min-width:100px;max-width:min(220px,55vw);}
+/* Closed selects (marked data-hug by hugSelect) are as wide as their WIDEST option instead of the
+   kit's fixed 100px, so "Follow chart" or "Heat (blue → orange)" is never cut. Sized by the option
+   list, not the current value, so the column does not jump while a value changes. The sizer is the
+   kit's own hidden option-width probe; this dialog's controls use the md (14px) font. */
+.vela-sd-pane .vela-select[data-hug]:not([data-fill]){width:auto;min-width:100px;max-width:260px;}
+.vela-sd-pane .vela-select[data-hug] .vela-select-sizer{font-size:14px;}
+.vela-sd-mobile .vela-select[data-hug]:not([data-fill]){max-width:min(220px,55vw);}
+/* Desktop: a cell holding ONE hugging select stretches to the control column (the widest select
+   in it sets the width), so every select in a page shares one edge instead of a ragged one. */
+.vela-dialog--settings:not(.vela-sd-mobile *) .vela-field-cell:has(> .vela-select[data-hug]:only-child){justify-self:stretch;}
+.vela-dialog--settings:not(.vela-sd-mobile *) .vela-field-cell > .vela-select[data-hug]:only-child{flex:1 1 auto;}`;
     if (!existing) document.head.appendChild(st);
 }
 
@@ -230,6 +246,26 @@ export class SettingsDialog {
 
     /** The visibility policy: setting ids hidden by the host (subtree semantics). */
     private hiddenSettings: ReadonlySet<string> = new Set();
+
+    /** The host's saved-template menu for the footer's "Template ▾" (see `setTemplateMenu`). */
+    private templateMenu: (() => SettingsTemplateMenuView | null) | null = null;
+    /** The footer menu of the CURRENT build — destroyed with it (its list floats outside the dialog). */
+    private footerMenu: Menu | null = null;
+    /** Reads the renderer's LIVE config, so a swatch repaints from the real value (an edit made in
+     *  this open dialog reached the renderer; the `config` snapshot taken at open did not change). */
+    private liveConfig: (() => ChartConfig) | null = null;
+
+    /** The host's template menu for the footer: when set, "Reset defaults" becomes the last row of a
+     *  "Template ▾" dropdown (the same shape the drawing settings dialog has). `null` ⇒ the plain
+     *  "Reset defaults" button. Read when the dialog builds its footer. */
+    setTemplateMenu(provider: (() => SettingsTemplateMenuView | null) | null): void {
+        this.templateMenu = provider;
+    }
+
+    /** Hand the dialog a reader of the renderer's live config (see {@link liveConfig}). */
+    setLiveConfig(read: (() => ChartConfig) | null): void {
+        this.liveConfig = read;
+    }
 
     /** Host-app sections (e.g. the widget's Status line tab) — re-shown on next open. */
     setHostSections(sections: HostSettingsSection[]): void {
@@ -352,6 +388,11 @@ export class SettingsDialog {
             closeOnBackdrop: true,
             footer: (foot) => {
                 foot.style.cssText = `padding:10px 14px;display:flex;align-items:center;justify-content:flex-start;gap:8px;`;
+                const templates = this.templateMenu?.() ?? null;
+                if (templates) {
+                    foot.appendChild(this.buildTemplateButton(templates));
+                    return;
+                }
                 const resetBtn = document.createElement('button');
                 resetBtn.type = 'button';
                 resetBtn.textContent = 'Reset defaults';
@@ -639,7 +680,7 @@ export class SettingsDialog {
         // ══ CANVAS — background/text + grid (the reference tab) ══
         body.append(sid(this.section('Canvas'), 'canvas'));
         body.append(sid(this.sectionTitle('Background & text'), 'canvas.background'));
-        body.append(sid(this.colorRow('Background', config.layout.background, (v) => this.emit({ layout: { background: v } })), 'canvas.background.color'));
+        body.append(sid(this.backgroundRow(config.layout), 'canvas.background.color'));
         body.append(sid(this.colorRow('Text color', config.layout.textColor, (v) => this.emit({ layout: { textColor: v } })), 'canvas.background.text-color'));
         body.append(sid(this.numberRow('Text size', config.layout.fontSize, 6, 32, 1, (v) => this.emit({ layout: { fontSize: v } })), 'canvas.background.text-size'));
         body.append(sid(this.colorRow('Pane separator color', config.panes.separatorColor, (v) => this.emit({ panes: { separatorColor: v } })), 'canvas.background.pane-separator'));
@@ -816,6 +857,8 @@ export class SettingsDialog {
     close(): void {
         closeOpenPopovers();
         closeWidthPopover();
+        this.footerMenu?.destroy();
+        this.footerMenu = null;
         const ui = this.ui;
         this.ui = null;
         this.root = null;
@@ -831,6 +874,53 @@ export class SettingsDialog {
         this.onChange = null;
         this.onImport = null;
         this.config = null;
+    }
+
+    /**
+     * The footer's "Template ▾": the host's saved-template rows (save, apply, delete — whatever the
+     * host lists) with "Reset defaults" as the LAST row, keeping what the old plain button did.
+     * The list opens upward (the footer is the dialog's bottom edge; Zag flips it when there is no
+     * room) and is rebuilt at every open so a save or delete shows at once. Opening, arrow keys and
+     * Enter/Space come from the kit Menu, so keyboard and touch work as in every other menu.
+     */
+    private buildTemplateButton(view: SettingsTemplateMenuView): HTMLElement {
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'vela-sd-btn';
+        trigger.textContent = 'Template \u25BE';
+        trigger.setAttribute('aria-label', 'Chart template');
+        this.footerMenu?.destroy(); // a rebuilt footer must not leave the previous menu's list floating
+        const menu = new Menu({
+            host: this.container,
+            trigger,
+            placement: 'top-start',
+            items: [],
+            onSelect: (id) => {
+                if (id === RESET_ROW_ID) {
+                    this.onReset?.();
+                    return;
+                }
+                view.run(id, trigger);
+                // The host may just have changed the chart's whole config (applying a template). A
+                // config edit made OUTSIDE this dialog never re-seeds an open one, so re-read the
+                // controls from the live values once the action has run.
+                setTimeout(() => {
+                    if (this.ui && this.liveConfig) this.refresh(this.liveConfig());
+                }, 0);
+            },
+        });
+        this.footerMenu = menu;
+        // The rows must be in place BEFORE Zag opens the list, and a list can open three ways: a
+        // click, a touch (`pointerdown` runs first), and Enter/Space/Arrow on the focused button
+        // (a keydown that Zag consumes, so no click follows). Capture phase on all three, plus once
+        // now so the list is never empty.
+        const fill = (): void => {
+            const rows = view.items();
+            menu.setItems([...rows, { id: RESET_ROW_ID, label: 'Reset defaults', separatorBefore: rows.length > 0 }]);
+        };
+        fill();
+        for (const type of ['pointerdown', 'keydown', 'click'] as const) trigger.addEventListener(type, fill, true);
+        return trigger;
     }
 
     /** Emit one chart-type SDK settings value (persisted under chartTypes[<id>]). */
@@ -1022,16 +1112,20 @@ export class SettingsDialog {
         }
         if (c.kind === 'select') {
             const def = typeof bag[c.key] === 'string' ? (bag[c.key] as string) : c.defval;
-            return buildFieldControl({
-                kind: 'select',
-                options: normalizeSelectOptions(c.options).map(([value, label]) => ({ value, label })),
-                value: def,
-                fill: false,
-                theme: this.theme,
-                title: c.label,
-                onChange: (v) => put(c.key, v),
-                sync: () => (typeof bag[c.key] === 'string' ? (bag[c.key] as string) : c.defval),
-            }).el;
+            const options = normalizeSelectOptions(c.options).map(([value, label]) => ({ value, label }));
+            return hugSelect(
+                buildFieldControl({
+                    kind: 'select',
+                    options,
+                    value: def,
+                    fill: false,
+                    theme: this.theme,
+                    title: c.label,
+                    onChange: (v) => put(c.key, v),
+                    sync: () => (typeof bag[c.key] === 'string' ? (bag[c.key] as string) : c.defval),
+                }).el,
+                options.map((o) => o.label),
+            );
         }
         const def = typeof bag[c.key] === 'number' ? (bag[c.key] as number) : c.defval;
         return buildFieldControl({
@@ -1293,6 +1387,50 @@ export class SettingsDialog {
         return el;
     }
 
+    /**
+     * Canvas → Background: a Solid / Gradient dropdown followed by the swatch(es) of the chosen mode —
+     * one for Solid, a top and a bottom one for Gradient. Both modes keep their colors, so flipping
+     * the dropdown loses nothing; the swatches read the renderer's LIVE values (a derived gradient
+     * end follows the Solid color), not the snapshot taken when the dialog opened.
+     */
+    private backgroundRow(layout: ChartConfig['layout']): HTMLElement {
+        let type = layout.backgroundType;
+        const live = (): ChartConfig['layout'] => this.liveConfig?.().layout ?? layout;
+        const solid = this.swatch(layout.background, (v) => this.emit({ layout: { background: v } }), () => live().background);
+        const top = this.swatch(layout.backgroundTop, (v) => this.emit({ layout: { backgroundTop: v } }), () => live().backgroundTop);
+        const bottom = this.swatch(layout.backgroundBottom, (v) => this.emit({ layout: { backgroundBottom: v } }), () => live().backgroundBottom);
+        solid.title = 'Background color';
+        top.title = 'Top color';
+        bottom.title = 'Bottom color';
+        const show = (): void => {
+            const gradient = type === 'gradient';
+            solid.style.display = gradient ? 'none' : '';
+            top.style.display = gradient ? '' : 'none';
+            bottom.style.display = gradient ? '' : 'none';
+        };
+        const choose = buildFieldControl({
+            kind: 'select',
+            options: [
+                { value: 'solid', label: 'Solid' },
+                { value: 'gradient', label: 'Gradient' },
+            ],
+            value: type,
+            fill: false,
+            theme: this.theme,
+            title: 'Background type',
+            onChange: (v) => {
+                type = v === 'gradient' ? 'gradient' : 'solid';
+                this.emit({ layout: { backgroundType: type } });
+                show();
+                // The gradient ends may have been derived from a Solid color edited since the
+                // swatches last painted: repaint them from the live config.
+                for (const el of [solid, top, bottom]) el.dispatchEvent(new Event('vela-sync'));
+            },
+        }).el;
+        show();
+        return this.rowWith('Background', [hugSelect(choose, ['Solid', 'Gradient']), solid, top, bottom]);
+    }
+
     private colorRow(label: string, value: string, onChange: (v: string) => void): HTMLElement {
         let current = value;
         return fieldRow({
@@ -1355,20 +1493,42 @@ export class SettingsDialog {
             label,
             labelSize: 'sm',
             className: 'vela-sd-row',
-            control: buildFieldControl({
-                kind: 'select',
-                options: options.map(([v, l]) => ({ value: v, label: l })),
-                value,
-                fill: false,
-                theme: this.theme,
-                onChange,
-            }).el,
+            control: hugSelect(
+                buildFieldControl({
+                    kind: 'select',
+                    options: options.map(([v, l]) => ({ value: v, label: l })),
+                    value,
+                    fill: false,
+                    theme: this.theme,
+                    onChange,
+                }).el,
+                options.map(([, l]) => l),
+            ),
         });
     }
 
     private selectRow(label: string, value: string, options: string[], onChange: (v: string) => void): HTMLElement {
         return this.selectRowLabeled(label, value, options.map((o) => [o, o] as const), onChange);
     }
+}
+
+/**
+ * Size a closed select to its widest option. The kit's md select is a fixed 100px column that
+ * ellipsizes; the settings dialog has room for the full value, so it appends the kit's own hidden
+ * width probe (the one the compact `sm` select uses) and flags the control for the `data-hug` CSS.
+ */
+function hugSelect(el: HTMLElement, labels: readonly string[]): HTMLElement {
+    el.dataset.hug = '';
+    const sizer = document.createElement('div');
+    sizer.className = 'vela-select-sizer';
+    sizer.setAttribute('aria-hidden', 'true');
+    for (const label of labels) {
+        const span = document.createElement('span');
+        span.textContent = label;
+        sizer.appendChild(span);
+    }
+    el.appendChild(sizer);
+    return el;
 }
 
 /** Normalize a select descriptor's options to `[value, label]` pairs. */
