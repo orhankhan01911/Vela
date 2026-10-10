@@ -2,7 +2,7 @@
 // every chart type registered through the plugin SDK, labels from the registry).
 import { Menu, type MenuItemDescriptor } from '../ui/components/menu';
 import { Tooltip } from '../ui/components/tooltip';
-import { LayoutPicker, type LayoutPickerShape } from './layout-picker';
+import { LayoutPicker, type LayoutCatalogGroup, type LayoutPickerShape } from './layout-picker';
 import { iconEl, iconMarkup, registerIcon } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
 import { chartType } from '../chart-types/registry';
@@ -260,6 +260,8 @@ export interface TopbarOptions {
         presets: () => Array<{ id: string; label: string }>;
         onSelectGrid: (rows: number, cols: number) => void;
         onSelectPreset: (id: string) => void;
+        /** The arrangement catalog grouped by chart count; replaces the grid canvas when given. */
+        catalog?: () => LayoutCatalogGroup[];
         /** SYNC switch rows (re-read on every open and after each toggle). */
         syncs: () => Array<{ id: string; label: string; checked: boolean }>;
         onToggleSync: (id: string) => void;
@@ -620,6 +622,7 @@ export class Topbar {
                 presets: () => layout.presets().map((p) => ({ ...p, checked: p.id === this.layoutId })),
                 onSelectGrid: (rows, cols) => layout.onSelectGrid(rows, cols),
                 onSelectPreset: (id) => layout.onSelectPreset(id),
+                ...(layout.catalog ? { catalog: () => layout.catalog!() } : {}),
                 syncs: () => layout.syncs(),
                 onToggleSync: (id) => layout.onToggleSync(id),
             });

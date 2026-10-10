@@ -75,6 +75,10 @@ export function registerBuiltinLayouts(): void {
     registerLayout({ id: '2v', label: '2 stacked', cols: [1], rows: [1, 1], cells: slots(2) });
     registerLayout({ id: '4', label: '4 grid', cols: [1, 1], rows: [1, 1], cells: slots(4) });
     registerLayout({ id: '8', label: '8 grid', cols: [1, 1, 1, 1], rows: [1, 1], cells: slots(8) });
+    // The catalog's asymmetric arrangements: registered so a saved layout id restores.
+    for (const def of layoutCatalog()) {
+        if (def.areas && !registry.has(def.id)) registerLayout(def);
+    }
 }
 
 // ── dynamic layouts (the topbar's grid picker) ──────────────────────────────
@@ -84,9 +88,11 @@ export function registerBuiltinLayouts(): void {
 // self-describing (`g3x2`) and `ensureLayout` re-synthesizes them, so persisted picks
 // restore across boots without polluting the plugin registry.
 
-/** Picker canvas bound — dynamic layouts stay within a 4×4 grid (16 cells, the
- *  workspace's dormant-state pool capacity). */
+/** Picker canvas bound — the uniform rows×cols canvas stays within a 4×4 grid. */
 export const GRID_PICKER_MAX = 4;
+
+/** Most charts one layout may hold — the workspace's dormant-state pool capacity. */
+export const LAYOUT_MAX_CELLS = 16;
 
 /** Classic preset ids by uniform geometry, so grid picks land on the builtins. */
 const GRID_BUILTIN_IDS: Record<string, string> = {
@@ -97,7 +103,7 @@ const GRID_BUILTIN_IDS: Record<string, string> = {
     '2x4': '8',
 };
 
-const clampTrack = (n: number): number => Math.max(1, Math.min(GRID_PICKER_MAX, Math.round(n)));
+const clampTrack = (n: number): number => Math.max(1, Math.min(LAYOUT_MAX_CELLS, Math.round(n)));
 
 /**
  * The layout for a UNIFORM rows×cols grid (Grid picker mode), clamped to the
@@ -105,8 +111,13 @@ const clampTrack = (n: number): number => Math.max(1, Math.min(GRID_PICKER_MAX, 
  * (id `'4'`, `'2h'`, …); anything else synthesizes a `g<rows>x<cols>` definition.
  */
 export function layoutForGrid(rows: number, cols: number): LayoutDefinition {
-    const r = clampTrack(rows);
-    const c = clampTrack(cols);
+    let r = clampTrack(rows);
+    let c = clampTrack(cols);
+    // Never more charts than the pool holds: trim the longer track until it fits.
+    while (r * c > LAYOUT_MAX_CELLS) {
+        if (c >= r) c -= 1;
+        else r -= 1;
+    }
     const builtin = GRID_BUILTIN_IDS[`${r}x${c}`];
     const registered = builtin ? registry.get(builtin) : undefined;
     if (registered) return registered;
@@ -120,7 +131,7 @@ export function layoutForGrid(rows: number, cols: number): LayoutDefinition {
     };
 }
 
-const GRID_ID_RE = /^g([1-4])x([1-4])$/;
+const GRID_ID_RE = /^g(\d{1,2})x(\d{1,2})$/;
 
 /**
  * Resolve a layout id to its definition, synthesizing the picker's dynamic ids
@@ -131,8 +142,187 @@ export function ensureLayout(id: string): LayoutDefinition | undefined {
     const registered = registry.get(id);
     if (registered) return registered;
     const g = GRID_ID_RE.exec(id);
-    if (g) return layoutForGrid(Number(g[1]), Number(g[2]));
+    if (g) {
+        const rows = Number(g[1]);
+        const cols = Number(g[2]);
+        // Only ids the picker could have produced: in range and within the pool.
+        if (rows >= 1 && cols >= 1 && rows <= LAYOUT_MAX_CELLS && cols <= LAYOUT_MAX_CELLS && rows * cols <= LAYOUT_MAX_CELLS) {
+            return layoutForGrid(rows, cols);
+        }
+    }
     return undefined;
+}
+
+// ── the layout catalog (the topbar's layout menu) ───────────────────────────
+//
+// Every arrangement the menu offers, grouped by chart count — the way trading terminals
+// list them. Each one is "columns of stacks" or "rows of stacks": a column layout has N
+// columns holding `counts[i]` stacked cells each (`[1, 3]` = one tall cell beside three
+// stacked ones); a row layout is the transpose. That one idea covers uniform grids,
+// big-plus-small and mixed arrangements, and it maps straight onto the engine's
+// `areas`, so the splitters and glyphs need nothing new.
+
+/** The shape of a catalog entry: stacks of `counts[i]` cells, laid out as columns or rows. */
+interface StackSpec {
+    kind: 'cols' | 'rows';
+    counts: number[];
+}
+
+const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+const lcm = (a: number, b: number): number => (a / gcd(a, b)) * b;
+
+/**
+ * The layout for a stack spec — PURE. Slots are numbered in reading order (top row first,
+ * left to right), so the first cell is always the top-left one.
+ */
+export function stackLayout(id: string, label: string, spec: StackSpec): LayoutDefinition {
+    const { kind, counts } = spec;
+    const tracks = counts.reduce(lcm, 1); // fine tracks along each stack
+    // grid[row][col] = the stack position (stack index, cell index within it) holding that track.
+    const key = (stack: number, cell: number): string => `${stack}:${cell}`;
+    const grid: string[][] = [];
+    if (kind === 'cols') {
+        for (let t = 0; t < tracks; t += 1) {
+            grid.push(counts.map((n, j) => key(j, Math.floor(t / (tracks / n)))));
+        }
+    } else {
+        for (let i = 0; i < counts.length; i += 1) {
+            const n = counts[i] ?? 1;
+            grid.push(Array.from({ length: tracks }, (_, t) => key(i, Math.floor(t / (tracks / n)))));
+        }
+    }
+    // Name areas c1…cN by the reading order of each area's top-left track.
+    const names = new Map<string, string>();
+    for (const row of grid) {
+        for (const k of row) {
+            if (!names.has(k)) names.set(k, `c${names.size + 1}`);
+        }
+    }
+    const areas = grid.map((row) => row.map((k) => names.get(k)).join(' '));
+    const nCols = kind === 'cols' ? counts.length : tracks;
+    const nRows = kind === 'cols' ? tracks : counts.length;
+    return {
+        id,
+        label,
+        cols: Array.from({ length: nCols }, () => 1),
+        rows: Array.from({ length: nRows }, () => 1),
+        areas,
+        cells: [...names.values()].map((n) => ({ id: n, area: n })),
+    };
+}
+
+const same = (counts: readonly number[]): boolean => counts.every((n) => n === counts[0]);
+
+/** One catalog entry: its chart count and the arrangement. */
+interface CatalogSpec extends StackSpec {
+    count: number;
+}
+
+const colsOf = (...counts: number[]): CatalogSpec => ({ kind: 'cols', counts, count: counts.reduce((a, b) => a + b, 0) });
+const rowsOf = (...counts: number[]): CatalogSpec => ({ kind: 'rows', counts, count: counts.reduce((a, b) => a + b, 0) });
+const ones = (n: number): number[] => Array.from({ length: n }, () => 1);
+
+/** The catalog, in menu order: 55 arrangements from 1 to 16 charts. */
+const CATALOG_SPECS: readonly CatalogSpec[] = [
+    colsOf(1),
+    colsOf(1, 1),
+    rowsOf(1, 1),
+    colsOf(1, 1, 1),
+    rowsOf(1, 1, 1),
+    colsOf(1, 2),
+    colsOf(2, 1),
+    rowsOf(1, 2),
+    rowsOf(2, 1),
+    colsOf(2, 2),
+    rowsOf(...ones(4)),
+    colsOf(...ones(4)),
+    colsOf(1, 3),
+    colsOf(3, 1),
+    rowsOf(1, 3),
+    rowsOf(3, 1),
+    colsOf(1, 2, 1),
+    colsOf(2, 1, 1),
+    colsOf(1, 1, 2),
+    colsOf(...ones(5)),
+    rowsOf(...ones(5)),
+    colsOf(1, 4),
+    colsOf(4, 1),
+    rowsOf(1, 4),
+    rowsOf(4, 1),
+    colsOf(2, 3),
+    rowsOf(2, 3),
+    colsOf(1, 2, 2),
+    colsOf(2, 2, 1),
+    rowsOf(3, 3),
+    rowsOf(2, 2, 2),
+    colsOf(...ones(6)),
+    rowsOf(...ones(6)),
+    colsOf(1, 5),
+    rowsOf(2, 4),
+    rowsOf(3, 4),
+    colsOf(...ones(7)),
+    colsOf(1, 6),
+    rowsOf(4, 4),
+    rowsOf(2, 2, 2, 2),
+    colsOf(...ones(8)),
+    rowsOf(...ones(8)),
+    rowsOf(3, 3, 3),
+    rowsOf(2, 3, 4),
+    colsOf(...ones(9)),
+    rowsOf(...ones(9)),
+    rowsOf(5, 5),
+    colsOf(...ones(10)),
+    rowsOf(...ones(10)),
+    rowsOf(4, 4, 4),
+    rowsOf(3, 3, 3, 3),
+    colsOf(...ones(12)),
+    rowsOf(7, 7),
+    rowsOf(4, 4, 4, 4),
+    rowsOf(8, 8),
+];
+
+/** Stable id for a catalog entry: the classic ids and `g<rows>x<cols>` for uniform grids. */
+function catalogId(spec: CatalogSpec): string {
+    if (same(spec.counts)) {
+        const k = spec.counts[0] ?? 1;
+        const stacks = spec.counts.length;
+        // `cols`: `stacks` columns of `k` stacked cells = k rows × stacks cols.
+        const rows = spec.kind === 'cols' ? k : stacks;
+        const cols = spec.kind === 'cols' ? stacks : k;
+        return `g${rows}x${cols}`;
+    }
+    return `${spec.kind === 'cols' ? 'c' : 'r'}-${spec.counts.join('-')}`;
+}
+
+function catalogLabel(spec: CatalogSpec): string {
+    const what = spec.kind === 'cols' ? 'columns' : 'rows';
+    return `${spec.count} charts — ${spec.counts.join(' + ')} ${what}`;
+}
+
+/**
+ * Every catalog layout, in menu order. Uniform grids resolve to the classic presets
+ * (`'1'`, `'2h'`, `'2v'`, `'4'`, `'8'`) so existing saved layouts keep their ids.
+ */
+export function layoutCatalog(): LayoutDefinition[] {
+    return CATALOG_SPECS.map((spec) => {
+        const id = catalogId(spec);
+        const uniform = GRID_ID_RE.exec(id);
+        // `layoutForGrid` hands back the registered classic preset when the geometry matches.
+        if (uniform) return layoutForGrid(Number(uniform[1]), Number(uniform[2]));
+        return stackLayout(id, catalogLabel(spec), spec);
+    });
+}
+
+/** The catalog grouped by chart count (1, 2, 3 …), in menu order — what the picker renders. */
+export function layoutCatalogGroups(): Array<{ count: number; layouts: LayoutDefinition[] }> {
+    const groups = new Map<number, LayoutDefinition[]>();
+    for (const def of layoutCatalog()) {
+        const n = def.cells.length;
+        const list = groups.get(n) ?? [];
+        list.push(def);
+        groups.set(n, list);
+    }
+    return [...groups.entries()].sort((a, b) => a[0] - b[0]).map(([count, list]) => ({ count, layouts: list }));
 }
 
 /** A layout's shape on the picker canvas. */

@@ -76,9 +76,11 @@ describe('dynamic picker layouts (pure)', () => {
         expect(layoutDefinition('g3x2')).toBeUndefined(); // the registry stays presets-only
     });
 
-    it('layoutForGrid clamps to the picker canvas (1..4 per axis)', () => {
-        expect(layoutForGrid(9, 0).id).toBe('g4x1');
+    it('layoutForGrid clamps each axis to 1..16 and the total to the 16-chart pool', () => {
+        expect(layoutForGrid(20, 0).id).toBe('g16x1');
         expect(layoutForGrid(4, 4).cells).toHaveLength(16);
+        expect(layoutForGrid(1, 9).id).toBe('g1x9'); // wider than the old 4x4 canvas
+        expect(layoutForGrid(6, 6).cells.length).toBeLessThanOrEqual(16);
     });
 
     it('ensureLayout: registered ids win; dynamic ids re-synthesize; junk stays undefined', () => {

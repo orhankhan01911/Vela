@@ -20,6 +20,10 @@ export {
     ensureLayout,
     layoutShape,
     GRID_PICKER_MAX,
+    LAYOUT_MAX_CELLS,
+    layoutCatalog,
+    layoutCatalogGroups,
+    stackLayout,
 } from './layouts';
 export type { LayoutDefinition, LayoutShape, TrackSizes } from './layouts';
 export { evenTracks, resizeTracks, trackOffsets } from './splitters';

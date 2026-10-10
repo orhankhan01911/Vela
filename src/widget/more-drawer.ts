@@ -8,7 +8,7 @@
 import { Drawer } from '../ui/components/drawer';
 import { iconEl } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
-import { layoutGridCanvas, paintLayoutGrid } from './layout-picker';
+import { layoutCatalogView, layoutGridCanvas, paintLayoutGrid, type LayoutCatalogGroup } from './layout-picker';
 
 const STYLE_ID = 'vela-widget-more-drawer';
 const CSS = `
@@ -123,6 +123,8 @@ export interface MoreDrawerOptions {
         presets: () => Array<{ id: string; label: string; checked: boolean }>;
         onSelectGrid: (rows: number, cols: number) => void;
         onSelectPreset: (id: string) => void;
+        /** The arrangement catalog grouped by chart count; replaces the grid canvas when given. */
+        catalog?: () => LayoutCatalogGroup[];
         syncs?: () => Array<{ id: string; label: string; checked: boolean }>;
         onToggleSync?: (id: string) => void;
         /** The current layout's 16px glyph (`<svg>` markup) for the Layout row. Omitted
@@ -293,15 +295,30 @@ export class MoreDrawer {
         // rectangle is lit, a tap applies that grid immediately (no hover preview).
         const wrap = doc.createElement('div');
         wrap.className = 'vela-md-gridwrap';
-        const { el: grid, squares } = layoutGridCanvas(doc);
-        paintLayoutGrid(squares, layout.shape());
-        grid.addEventListener('click', (e) => {
-            const sq = (e.target as Element | null)?.closest?.('.vela-lp-sq');
-            if (!(sq instanceof HTMLButtonElement)) return;
-            layout.onSelectGrid(Number(sq.dataset.r) + 1, Number(sq.dataset.c) + 1);
-            this.drawer.hide();
-        });
-        wrap.appendChild(grid);
+        if (layout.catalog) {
+            // Every arrangement by chart count, touch-sized; a tap applies it.
+            wrap.appendChild(
+                layoutCatalogView(
+                    doc,
+                    layout.catalog(),
+                    (id) => {
+                        layout.onSelectPreset(id);
+                        this.drawer.hide();
+                    },
+                    { touch: true },
+                ),
+            );
+        } else {
+            const { el: grid, squares } = layoutGridCanvas(doc);
+            paintLayoutGrid(squares, layout.shape());
+            grid.addEventListener('click', (e) => {
+                const sq = (e.target as Element | null)?.closest?.('.vela-lp-sq');
+                if (!(sq instanceof HTMLButtonElement)) return;
+                layout.onSelectGrid(Number(sq.dataset.r) + 1, Number(sq.dataset.c) + 1);
+                this.drawer.hide();
+            });
+            wrap.appendChild(grid);
+        }
         list.appendChild(wrap);
         for (const preset of layout.presets()) {
             list.appendChild(

@@ -72,6 +72,8 @@ import {
     layoutForGrid,
     layoutShape,
     layoutGlyph,
+    layoutCatalog,
+    layoutCatalogGroups,
     occupancyGrid,
     type LayoutDefinition,
     type TrackSizes,
@@ -576,9 +578,10 @@ export class VelaWorkspace {
                 // The picker composes dynamic layouts on its grid canvas; registered
                 // presets the canvas cannot express (bespoke plugin areas) list as rows.
                 shape: () => layoutShape(this.def),
-                presets: () => layouts().filter((l) => layoutShape(l) === null).map((l) => ({ id: l.id, label: l.label })),
+                presets: () => this.layoutsOutsideCatalog().map((l) => ({ id: l.id, label: l.label })),
                 onSelectGrid: (rows, cols) => this.setLayout(layoutForGrid(rows, cols)),
                 onSelectPreset: (id) => this.setLayout(id),
+                catalog: () => this.layoutCatalogView(),
                 // The SYNC switches reflect the simple all-cells form; flipping one
                 // OVERRIDES a host-set group record with plain on/off (groups stay an
                 // API-only shape).
@@ -2341,11 +2344,10 @@ export class VelaWorkspace {
             layout: this.monoLayout || !has('layout') ? undefined : {
                 shape: () => layoutShape(this.def),
                 presets: () =>
-                    layouts()
-                        .filter((l) => layoutShape(l) === null)
-                        .map((l) => ({ id: l.id, label: l.label, checked: l.id === this.def.id })),
+                    this.layoutsOutsideCatalog().map((l) => ({ id: l.id, label: l.label, checked: l.id === this.def.id })),
                 onSelectGrid: (rows, cols) => this.setLayout(layoutForGrid(rows, cols)),
                 onSelectPreset: (id) => this.setLayout(id),
+                catalog: () => this.layoutCatalogView(),
                 syncs: () => [
                     { id: 'symbol', label: 'Symbol', checked: this.syncOpts.symbol === true },
                     { id: 'timeframe', label: 'Interval', checked: this.syncOpts.timeframe === true },
@@ -2362,6 +2364,28 @@ export class VelaWorkspace {
             onOpenChange: (open) => this.trackDialog(open),
         });
         this.moreDrawer.open();
+    }
+
+    /** The catalog the layout menu lists: arrangements by chart count, the current one lit. */
+    private layoutCatalogView(): Array<{
+        count: number;
+        items: Array<{ id: string; label: string; glyph: string; checked: boolean }>;
+    }> {
+        return layoutCatalogGroups().map((g) => ({
+            count: g.count,
+            items: g.layouts.map((l) => ({
+                id: l.id,
+                label: `${g.count} chart${g.count === 1 ? '' : 's'}`,
+                glyph: layoutGlyph(l),
+                checked: l.id === this.def.id,
+            })),
+        }));
+    }
+
+    /** Registered layouts the catalog does not list (a host's bespoke presets). */
+    private layoutsOutsideCatalog(): LayoutDefinition[] {
+        const listed = new Set(layoutCatalog().map((l) => l.id));
+        return layouts().filter((l) => !listed.has(l.id));
     }
 
     /** The contributed topbar actions the mobile menu lists, from one cluster. */
