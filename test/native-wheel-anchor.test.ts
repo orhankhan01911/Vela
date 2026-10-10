@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { wheelZoomAnchor, isHorizontalWheel, wheelPanRightOffset, wheelPanDelta, InputController, type InputControllerDeps } from '../src/renderers/native/core/InputController';
+import { wheelZoomAnchor, autoWheelZoomAnchor, isHorizontalWheel, wheelPanRightOffset, wheelPanDelta, InputController, type InputControllerDeps } from '../src/renderers/native/core/InputController';
 import { NativeRenderer } from '../src/renderers/native/NativeRenderer';
 import { CoordinateSystem } from '../src/renderers/native/core/CoordinateSystem';
 
@@ -134,12 +134,139 @@ describe('wheel over the price axis rescales that scale like a slow drag', () =>
     });
 });
 
-describe('wheel-zoom anchor defaults to the right edge', () => {
-    it('InputController.rightEdgeZoom is true by default', () => {
-        expect(new InputController({} as never).rightEdgeZoom).toBe(true);
+describe('wheel-zoom anchor defaults to auto', () => {
+    it("InputController.zoomAnchor is 'auto' by default and rightEdgeZoom reflects only 'right'", () => {
+        const ctl = new InputController({} as never);
+        expect(ctl.zoomAnchor).toBe('auto');
+        expect(ctl.rightEdgeZoom).toBe(false);
+        ctl.rightEdgeZoom = true;
+        expect(ctl.zoomAnchor).toBe('right');
+        ctl.rightEdgeZoom = false;
+        expect(ctl.zoomAnchor).toBe('cursor');
     });
 
-    it("NativeRenderer reports zoomAnchor 'right' by default", () => {
-        expect(new NativeRenderer().readFeature('zoomAnchor')).toBe('right');
+    it("NativeRenderer reports zoomAnchor 'auto' by default and accepts right / cursor", () => {
+        const r = new NativeRenderer();
+        expect(r.readFeature('zoomAnchor')).toBe('auto');
+        r.applyFeature('zoomAnchor', 'right');
+        expect(r.readFeature('zoomAnchor')).toBe('right');
+        r.applyFeature('zoomAnchor', 'cursor');
+        expect(r.readFeature('zoomAnchor')).toBe('cursor');
+        r.applyFeature('zoomAnchor', 'anything-else');
+        expect(r.readFeature('zoomAnchor')).toBe('auto');
+    });
+});
+
+describe('autoWheelZoomAnchor: toward the cursor, latest bar glued only on the right side of a live chart', () => {
+    function cs(rightOffset: number, bars = 200): CoordinateSystem {
+        const c = new CoordinateSystem();
+        c.setSize(800, 200, 1);
+        c.setBars(Array.from({ length: bars }, (_, i) => (i + 1) * 1000));
+        c.setViewport({ barSpacing: 10, rightOffset });
+        return c;
+    }
+
+    it('scrolled back into history (latest bar off screen): pins the bar under the cursor', () => {
+        const c = cs(-60);
+        const a = autoWheelZoomAnchor(c, 120);
+        expect(a.x).toBe(120);
+        expect(a.logical).toBeCloseTo(c.xToLogical(120));
+    });
+
+    it('latest bar in view and cursor on the right side: pins the right edge', () => {
+        const c = cs(3);
+        const a = autoWheelZoomAnchor(c, 700);
+        expect(a.x).toBe(800);
+        expect(a.logical).toBe(c.rightEdgeLogical);
+    });
+
+    it('latest bar in view but cursor on the left side: pins the bar under the cursor (the first bars of a fully zoomed-out chart)', () => {
+        const c = cs(3, 60); // 60 bars x 10px = 600px of data, all of it in view, first bar at x = 180
+        const a = autoWheelZoomAnchor(c, 250);
+        expect(a.x).toBe(250);
+        expect(a.logical).toBeCloseTo(c.xToLogical(250));
+    });
+
+    it('cursor over the empty space left of the first bar: zooms onto the first bar, at the pixel it already sits', () => {
+        const c = cs(-190, 200); // the viewport shows bars from before index 0 up to ~index 10
+        const x = 30;
+        expect(c.xToLogical(x)).toBeLessThan(0);
+        const a = autoWheelZoomAnchor(c, x);
+        expect(a.logical).toBe(0);
+        expect(a.x).toBeCloseTo(c.logicalToX(0));
+    });
+
+    it('an empty chart falls back to the right edge', () => {
+        const c = new CoordinateSystem();
+        c.setSize(800, 200, 1);
+        c.setBars([]);
+        const a = autoWheelZoomAnchor(c, 100);
+        expect(a.x).toBe(800);
+    });
+});
+
+describe('wheel handler uses the auto anchor and Ctrl still forces the cursor', () => {
+    function mk(rightOffset: number) {
+        const cs = new CoordinateSystem();
+        cs.setSize(800, 200, 1);
+        cs.setBars(Array.from({ length: 200 }, (_, i) => (i + 1) * 1000));
+        cs.setViewport({ barSpacing: 10, rightOffset });
+        const zoomTo = vi.fn();
+        const listeners = new Map<string, (e: unknown) => void>();
+        const el = {
+            addEventListener: (t: string, f: (e: unknown) => void) => listeners.set(t, f),
+            removeEventListener: () => {},
+            getBoundingClientRect: () => ({ left: 0, top: 0 }),
+            style: { setProperty() {} } as unknown as CSSStyleDeclaration,
+            setPointerCapture() {},
+            releasePointerCapture() {},
+        };
+        const deps = {
+            getCoords: () => cs,
+            apply: vi.fn(),
+            zoomTo,
+            fling: vi.fn(),
+            onPointerMove: vi.fn(),
+            onClick: vi.fn(),
+            beginPriceScale: vi.fn(),
+            priceScaleBy: vi.fn(),
+            beginPricePan: () => false,
+            pricePanBy: vi.fn(),
+            resetPriceScale: vi.fn(),
+            dataDblClick: vi.fn(),
+            paneSeparatorAt: () => false,
+            beginPaneResize: vi.fn(),
+            paneResizeBy: vi.fn(),
+            resetPaneSize: vi.fn(),
+            resetView: vi.fn(),
+        } satisfies InputControllerDeps;
+        const ctl = new InputController(deps);
+        ctl.attach(el as unknown as HTMLElement);
+        const wheel = (clientX: number, ctrlKey = false) => listeners.get('wheel')!({ clientX, clientY: 100, deltaY: -100, deltaX: 0, shiftKey: false, ctrlKey, metaKey: false, preventDefault() {} });
+        return { cs, zoomTo, wheel, ctl };
+    }
+
+    it('scrolled back: zoomTo is anchored at the cursor, not the right edge', () => {
+        const h = mk(-60);
+        h.wheel(120);
+        const [, logical, x] = h.zoomTo.mock.calls[0]!;
+        expect(x).toBe(120);
+        expect(logical).toBeCloseTo(h.cs.xToLogical(120));
+    });
+
+    it("mode 'right' keeps the old always-right-edge behaviour", () => {
+        const h = mk(-60);
+        h.ctl.zoomAnchor = 'right';
+        h.wheel(120);
+        const [, logical, x] = h.zoomTo.mock.calls[0]!;
+        expect(x).toBe(800);
+        expect(logical).toBe(h.cs.rightEdgeLogical);
+    });
+
+    it('Ctrl at the live edge on the right side still goes to the cursor', () => {
+        const h = mk(3);
+        h.wheel(700, true);
+        const [, , x] = h.zoomTo.mock.calls[0]!;
+        expect(x).toBe(700);
     });
 });

@@ -287,7 +287,7 @@ export class NativeRenderer implements IChartRenderer {
     private targetBarSpacing = 0; // eased zoom target
     private zoomAnchorLogical = 0; // logical kept pinned under the cursor while zooming
     private zoomAnchorX = 0; // pixel the anchor logical is pinned to
-    private zoomAnchorMode: 'cursor' | 'right' = 'right'; // wheel-zoom anchor (right edge by default, the common idiom)
+    private zoomAnchorMode: 'auto' | 'cursor' | 'right' = 'auto'; // wheel-zoom anchor: toward the cursor, latest bar glued while it is in view on the right side
     private panVelocity = 0; // inertial rightOffset velocity (logical units / ms)
 
     private bars: OHLCV[] = [];
@@ -470,8 +470,8 @@ export class NativeRenderer implements IChartRenderer {
                 return;
             }
             case 'zoomAnchor':
-                this.zoomAnchorMode = value === 'right' ? 'right' : 'cursor';
-                if (this.input) this.input.rightEdgeZoom = this.zoomAnchorMode === 'right';
+                this.zoomAnchorMode = value === 'right' ? 'right' : value === 'cursor' ? 'cursor' : 'auto';
+                if (this.input) this.input.zoomAnchor = this.zoomAnchorMode;
                 return; // affects the next wheel-zoom only — nothing to repaint
             case 'axisDrag':
                 this.axisDragEnabled = Boolean(value);
@@ -1627,7 +1627,7 @@ export class NativeRenderer implements IChartRenderer {
             drawingsDblClick: (x, y) => this.userDrawings?.dblClick(x, y) ?? false,
             drawingsClearTransient: () => this.userDrawings?.clearTransient(),
         });
-        this.input.rightEdgeZoom = this.zoomAnchorMode === 'right'; // honor a pre-mount feature set
+        this.input.zoomAnchor = this.zoomAnchorMode; // honor a pre-mount feature set
         this.input.axisDrag = this.axisDragEnabled;
         this.input.paneResize = this.paneResizeEnabled;
         this.input.drawings = this.drawingsInteractive;

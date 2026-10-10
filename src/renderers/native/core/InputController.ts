@@ -136,6 +136,32 @@ export function wheelZoomAnchor(
     return { logical: coords.xToLogical(cursorX), x: cursorX };
 }
 
+/** Cursor x (as a fraction of the plot width) from which `auto` mode keeps the latest bar glued to the right edge. */
+export const AUTO_ZOOM_LIVE_ZONE = 0.65;
+
+/**
+ * `auto` wheel-zoom anchor. Zooming toward the cursor is what a reader expects once they have scrolled
+ * into history, so that is the rule, with one exception: when the latest bar is in view and the cursor is
+ * on its side of the chart (the right 35 %), the right edge stays pinned so a live chart keeps showing
+ * the newest bar. A cursor over the empty space left of the first bar (or right of the last) zooms onto
+ * the nearest bar instead of onto an index that has no bar. The old behaviour (always the right edge)
+ * made zooming at the start of the data fly away from the bars under the cursor.
+ */
+export function autoWheelZoomAnchor(
+    coords: Pick<CoordinateSystem, 'xToLogical' | 'logicalToX' | 'rightEdgeLogical' | 'width' | 'barCount'>,
+    cursorX: number,
+): { logical: number; x: number } {
+    const last = coords.barCount - 1;
+    if (last < 0) return { logical: coords.rightEdgeLogical, x: coords.width };
+    const liveInView = coords.rightEdgeLogical >= last - 0.5;
+    if (liveInView && cursorX >= coords.width * AUTO_ZOOM_LIVE_ZONE) return { logical: coords.rightEdgeLogical, x: coords.width };
+    const logical = coords.xToLogical(cursorX);
+    const nearest = Math.min(last, Math.max(0, logical));
+    return nearest === logical ? { logical, x: cursorX } : { logical: nearest, x: coords.logicalToX(nearest) };
+}
+
+export type ZoomAnchorMode = 'auto' | 'right' | 'cursor';
+
 /**
  * A wheel gesture pans through time when its horizontal delta dominates — a trackpad
  * two-finger sideways swipe, or a tilt/horizontal mouse wheel. A vertical-dominant
@@ -200,9 +226,17 @@ export function pinchPinnedRightOffset(anchorLogical: number, barCount: number, 
  * just classifies the gesture and emits intents.
  */
 export class InputController {
-    /** When true (the default), wheel-zoom pins the right edge instead of the bar
-     *  under the cursor. */
-    rightEdgeZoom = true;
+    /** Wheel-zoom anchor: `auto` (the default) zooms toward the cursor, keeping the latest bar glued to the
+     *  right edge only when it is in view and the cursor is on its side; `right` always pins the right edge;
+     *  `cursor` always pins the bar under the cursor. */
+    zoomAnchor: ZoomAnchorMode = 'auto';
+    /** Compatibility view of {@link zoomAnchor}: true = `right`; setting it picks `right` or `cursor`. */
+    get rightEdgeZoom(): boolean {
+        return this.zoomAnchor === 'right';
+    }
+    set rightEdgeZoom(v: boolean) {
+        this.zoomAnchor = v ? 'right' : 'cursor';
+    }
     /** When true (the default), the price/time axis strips are draggable to rescale/zoom.
      *  When false, every press in those strips behaves as a normal data-area pan. */
     axisDrag = true;
@@ -765,8 +799,12 @@ export class InputController {
             return;
         }
         // Holding Ctrl/Cmd overrides the sticky right-edge anchor → zoom toward the cursor's bar.
-        const rightEdge = this.rightEdgeZoom && !(e.ctrlKey || e.metaKey);
-        const anchor = wheelZoomAnchor(coords, x, rightEdge);
+        const toCursor = e.ctrlKey || e.metaKey;
+        const anchor = toCursor
+            ? wheelZoomAnchor(coords, x, false)
+            : this.zoomAnchor === 'auto'
+              ? autoWheelZoomAnchor(coords, x)
+              : wheelZoomAnchor(coords, x, this.zoomAnchor === 'right');
         // Smooth multiplicative zoom; scroll up (deltaY<0) zooms in.
         const target = clampBarSpacing(vp.barSpacing * Math.exp(-e.deltaY * WHEEL_ZOOM_K));
         this.deps.zoomTo(target, anchor.logical, anchor.x);
