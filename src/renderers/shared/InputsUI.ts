@@ -51,6 +51,11 @@ export interface LegendPlotValue {
     color: string;
 }
 
+/** Whether an indicator has anything for its settings dialog to show. */
+function hasSettings(inputs: InputSchema[], opts: { props?: InputSchema[]; style?: InputSchema[] }): boolean {
+    return inputs.length > 0 || (opts.props ?? []).length > 0 || (opts.style ?? []).length > 0;
+}
+
 interface LegendRow {
     id: string;
     /** Display text for the legend chip AND the settings-dialog header (may be a compact shorttitle). */
@@ -79,6 +84,9 @@ interface LegendRow {
     paneId: string;
     hidden: boolean;
     eyeEl: HTMLButtonElement | null;
+    /** Settings gear: shown while the indicator has inputs, props or style rows (a script's style rows only
+     *  exist after its first run, so the row created for the loading placeholder may gain the gear later). */
+    gearEl: HTMLButtonElement;
     /** Wraps the eye/gear/✕ controls; revealed on title hover / selection (eye alone
      *  also stays out while the indicator is hidden). */
     controlsEl: HTMLElement;
@@ -721,6 +729,7 @@ export class InputsUI {
             existing.propValues = { ...(opts.propValues ?? {}) };
             existing.style = opts.style ?? [];
             existing.styleValues = { ...(opts.styleValues ?? {}) };
+            existing.gearEl.style.display = hasSettings(inputs, opts) ? 'inline-flex' : 'none';
             existing.titleEl.textContent = title;
             if (existing.paneId !== paneId) { // re-routed to a different pane
                 existing.paneId = paneId;
@@ -842,17 +851,16 @@ export class InputsUI {
             controlsEl.appendChild(eye);
             eyeEl = eye;
         }
-        if (inputs.length > 0 || (opts.props ?? []).length > 0 || (opts.style ?? []).length > 0) {
-            const gear = document.createElement('button');
-            gear.type = 'button';
-            gear.setAttribute('aria-label', 'Settings');
-            this.tip(this.rowTips, id, gear, 'Settings');
-            gear.innerHTML = GEAR_SVG;
-            gear.className = 'vela-ind-ctl';
-            gear.style.cssText = LEGEND_CTL_CSS;
-            gear.addEventListener('click', () => this.openDialog(id));
-            controlsEl.appendChild(gear);
-        }
+        const gear = document.createElement('button');
+        gear.type = 'button';
+        gear.setAttribute('aria-label', 'Settings');
+        this.tip(this.rowTips, id, gear, 'Settings');
+        gear.innerHTML = GEAR_SVG;
+        gear.className = 'vela-ind-ctl';
+        gear.style.cssText = LEGEND_CTL_CSS;
+        gear.style.display = hasSettings(inputs, opts) ? 'inline-flex' : 'none';
+        gear.addEventListener('click', () => this.openDialog(id));
+        controlsEl.appendChild(gear);
         // Move to — opens a small pane menu (Main chart / New pane above·below / existing panes).
         // Present only when the host wired a move API (i.e. the renderer supports pane management).
         if (this.moveApi) {
@@ -884,7 +892,7 @@ export class InputsUI {
         el.appendChild(controlsEl);
 
         this.attach(this.legendFor(paneId), el, !!opts.native);
-        const row: LegendRow = { id, title, inputs, values: { ...values }, props: opts.props ?? [], propValues: { ...(opts.propValues ?? {}) }, style: opts.style ?? [], styleValues: { ...(opts.styleValues ?? {}) }, el, titleEl, statusEl, valuesEl, plotValues: [], plotValuesKey: '', showValues: null, highlighted: false, paneId, hidden: false, eyeEl, controlsEl, extrasEl, calloutsEl, callouts: [], native: !!opts.native };
+        const row: LegendRow = { id, title, inputs, values: { ...values }, props: opts.props ?? [], propValues: { ...(opts.propValues ?? {}) }, style: opts.style ?? [], styleValues: { ...(opts.styleValues ?? {}) }, el, titleEl, statusEl, valuesEl, plotValues: [], plotValuesKey: '', showValues: null, highlighted: false, paneId, hidden: false, eyeEl, gearEl: gear, controlsEl, extrasEl, calloutsEl, callouts: [], native: !!opts.native };
         this.rows.set(id, row);
         this.renderCallouts(row);
         this.syncFoldToggle(); // 2+ indicators grow the fold chevron; a folded legend hides the new row too
