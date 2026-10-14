@@ -122,4 +122,9 @@ export interface IndicatorModel {
     props?: InputSchema[];
     /** Current prop values (effective defaults merged with any user/add-time overrides). */
     propValues?: Record<string, InputValue>;
+    /** Script indicators: the settings dialog's "Style" tab (per plot / level / fill), read
+     *  from the run's own output (see `core/engine/plotStyle.ts`). Absent ≡ none. */
+    styleInputs?: InputSchema[];
+    /** The user's style overrides, keyed like {@link styleInputs}. */
+    styleValues?: Record<string, InputValue>;
 }

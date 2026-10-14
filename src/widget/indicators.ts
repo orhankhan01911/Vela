@@ -94,7 +94,7 @@ export async function resolveIndicators(
  * declaration default, else the name plus the DELTAS (see `inputDeltas`) — a default
  * that later changes in the script must never stay frozen in saved documents.
  */
-export type LedgerManifestEntry = string | { name: string; inputs?: Record<string, InputValue>; props?: Record<string, InputValue>; hidden?: boolean };
+export type LedgerManifestEntry = string | { name: string; inputs?: Record<string, InputValue>; props?: Record<string, InputValue>; style?: Record<string, InputValue>; hidden?: boolean };
 
 /** The entry's manifest NAME, whichever shape it travels as. */
 export const ledgerEntryName = (e: LedgerManifestEntry): string => (typeof e === 'string' ? e : e.name);

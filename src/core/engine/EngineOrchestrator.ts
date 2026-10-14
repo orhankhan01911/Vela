@@ -39,6 +39,7 @@ import { parseSymbol } from '../../data/ProviderRegistry';
 import { barTransformFor, parseExtendedTicker, type BarTransform } from '../price-styles/BarTransform';
 import { chartType, type SeriesDataEngine } from '../../chart-types/registry';
 import { resolveTheme } from '../theme';
+import { applyPlotStyle, plotStyleSchema } from './plotStyle';
 import type { ReplayBounds, ReplayController, ReplayEndReason, ReplayStartOptions, ReplayState, ReplayTick, ReplayTickSource } from '../ReplayControl';
 
 export interface ResolvedConfig {
@@ -241,7 +242,11 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         this.renderer.mount(container, config.theme);
         // The renderer's in-chart settings dialog reports edits here → re-run that indicator.
         this.renderer.onInputChange((e) =>
-            e.kind === 'prop' ? this.applyProps(e.indicatorId, { [e.key]: e.value }) : this.applyInputs(e.indicatorId, { [e.key]: e.value }),
+            e.kind === 'prop'
+                ? this.applyProps(e.indicatorId, { [e.key]: e.value })
+                : e.kind === 'style'
+                  ? this.applyStyle(e.indicatorId, { [e.key]: e.value })
+                  : this.applyInputs(e.indicatorId, { [e.key]: e.value }),
         );
         // The renderer's in-chart legend ✕ reports a removal here → tear the indicator down.
         this.renderer.onRemoveIndicator((id) => this.removeIndicator(id));
@@ -1750,7 +1755,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const title = options.title ?? 'Indicator';
         const handle = new IndicatorHandleImpl(id, title, this, source);
         this.handles.set(id, handle);
-        this.registry.add({ id, title, source, options, inputValues: { ...(options.inputs ?? {}) }, propValues: { ...(options.props ?? {}) } });
+        this.registry.add({ id, title, source, options, inputValues: { ...(options.inputs ?? {}) }, propValues: { ...(options.props ?? {}) }, styleValues: { ...(options.style ?? {}) } });
         void this.startIndicator(id, source, options, handle);
         return handle;
     }
@@ -1874,6 +1879,44 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         record.pendingCause = 'inputs';
         record.session.update(record.inputValues, record.propValues);
         this.events.emit('indicator:inputs', { id });
+    }
+
+    /** IndicatorController: the CURRENT style overrides (the settings dialog's "Style" tab). */
+    styleValuesOf(id: string): Record<string, InputValue> {
+        return { ...this.registry.get(id)?.styleValues };
+    }
+
+    /**
+     * IndicatorController: override plot / level / fill styles of a SCRIPT indicator. No
+     * re-run: the overrides are re-applied over the current model and the indicator is
+     * remounted in place (legend row and an open settings dialog survive). Natives style
+     * themselves through their own inputs.
+     */
+    applyStyle(id: string, values: Record<string, InputValue>): void {
+        const record = this.registry.get(id);
+        if (!record || record.native) return;
+        record.styleValues = { ...record.styleValues, ...values };
+        const model = record.model;
+        if (model && record.renderHandle && !record.loading) {
+            this.styleModel(record, model);
+            record.renderHandle = this.renderer.mountIndicator(model);
+            this.renderer.setIndicatorInputs(record.renderHandle, record.inputValues, record.propValues, record.styleValues);
+        } else if (record.renderHandle) {
+            this.renderer.setIndicatorInputs(record.renderHandle, record.inputValues, record.propValues, record.styleValues);
+        }
+        this.events.emit('indicator:inputs', { id });
+    }
+
+    /** Attach the Style-tab schema read from a model's own output, then apply the overrides.
+     *  Returns true when the set of styleable outputs changed (the legend row must remount). */
+    private styleModel(record: IndicatorRecord, model: IndicatorModel): boolean {
+        const before = record.model?.styleInputs?.map((i) => i.key).join('|');
+        // A remount re-styles the SAME model object: its schema was read from the raw output
+        // already, so keep it instead of re-reading the overridden look as the default.
+        if (!(record.model === model && model.styleInputs)) model.styleInputs = plotStyleSchema(model);
+        model.styleValues = { ...record.styleValues };
+        applyPlotStyle(model, record.styleValues ?? {});
+        return before !== model.styleInputs.map((i) => i.key).join('|');
     }
 
     /**
@@ -2742,6 +2785,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (record.loading && this.bars.length === 0 && !EngineOrchestrator.modelHasOutput(model)) return false;
 
         const handle = this.handles.get(id);
+        if (!record.native && this.styleModel(record, model) && record.renderHandle) record.pendingStructural = true;
 
         if (!record.renderHandle) {
             const paneId = this.routePane(id, model, record.options ?? {});
@@ -2781,7 +2825,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             // Idempotent-by-id remount: refresh visuals while keeping the legend + open
             // settings dialog intact (an input change can restructure series/drawings).
             record.renderHandle = this.renderer.mountIndicator(model);
-            this.renderer.setIndicatorInputs(record.renderHandle, record.inputValues, record.propValues);
+            this.renderer.setIndicatorInputs(record.renderHandle, record.inputValues, record.propValues, record.styleValues);
             record.pendingStructural = false;
         } else {
             this.renderer.updateIndicator(record.renderHandle, modelToValuePatch(model));

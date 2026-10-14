@@ -197,7 +197,7 @@ interface CellInstance {
      *  whatever a host keyed on it (a document, an editor tab) keeps pointing at it. */
     id?: string;
     external?: boolean;
-    values?: { inputs?: Record<string, InputValue>; props?: Record<string, InputValue> };
+    values?: { inputs?: Record<string, InputValue>; props?: Record<string, InputValue>; style?: Record<string, InputValue> };
 }
 
 /** A native handle's ledger entry: the bare type, or type + input deltas + hidden flag. */
@@ -208,11 +208,14 @@ function nativeLedgerEntry(handle: IndicatorHandle): LedgerNativeEntry {
 }
 
 /** The handle's current input/prop DELTAS against declaration defaults (see `inputDeltas`). */
-function instanceDeltas(handle: IndicatorHandle | null): { inputs?: Record<string, InputValue>; props?: Record<string, InputValue> } | undefined {
+function instanceDeltas(handle: IndicatorHandle | null): { inputs?: Record<string, InputValue>; props?: Record<string, InputValue>; style?: Record<string, InputValue> } | undefined {
     if (!handle) return undefined;
     const inputs = inputDeltas(handle.inputs, handle.inputValues());
     const props = inputDeltas(handle.props, handle.propValues());
-    return inputs || props ? { ...(inputs ? { inputs } : {}), ...(props ? { props } : {}) } : undefined;
+    // Style values are overrides already (absent ≡ the script's own look).
+    const styleValues = handle.styleValues();
+    const style = Object.keys(styleValues).length > 0 ? styleValues : undefined;
+    return inputs || props || style ? { ...(inputs ? { inputs } : {}), ...(props ? { props } : {}), ...(style ? { style } : {}) } : undefined;
 }
 
 export class ChartCell {
@@ -1115,7 +1118,7 @@ export class ChartCell {
             if (list.length === 0) return; // the manifest hasn't resolved yet — keep waiting
             for (const led of this.pendingManifestNames) {
                 const entry = list.find((e) => e.name === ledgerEntryName(led));
-                if (entry) this.addManifestInstance(entry, { record: false, ...(typeof led === 'object' ? { inputs: led.inputs, props: led.props, hidden: led.hidden } : {}) });
+                if (entry) this.addManifestInstance(entry, { record: false, ...(typeof led === 'object' ? { inputs: led.inputs, props: led.props, style: led.style, hidden: led.hidden } : {}) });
             }
             this.pendingManifestNames = null;
             return;
@@ -1166,7 +1169,7 @@ export class ChartCell {
                     if (entry)
                         this.addManifestInstance(entry, {
                             record: false,
-                            ...(typeof item === 'object' ? { inputs: item.inputs, props: item.props, hidden: item.hidden } : {}),
+                            ...(typeof item === 'object' ? { inputs: item.inputs, props: item.props, style: item.style, hidden: item.hidden } : {}),
                         });
                 }
                 this.pendingManifestNames = null;
@@ -1230,20 +1233,27 @@ export class ChartCell {
      * a persistence handler's `restore` runs silently, a user-driven call records.
      */
     addExternalIndicator(entry: ExternalIndicatorEntry): void {
-        const { id, inputs, props, hidden, ...script } = entry;
+        const { id, inputs, props, style, hidden, ...script } = entry;
         this.addManifestInstance(
             { ...script, enabled: true },
-            { external: true, ...(id !== undefined ? { id } : {}), ...(inputs ? { inputs } : {}), ...(props ? { props } : {}), ...(hidden ? { hidden: true } : {}) },
+            {
+                external: true,
+                ...(id !== undefined ? { id } : {}),
+                ...(inputs ? { inputs } : {}),
+                ...(props ? { props } : {}),
+                ...(style ? { style } : {}),
+                ...(hidden ? { hidden: true } : {}),
+            },
         );
     }
 
     /** Add ONE instance of a manifest entry (repeatable — duplicates are legitimate). */
     addManifestInstance(
         entry: ResolvedIndicator,
-        opts: { record?: boolean; external?: boolean; id?: string; inputs?: Record<string, InputValue>; props?: Record<string, InputValue>; hidden?: boolean } = {},
+        opts: { record?: boolean; external?: boolean; id?: string; inputs?: Record<string, InputValue>; props?: Record<string, InputValue>; style?: Record<string, InputValue>; hidden?: boolean } = {},
     ): void {
         if (this.destroyed) return;
-        const values = opts.inputs || opts.props ? { inputs: opts.inputs, props: opts.props } : undefined;
+        const values = opts.inputs || opts.props || opts.style ? { inputs: opts.inputs, props: opts.props, style: opts.style } : undefined;
         const handle = this.addToChart(entry, values, opts.id);
         // The chart refused the add (a host id already live on it): no instance, no
         // history entry — a ghost row with nothing behind it would be worse than nothing.
@@ -1378,7 +1388,7 @@ export class ChartCell {
         });
     }
 
-    private addToChart(entry: ResolvedIndicator, values?: { inputs?: Record<string, InputValue>; props?: Record<string, InputValue> }, id?: string): IndicatorHandle | null {
+    private addToChart(entry: ResolvedIndicator, values?: { inputs?: Record<string, InputValue>; props?: Record<string, InputValue>; style?: Record<string, InputValue> }, id?: string): IndicatorHandle | null {
         try {
             return (
                 this.inner?.addIndicator(entry.script, {
@@ -1386,6 +1396,7 @@ export class ChartCell {
                     ...(entry.language !== undefined ? { language: entry.language } : {}),
                     ...(values?.inputs ? { inputs: values.inputs } : {}),
                     ...(values?.props ? { props: values.props } : {}),
+                    ...(values?.style ? { style: values.style } : {}),
                 }) ?? null
             );
         } catch (err) {

@@ -57,9 +57,12 @@ interface LegendRow {
     title: string;
     inputs: InputSchema[];
     values: Record<string, InputValue>;
-    /** Declaration-props schema + values (the settings dialog's "Properties" tab). */
+    /** Declaration-props schema + values (only `precision` is shown, on the "Style" tab). */
     props: InputSchema[];
     propValues: Record<string, InputValue>;
+    /** Plot / level / fill style schema + overrides (the settings dialog's "Style" tab). */
+    style: InputSchema[];
+    styleValues: Record<string, InputValue>;
     el: HTMLElement;
     titleEl: HTMLElement;
     statusEl: HTMLElement;
@@ -701,7 +704,14 @@ export class InputsUI {
     }
 
     /** Create or update an indicator's legend row (in the legend for its pane). */
-    upsert(id: string, title: string, inputs: InputSchema[], values: Record<string, InputValue>, paneId = 'price', opts: { native?: boolean; beta?: boolean; props?: InputSchema[]; propValues?: Record<string, InputValue> } = {}): void {
+    upsert(
+        id: string,
+        title: string,
+        inputs: InputSchema[],
+        values: Record<string, InputValue>,
+        paneId = 'price',
+        opts: { native?: boolean; beta?: boolean; props?: InputSchema[]; propValues?: Record<string, InputValue>; style?: InputSchema[]; styleValues?: Record<string, InputValue> } = {},
+    ): void {
         const existing = this.rows.get(id);
         if (existing) {
             existing.title = title;
@@ -709,6 +719,8 @@ export class InputsUI {
             existing.values = { ...values };
             existing.props = opts.props ?? [];
             existing.propValues = { ...(opts.propValues ?? {}) };
+            existing.style = opts.style ?? [];
+            existing.styleValues = { ...(opts.styleValues ?? {}) };
             existing.titleEl.textContent = title;
             if (existing.paneId !== paneId) { // re-routed to a different pane
                 existing.paneId = paneId;
@@ -830,7 +842,7 @@ export class InputsUI {
             controlsEl.appendChild(eye);
             eyeEl = eye;
         }
-        if (inputs.length > 0 || (opts.props ?? []).length > 0) {
+        if (inputs.length > 0 || (opts.props ?? []).length > 0 || (opts.style ?? []).length > 0) {
             const gear = document.createElement('button');
             gear.type = 'button';
             gear.setAttribute('aria-label', 'Settings');
@@ -872,7 +884,7 @@ export class InputsUI {
         el.appendChild(controlsEl);
 
         this.attach(this.legendFor(paneId), el, !!opts.native);
-        const row: LegendRow = { id, title, inputs, values: { ...values }, props: opts.props ?? [], propValues: { ...(opts.propValues ?? {}) }, el, titleEl, statusEl, valuesEl, plotValues: [], plotValuesKey: '', showValues: null, highlighted: false, paneId, hidden: false, eyeEl, controlsEl, extrasEl, calloutsEl, callouts: [], native: !!opts.native };
+        const row: LegendRow = { id, title, inputs, values: { ...values }, props: opts.props ?? [], propValues: { ...(opts.propValues ?? {}) }, style: opts.style ?? [], styleValues: { ...(opts.styleValues ?? {}) }, el, titleEl, statusEl, valuesEl, plotValues: [], plotValuesKey: '', showValues: null, highlighted: false, paneId, hidden: false, eyeEl, controlsEl, extrasEl, calloutsEl, callouts: [], native: !!opts.native };
         this.rows.set(id, row);
         this.renderCallouts(row);
         this.syncFoldToggle(); // 2+ indicators grow the fold chevron; a folded legend hides the new row too
@@ -885,11 +897,12 @@ export class InputsUI {
     }
 
     /** Reflect programmatic input changes (so a re-opened dialog shows current values). */
-    setValues(id: string, values: Record<string, InputValue>, props?: Record<string, InputValue>): void {
+    setValues(id: string, values: Record<string, InputValue>, props?: Record<string, InputValue>, style?: Record<string, InputValue>): void {
         const row = this.rows.get(id);
         if (!row) return;
         row.values = { ...row.values, ...values };
         if (props) row.propValues = { ...row.propValues, ...props };
+        if (style) row.styleValues = { ...row.styleValues, ...style };
     }
 
     /**

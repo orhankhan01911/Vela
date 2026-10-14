@@ -42,6 +42,8 @@ export interface IndicatorRecord {
     /** Declaration-prop values (effective defaults merged with user/add-time overrides).
      *  Stays empty for engines without props support and for natives. */
     propValues: Record<string, InputValue>;
+    /** Style overrides (the settings dialog's "Style" tab) — script indicators only. */
+    styleValues?: Record<string, InputValue>;
     /**
      * A source handed to `updateCode` that is still being prepared. The latest call wins:
      * a prepare that resolves for any other source is discarded, so two quick edits never

@@ -96,6 +96,8 @@ export interface ExternalIndicatorEntry {
     inputs?: Record<string, InputValue>;
     /** Declaration-prop overrides applied at add time. */
     props?: Record<string, InputValue>;
+    /** Style overrides (the settings dialog's "Style" tab) applied at add time. */
+    style?: Record<string, InputValue>;
     /** Restore hidden: the indicator is suspended right after the add (legend row
      *  stays, marked hidden) — a persistence handler carrying a hidden flag applies
      *  it here so the engine never spends anything on a tucked-away indicator. */

@@ -16,8 +16,8 @@ export interface InputsUIChange {
     indicatorId: string;
     key: string;
     value: InputValue;
-    /** What was edited: a script input (default) or a declaration prop (the "Properties" tab). */
-    kind?: 'input' | 'prop';
+    /** What was edited: a script input (default), a declaration prop, or a plot style (the "Style" tab). */
+    kind?: 'input' | 'prop' | 'style';
 }
 
 /** The slice of a legend row the settings dialog needs. */
@@ -27,21 +27,30 @@ export interface IndicatorDialogRow {
     title: string;
     inputs: InputSchema[];
     values: Record<string, InputValue>;
-    /** Declaration-props schema + values — rendered on the "Properties" tab. */
+    /** Declaration-props schema + values. Kept for Reset/Cancel; not shown (see {@link STYLE_TAB}). */
     props: InputSchema[];
     propValues: Record<string, InputValue>;
+    /** Plot / level / fill style schema + overrides — rendered on the "Style" tab. */
+    style?: InputSchema[];
+    styleValues?: Record<string, InputValue>;
 }
 
-/** The settings-dialog tab hosting declaration props. */
-export const PROPS_TAB = 'Properties';
+/**
+ * The settings-dialog tab for a script's look, TradingView's layout: Inputs, then Style (one row per plot, level and
+ * fill). Declaration props (`max_bars_back`, `max_lines_count`, `calc_bars_count`, ...) are engine limits a script
+ * declares, not settings a trader changes, so the dialog no longer lists them (they stay settable by API).
+ */
+export const STYLE_TAB = 'Style';
 
-/** An input decl as the dialog renders it — `prop` marks a declaration-prop entry:
- *  reads/writes route to `row.propValues` and its commits carry `kind: 'prop'`. */
-type DialogDecl = InputSchema & { prop?: boolean };
+/** An input decl as the dialog renders it — `bag` marks where its value lives:
+ *  `prop` routes to `row.propValues`, `style` to `row.styleValues`; commits carry that `kind`. */
+type DialogDecl = InputSchema & { bag?: 'prop' | 'style' };
 
-/** The value bag a decl reads from / writes to (inputs vs declaration props). */
+/** The value bag a decl reads from / writes to (inputs, declaration props, or styles). */
 function bagOf(row: IndicatorDialogRow, decl: DialogDecl): Record<string, InputValue> {
-    return decl.prop ? row.propValues : row.values;
+    if (decl.bag === 'prop') return row.propValues;
+    if (decl.bag === 'style') return (row.styleValues ??= {});
+    return row.values;
 }
 
 export interface IndicatorDialogHost {
@@ -69,6 +78,7 @@ export class IndicatorInputsDialog {
     private row: IndicatorDialogRow | null = null;
     private snapshot: Record<string, InputValue> | null = null;
     private propSnapshot: Record<string, InputValue> | null = null;
+    private styleSnapshot: Record<string, InputValue> | null = null;
     private dialogTips: Array<() => void> = [];
     /** Re-applies every `when` gate against current values; set while the dialog is open. */
     private refreshVisibility: (() => void) | null = null;
@@ -92,11 +102,12 @@ export class IndicatorInputsDialog {
 
     open(row: IndicatorDialogRow): void {
         this.close();
-        if (row.inputs.length === 0 && row.props.length === 0) return;
+        if (row.inputs.length === 0 && (row.style ?? []).length === 0) return;
         this.row = row;
         this.openId = row.id;
         this.snapshot = { ...row.values };
         this.propSnapshot = { ...row.propValues };
+        this.styleSnapshot = { ...row.styleValues };
         ensureDialogStyles();
         const t = this.host.theme();
         const border = 'var(--vela-border)';
@@ -136,18 +147,18 @@ export class IndicatorInputsDialog {
         }));
 
         const tabDefs = tabInputs(row.inputs);
-        if (row.props.length > 0) {
-            // Props always render on the trailing "Properties" tab — an engine schema
-            // carries no `tab=`, and a script input that DECLARES tab='Properties'
-            // shares the tab rather than spawning a duplicate strip label.
-            const propDecls: DialogDecl[] = row.props.map((p) => {
-                const d: DialogDecl = { ...p, prop: true };
+        const style = row.style ?? [];
+        if (style.length > 0) {
+            // The Style tab follows the input tabs; a script input that DECLARES
+            // tab='Style' shares it rather than spawning a duplicate strip label.
+            const styleDecls: DialogDecl[] = style.map((p) => {
+                const d: DialogDecl = { ...p, bag: 'style' };
                 delete d.tab;
                 return d;
             });
-            const existing = tabDefs.find((t) => t.name === PROPS_TAB);
-            if (existing) existing.inputs.push(...propDecls);
-            else tabDefs.push({ name: PROPS_TAB, inputs: propDecls });
+            const existing = tabDefs.find((t) => t.name === STYLE_TAB);
+            if (existing) existing.inputs.push(...styleDecls);
+            else tabDefs.push({ name: STYLE_TAB, inputs: styleDecls });
         }
         const tabs = document.createElement('div');
         tabs.style.cssText = `display:flex;gap:12px;padding:0 20px;border-bottom:1px solid ${border};flex:0 0 auto;`;
@@ -270,6 +281,7 @@ export class IndicatorInputsDialog {
         this.row = null;
         this.snapshot = null;
         this.propSnapshot = null;
+        this.styleSnapshot = null;
         ui?.destroy();
     }
 
@@ -298,6 +310,18 @@ export class IndicatorInputsDialog {
                 }
             }
         }
+        const styleSnap = this.styleSnapshot;
+        if (row && styleSnap) {
+            const bag = (row.styleValues ??= {});
+            for (const d of row.style ?? []) {
+                const snapped = styleSnap[d.key];
+                const before: InputValue = snapped !== undefined ? snapped : d.defval;
+                if ((bag[d.key] ?? d.defval) !== before) {
+                    bag[d.key] = before;
+                    this.host.onChange?.({ indicatorId: row.id, key: d.key, value: before, kind: 'style' });
+                }
+            }
+        }
         this.close();
     }
 
@@ -318,6 +342,7 @@ export class IndicatorInputsDialog {
         if (!row) return;
         const snap = this.snapshot;
         const propSnap = this.propSnapshot;
+        const styleSnap = this.styleSnapshot;
         for (const inp of row.inputs) {
             if (row.values[inp.key] !== inp.defval) {
                 row.values[inp.key] = inp.defval;
@@ -332,15 +357,24 @@ export class IndicatorInputsDialog {
                 this.host.onChange?.({ indicatorId: row.id, key: p.key, value: p.defval, kind: 'prop' });
             }
         }
+        // Styles go back to the script's own look.
+        const bag = (row.styleValues ??= {});
+        for (const d of row.style ?? []) {
+            if ((bag[d.key] ?? d.defval) !== d.defval) {
+                bag[d.key] = d.defval;
+                this.host.onChange?.({ indicatorId: row.id, key: d.key, value: d.defval, kind: 'style' });
+            }
+        }
         this.open(row);
         if (snap) this.snapshot = snap;
         if (propSnap) this.propSnapshot = propSnap;
+        if (styleSnap) this.styleSnapshot = styleSnap;
     }
 
     /** Write one edit through: store it, notify the host, and re-apply the `when` gates. */
     private commit(row: IndicatorDialogRow, decl: DialogDecl, value: InputValue): void {
         bagOf(row, decl)[decl.key] = value;
-        this.host.onChange?.({ indicatorId: row.id, key: decl.key, value, ...(decl.prop ? { kind: 'prop' as const } : {}) });
+        this.host.onChange?.({ indicatorId: row.id, key: decl.key, value, ...(decl.bag ? { kind: decl.bag } : {}) });
         this.refreshVisibility?.();
     }
 

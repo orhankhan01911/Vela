@@ -423,6 +423,9 @@ export interface AddIndicatorOptions {
      *  `precision`, …), keyed like the engine's props schema. Ignored by engines
      *  without props support. */
     props?: Record<string, InputValue>;
+    /** Style overrides for a script indicator's plots, levels and fills (the settings
+     *  dialog's "Style" tab), keyed like `IndicatorHandle.styleValues()`. */
+    style?: Record<string, InputValue>;
     /** Force overlay-vs-pane placement (default: read from `indicator(overlay=…)`). */
     overlay?: boolean;
     /** Explicit pane placement. */

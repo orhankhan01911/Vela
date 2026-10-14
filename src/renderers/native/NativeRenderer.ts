@@ -2280,6 +2280,7 @@ export class NativeRenderer implements IChartRenderer {
             this.inputsUI.upsert(model.id, model.shorttitle ?? model.title, model.inputs, model.inputValues, model.paneId, {
                 native: !!model.native,
                 ...(model.props ? { props: model.props, propValues: model.propValues ?? {} } : {}),
+                ...(model.styleInputs ? { style: model.styleInputs, styleValues: model.styleValues ?? {} } : {}),
             });
         }
         if (model.native?.type === 'volume') {
@@ -2333,8 +2334,8 @@ export class NativeRenderer implements IChartRenderer {
         this.scheduler.invalidate(InvalidateLevel.Full);
     }
 
-    setIndicatorInputs(handle: IndicatorRenderHandle, values: Record<string, InputValue>, props?: Record<string, InputValue>): void {
-        this.inputsUI.setValues(handle.id, values, props);
+    setIndicatorInputs(handle: IndicatorRenderHandle, values: Record<string, InputValue>, props?: Record<string, InputValue>, style?: Record<string, InputValue>): void {
+        this.inputsUI.setValues(handle.id, values, props, style);
     }
 
     setSymbolPicker(picker: SymbolPickerFn | null): void {

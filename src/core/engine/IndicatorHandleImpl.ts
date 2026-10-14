@@ -11,6 +11,8 @@ export interface IndicatorController {
     inputValuesOf(id: string): Record<string, InputValue>;
     propValuesOf(id: string): Record<string, InputValue>;
     applyProps(id: string, values: Record<string, InputValue>): void;
+    styleValuesOf?(id: string): Record<string, InputValue>;
+    applyStyle?(id: string, values: Record<string, InputValue>): void;
     updateCode(id: string, source: string): Promise<CodeUpdateResult>;
     removeIndicator(id: string): void;
     setVisible(id: string, visible: boolean): void;
@@ -62,6 +64,14 @@ export class IndicatorHandleImpl implements IndicatorHandle {
 
     propValues(): Record<string, InputValue> {
         return this.controller.propValuesOf(this.id);
+    }
+
+    styleValues(): Record<string, InputValue> {
+        return this.controller.styleValuesOf?.(this.id) ?? {};
+    }
+
+    setStyle(values: Record<string, InputValue>): void {
+        this.controller.applyStyle?.(this.id, values);
     }
 
     setInput(key: string, value: InputValue): void {

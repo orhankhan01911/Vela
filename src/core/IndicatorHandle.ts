@@ -46,6 +46,11 @@ export interface IndicatorHandle {
     /** The CURRENT stored declaration-prop values (overrides only — props keep no
      *  merged defaults; absent keys mean the declaration value). */
     propValues(): Record<string, InputValue>;
+    /** The CURRENT style overrides (the settings dialog's "Style" tab): overrides only,
+     *  absent keys mean the script's own look. Empty for natives. */
+    styleValues(): Record<string, InputValue>;
+    /** Override plot / level / fill styles without re-running the script. */
+    setStyle(values: Record<string, InputValue>): void;
     setInput(key: string, value: InputValue): void;
     setInputs(values: Record<string, InputValue>): void;
     /** Override one declaration prop and re-run (a prop change replays the whole script). */
