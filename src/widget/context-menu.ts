@@ -21,7 +21,8 @@ import {
 } from './context-menu-model';
 import { resolveTimezone } from './timezones';
 
-/** Approximate chrome insets used only to classify the right-clicked zone. */
+/** Approximate chrome insets used only to classify the right-clicked zone. The price scale is at least this
+ *  wide; a column widened for long labels is read live (`priceColumnWidth`). */
 const PRICE_AXIS_W = 60;
 const TIME_AXIS_H = 26;
 
@@ -96,7 +97,8 @@ export class ChartContextMenu {
 
     private zoneOf(e: MouseEvent): Zone {
         const rect = this.host.getBoundingClientRect();
-        if (e.clientX - rect.left > rect.width - PRICE_AXIS_W) return 'price-axis';
+        const axisW = Math.max(PRICE_AXIS_W, (this.chart?.renderer.priceColumnWidth?.() ?? 64) - 4);
+        if (e.clientX - rect.left > rect.width - axisW) return 'price-axis';
         if (e.clientY - rect.top > rect.height - TIME_AXIS_H) return 'time-axis';
         return 'body';
     }

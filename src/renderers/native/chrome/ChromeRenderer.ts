@@ -70,6 +70,12 @@ export class ChromeRenderer {
     mount(canvas: HTMLCanvasElement): void {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
+        // Widths measured before a web font arrived (font-display: swap) belong to the fallback face: drop them,
+        // so label chips and the price column are sized from the real font.
+        canvas.ownerDocument?.fonts?.addEventListener?.('loadingdone', () => {
+            this.widthCache.clear();
+            this.widthCachePrev.clear();
+        });
     }
 
     private measureCached(ctx: CanvasRenderingContext2D, text: string): number {
