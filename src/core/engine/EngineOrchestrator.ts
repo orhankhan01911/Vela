@@ -632,6 +632,12 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         });
     }
 
+    /** The loaded market bars, oldest first, as a copy: real OHLCV (never a Heikin Ashi or other style view), and
+     *  during a replay only the bars up to the cursor. Empty before the first load. */
+    loadedBars(): OHLCV[] {
+        return this.rawBars.slice();
+    }
+
     /** The current market identity — a snapshot of the REQUESTED market, so it reflects
      *  an in-flight `setMarket` immediately (the config mutates before the load). */
     marketSnapshot(): MarketSnapshot {

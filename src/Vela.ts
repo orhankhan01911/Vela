@@ -5,6 +5,7 @@ import type { VisibleRangePreset } from './core/visible-range';
 import type { VelaOptions, VelaTheme, ThemeName, MarketSwitch, MarketSnapshot, AddIndicatorOptions } from './core/options';
 import { resolveAnimations } from './core/options';
 import type { InputValue } from './core/model/inputs';
+import type { OHLCV } from './core/model/ohlcv';
 import type { IndicatorHandle } from './core/IndicatorHandle';
 import type { EngineContextSnapshot } from './core/ports/ScriptingEngine';
 import type { NativeIndicatorInfo } from './core/native-indicators';
@@ -412,6 +413,13 @@ export class Vela {
 
     on<K extends keyof VelaEventMap>(event: K, handler: (payload: VelaEventMap[K]) => void): () => void {
         return this.orchestrator.events.on(event, handler);
+    }
+
+    /** The loaded market bars, oldest first, as a copy (safe to keep): real OHLCV, never the Heikin Ashi or other
+     *  style view, and during a replay only the bars up to the replay cursor. Empty before the first load.
+     *  For exports ("Export chart data") and host-side checks. */
+    bars(): OHLCV[] {
+        return this.orchestrator.loadedBars();
     }
 
     /** The current visible time range (`from`/`to` in epoch-ms), or null before data loads. */
