@@ -160,6 +160,12 @@ export class RendererControl {
         return this.renderer.onClick(cb);
     }
 
+    /** Width in px of the master price column: 64 unless long labels (0.035000 at a large font) widened it.
+     *  Overlays that draw into the price gutter size themselves from this. */
+    priceColumnWidth(): number {
+        return this.renderer.priceColumnWidth?.() ?? 64;
+    }
+
     /** Touch long-press on a price or time axis strip — silent no-op without the seam. */
     onAxisLongPress(cb: (e: AxisLongPressEvent) => void): Unsubscribe {
         return this.renderer.onAxisLongPress?.(cb) ?? (() => undefined);

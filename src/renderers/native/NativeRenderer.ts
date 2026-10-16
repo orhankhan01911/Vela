@@ -58,7 +58,7 @@ import type { IRenderBackend } from './backend/IRenderBackend';
 import { ChromeRenderer } from './chrome/ChromeRenderer';
 import { PriceAxisTickSource } from './chrome/priceAxisTicks';
 import { LabelTooltip } from './chrome/LabelTooltip';
-import { AXIS_MASTER_W, AXIS_MERGED_W } from './chrome/axisLayout';
+import { AXIS_MASTER_W, AXIS_MERGED_W, nextMasterWidth } from './chrome/axisLayout';
 import { CrosshairRenderer } from './chrome/CrosshairRenderer';
 import { SettingsDialog } from './chrome/SettingsDialog';
 import { UserDrawingController } from './drawings/UserDrawingController';
@@ -331,6 +331,9 @@ export class NativeRenderer implements IChartRenderer {
     // ── pane management (merge / reorder / collapse / maximize) ──
     private maximizedPaneId: string | null = null; // pane filling the plot (others hidden), or null
     private rightAxisW = RIGHT_AXIS_W; // total right-gutter width (master column + merged-scale columns)
+    /** Width of the master price column: RIGHT_AXIS_W at least, wider when the price labels need it. */
+    private masterAxisW = RIGHT_AXIS_W;
+    private fitAxisRaf = 0;
     private paneControls: PaneControls | null = null; // per-pane hover button cluster (top-right)
     private axisScaleButtons: AxisScaleButtons | null = null; // A/L hover buttons at the bottom of each pane's price scale
     private readonly paneActionCbs = new Set<(a: PaneAction) => void>();
@@ -1776,6 +1779,7 @@ export class NativeRenderer implements IChartRenderer {
         this.axisScaleButtons = new AxisScaleButtons(this.plot, theme, {
             panes: () => this.axisScaleViews(),
             rightAxis: () => this.rightAxisW,
+            masterAxis: () => this.masterAxisW,
             onToggleAuto: (paneId) => this.togglePaneAuto(paneId),
             onToggleLog: (paneId) => {
                 const pane = this.scene.panes.get(paneId);
@@ -1950,6 +1954,8 @@ export class NativeRenderer implements IChartRenderer {
         this.inputsUI?.destroy();
         this.paneControls?.destroy();
         this.axisScaleButtons?.destroy();
+        if (this.fitAxisRaf) this.mountContainer?.ownerDocument.defaultView?.cancelAnimationFrame(this.fitAxisRaf);
+        this.fitAxisRaf = 0;
         this.resizeObserver?.disconnect();
         this.resizeObserver = null;
         this.dprMedia?.removeEventListener('change', this.onDprChange);
@@ -2202,9 +2208,32 @@ export class NativeRenderer implements IChartRenderer {
         return max;
     }
 
+    /** Width of the pane master price column in px (grows to fit long price labels; AXIS_MASTER_W at least). */
+    priceColumnWidth(): number {
+        return this.masterAxisW;
+    }
+
+    /** After a chrome paint: widen (or, with slack, narrow) the master price column to fit the widest label just
+     *  drawn. The resize runs on the next frame, never inside the paint. */
+    private fitPriceColumn(): void {
+        const next = nextMasterWidth(this.masterAxisW, this.chrome.widestPriceLabel);
+        if (next === this.masterAxisW || this.fitAxisRaf) return;
+        const win = this.mountContainer?.ownerDocument.defaultView;
+        if (!win) return;
+        this.fitAxisRaf = win.requestAnimationFrame(() => {
+            this.fitAxisRaf = 0;
+            const n = nextMasterWidth(this.masterAxisW, this.chrome.widestPriceLabel);
+            if (n === this.masterAxisW) return;
+            this.masterAxisW = n;
+            this.chrome.masterW = n;
+            this.refreshAxisWidth();
+            this.axisScaleButtons?.reposition();
+        });
+    }
+
     /** Recompute the right-gutter width (master column + one per merged scale). Re-sizes on change. */
     private refreshAxisWidth(): boolean {
-        const w = RIGHT_AXIS_W + AXIS_COL_W * this.maxOwnScaleColumns();
+        const w = this.masterAxisW + AXIS_COL_W * this.maxOwnScaleColumns();
         if (w === this.rightAxisW) return false;
         this.rightAxisW = w;
         this.publishGutters();
@@ -2939,8 +2968,8 @@ export class NativeRenderer implements IChartRenderer {
         if (!pane) return null;
         const dataW = this.coords.width;
         const merged = this.scene.ownScaleIndicatorsForPane(pane.id);
-        if (x >= dataW + AXIS_MASTER_W && merged.length > 0) {
-            const k = Math.floor((x - dataW - AXIS_MASTER_W) / AXIS_MERGED_W);
+        if (x >= dataW + this.masterAxisW && merged.length > 0) {
+            const k = Math.floor((x - dataW - this.masterAxisW) / AXIS_MERGED_W);
             const model = merged[k];
             if (model) return { holder: this.scene.ensureIndicatorScale(model.id, pane.scaleTarget), height: pane.bounds.height };
         }
@@ -3359,6 +3388,7 @@ export class NativeRenderer implements IChartRenderer {
             // re-wires the drawing resolvers (three closures over live refs — cheap).
             this.chrome.prepare(this.scene, this.coords, this.theme);
             this.chrome.render(this.scene, this.coords, this.theme, this.axisSurface());
+            this.fitPriceColumn();
             this.trackMarkPopover();
         }
         this.renderCrosshairLayer(); // L2 crosshair
@@ -3516,6 +3546,7 @@ export class NativeRenderer implements IChartRenderer {
         this.backdropRenderer.render(this.scene, this.coords, this.theme, gridAlpha); // L-2, under every layer canvas
         this.backend.render(this.scene, this.coords, this.theme);
         this.chrome.render(this.scene, this.coords, this.theme, this.axisSurface());
+        this.fitPriceColumn();
         this.trackMarkPopover();
         this.userDrawings?.render(); // L1.5 — above Pine drawings, below the crosshair
 

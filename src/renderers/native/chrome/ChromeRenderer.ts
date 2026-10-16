@@ -12,7 +12,7 @@ import { renderTradeMarkers } from '../../shared/trade-markers';
 import type { TradeExecution } from '../../../core/model/trades';
 import { paneAxisTicks, formatAxisValue, timeTicks } from './ticks';
 import { PriceAxisTickSource } from './priceAxisTicks';
-import { axisColumnX, PANE_SEPARATOR_PX } from './axisLayout';
+import { AXIS_MASTER_W, axisColumnX, PANE_SEPARATOR_PX } from './axisLayout';
 import { DARK_THEME } from '../../../core/theme';
 import { tzOffsetMs } from './tz';
 import { countdownText } from './countdown';
@@ -60,6 +60,11 @@ export class ChromeRenderer {
     // so a theme/fontSize change (which changes ctx.font) naturally misses and re-measures instead
     // of returning a stale width. See docs/research/vela-perf-findings-2026-09-10.md.
     private widthCache = new Map<string, number>();
+    /** Width of the pane master price column (set by the renderer; it grows to fit the labels). */
+    masterW = AXIS_MASTER_W;
+    /** Widest master-scale price label drawn by the last paint, px (0 = none drawn). The renderer sizes the
+     *  column from it after the paint. */
+    widestPriceLabel = 0;
     private widthCachePrev = new Map<string, number>();
 
     mount(canvas: HTMLCanvasElement): void {
@@ -318,7 +323,11 @@ export class ChromeRenderer {
         ctx.moveTo(dataW + 0.5, 0);
         ctx.lineTo(dataW + 0.5, coords.height);
         ctx.stroke();
-        if (!scene.showAxisLabels) return;
+        if (!scene.showAxisLabels) {
+            this.widestPriceLabel = 0;
+            return;
+        }
+        let widest = 0;
         ctx.fillStyle = this.axisTextColor;
         ctx.textAlign = 'left';
         const font = `${scene.style.fontSize}px ${theme.fontFamily}`;
@@ -332,6 +341,8 @@ export class ChromeRenderer {
                 if (t.major === true) ctx.font = majorFont;
                 else if (t.major === false) ctx.globalAlpha = alpha * MINOR_LABEL_ALPHA;
                 ctx.fillText(t.label, dataW + 6, y);
+                const w = this.measureCached(ctx, t.label);
+                if (w > widest) widest = w;
                 if (t.major === true) ctx.font = font;
                 else if (t.major === false) ctx.globalAlpha = alpha;
             }
@@ -342,9 +353,12 @@ export class ChromeRenderer {
                     const y = pane.bounds.top + b.frac * pane.bounds.height;
                     if (y < pane.bounds.top + 6 || y > pane.bounds.top + pane.bounds.height - 4) continue;
                     ctx.fillText(b.label, dataW + 6, y);
+                    const w = this.measureCached(ctx, b.label);
+                    if (w > widest) widest = w;
                 }
             }
         }
+        this.widestPriceLabel = widest;
         ctx.textAlign = 'start';
     }
 
@@ -381,7 +395,7 @@ export class ChromeRenderer {
             merged.forEach((model, k) => {
                 const sc = scene.indicatorScales.get(model.id)?.scale;
                 if (!sc) return;
-                const x = axisColumnX(dataW, k + 1); // column 0 is the master scale
+                const x = axisColumnX(dataW, k + 1, this.masterW); // column 0 is the master scale
                 for (const t of paneAxisTicks(sc, pane.bounds.height, undefined, scene.priceMintick)) {
                     const y = coords.priceToY(t.price, sc, pane.bounds);
                     if (y < pane.bounds.top + 6 || y > pane.bounds.top + pane.bounds.height - 4) continue;

@@ -17,6 +17,8 @@ export interface AxisScaleButtonsDeps {
     panes(): AxisScaleView[];
     /** Total right-gutter width in px (master column + merged-scale columns). */
     rightAxis(): number;
+    /** Width of the master price column in px (it grows to fit long labels). Default AXIS_MASTER_W. */
+    masterAxis?(): number;
     onToggleAuto(paneId: string): void;
     onToggleLog(paneId: string): void;
 }
@@ -74,7 +76,7 @@ export class AxisScaleButtons {
             alignItems: 'center',
             gap: `${BTN_GAP}px`,
             padding: `${PAD_TOP}px 0 ${PAD_BOTTOM}px`,
-            width: `${CLUSTER_W}px`,
+            width: `${CLUSTER_W}px`, // re-set from the live master width in reposition()
             boxSizing: 'border-box',
             zIndex: '6',
             pointerEvents: 'auto',
@@ -119,7 +121,7 @@ export class AxisScaleButtons {
         const x = e.clientX - rect.left;
         const gutterLeft = rect.width - this.deps.rightAxis();
         let hit: string | null = null;
-        if (x >= gutterLeft && x <= gutterLeft + AXIS_MASTER_W) {
+        if (x >= gutterLeft && x <= gutterLeft + this.masterW()) {
             const y = e.clientY - rect.top;
             for (const p of this.deps.panes()) {
                 if (p.collapsed || p.height < MIN_PANE_H) continue;
@@ -149,6 +151,10 @@ export class AxisScaleButtons {
         this.reposition();
     }
 
+    private masterW(): number {
+        return this.deps.masterAxis?.() ?? AXIS_MASTER_W;
+    }
+
     /** Re-place (or hide) the cluster after a hover or pane-layout change. */
     reposition(): void {
         const pane = this.hoverPaneId ? this.deps.panes().find((p) => p.id === this.hoverPaneId) : undefined;
@@ -158,7 +164,9 @@ export class AxisScaleButtons {
         }
         // Flush with the pane's bottom edge, inset 1px from the axis frame so the scale
         // border stays visible. The extra PAD_TOP is the air above the letters.
-        this.cluster.style.right = `${this.deps.rightAxis() - AXIS_MASTER_W}px`;
+        const masterW = this.masterW();
+        this.cluster.style.right = `${this.deps.rightAxis() - masterW}px`;
+        this.cluster.style.width = `${masterW - AXIS_BORDER}px`;
         this.cluster.style.top = `${pane.top + pane.height - CLUSTER_H}px`;
         this.cluster.style.display = 'flex';
         this.sync();

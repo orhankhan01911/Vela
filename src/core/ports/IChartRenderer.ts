@@ -428,6 +428,8 @@ export interface IChartRenderer {
     /** Touch long-press on a price or time axis strip. Optional — a renderer without
      *  touch axis gestures omits it; host chrome (timezone / price-scale sheets) keys off it. */
     onAxisLongPress?(cb: (e: AxisLongPressEvent) => void): Unsubscribe;
+    /** Width in px of the pane master price column (it grows to fit long price labels). */
+    priceColumnWidth?(): number;
 
     /**
      * Display an EXTERNAL crosshair at a data-space position — a ghost marker driven by
