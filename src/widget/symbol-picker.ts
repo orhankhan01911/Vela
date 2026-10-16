@@ -361,6 +361,9 @@ export class SymbolPicker {
             if (e.key === 'ArrowDown') this.moveHighlight(1);
             else if (e.key === 'ArrowUp') this.moveHighlight(-1);
             else if (e.key === 'Enter') {
+                // Picking closes the dialog and focus goes back to the symbol button. Without this, Chromium sends
+                // the same key press on to that button ("keypress" -> "click") and the picker opens again.
+                e.preventDefault();
                 const pick = this.rows[this.highlighted];
                 if (pick) this.pick(pick);
                 return;
