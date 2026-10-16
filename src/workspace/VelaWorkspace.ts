@@ -192,6 +192,7 @@ const CSS = `
 /* Mobile: the docked drawing-toolbar column would eat a phone-width grid — the shell's
    drawings drawer + on-chart pill replace it (same policy as the widget's in-chart bar). */
 [data-layout='mobile'] .vela-ws-toolbar { display: none; }
+[data-layout='mobile'] .vela-favbar { display: none !important; }
 /* A maximized cell owns the whole grid: the splitter strips have no seams to grab and
    the active ring would just outline the only visible chart — both are noise here. */
 .vela-ws-grid[data-maximized='1'] .vela-ws-splitter { display: none; }
@@ -681,6 +682,12 @@ export class VelaWorkspace {
                       onDrawingsSync: (on) => {
                           this.sync.set('drawings', on);
                           this.refocusActive();
+                      },
+                      // The floating favourites bar floats over the whole grid; its spot and
+                      // show/hide ride next to the persisted document (same storage scope).
+                      favoritesBar: {
+                          host: this.gridEl,
+                          storageKey: this.persistKey !== null ? `${this.persistKey}:favorites-toolbar` : 'vela-favorites-toolbar',
                       },
                   },
               )

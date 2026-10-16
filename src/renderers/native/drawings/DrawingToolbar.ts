@@ -6,6 +6,7 @@ import { applyChromeTokens } from '../../shared/theme-tokens';
 import { attachChromeTooltip } from '../../shared/chrome-tooltip';
 import { announceSurface } from '../../../ui/surface-events';
 import { holdForExit, type SurfaceExit } from '../../../ui/surface-exit';
+import { FavoritesBar } from './FavoritesBar';
 
 /** Expanded bar width in px — a docked host's left-gutter reservation must match it. */
 export const TOOLBAR_WIDTH = 44;
@@ -33,6 +34,11 @@ export interface DrawingToolbarOptions {
      *  linked — edits and removals follow (a multi-chart host's concern — a
      *  single-chart bar omits the callback and never shows it). */
     onDrawingsSync?: (on: boolean) => void;
+    /** When given, starred tools also show on a floating favourites bar over `host` (the
+     *  chart area, positioned), and a "Show Favorites Toolbar" star toggle renders at the
+     *  bottom of this bar. Position and visibility persist under `storageKey`
+     *  (localStorage; `null` keeps nothing). */
+    favoritesBar?: { host: HTMLElement; storageKey?: string | null };
 }
 
 /**
@@ -79,6 +85,9 @@ export class DrawingToolbar {
     private stayActive = false;
     private syncBtn: HTMLButtonElement | null = null;
     private syncActive = false;
+    /** The floating favourites bar (only when the host passed `favoritesBar`). */
+    private readonly favBar: FavoritesBar | null;
+    private favToggleBtn: HTMLButtonElement | null = null;
     private collapseBtn: HTMLButtonElement | null = null;
     private collapsed = false;
     private visible = false;
@@ -114,6 +123,22 @@ export class DrawingToolbar {
         this.root.className = 'vela-dtb';
         this.styleRoot();
         host.appendChild(this.root);
+        const fb = options.favoritesBar;
+        this.favBar = fb
+            ? new FavoritesBar({
+                  host: fb.host,
+                  theme,
+                  storageKey: fb.storageKey === undefined ? 'vela-favorites-toolbar' : fb.storageKey,
+                  onPick: (type) => this.onArm(type),
+                  onShownChange: () => this.paintFavToggle(),
+              })
+            : null;
+        this.favBar?.setEnabled(false); // shown once the host makes the toolbar visible
+    }
+
+    /** The floating favourites bar, when this toolbar hosts one (tests and hosts read it). */
+    get favoritesBar(): FavoritesBar | null {
+        return this.favBar;
     }
 
     /** Live divider/border ink — the option override, else the current theme's border
@@ -147,6 +172,7 @@ export class DrawingToolbar {
 
     setDefinition(def: ToolbarDefinition): void {
         this.def = def;
+        this.favBar?.setDefinition(def);
         for (const g of def.groups) {
             const first = g.tools[0];
             if (first && !this.lastUsed.has(g.id)) this.lastUsed.set(g.id, first.type);
@@ -159,6 +185,7 @@ export class DrawingToolbar {
     setFavorites(types: readonly DrawingTypeKey[]): void {
         this.favorites = new Set(types);
         for (const [type, el] of this.starEls) this.paintStar(el, type);
+        this.favBar?.setFavorites(types);
     }
 
     /** Per-tool shortcut hints (pre-formatted display strings, e.g. `'Alt+T'`) shown at the
@@ -179,10 +206,12 @@ export class DrawingToolbar {
     setVisible(visible: boolean): void {
         this.visible = visible;
         this.root.style.display = visible ? 'flex' : 'none';
+        this.favBar?.setEnabled(visible);
     }
 
     setActiveTool(type: DrawingTypeKey | null): void {
         this.active = type;
+        this.favBar?.setActiveTool(type);
         if (type) {
             const group = this.def.groups.find((g) => g.tools.some((t) => t.type === type));
             if (group) {
@@ -197,6 +226,7 @@ export class DrawingToolbar {
     setTheme(theme: VelaTheme): void {
         this.theme = theme;
         this.styleRoot();
+        this.favBar?.setTheme(theme);
         this.rebuild();
     }
 
@@ -204,6 +234,7 @@ export class DrawingToolbar {
         this.closeFlyout();
         for (const { exit } of [...this.exitingFlyouts.values()]) exit.finish();
         for (const dispose of this.tipDisposers.splice(0)) dispose();
+        this.favBar?.destroy();
         this.root.remove();
     }
 
@@ -235,6 +266,12 @@ export class DrawingToolbar {
             this.syncBtn = this.makeButton(SYNC_ICON, 'Sync drawings on all charts', () => this.toggleDrawingsSync());
             this.root.appendChild(this.syncBtn);
         }
+        // Favourites-bar toggle (TradingView's "Show Favorites Toolbar" star), bottom group.
+        if (this.favBar) {
+            this.favToggleBtn = this.makeButton(STAR_ICON, 'Show Favorites Toolbar', () => this.favBar?.setShown(!this.favBar.isShown()));
+            this.favToggleBtn.classList.add('vela-dtb-favtoggle');
+            this.root.appendChild(this.favToggleBtn);
+        }
         // Collapse/expand toggle — pinned to the bottom; the only child a collapsed strip shows.
         this.collapseBtn = this.makeButton(COLLAPSE_ICON, 'Collapse toolbar', () => this.toggleCollapsed());
         this.collapseBtn.classList.add('vela-dtb-collapse');
@@ -244,8 +281,21 @@ export class DrawingToolbar {
         this.paintMagnet();
         this.paintStay();
         this.paintDrawingsSync();
+        this.paintFavToggle();
         this.paintCollapse();
         this.highlight();
+    }
+
+    /** The star toggle: lit while the favourites bar is switched on. */
+    private paintFavToggle(): void {
+        const b = this.favToggleBtn;
+        if (!b || !this.favBar) return;
+        const on = this.favBar.isShown();
+        b.dataset.active = on ? '1' : '';
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        const label = on ? 'Hide Favorites Toolbar' : 'Show Favorites Toolbar';
+        b.setAttribute('aria-label', label);
+        this.tipText.set(b, label);
     }
 
     /** Collapse to a slim expand-strip / restore the full bar, and tell the host so a
@@ -754,6 +804,8 @@ function ensureStyles(): void {
 .vela-dtb-cell.vela-open .vela-dtb-arrow .vela-dtb-hit{background:var(--vela-active);}
 .vela-dtb-cell.vela-open .vela-dtb-arrow:hover .vela-dtb-hit{background:var(--vela-hover);}
 .vela-dtb-collapse{margin-top:auto;}
+.vela-dtb-favtoggle{margin-top:auto;}
+.vela-dtb-favtoggle~.vela-dtb-collapse{margin-top:0;}
 .vela-dtb[data-collapsed='1']>*:not(.vela-dtb-collapse){display:none;}
 .vela-dtb[data-collapsed='1'] .vela-dtb-collapse .vela-dtb-hit{width:14px;}
 .vela-dtb-item{background:transparent;border:none;transition:background var(--vela-dur-fast) ease;}
