@@ -279,6 +279,9 @@ export class ChartCell {
     private presentNatives: Array<{ id: string; type: string }> = [];
     private rangeBars = 0;
     private pendingRange: RangePreset | null = null;
+    /** History depth a {@link jumpTo} borrowed beyond the cell's own (0 = none). The next symbol or timeframe switch
+     *  loads the cell's own depth again, so a jump's deep history is never carried to another market. */
+    private jumpBars = 0;
     /** Last symbol we toasted "no provider serves this" for — once per symbol (the
      *  core re-reports on every provider-index settle). */
     private unresolvedToasted: string | null = null;
@@ -792,6 +795,7 @@ export class ChartCell {
                     get: () => String(this.state.bars ?? 1000),
                     set: (v: string) => {
                         this.state.bars = Number(v);
+                        this.jumpBars = 0;
                         this.deps.onStateDirty();
                         void this.inner?.setMarket({ bars: Math.max(this.state.bars, this.rangeBars) });
                     },
@@ -998,7 +1002,9 @@ export class ChartCell {
     setSymbol(symbol: string): void {
         if (!this.inner || symbol === this.symbol) return;
         this.unresolvedToasted = null; // a re-picked symbol gets a fresh verdict
-        void this.inner.setMarket({ symbol });
+        // A jump's borrowed depth stays with the market it was for: the new symbol loads the cell's own depth.
+        void this.inner.setMarket(this.jumpBars ? { symbol, bars: this.ownBars() } : { symbol });
+        this.jumpBars = 0;
         this.projectMarket(symbol, this.timeframe);
         this.deps.onMarketChanged(this.id);
     }
@@ -1008,7 +1014,9 @@ export class ChartCell {
         // Leaving range mode: drop the chip AND its fetch budget (back to the cell's own bars).
         this.activeRangeId = null;
         this.rangeBars = 0;
-        void this.inner.setMarket({ timeframe, bars: this.state.bars });
+        const bars = this.jumpBars ? this.ownBars() : this.state.bars; // a jump's depth stays with its timeframe
+        this.jumpBars = 0;
+        void this.inner.setMarket({ timeframe, bars });
         this.projectMarket(this.symbol, timeframe);
         this.deps.onMarketChanged(this.id);
     }
@@ -1049,6 +1057,7 @@ export class ChartCell {
     applyRange(preset: RangePreset): void {
         if (!this.inner || this.destroyed) return;
         this.activeRangeId = preset.id;
+        this.jumpBars = 0; // the chip sets its own depth below
         const tfChanged = preset.tf !== this.timeframe;
         const deeper = preset.bars > Math.max(this.state.bars ?? 500, this.rangeBars);
         this.rangeBars = preset.bars;
@@ -1065,6 +1074,44 @@ export class ChartCell {
         } else {
             this.inner.setVisibleRangePreset(preset.preset);
         }
+    }
+
+    /** The cell's own history depth: its "Bars to fetch" (default 500), deeper while a range chip needs it. */
+    private ownBars(): number {
+        return Math.max(this.state.bars ?? 500, this.rangeBars);
+    }
+
+    /**
+     * Go to a moment in the past (TradingView's "Go to date"): switch to `timeframe` when given, load at least `bars`
+     * of history, then frame `range` once that history is in. The extra depth is borrowed: the next symbol or
+     * timeframe switch loads the cell's own depth again. Resolves after the framing, or early when another market
+     * switch superseded the jump (nothing is framed then).
+     */
+    async jumpTo(range: VisibleRange, opts: { bars: number; timeframe?: string }): Promise<void> {
+        const inner = this.inner;
+        if (!inner || this.destroyed) return;
+        const tf = opts.timeframe && opts.timeframe !== this.timeframe ? opts.timeframe : null;
+        if (tf) {
+            this.activeRangeId = null; // a jump leaves range mode, like a timeframe pick
+            this.rangeBars = 0;
+        }
+        const own = this.ownBars();
+        const bars = Math.max(Math.round(opts.bars), own);
+        this.jumpBars = bars > own ? bars : 0;
+        // No first-paint `visibleRange`: a framed load is ONE request, which a paging source answers with a single
+        // page (Bybit: 1000 bars). Unframed, a deep load paints its newest chunk and pages the rest in behind it;
+        // the window is framed once that history is complete.
+        const loading = inner.setMarket(tf ? { timeframe: tf, bars } : { bars });
+        if (tf) {
+            this.projectMarket(this.symbol, tf);
+            this.deps.onMarketChanged(this.id);
+        }
+        const want = { symbol: inner.market.symbol, timeframe: inner.market.timeframe, bars: inner.market.bars };
+        await loading;
+        await inner.historyComplete();
+        const now = inner.market;
+        if (this.destroyed || this.inner !== inner || now.symbol !== want.symbol || now.timeframe !== want.timeframe || now.bars !== want.bars) return;
+        inner.setVisibleRange(range);
     }
 
     /** Reset this cell's view: re-enable auto scale and frame the full history —
