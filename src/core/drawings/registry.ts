@@ -153,7 +153,8 @@ export function deserializeDrawing(doc: SerializedDrawing): Drawing | null {
 }
 
 // ── built-in lean-core types ──
-const LINE_ICON = svg24('<line x1="4" y1="19" x2="20" y2="5"/>');
+// Trend line: the segment ends at two hollow anchor handles (TradingView-style toolbar glyph).
+const LINE_ICON = svg24('<path d="M6.6 17.4 17.4 6.6"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="5" r="2.2"/>');
 const HLINE_ICON = svg24('<line x1="3" y1="12" x2="21" y2="12"/>');
 
 registerDrawingType({
@@ -574,8 +575,10 @@ registerDrawingType({
 // ── stamps (single-click glyph markers) ──
 const FLAG_MARK_ICON =
     svg24('<path d="M6 21V4"/><path d="M6 5h11l-2.5 3.5L17 12H6" fill="currentColor" stroke="none"/>');
-const ICON_STAMP_ICON =
-    svg24('<path d="m12 3 2.6 5.8 6.4.6-4.8 4.2 1.4 6.2L12 16.9 6.4 19.8 7.8 13.6 3 9.4l6.4-.6Z"/>');
+// Smiley: the Icons group's face on the toolbar.
+const ICON_STAMP_ICON = svg24(
+    '<circle cx="12" cy="12" r="8.5"/><path d="M8.6 14.2a4.4 4.4 0 0 0 6.8 0"/><circle cx="9.2" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="14.8" cy="10" r="1" fill="currentColor" stroke="none"/>'
+);
 
 registerDrawingType({
     type: 'flagmark',
@@ -596,8 +599,10 @@ registerDrawingType({
 });
 
 // ── fibonacci ──
-const FIB_RETRACE_ICON =
-    svg24('<line x1="3" y1="5" x2="21" y2="5"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="3" y1="19" x2="21" y2="19"/>');
+// Four levels; the top level ends at its right anchor handle, the bottom one starts at its left handle.
+const FIB_RETRACE_ICON = svg24(
+    '<path d="M3 5h13.8M3 10h18M3 14h18M7.2 19H21"/><circle cx="19" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/>'
+);
 
 const FIB_EXTEND_ICON =
     svg24('<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="11" x2="21" y2="11"/><line x1="3" y1="15" x2="14" y2="15"/><line x1="3" y1="20" x2="14" y2="20"/>');
@@ -842,7 +847,11 @@ registerDrawingType({
 });
 
 // ── patterns ──
-const XABCD_ICON = svg24('<path d="M3 18 7 8 11 14 15 6 20 16"/>');
+// X-A-B-C-D legs with the two X-B / B-D bases, each point a hollow handle.
+const XABCD_ICON = svg24(
+    '<path d="M4 19 7 6l5 7.5L17 5l3 14M4 19l8-5.5 8 5.5"/>' +
+        '<circle cx="4" cy="19" r="1.7"/><circle cx="7" cy="6" r="1.7"/><circle cx="12" cy="13.5" r="1.7"/><circle cx="17" cy="5" r="1.7"/><circle cx="20" cy="19" r="1.7"/>'
+);
 const ABCD_ICON = svg24('<path d="M4 17 9 7 14 15 20 5"/>');
 const ELLIOTT_IMPULSE_ICON = svg24('<path d="M3 19 8 9 12 13 17 5 21 9"/>');
 const ELLIOTT_CORRECTION_ICON = svg24('<path d="M4 7 11 16 20 9"/>');
@@ -919,9 +928,9 @@ registerDrawingType({
 
 // ── positions ──
 // Shaded target zone above the entry edge, hollow stop zone below it.
+// Target and stop levels, each from a left anchor handle, with an "L" (long) between them.
 const POSITION_ICON = svg24(
-    '<rect x="4.5" y="4.5" width="15" height="7.5" rx="1" fill="currentColor" fill-opacity="0.25"/>' +
-        '<rect x="4.5" y="12" width="15" height="7.5" rx="1"/>',
+    '<circle cx="5" cy="6" r="2.2"/><path d="M7.2 6H21"/><circle cx="5" cy="18" r="2.2"/><path d="M7.2 18H21"/><path d="M11 9.5v5h4.5"/>'
 );
 
 registerDrawingType({
@@ -929,6 +938,9 @@ registerDrawingType({
     group: 'measure',
     label: 'Long/Short Position',
     icon: POSITION_ICON,
+    // Starts over the candles like TradingView: its zones are translucent, and its stats labels
+    // must never be painted over by a candle (a misread target/stop is a trading loss).
+    coversSeries: true,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new PositionTool(init),
 });

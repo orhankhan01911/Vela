@@ -567,7 +567,7 @@ describe('buildToolbar grouping', () => {
         ]);
 
         const iconsGroup = definition.groups.find((g) => g.id === 'icons');
-        expect(iconsGroup?.sections?.[0]?.tools.map((t) => t.type)).toEqual(['flagmark', 'iconstamp']);
+        expect(iconsGroup?.sections?.[0]?.tools.map((t) => t.type)).toEqual(['iconstamp', 'flagmark']);
 
         const measureGroup = definition.groups.find((g) => g.id === 'measurements');
         expect(measureGroup?.label).toBe('Measurements');

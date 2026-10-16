@@ -179,14 +179,17 @@ registerIcon('pane-collapse', S('<path d="M2.6 9.4h4v4M13.4 6.6h-4v-4"/><path d=
 registerIcon('pane-expand', S('<path d="M9.8 2.4h3.8v3.8M6.2 13.6H2.4V9.8"/><path d="m13.6 2.4-4.4 4.4M2.4 13.6l4.4-4.4"/>'));
 
 // ── drawing tools and their toolbars (tier B) ──
-registerIcon('cursor', svg24('<path d="M5 3l6 16 2-6 6-2z"/>', 'fill="currentColor" stroke="none"'));
+// Crosshair: the chart's default cursor, as the toolbar shows it.
+registerIcon('cursor', svg24('<path d="M12 3.5v6M12 14.5v6M3.5 12h6M14.5 12h6"/>'));
 registerIcon(
     'ruler',
-    svg24('<path d="M21.3 15.3 8.7 2.7a1 1 0 0 0-1.4 0L2.7 7.3a1 1 0 0 0 0 1.4l12.6 12.6a1 1 0 0 0 1.4 0l4.6-4.6a1 1 0 0 0 0-1.4Z"/><path d="m7.5 10.5 2 2"/><path d="m10.5 7.5 2 2"/><path d="m13.5 4.5 2 2"/><path d="m4.5 13.5 2 2"/>'),
+    // A long diagonal ruler with ticks along its upper edge.
+    svg24('<path d="M3.5 16.5 16.5 3.5l4 4-13 13Z"/><path d="m6 14 1.5 1.5M8.5 11.5l2 2M11 9l1.5 1.5M13.5 6.5l2 2"/>'),
 );
 registerIcon(
     'magnet',
-    svg24('<path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15"/><path d="m5 8 4 4"/><path d="m12 15 4 4"/>'),
+    // Upright horseshoe magnet with its two pole bands.
+    svg24('<path d="M5.5 20V11a6.5 6.5 0 0 1 13 0v9h-4.2v-9a2.3 2.3 0 0 0-4.6 0v9Z"/><path d="M5.5 16.5h4.2M14.3 16.5h4.2"/>'),
 );
 registerIcon(
     'eraser',
@@ -198,8 +201,8 @@ registerIcon(
 );
 registerIcon(
     'pen-sync',
-    // Pen + two stacked panes — drawing onto every linked chart at once.
-    svg24('<path d="M13.8 4.2a2.1 2.1 0 0 1 3 3L8.5 15.5l-3.5 1 1-3.5Z"/><rect x="12.5" y="13.5" width="6" height="4.8" rx="1"/><path d="M15.5 18.3v1a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-2.8a1 1 0 0 0-1-1h-1"/>'),
+    // Chain link: drawings linked across every chart.
+    svg24('<path d="m10.6 13.4.4.4a3.6 3.6 0 0 0 5.1 0l3.3-3.3a3.6 3.6 0 0 0-5.1-5.1l-1.4 1.4"/><path d="m13.4 10.6-.4-.4a3.6 3.6 0 0 0-5.1 0l-3.3 3.3a3.6 3.6 0 0 0 5.1 5.1l1.4-1.4"/>'),
 );
 registerIcon('brush', svg24('<path d="M9.5 12 17 4.5a2.12 2.12 0 0 1 3 3L12.5 15"/><path d="M7 14a3 3 0 0 0-3 3c0 1.3-1.2 1.5-1.5 2 .8.9 2 1.5 3.5 1.5a3.5 3.5 0 0 0 3.5-3.5 3 3 0 0 0-2.5-3Z"/>'));
 registerIcon(

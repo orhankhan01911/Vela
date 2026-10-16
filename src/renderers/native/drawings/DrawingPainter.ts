@@ -711,9 +711,12 @@ export class DrawingPainter {
         ctx.textBaseline = 'alphabetic';
     }
 
-    /** Paint a position tool: a reward zone (entry↔target) + risk zone (entry↔stop) in the
-     *  tool's own zone colors, the three level lines, and the direction / R:R / % / loss+size
-     *  labels (styled by `text`, hidden wholesale by showText). */
+    /** Paint a position tool the way TradingView does: a reward zone (entry↔target) + risk
+     *  zone (entry↔stop) in the tool's own zone colors, the three level lines, and solid label
+     *  boxes with white text: target stats just outside the reward zone, stop stats just
+     *  outside the risk zone, and the size + Risk/Reward ratio centred on the entry line.
+     *  The box fill is the zone color darkened until white text reaches 4.5:1 contrast, so a
+     *  bright custom color stays readable. Text size follows `text.size`; showText hides all. */
     private paintPosition(ctx: CanvasRenderingContext2D, d: PositionTool, proj: Projector, theme: VelaTheme): void {
         const L = d.layout(proj);
         if (!L) return;
@@ -721,7 +724,7 @@ export class DrawingPainter {
         const w = x2 - x1;
         const zone = (yA: number, yB: number, color: string): void => {
             ctx.save();
-            ctx.globalAlpha = 0.13 * ctx.globalAlpha;
+            ctx.globalAlpha = 0.2 * ctx.globalAlpha;
             ctx.fillStyle = color;
             ctx.fillRect(x1, Math.min(yA, yB), w, Math.abs(yB - yA));
             ctx.restore();
@@ -738,19 +741,36 @@ export class DrawingPainter {
         line(ey, d.style.lineColor); // entry — accent
         if (!d.showText) return;
         const fs = namedFontSize(d.text?.size ?? 'normal');
-        ctx.fillStyle = d.text?.color ?? theme.textColor;
+        const ink = d.text?.color ?? '#ffffff'; // palette-exempt: TradingView-style white label text
+        ctx.font = `${fs}px ${theme.fontFamily}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = `${fs}px ${theme.fontFamily}`;
         const cx = x1 + w / 2;
-        // Header + loss/size stack above the box (whichever is shown alone takes the bottom
-        // slot); target/stop % stay centered in their zones.
-        const topY = Math.min(ey, sy, ty) - 9;
-        if (d.showHeader) ctx.fillText(d.headerLabel(), cx, d.showLossSize ? topY - Math.round(fs * 1.15) : topY);
-        ctx.font = `${Math.max(10, fs - 1)}px ${theme.fontFamily}`;
-        if (d.showLossSize) ctx.fillText(d.lossSizeLabel(), cx, topY);
-        if (d.showTargetLabel) ctx.fillText(d.targetLabel(), cx, (ey + ty) / 2);
-        if (d.showStopLabel) ctx.fillText(d.stopLabel(), cx, (ey + sy) / 2);
+        const padX = 6;
+        const lh = Math.round(fs * 1.3);
+        const gap = 3;
+        /** A solid rounded box of `lines`, centred on cx; `top` is its top edge. */
+        const box = (lines: string[], top: number, fill: string): void => {
+            if (lines.length === 0) return;
+            const tw = Math.max(...lines.map((t) => ctx.measureText(t).width));
+            const bw = Math.ceil(tw + padX * 2);
+            const bh = lines.length * lh + 6;
+            ctx.save();
+            roundRect(ctx, Math.round(cx - bw / 2), Math.round(top), bw, bh, 3);
+            ctx.fillStyle = fill;
+            ctx.fill();
+            ctx.restore();
+            ctx.fillStyle = ink;
+            lines.forEach((t, i) => ctx.fillText(t, cx, top + 3 + lh / 2 + i * lh));
+        };
+        const boxH = lh + 6;
+        // Target and stop boxes sit outside the box, on their own level line (above it when the
+        // level is the top edge, below when it is the bottom edge).
+        const outside = (y: number): number => (y <= ey ? y - gap - boxH : y + gap);
+        if (d.showTargetLabel) box([d.targetBoxLabel()], outside(ty), labelFill(d.profitColor));
+        if (d.showStopLabel) box([d.stopBoxLabel()], outside(sy), labelFill(d.lossColor));
+        const mid = d.centerBoxLines();
+        if (mid.length > 0) box(mid, ey - (mid.length * lh + 6) / 2, POSITION_CENTER_FILL);
         ctx.textAlign = 'left';
         ctx.textBaseline = 'alphabetic';
     }
@@ -1911,6 +1931,43 @@ function formatPriceTag(p: number): string {
 }
 
 /** Begin a rounded-rectangle path (arcTo-based, no `ctx.roundRect` dependency). */
+/** Neutral fill of the position tool's centre (size + ratio) box; white text on it is ~9:1. */
+const POSITION_CENTER_FILL = '#4c525e'; // palette-exempt: neutral position-tool centre label box
+
+/** A label fill derived from a zone color: the same hue, darkened until white text on it
+ *  reaches 4.5:1 (WCAG AA). Unparseable colors are returned unchanged. */
+function labelFill(color: string): string {
+    const rgb = parseRgb(color);
+    if (!rgb) return color;
+    let [r, g, b] = rgb;
+    const lum = (): number => {
+        const ch = (v: number): number => {
+            const c = v / 255;
+            return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+        };
+        return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+    };
+    for (let i = 0; i < 30 && 1.05 / (lum() + 0.05) < 4.5; i++) {
+        r *= 0.92;
+        g *= 0.92;
+        b *= 0.92;
+    }
+    return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+}
+
+/** `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()` or `rgba()` to [r, g, b]; null for anything else. */
+function parseRgb(color: string): [number, number, number] | null {
+    const c = color.trim();
+    const hex = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(c);
+    if (hex) {
+        const h = hex[1]!;
+        if (h.length === 3) return [parseInt(h[0]! + h[0]!, 16), parseInt(h[1]! + h[1]!, 16), parseInt(h[2]! + h[2]!, 16)];
+        return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    }
+    const fn = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(c);
+    return fn ? [Number(fn[1]), Number(fn[2]), Number(fn[3])] : null;
+}
+
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
     const rr = Math.min(r, w / 2, h / 2);
     ctx.beginPath();

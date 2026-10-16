@@ -67,7 +67,7 @@ export class PositionTool extends Drawing {
         if (this.accountBalance === undefined) this.accountBalance = PositionTool.DEFAULT_ACCOUNT_BALANCE;
         if (this.showText === undefined) this.showText = true;
         if (this.showHeader === undefined) this.showHeader = true;
-        if (this.showPrices === undefined) this.showPrices = false;
+        if (this.showPrices === undefined) this.showPrices = true;
         if (this.showLossSize === undefined) this.showLossSize = true;
         if (this.showTargetLabel === undefined) this.showTargetLabel = true;
         if (this.showStopLabel === undefined) this.showStopLabel = true;
@@ -299,6 +299,39 @@ export class PositionTool extends Drawing {
         return `Stop −${this.riskPct().toFixed(2)}%${at}`;
     }
 
+    // ── TradingView-style boxed labels (the painter draws each in a solid box on its level) ──
+
+    /** `Target: 85,123.40 (3.41%) 2,806.00, Amount: 341.10` — level price (when showPrices is
+     *  on), distance from the entry in % and in price, and the profit at the target for the
+     *  computed size. Shown just outside the reward zone, on the target line. */
+    targetBoxLabel(): string {
+        const p = this.prices();
+        if (!p) return '';
+        const dist = Math.abs(p.target - p.entry);
+        const at = this.showPrices ? `${formatGrouped(p.target)} ` : '';
+        return `Target: ${at}(${this.rewardPct().toFixed(2)}%) ${formatGrouped(dist)}, Amount: ${formatGrouped(dist * this.positionSize(), 2)}`;
+    }
+
+    /** `Stop: 80,500.00 (2.05%) 1,690.20, Amount: 100.00` — same shape as the target label;
+     *  the amount is the loss at the stop. Shown just outside the risk zone, on the stop line. */
+    stopBoxLabel(): string {
+        const p = this.prices();
+        if (!p) return '';
+        const dist = Math.abs(p.entry - p.stop);
+        const at = this.showPrices ? `${formatGrouped(p.stop)} ` : '';
+        return `Stop: ${at}(${this.riskPct().toFixed(2)}%) ${formatGrouped(dist)}, Amount: ${formatGrouped(dist * this.positionSize(), 2)}`;
+    }
+
+    /** The centre box on the entry line: `Long, Qty: 0.0591, Risk: $100` (showLossSize) over
+     *  `Risk/Reward Ratio: 2.07` (showHeader). Empty when both are off. */
+    centerBoxLines(): string[] {
+        const lines: string[] = [];
+        const dir = this.direction === 'long' ? 'Long' : 'Short';
+        if (this.showLossSize) lines.push(`${dir}, Qty: ${formatQty(this.positionSize())}, Risk: $${formatGrouped(this.dollarLoss(), 2)}`);
+        if (this.showHeader) lines.push(`Risk/Reward Ratio: ${this.rr().toFixed(2)}`);
+        return lines;
+    }
+
     // ── stop/target input units (the gear panel's Price / Points dropdowns) ──
 
     /** The stop or target expressed in the given unit: the absolute price, or the distance from
@@ -384,8 +417,8 @@ export class PositionTool extends Drawing {
                 { path: 'stopPrice', label: 'Stop price', kind: 'number', group: 'behavior' },
                 { path: 'targetPrice', label: 'Target price', kind: 'number', group: 'behavior' },
                 { path: 'showText', label: 'Show text', kind: 'boolean', group: 'behavior' },
-                { path: 'showHeader', label: 'Show direction & ratio', kind: 'boolean', group: 'behavior' },
-                { path: 'showLossSize', label: 'Show loss & size', kind: 'boolean', group: 'behavior' },
+                { path: 'showHeader', label: 'Show risk/reward ratio', kind: 'boolean', group: 'behavior' },
+                { path: 'showLossSize', label: 'Show size & risk', kind: 'boolean', group: 'behavior' },
                 { path: 'showTargetLabel', label: 'Show target label', kind: 'boolean', group: 'behavior' },
                 { path: 'showStopLabel', label: 'Show stop label', kind: 'boolean', group: 'behavior' },
                 { path: 'showPrices', label: 'Show level prices', kind: 'boolean', group: 'behavior' },
@@ -451,6 +484,15 @@ function formatPrice(n: number): string {
     if (!Number.isFinite(n)) return '0';
     if (Math.abs(n) >= 1) return n.toFixed(2);
     return n.toPrecision(4).replace(/\.?0+$/, '');
+}
+
+/** Price-like number with thousands separators: `decimals` when given, else 2 at ≥1 and four
+ *  significant digits below 1 (sub-dollar coins keep their precision). */
+function formatGrouped(n: number, decimals?: number): string {
+    if (!Number.isFinite(n)) return '0';
+    if (decimals === undefined && Math.abs(n) < 1) return formatPrice(n);
+    const d = decimals ?? 2;
+    return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
 /** Trim binary float noise from a converted value (points arithmetic). */

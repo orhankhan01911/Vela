@@ -142,11 +142,26 @@ describe('drawings/position tools', () => {
         expect(d.directionLabel()).toBe('SHORT');
     });
 
+    it('TradingView-style boxed labels: level, %, distance, amount; centre size + ratio', () => {
+        // entry 50, stop 40, target 70; 1% of $10,000 = $100 at risk → size 10
+        const d = createDrawing('position', { paneId: 'price', anchors: [{ time: 0, price: 50 }, { time: 5 * HR, price: 40 }, { time: 10 * HR, price: 70 }] })! as PositionTool;
+        expect(d.targetBoxLabel()).toBe('Target: 70.00 (40.00%) 20.00, Amount: 200.00');
+        expect(d.stopBoxLabel()).toBe('Stop: 40.00 (20.00%) 10.00, Amount: 100.00');
+        expect(d.centerBoxLines()).toEqual(['Long, Qty: 10, Risk: $100.00', 'Risk/Reward Ratio: 2.00']);
+        d.applySettings({ showPrices: false, showLossSize: false });
+        expect(d.targetBoxLabel()).toBe('Target: (40.00%) 20.00, Amount: 200.00');
+        expect(d.centerBoxLines()).toEqual(['Risk/Reward Ratio: 2.00']);
+        // thousands separators on big prices
+        const b = createDrawing('position', { paneId: 'price', anchors: [{ time: 0, price: 82000 }, { time: 5 * HR, price: 81000 }, { time: 10 * HR, price: 84000 }] })! as PositionTool;
+        expect(b.targetBoxLabel()).toBe('Target: 84,000.00 (2.44%) 2,000.00, Amount: 200.00');
+    });
+
     it('label toggles: showPrices appends levels; header/loss/size lines are separate strings', () => {
         const d = createDrawing('position', { paneId: 'price', anchors: [{ time: 0, price: 50 }, { time: 5 * HR, price: 40 }, { time: 10 * HR, price: 70 }] })! as PositionTool;
         expect(d.showText).toBe(true);
         expect(d.showLossSize).toBe(true);
-        expect(d.showPrices).toBe(false);
+        expect(d.showPrices).toBe(true); // TradingView shows the level price by default
+        d.applySettings({ showPrices: false });
         expect(d.headerLabel()).toBe('LONG  ·  R:R 2.00');
         expect(d.targetLabel()).toBe('Target +40.00%');
         expect(d.stopLabel()).toBe('Stop −20.00%');
