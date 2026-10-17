@@ -37,7 +37,7 @@ import type { DataControl } from '../DataControl';
 import { timeframeToMs } from '../../data/timeframe';
 import { parseSymbol } from '../../data/ProviderRegistry';
 import { barTransformFor, parseExtendedTicker, type BarTransform } from '../price-styles/BarTransform';
-import { chartType, type SeriesDataEngine } from '../../chart-types/registry';
+import { chartType, replacesSeries, type SeriesDataEngine } from '../../chart-types/registry';
 import { resolveTheme } from '../theme';
 import { applyPlotStyle, plotStyleSchema } from './plotStyle';
 import type { ReplayBounds, ReplayController, ReplayEndReason, ReplayStartOptions, ReplayState, ReplayTick, ReplayTickSource } from '../ReplayControl';
@@ -148,6 +148,14 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     private readonly typeSettings = new Map<string, Record<string, unknown>>();
     /** The style id whose data engine is currently ACTIVE (drives suspend/resume + pokes). */
     private activeEngineStyle: string | null = null;
+    /** The active style when it REPLACES the series (Renko, tick bars — `replacesSeries`):
+     *  `this.bars` is then whatever its engine pushed, never derived from the raw bars. */
+    private seriesStyle: string | null = null;
+    /** A series-replacing style is active but its engine has not pushed a series yet. */
+    private seriesPending = false;
+    /** One coalesced `onBars` poke per microtask for the series engine (a replay step or a
+     *  backfill can change the raw bars several times in one synchronous run). */
+    private seriesPokeQueued = false;
     /** The chart's current price style (tracked from the renderer's change events + initial read). */
     private priceStyle: PriceStyle = 'candles';
     private priceStyleWillChangeUnsub: Unsubscribe | null = null;
@@ -288,6 +296,10 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const initialStyle = this.renderer.readFeature('priceStyle');
         if (typeof initialStyle === 'string') this.priceStyle = initialStyle as PriceStyle;
         this.barTransform = barTransformFor(initialStyle);
+        if (replacesSeries(initialStyle)) {
+            this.seriesStyle = initialStyle as string;
+            this.seriesPending = true;
+        }
         // User drawings: owns the model + tool/selection state, drives the renderer's
         // drawings port (inert when the renderer lacks the `userDrawings` capability).
         // The series service backs data-driven drawings that read a finer timeframe:
@@ -1499,8 +1511,109 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      */
     private syncPriceStyle(style: unknown): void {
         if (typeof style === 'string') this.priceStyle = style as PriceStyle;
+        this.syncSeriesOwner(style);
         this.syncBarTransform(style);
         this.syncChartTypeEngine(style);
+    }
+
+    /**
+     * Enter or leave a SERIES-REPLACING style (`replacesSeries`: Renko, tick bars). Entering
+     * blanks the view until the type's engine pushes its own series (raw candles on a brick
+     * axis would be wrong for that gap); leaving re-derives the view from the raw bars. The
+     * raw plane (load, live, heal, replay) never notices either way.
+     */
+    private syncSeriesOwner(style: unknown): void {
+        const want = replacesSeries(style) ? (style as string) : null;
+        if (want === this.seriesStyle) return;
+        this.seriesStyle = want;
+        if (want) {
+            this.seriesPending = true;
+            this.bars = [];
+            this.renderer.setBars(this.bars);
+            this.renderer.setLoading?.(true);
+            this.blankIndicatorVisuals(); // their plots sit on the old bar indices until the series lands
+            this.events.emit('series:bar', { bar: null });
+            return;
+        }
+        if (this.seriesPending) {
+            this.seriesPending = false;
+            if (!this.loadingUp) this.renderer.setLoading?.(false);
+        }
+        this.barTransform = barTransformFor(style);
+        this.bars = this.barTransform ? this.barTransform.full(this.rawBars) : this.rawBars;
+        this.renderer.setBars(this.bars);
+        this.reexecuteIndicators();
+        this.pokeNatives();
+        this.events.emit('series:bar', { bar: this.bars[this.bars.length - 1] ?? null });
+    }
+
+    /** Poke the series-replacing engine once per microtask: its raw input changed. */
+    private pokeSeriesEngine(): void {
+        if (this.seriesPokeQueued) return;
+        this.seriesPokeQueued = true;
+        queueMicrotask(() => {
+            this.seriesPokeQueued = false;
+            const id = this.seriesStyle;
+            if (!id || id !== this.activeEngineStyle || this.switchingMarket) return;
+            this.typeEngines.get(id)?.onBars?.();
+        });
+    }
+
+    /** Raw depth a series engine asked for, per market generation (one backfill per target). */
+    private rawDepthAsked: { gen: number; bars: number } | null = null;
+
+    /**
+     * A series-replacing engine needs more RAW history than the chart loaded (see
+     * `SeriesDataEngineHost.ensureDepth`): extend in the background exactly like a depth-only
+     * `setMarket`, without touching the market config (leaving the style keeps the user's
+     * depth). Asked once per generation and target: a source that has no older bars answers
+     * the first backfill with genesis, and asking again would only refetch that empty chunk.
+     */
+    private ensureRawDepth(bars: number): void {
+        const want = Math.min(Math.max(0, Math.floor(bars)), 20_000);
+        if (this.switchingMarket || this.historyState === 'backfill' || this.replayQueue !== null) return;
+        if (!this.feed.loadRange || this.config.market.data?.length) return;
+        if (this.rawBars.length === 0 || this.rawBars.length >= want) return;
+        const asked = this.rawDepthAsked;
+        if (asked && asked.gen === this.generation && asked.bars >= want) return;
+        this.rawDepthAsked = { gen: this.generation, bars: want };
+        this.resetHistoryTracking();
+        this.extendDepth(this.generation, want);
+    }
+
+    /** A series-replacing engine pushed a whole series: it IS the view now. */
+    private applySeries(bars: OHLCV[], opts?: { preserveView?: boolean }): void {
+        this.bars = bars.slice(); // the view owns its array (live updates mutate it in place)
+        this.renderer.setBars(this.bars, { preserveView: opts?.preserveView });
+        if (this.seriesPending) {
+            this.seriesPending = false;
+            if (!this.loadingUp) this.renderer.setLoading?.(false);
+        }
+        this.reexecuteIndicators(); // a new series is new input data wholesale
+        this.pokeNatives();
+        this.events.emit('series:bar', { bar: this.bars[this.bars.length - 1] ?? null });
+    }
+
+    /** A series-replacing engine's live update: refine the forming view bar or append one. */
+    private applySeriesBar(bar: OHLCV): void {
+        const last = this.bars[this.bars.length - 1];
+        if (last && bar.time === last.time) {
+            this.bars[this.bars.length - 1] = bar;
+            this.barCause = 'tick';
+        } else if (!last || bar.time > last.time) {
+            this.bars.push(bar);
+            this.barCause = 'bar';
+        } else return;
+        this.renderer.updateBar(bar);
+        this.notifyViewConsumers();
+        this.events.emit('series:bar', { bar });
+    }
+
+    /** Tell every started native indicator that the view bars changed. */
+    private pokeNatives(): void {
+        for (const record of this.registry.all()) {
+            if (record.native?.started && !record.hidden) record.native.instance.onBars();
+        }
     }
 
     /**
@@ -1532,6 +1645,24 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const def = chartType(id);
         if (!def?.dataEngine) return;
         const engine = def.dataEngine();
+        // A series-replacing type reads the raw market and pushes the view; its pushes count
+        // only while it is still THIS chart's engine for the active style (a stopped or
+        // superseded engine's late async push is dropped).
+        const owns = (): boolean => this.seriesStyle === id && this.typeEngines.get(id) === engine;
+        const series = def.replacesSeries
+            ? {
+                  rawBars: () => this.rawBars,
+                  setSeries: (bars: OHLCV[], opts?: { preserveView?: boolean }) => {
+                      if (owns()) this.applySeries(bars, opts);
+                  },
+                  updateSeries: (bar: OHLCV) => {
+                      if (owns()) this.applySeriesBar(bar);
+                  },
+                  ensureDepth: (bars: number) => {
+                      if (owns()) this.ensureRawDepth(bars);
+                  },
+              }
+            : {};
         this.typeEngines.set(id, engine);
         // Seed the stored settings BEFORE start (a pre-start onSettings is pure
         // configuration by contract), so the engine's first fetch already runs on
@@ -1547,6 +1678,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             data: this.dataControl,
             pushData: (data) => this.renderer.setNativeData?.(id, data),
             pushPending: (ranges) => this.renderer.setNativeData?.(`${id}-pending`, ranges),
+            ...series,
         });
     }
 
@@ -1562,6 +1694,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const transform = barTransformFor(style);
         if (transform === this.barTransform) return; // singletons per style — identity is enough
         this.barTransform = transform;
+        if (this.seriesStyle) return; // the series engine owns the view (syncSeriesOwner re-derives on leave)
         if (this.rawBars.length === 0) return;
         this.bars = transform ? transform.full(this.rawBars) : this.rawBars;
         this.renderer.setBars(this.bars, { preserveView: true });
@@ -1627,6 +1760,21 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      */
     private setBarSeries(raw: OHLCV[], opts?: { preserveView?: boolean; clearing?: boolean }): void {
         this.rawBars = raw;
+        if (this.seriesStyle) {
+            // A series-replacing style: the raw series feeds its engine, not the view.
+            if (opts?.clearing) {
+                this.bars = [];
+                this.renderer.setBars(this.bars);
+                this.seriesPending = true;
+                return;
+            }
+            if (raw.length > 0) {
+                this.endLoad();
+                if (this.seriesPending) this.renderer.setLoading?.(true); // the engine's series is still to come
+            }
+            this.pokeSeriesEngine();
+            return;
+        }
         this.bars = this.barTransform ? this.barTransform.full(raw) : raw;
         this.renderer.setBars(this.bars, { preserveView: opts?.preserveView });
         // The first PAINTED batch ends the loading state — on a deep history that is the quick
@@ -1648,6 +1796,15 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      */
     private applyBar(bar: OHLCV, notify = true): void {
         const last = this.rawBars[this.rawBars.length - 1];
+        if (this.seriesStyle) {
+            // Raw plane only: the series engine derives (and pushes) its own view from it.
+            if (last && bar.time === last.time) this.rawBars[this.rawBars.length - 1] = bar;
+            else if (!last || bar.time > last.time) this.rawBars.push(bar);
+            else return;
+            this.events.emit('bar', bar);
+            if (notify) this.pokeSeriesEngine();
+            return;
+        }
         let viewBar = bar;
         if (last && bar.time === last.time) {
             this.rawBars[this.rawBars.length - 1] = bar;
@@ -1684,6 +1841,17 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      */
     private notifySessionsBars(reason?: BarsChangeReason): void {
         if (this.switchingMarket) return; // old sessions must not run over the incoming market's bars
+        if (this.seriesStyle) {
+            this.pokeSeriesEngine(); // the RAW bars changed; the view follows the engine's push
+            return;
+        }
+        this.notifyViewConsumers(reason);
+        if (this.activeEngineStyle) this.typeEngines.get(this.activeEngineStyle)?.onBars?.();
+    }
+
+    /** Signal every live session + native that the VIEW bars changed (see {@link notifySessionsBars}). */
+    private notifyViewConsumers(reason?: BarsChangeReason): void {
+        if (this.switchingMarket) return;
         // A backfill chunk (or the run released by its completion) is still the script's
         // FIRST look at the history, whichever bar arrived last.
         const cause: ScriptRunCause = reason ? 'history' : this.barCause;
@@ -1694,7 +1862,6 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 record.session.notifyBars(reason);
             } else if (record.native) record.native.instance.onBars();
         }
-        if (this.activeEngineStyle) this.typeEngines.get(this.activeEngineStyle)?.onBars?.();
     }
 
     /** Gap healing needs a ranged feed and a provider-backed series (offline `data` has no source). */

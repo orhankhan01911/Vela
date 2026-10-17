@@ -20,6 +20,7 @@ export {
     chartType,
     chartTypes,
     tickerModifierIds,
+    replacesSeries,
     normalizeSettingsRow,
     settingsRowValueKeys,
     type ChartTypeDefinition,

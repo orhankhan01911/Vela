@@ -123,6 +123,14 @@ export interface VelaEventMap extends Record<string, unknown> {
   /** A live tick: the forming bar was updated or a new bar appended (a bar revealed by replay included). */
   bar: OHLCV;
   /**
+   * The VIEW series changed under a series-replacing chart type (Renko, tick bars — see
+   * `ChartTypeDefinition.replacesSeries`): `bar` is the newest view bar (a brick, an N-trade
+   * bar), `null` when the view is empty. Fires on every `setSeries`/`updateSeries`; the raw
+   * `bar` event keeps carrying the feed's own bars. Readouts that show what is PAINTED (the
+   * status line's OHLC) follow this while such a style is active.
+   */
+  "series:bar": { bar: OHLCV | null };
+  /**
    * The visible time range moved (pan/zoom/fit — fires per applied change, NOT
    * debounced; the engine re-run debounce is separate). Payload = `{from, to}` in
    * epoch-ms. The seam viewport-sync links between charts build on.

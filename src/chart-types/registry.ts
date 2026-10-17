@@ -34,6 +34,34 @@ export interface SeriesDataEngineHost {
     pushData: (data: unknown) => void;
     /** Push the ranges still loading (the `<id>-pending` channel — skeleton/reveal UIs). */
     pushPending: (ranges: ReadonlyArray<readonly [number, number]>) => void;
+    /**
+     * The chart's RAW bars (the feed's series, never transformed) — read fresh, never cache.
+     * Present only for a type that {@link ChartTypeDefinition.replacesSeries replaces the
+     * series}: its `bars()` is its own pushed series, so this is where it reads the market.
+     */
+    rawBars?: () => readonly OHLCV[];
+    /**
+     * Replace the chart's whole view series (a {@link ChartTypeDefinition.replacesSeries}
+     * type only). Bar times must be strictly increasing. The renderer, every Pine
+     * indicator and every native indicator see these bars instead of the raw ones; the
+     * first call also ends the style's loading state. `preserveView` keeps the viewport
+     * (right-anchored, so older bars prepended in place do not move the view).
+     */
+    setSeries?: (bars: OHLCV[], opts?: { preserveView?: boolean }) => void;
+    /**
+     * Update the forming view bar (same `time` as the last bar) or append a new one
+     * (a later `time`) — the live path of a series-replacing type. Earlier times are ignored.
+     */
+    updateSeries?: (bar: OHLCV) => void;
+    /**
+     * Ask for at least `bars` RAW bars of history (a {@link ChartTypeDefinition.replacesSeries}
+     * type only). Renko and similar types fold many raw bars into one view bar, so the chart's
+     * default depth can leave too few view bars for an indicator to warm up (TradingView loads
+     * history until a brick count is reached). The extra history streams in behind the chart
+     * like any backfill (`onBars` per chunk). A no-op while a market switch, a backfill or a
+     * replay is running, for an offline series, or when that many bars are already held.
+     */
+    ensureDepth?: (bars: number) => void;
 }
 
 /**
@@ -94,6 +122,17 @@ export interface ChartTypeDefinition {
      * indicators and drawings are unaffected.
      */
     basePainting?: 'candles' | 'none';
+    /**
+     * The type's data engine SUPPLIES the bar series itself (Renko, tick bars, range bars):
+     * its bars are not 1:1 with the raw ones, so neither the bar count nor the time axis
+     * follows the chart's timeframe. While the style is active the raw series keeps
+     * loading, streaming, healing and replaying exactly as usual, but only the engine sees
+     * it (`host.rawBars()`, poked through `onBars`); the view, the renderer and every
+     * indicator read what the engine pushes through `host.setSeries` / `host.updateSeries`.
+     * Requires `dataEngine`. The countdown-to-bar-close chip is hidden for such a type
+     * (its bars have no fixed close time).
+     */
+    replacesSeries?: boolean;
 }
 
 /**
@@ -394,6 +433,12 @@ export function chartType(id: unknown): ChartTypeDefinition | undefined {
 /** Every registered chart type (registration order). */
 export function chartTypes(): ChartTypeDefinition[] {
     return [...registry.values()];
+}
+
+/** Whether the price style is a {@link ChartTypeDefinition.replacesSeries series-replacing} type. */
+export function replacesSeries(id: unknown): boolean {
+    const def = chartType(id);
+    return !!(def?.replacesSeries && def.dataEngine);
 }
 
 /** Ids that act as extended-ticker modifiers (`"SYM;id"`). */

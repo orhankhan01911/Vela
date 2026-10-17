@@ -746,6 +746,10 @@ export class NativeRenderer implements IChartRenderer {
      * Set the active symbol's tick size so the price axis shows the instrument's true
      * precision (see the port). Undefined / non-positive ⇒ fall back to the zoom formula.
      */
+    getPricePrecision(): number | undefined {
+        return this.scene.priceMintick;
+    }
+
     setPricePrecision(mintick: number | undefined): void {
         const m = typeof mintick === 'number' && mintick > 0 ? mintick : undefined;
         if (m === this.scene.priceMintick) return;

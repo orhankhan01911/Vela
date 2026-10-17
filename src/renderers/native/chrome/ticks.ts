@@ -245,7 +245,9 @@ export function formatTimeStamp(ms: number, timeZone: string, barIntervalMs: num
     const d = zonedDate(ms, timeZone);
     const date = `${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} '${pad2(d.getUTCFullYear() % 100)}`;
     if (barIntervalMs >= DAY) return date;
-    return `${date} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+    const hm = `${date} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+    // Sub-minute bars (seconds timeframes, tick bars): the minute alone repeats across bars.
+    return barIntervalMs > 0 && barIntervalMs < MIN ? `${hm}:${pad2(d.getUTCSeconds())}` : hm;
 }
 
 function pickStep(targetMs: number): number {
@@ -277,9 +279,12 @@ export function timeTicks(fromMs: number, toMs: number, target = 8, offsetMs = 0
         if (step < DAY) {
             const h = d.getUTCHours();
             const m = d.getUTCMinutes();
-            if (h === 0 && m === 0) {
+            const sec = d.getUTCSeconds();
+            if (h === 0 && m === 0 && sec === 0) {
                 label = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
                 major = true;
+            } else if (step < MIN) {
+                label = `${pad2(h)}:${pad2(m)}:${pad2(sec)}`; // a seconds ladder: hh:mm alone repeats
             } else {
                 label = `${pad2(h)}:${pad2(m)}`;
             }

@@ -272,6 +272,9 @@ export interface IChartRenderer {
      */
     setPricePrecision?(mintick: number | undefined): void;
 
+    /** The tick size last given to {@link setPricePrecision} (undefined = zoom-derived decimals). Optional. */
+    getPricePrecision?(): number | undefined;
+
     /**
      * Push a bespoke NATIVE-LAYER render payload, keyed by layer `type`. Visuals that aren't
      * ordinary series/fills draw through a dedicated renderer layer instead of the model; this is

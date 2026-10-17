@@ -16,6 +16,7 @@ import { AXIS_MASTER_W, axisColumnX, PANE_SEPARATOR_PX } from './axisLayout';
 import { DARK_THEME } from '../../../core/theme';
 import { tzOffsetMs } from './tz';
 import { countdownText } from './countdown';
+import { replacesSeries } from '../../../chart-types/registry';
 import { tagTextColor } from './contrast';
 import { markGroupVisible } from '../../shared/marks-state';
 import { clusterTooltip, layoutMarkLane, markGlyphAt, markStackAt, type MarkLaneLayout, type PlacedGlyph } from './marks/layout';
@@ -447,7 +448,8 @@ export class ChromeRenderer {
         }
 
         // ── axis chips: last-price label and/or countdown ──
-        const cdText = scene.showCountdown ? countdownText(last.time, coords.barInterval, Date.now()) : null;
+        // A series-replacing style (Renko, tick bars) has no fixed bar close: no countdown.
+        const cdText = scene.showCountdown && !replacesSeries(scene.priceStyle) ? countdownText(last.time, coords.barInterval, Date.now()) : null;
         const showCountdown = cdText !== null;
         const showLabel = scene.showPriceLabel;
         if (!showLabel && !showCountdown) return;

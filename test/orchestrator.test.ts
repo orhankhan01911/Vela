@@ -27,7 +27,7 @@ import type { DataProvider, ProviderInfo, ProviderCapabilities, SymbolDescriptor
 import type { OHLCV } from '../src/core/model/ohlcv';
 import { registerNativeIndicator, unregisterNativeIndicator } from '../src/core/native-indicators/NativeIndicator';
 import { heikinAshiFull } from '../src/core/price-styles/heikin-ashi';
-import { registerChartType, unregisterChartType, type SeriesDataEngineHost } from '../src/chart-types/registry';
+import { registerChartType, unregisterChartType, replacesSeries, type SeriesDataEngineHost } from '../src/chart-types/registry';
 import type { BarTransform } from '../src/core/price-styles/BarTransform';
 import type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor } from '../src/core/native-indicators/NativeIndicator';
 import type { Pane } from '../src/core/model/scene';
@@ -2018,6 +2018,99 @@ describe('EngineOrchestrator — chart-type SDK (registerChartType)', () => {
         await flush();
         expect(calls).toEqual(['start']);
         chart.destroy();
+    });
+});
+
+describe('EngineOrchestrator — series-replacing chart types (replacesSeries)', () => {
+    afterEach(() => unregisterChartType('bricks'));
+
+    /** A toy "brick" engine: one view bar per 2 raw bars, times = the raw pair's first time. */
+    function bricksType(log: { host: SeriesDataEngineHost | null; pokes: number }) {
+        const derive = (raw: readonly OHLCV[]): OHLCV[] => {
+            const out: OHLCV[] = [];
+            for (let i = 0; i + 1 < raw.length; i += 2) out.push({ ...raw[i]!, close: raw[i + 1]!.close });
+            return out;
+        };
+        registerChartType({
+            id: 'bricks',
+            replacesSeries: true,
+            dataEngine: () => ({
+                start(h) {
+                    log.host = h;
+                    h.setSeries!(derive(h.rawBars!()));
+                },
+                onBars() {
+                    log.pokes += 1;
+                    const raw = log.host!.rawBars!();
+                    const last = raw[raw.length - 1]!;
+                    log.host!.updateSeries!({ ...last, time: last.time });
+                },
+                suspend() {},
+                resume() {},
+                stop() {},
+            }),
+        });
+        return derive;
+    }
+
+    it('the engine series IS the view; raw ticks reach only the engine; leaving restores the raw view', async () => {
+        const log = { host: null as SeriesDataEngineHost | null, pokes: 0 };
+        const derive = bricksType(log);
+        const feed = new GapFeed(50);
+        const renderer = new FakeRenderer();
+        const chart = new Vela({} as unknown as HTMLElement, { live: true, volume: false }, { renderer, engines: [], dataFeed: feed });
+        await chart.ready();
+        await flush();
+        const raw = makeBars(50);
+        expect(renderer.bars).toEqual(raw);
+
+        renderer.firePriceStyle('bricks');
+        await flush();
+        expect(log.host!.rawBars!()).toEqual(raw); // the engine reads the RAW market
+        expect(renderer.bars).toEqual(derive(raw)); // the view is the engine's own series (25 bars)
+        expect(log.host!.bars()).toEqual(derive(raw));
+
+        // A live raw tick does not touch the view directly — it pokes the engine (once per microtask).
+        const before = renderer.updatedBars.length;
+        const tick = { ...raw[49]!, close: 999 };
+        feed.push!(tick);
+        feed.push!({ ...tick, close: 998 });
+        await flush();
+        expect(log.pokes).toBe(1); // two raw ticks, one coalesced poke
+        expect(log.host!.rawBars!()[49]!.close).toBe(998);
+        // The engine's updateSeries appended a bar (a later time than its last brick).
+        expect(renderer.updatedBars.length).toBe(before + 1);
+        expect(renderer.bars[renderer.bars.length - 1]!.close).toBe(998);
+
+        renderer.firePriceStyle('candles');
+        await flush();
+        expect(renderer.bars.length).toBe(50); // raw view again, live tick included
+        expect(renderer.bars[49]!.close).toBe(998);
+        chart.destroy();
+    });
+
+    it('a stale engine push after leaving the style is dropped', async () => {
+        const log = { host: null as SeriesDataEngineHost | null, pokes: 0 };
+        bricksType(log);
+        const renderer = new FakeRenderer();
+        const chart = new Vela({} as unknown as HTMLElement, { live: false, volume: false }, { renderer, engines: [], dataFeed: new MockDataFeed() });
+        await chart.ready();
+        await flush();
+        renderer.firePriceStyle('bricks');
+        await flush();
+        const host = log.host!;
+        renderer.firePriceStyle('candles');
+        await flush();
+        host.setSeries!([{ time: 1, open: 1, high: 1, low: 1, close: 1 }]);
+        expect(renderer.bars.length).toBe(50); // ignored: the raw view stays
+        chart.destroy();
+    });
+
+    it('the countdown helper knows series-replacing styles', () => {
+        bricksType({ host: null, pokes: 0 });
+        expect(replacesSeries('bricks')).toBe(true);
+        expect(replacesSeries('candles')).toBe(false);
+        expect(replacesSeries('heikinashi')).toBe(false);
     });
 });
 

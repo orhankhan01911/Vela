@@ -7,10 +7,11 @@ import { injectStyles } from '../ui/styles';
 import { Tooltip } from '../ui/components/tooltip';
 import { CalloutBubble } from '../ui/components/callout-bubble';
 import { Menu } from '../ui/components/menu';
+import { replacesSeries } from '../chart-types/registry';
 import { segmentVisibility, statuslineMenuItems, STATUSLINE_LADDER, readoutCells, type StatuslinePart, type StatuslineLayout } from './statusline-model';
 import { SESSION_PRE, SESSION_POST, SESSION_OFF } from '../core/palette';
 import { iconAt } from '../core/icons';
-import { fmtPrice, fmtChange, fmtChangePct, decimalsFor } from './format';
+import { fmtPrice, fmtChange, fmtChangePct, priceDecimals } from './format';
 import { timeframeLabel } from './timeframe';
 import { tickerIconEl } from './symbol-icon';
 import { parseSymbol } from '../data/ProviderRegistry';
@@ -297,6 +298,8 @@ export class Statusline {
     private chartHidden = false;
     private lastBar: BarLike | null = null;
     private hoverBar: BarLike | null = null;
+    /** The bound chart's tick size source (the price axis's precision), see {@link dp}. */
+    private mintick: (() => number | undefined) | null = null;
     private unsubs: Array<() => void> = [];
     /** Up/down ink for the OHLC + change values — the ACTIVE price style's configured
      *  colors (candle bodies, bar ticks, the line color, …); null falls back to the theme
@@ -606,9 +609,17 @@ export class Statusline {
         this.detach();
         this.lastBar = null;
         this.hoverBar = null;
+        this.mintick = () => chart.renderer.priceMintick?.();
         this.unsubs.push(
             chart.on('bar', (b: OHLCV) => {
+                // A series-replacing style (Renko, tick bars) paints its own bars: the raw tick
+                // is not what the chart shows, `series:bar` below carries that.
+                if (replacesSeries(chart.renderer.get('priceStyle'))) return;
                 this.lastBar = b;
+                if (!this.hoverBar) this.render();
+            }),
+            chart.on('series:bar', ({ bar }) => {
+                this.lastBar = bar;
                 if (!this.hoverBar) this.render();
             }),
             // A replay cut or restore replaces the newest bar without a `bar` event.
@@ -670,11 +681,17 @@ export class Statusline {
     private widthKey(): string {
         const bar = this.hoverBar ?? this.lastBar;
         if (!bar) return this.readout;
-        const dp = decimalsFor(bar.close);
+        const dp = this.dp(bar.close);
         const diff = bar.close - bar.open;
         const text = [bar.open, bar.high, bar.low, bar.close, diff].map((v) => v.toFixed(dp));
         text.push(((diff / bar.open) * 100).toFixed(2));
         return `${this.readout} ${text.join(' ')}`.replace(/\d/g, '0');
+    }
+
+    /** Decimals of the OHLC readout: the symbol's tick size, as on the price axis (a 0.0333 pair with a
+     *  0.000001 tick reads 0.033273, not 0.0333); the magnitude rule only while the tick is unknown. */
+    private dp(close: number): number {
+        return priceDecimals(close, this.mintick?.());
     }
 
     /** Write the value readout for the current bar at the current ladder level. */
@@ -685,7 +702,7 @@ export class Statusline {
             this.changeEl.textContent = '';
             return;
         }
-        const dp = decimalsFor(bar.close);
+        const dp = this.dp(bar.close);
         const doc = this.el.ownerDocument;
         const up = this.isUp ? this.isUp(bar) : bar.close >= bar.open;
         // ONE ink for the whole readout — OHLC values and the change share it, so the
@@ -706,7 +723,7 @@ export class Statusline {
         // percent delta alone.
         const { level } = this.layout;
         this.ohlcEl.replaceChildren(...readoutCells(level, this.readout).map((c) => cell(c.label, bar[c.key])));
-        this.changeEl.textContent = level === 'minimal' ? fmtChangePct(bar.open, bar.close) : fmtChange(bar.open, bar.close);
+        this.changeEl.textContent = level === 'minimal' ? fmtChangePct(bar.open, bar.close) : fmtChange(bar.open, bar.close, dp);
         this.changeEl.dataset.dir = up ? 'up' : 'down';
         this.changeEl.style.color = ink;
     }

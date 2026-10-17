@@ -160,6 +160,12 @@ export class RendererControl {
         return this.renderer.onClick(cb);
     }
 
+    /** The active symbol's tick size as the price axis uses it (`undefined` until the symbol's metadata
+     *  resolves, or when it has none). Host chrome formats prices with it so it reads like the axis. */
+    priceMintick(): number | undefined {
+        return this.renderer.getPricePrecision?.();
+    }
+
     /** Width in px of the master price column: 64 unless long labels (0.035000 at a large font) widened it.
      *  Overlays that draw into the price gutter size themselves from this. */
     priceColumnWidth(): number {

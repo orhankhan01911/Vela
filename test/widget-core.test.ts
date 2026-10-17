@@ -637,3 +637,17 @@ describe('watermarkFontPx — the mark fits the chart, not the viewport', () => 
         expect(watermarkFontPx(400, 0)).toBe(36);
     });
 });
+
+// 2026-10-16: a HYPE / ETH pair (0.033273, tick 0.000001) read "O 0.0333 H 0.0333 L 0.0333 C 0.0333" in the
+// legend while its price axis showed 0.033273: the legend ignored the symbol's tick size.
+import { priceDecimals, decimalsForTick } from '../src/widget/format';
+describe('legend price decimals follow the symbol tick size', () => {
+    it('uses the tick size when known, the magnitude rule otherwise', () => {
+        expect(priceDecimals(0.033273, 0.000001)).toBe(6);
+        expect(fmtPrice(0.033273, priceDecimals(0.033273, 0.000001))).toBe('0.033273');
+        expect(priceDecimals(0.033273)).toBe(4);
+        expect(priceDecimals(81.112, 0.001)).toBe(3);
+        expect(decimalsForTick(0.25)).toBe(2);
+        expect(fmtChange(0.033263, 0.033273, 6)).toBe('+0.000010 (+0.03%)');
+    });
+});
