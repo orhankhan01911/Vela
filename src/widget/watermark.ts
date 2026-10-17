@@ -129,9 +129,10 @@ export class Watermark {
         this.el.style.display = (this.shown || replay) && !this.loading ? '' : 'none';
     }
 
-    update(symbol: string, timeframe: string): void {
+    /** `label` overrides the resolution (tick/range… bars: `'100T'`). */
+    update(symbol: string, timeframe: string, label?: string): void {
         // Bare ticker — the venue prefix is routing identity, not something to watermark.
-        this.text.textContent = symbol ? `${parseSymbol(symbol).ticker} · ${timeframeLabel(timeframe)}` : '';
+        this.text.textContent = symbol ? `${parseSymbol(symbol).ticker} · ${label ?? timeframeLabel(timeframe)}` : '';
         this.fit();
     }
 

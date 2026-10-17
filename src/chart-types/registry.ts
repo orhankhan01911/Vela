@@ -98,6 +98,9 @@ export interface ChartTypeDefinition {
     id: string;
     /** Human-readable label for style pickers. Defaults to the id. */
     label?: string;
+    /** Reached through the INTERVAL dropdown (an `interval-sections.ts` section such as ticks or
+     *  ranges), so it is left out of the chart-type pickers. Still a normal price style otherwise. */
+    intervalOnly?: boolean;
     /** Raw `<svg>` markup for style pickers (surfaced as icon id `style-<id>`). */
     icon?: string;
     /** Optional SETTINGS SECTION rendered inside the chart-settings dialog — declarative

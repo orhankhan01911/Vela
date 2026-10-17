@@ -38,6 +38,9 @@ import { resolveTopbarComposition, topbarHas, TOPBAR_BUILTIN_IDS, type ResolvedT
 import { LayoutModeController, type LayoutMode } from '../widget/layout-mode';
 import { MobileBar } from '../widget/mobile-bar';
 import { TimeframeDrawer } from '../widget/timeframe-drawer';
+import { chartType } from '../chart-types/registry';
+import { currentIntervalLabel } from '../widget/interval-menu';
+import { onIntervalSectionsChanged } from '../widget/interval-sections';
 import { DrawingsDrawer } from '../widget/drawings-drawer';
 import { MoreDrawer } from '../widget/more-drawer';
 import { TimezoneDrawer } from '../widget/timezone-drawer';
@@ -385,6 +388,7 @@ export class VelaWorkspace {
     private readonly mobileBar: MobileBar | null;
     private readonly drawingPill: DrawingPill | null;
     private tfDrawer: TimeframeDrawer | null = null;
+    private readonly offIntervalSections: () => void;
     private drawingsDrawer: DrawingsDrawer | null = null;
     private moreDrawer: MoreDrawer | null = null;
     private timezoneDrawer: TimezoneDrawer | null = null;
@@ -738,6 +742,10 @@ export class VelaWorkspace {
                       onSettingsClick: () => this.active.chart.renderer.openSettings(),
                   })
                 : null;
+        // Tick/range… bars changed size or turned on/off (interval sections): the phone bar's label follows.
+        this.offIntervalSections = onIntervalSectionsChanged(() => {
+            if (!this.destroyed) this.mobileBar?.setTimeframe(this.active.timeframe, currentIntervalLabel(this.active.timeframe, this.context()));
+        });
         // One pill for the whole grid — rebound to the active cell on every projection.
         this.drawingPill = this.drawingsEnabled ? new DrawingPill(this.gridEl) : null;
 
@@ -1306,6 +1314,7 @@ export class VelaWorkspace {
         if (this.destroyed) return;
         this.flushPendingState(); // the user's last edit, before anything is torn down
         this.destroyed = true;
+        this.offIntervalSections();
         this.replay.destroy();
         if (this.persistKey !== null && typeof window !== 'undefined') window.removeEventListener('beforeunload', this.onUnload);
         this.resizeObserver?.disconnect();
@@ -1378,7 +1387,7 @@ export class VelaWorkspace {
         this.topbar.renderActions(); // contributed `when()` gates may depend on the active cell
         this.mobileBar?.renderActions();
         this.mobileBar?.setSymbol(cell.symbol);
-        this.mobileBar?.setTimeframe(cell.timeframe);
+        this.mobileBar?.setTimeframe(cell.timeframe, currentIntervalLabel(cell.timeframe, this.context()));
         this.syncMobileMaximize(); // the new active cell may hold a maximized pane
         this.drawingPill?.onChart(cell.chart); // the pill mirrors the ACTIVE cell's tool state
         const pushHistory = (): void => this.topbar.setHistoryState(cell.history.canUndo, cell.history.canRedo);
@@ -2126,7 +2135,7 @@ export class VelaWorkspace {
         this.topbar.setSymbol(cell.symbol);
         this.topbar.setTimeframe(cell.timeframe);
         this.mobileBar?.setSymbol(cell.symbol);
-        this.mobileBar?.setTimeframe(cell.timeframe);
+        this.mobileBar?.setTimeframe(cell.timeframe, currentIntervalLabel(cell.timeframe, this.context()));
         this.objectTree.setSymbol(cell.symbol);
         this.bottombar?.setSession({ session: cell.session, enabled: cell.sessionAvailable });
         this.projectTimezone(); // the new symbol's market zone, once its metadata lands
@@ -2145,6 +2154,8 @@ export class VelaWorkspace {
         const cell = this.cellsById.get(id);
         if (!cell) return;
         this.topbar.setPriceStyle(cell.priceStyle);
+        // Tick/range… bars on or off: the phone bar's interval label follows.
+        this.mobileBar?.setTimeframe(cell.timeframe, currentIntervalLabel(cell.timeframe, this.context()));
     }
 
     /** Trigger ② — a cell's indicator ledger changed: count + picker only if active. */
@@ -2215,6 +2226,7 @@ export class VelaWorkspace {
             ranges: RANGE_PRESETS,
             currentTimeframe: () => this.active.timeframe,
             activeRange: () => this.active.activeRangeId,
+            getContext: () => this.context(),
             onTimeframe: (tf) => this.setActiveTimeframe(tf),
             onRange: (preset) => {
                 this.active.applyRange(preset);
@@ -2250,7 +2262,11 @@ export class VelaWorkspace {
                 : {}),
             canUndo: () => this.active.history.canUndo,
             canRedo: () => this.active.history.canRedo,
-            priceStyles: () => priceStyleIds().map((id) => ({ id, label: priceStyleLabel(id), icon: priceStyleIcon(id) })),
+            // Interval-only types (tick, range… bars) are picked in the timeframe drawer instead.
+            priceStyles: () =>
+                priceStyleIds()
+                    .filter((id) => !chartType(id)?.intervalOnly)
+                    .map((id) => ({ id, label: priceStyleLabel(id), icon: priceStyleIcon(id) })),
             priceStyle: () => this.active.priceStyle,
             onPriceStyle: (id) => this.active.setPriceStyle(id),
             panels: () => (has('panels') ? [...this.dock.list()] : []),

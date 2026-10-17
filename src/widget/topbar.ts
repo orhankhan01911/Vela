@@ -10,6 +10,8 @@ import { topbarActionOverride, widgetActions, type SidePanelButton, type WidgetC
 import { resolveTopbarComposition, topbarHas, TOPBAR_BUILTIN_IDS, type ResolvedTopbarComposition, type TopbarComposition } from './topbar-composition';
 import { BUILTIN_PRICE_STYLES, priceStyleIds } from '../renderers/native/core/chartConfig';
 import { favoriteTimeframeChips, timeframeLabel } from './timeframe';
+import { currentIntervalLabel, IntervalMenu } from './interval-menu';
+import { activeIntervalSection, onIntervalSectionsChanged } from './interval-sections';
 import { parseSymbol } from '../data/ProviderRegistry';
 
 // The component owns its stylesheet (id-guarded, injected at construction) so EVERY
@@ -228,7 +230,8 @@ export class Topbar {
     private layoutButton: HTMLElement | null = null;
     private layoutPicker: LayoutPicker | null = null;
     private layoutId: string | null = null;
-    private readonly tfMenu: Menu;
+    private readonly tfMenu: IntervalMenu;
+    private readonly offIntervals: () => void;
     private readonly styleMenu: Menu;
     private readonly tooltips: Tooltip[] = [];
     private readonly actionsHost: HTMLElement;
@@ -457,16 +460,22 @@ export class Topbar {
                 onToggleSync: (id) => layout.onToggleSync(id),
             });
         }
-        this.tfMenu = new Menu({
+        // TradingView-style interval dropdown: custom interval + collapsible SECONDS / MINUTES /
+        // HOURS / DAYS sections, plus the plugin sections (`interval-sections.ts`: ticks, ranges…).
+        this.tfMenu = new IntervalMenu({
             trigger: this.tfCaret,
-            triggerId: 'vela-topbar-tf',
             host,
-            items: this.tfItems(),
-            onSelect: (id) => opts.onTimeframe(id),
-            onFavorite: (id, on) => opts.onTimeframeFavorite?.(id, on),
-            // Timeframe labels are two-or-three characters ("1m", "4h", "1D") — the
-            // stylesheet's default min-width would leave the list mostly empty.
-            minWidth: '84px',
+            timeframes: () => this.opts.timeframes,
+            currentTimeframe: () => this.timeframe,
+            getContext: opts.getContext,
+            onTimeframe: (tf) => opts.onTimeframe(tf),
+            favorites: () => this.tfFavs,
+            ...(opts.onTimeframeFavorite ? { onFavorite: (tf: string, on: boolean) => opts.onTimeframeFavorite!(tf, on) } : {}),
+        });
+        // A plugin section turned on/off or changed size: the label and an open list follow.
+        this.offIntervals = onIntervalSectionsChanged(() => {
+            this.renderTfChips();
+            this.tfMenu.refresh();
         });
         this.styleMenu = new Menu({
             trigger: this.styleButton,
@@ -484,7 +493,7 @@ export class Topbar {
 
     setTimeframe(tf: string): void {
         this.timeframe = tf;
-        this.tfMenu.setItems(this.tfItems());
+        this.tfMenu.refresh();
         this.renderTfChips();
     }
 
@@ -492,7 +501,7 @@ export class Topbar {
     setTimeframeFavorites(favs: readonly string[]): void {
         this.tfFavs = [...favs];
         this.renderTfChips();
-        this.tfMenu.setItems(this.tfItems());
+        this.tfMenu.refresh();
     }
 
     /** Rebuild the quick-switch chips (current value changed, or the favorite set did). */
@@ -501,28 +510,50 @@ export class Topbar {
         this.tfChipsHost.replaceChildren();
         const stars = this.opts.onTimeframeFavorite !== undefined;
         const chips = stars ? favoriteTimeframeChips(this.tfFavs) : [];
-        const currentIsFav = chips.includes(this.timeframe);
-        // Unstarred current sits next to the caret so the favorite row never jumps.
-        const shown = currentIsFav || chips.length === 0 ? chips : [...chips, this.timeframe];
-        for (const tf of shown) {
+        const ctx = this.opts.getContext?.() ?? null;
+        // Bars that are not a time span (ticks, ranges…) are on: no time chip is current, and the
+        // current-interval chip shows that section's label ("100T").
+        const plugin = ctx ? activeIntervalSection(ctx) : null;
+        const currentIsFav = !plugin && chips.includes(this.timeframe);
+        // The current interval when it is not a starred chip (an unstarred time, or "100T") sits next
+        // to the caret, so the favorite row never jumps.
+        const entries: { tf: string | null; label: string; current: boolean }[] = chips.map((tf) => ({
+            tf,
+            label: timeframeLabel(tf),
+            current: !plugin && tf === this.timeframe,
+        }));
+        if (chips.length > 0 && !currentIsFav) {
+            entries.push(
+                plugin
+                    ? { tf: null, label: plugin.section.short(plugin.value), current: true }
+                    : { tf: this.timeframe, label: timeframeLabel(this.timeframe), current: true },
+            );
+        }
+        for (const e of entries) {
             const b = doc.createElement('button');
             b.className = 'vela-widget-tf';
-            const label = timeframeLabel(tf);
+            const label = e.label;
             b.textContent = label;
-            if (tf === this.timeframe) {
+            if (e.current) {
                 b.dataset.current = '1';
                 b.setAttribute('aria-current', 'true');
             } else {
+                const tf = e.tf!;
                 b.setAttribute('aria-label', `Switch timeframe to ${label}`);
-                b.addEventListener('click', () => this.opts.onTimeframe(tf));
+                b.addEventListener('click', () => {
+                    // Leaving tick/range/… bars for a time interval.
+                    if (ctx && plugin) plugin.section.leave(ctx);
+                    this.opts.onTimeframe(tf);
+                });
             }
             this.tfChipsHost.appendChild(b);
         }
         this.tfCaret.replaceChildren();
         if (chips.length === 0) {
             this.tfCaret.dataset.solo = '1';
-            this.tfCaret.append(doc.createTextNode(timeframeLabel(this.timeframe)), iconEl('chevron-down', doc));
-            this.tfCaret.setAttribute('aria-label', `Timeframe — ${timeframeLabel(this.timeframe)}`);
+            const label = currentIntervalLabel(this.timeframe, ctx);
+            this.tfCaret.append(doc.createTextNode(label), iconEl('chevron-down', doc));
+            this.tfCaret.setAttribute('aria-label', `Interval — ${label}`);
         } else {
             delete this.tfCaret.dataset.solo;
             this.tfCaret.appendChild(iconEl('chevron-down', doc));
@@ -535,6 +566,8 @@ export class Topbar {
         this.priceStyle = style;
         this.renderStyleButton(this.styleButton.ownerDocument);
         this.styleMenu.setItems(this.styleItems());
+        // Turning tick/range… bars on or off changes the interval label.
+        this.renderTfChips();
     }
 
     /** Reflect the current workspace layout (no-op without the layout dropdown). */
@@ -670,6 +703,7 @@ export class Topbar {
         win?.removeEventListener('resize', this.onHairlineSync);
         if (this.hairlineRaf) win?.cancelAnimationFrame(this.hairlineRaf);
         this.tfMenu.destroy();
+        this.offIntervals();
         this.styleMenu.destroy();
         this.layoutPicker?.destroy();
         for (const t of [...this.tooltips, ...this.panelTooltips, ...this.actionTooltips]) t.destroy();
@@ -705,23 +739,14 @@ export class Topbar {
         }
     }
 
-    private tfItems(): MenuItemDescriptor[] {
-        // Stars only when the host handles the toggle — a starless dropdown otherwise.
-        const stars = this.opts.onTimeframeFavorite !== undefined;
-        return this.opts.timeframes.map((tf) => ({
-            id: tf,
-            label: timeframeLabel(tf),
-            checked: tf === this.timeframe,
-            ...(stars ? { favorite: this.tfFavs.includes(tf) } : {}),
-        }));
-    }
-
     private styleItems(): MenuItemDescriptor[] {
         // Live list: built-ins ∪ plugin-registered chart types (a registered type shows
         // up here automatically — the SDK's style-picker contribution). Registered types
         // sit BELOW a separator: the built-in price styles and the plugin chart types
         // read as two distinct families.
-        return priceStyleIds().map((id, i) => ({
+        // Interval-only types (tick, range… bars) live in the interval dropdown instead.
+        const ids = priceStyleIds().filter((id) => !chartType(id)?.intervalOnly);
+        return ids.map((id, i) => ({
             id,
             label: priceStyleLabel(id),
             icon: priceStyleIcon(id),

@@ -168,3 +168,14 @@ export { inputDeltas } from './core/model';
 // The semantic palette (fixed brand/meaning colors, never theme-dependent) so plugin
 // output — default plot colors, layer inks — matches core affordances exactly.
 export * from './core/palette';
+// Interval dropdown sections (ticks, ranges… bars listed next to SECONDS / MINUTES / HOURS / DAYS).
+export {
+    registerIntervalSection,
+    unregisterIntervalSection,
+    intervalSections,
+    activeIntervalSection,
+    notifyIntervalSectionsChanged,
+    BUILTIN_INTERVAL_ORDER,
+    type IntervalSection,
+    type IntervalChoice,
+} from './widget/interval-sections';

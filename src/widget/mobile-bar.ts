@@ -160,8 +160,9 @@ export class MobileBar {
         this.symbolEl.textContent = parseSymbol(symbol).ticker;
     }
 
-    setTimeframe(tf: string): void {
-        this.tfEl.textContent = timeframeLabel(tf);
+    /** `label` overrides the timeframe's own (tick/range… bars on: `'100T'`). */
+    setTimeframe(tf: string, label?: string): void {
+        this.tfEl.textContent = label ?? timeframeLabel(tf);
     }
 
     /** Light the maximize stop while something is isolated (a chart over the grid,

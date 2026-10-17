@@ -495,9 +495,10 @@ export class Statusline {
         this.render();
     }
 
-    /** The "· BINANCE · 1h" segment after the symbol — venue first, then resolution. */
-    setMeta(timeframe: string, provider: string): void {
-        this.metaEl.textContent = `${provider ? `· ${provider.toUpperCase()} ` : ''}· ${timeframeLabel(timeframe)}`;
+    /** The "· BINANCE · 1h" segment after the symbol — venue first, then resolution.
+     *  `label` overrides the resolution (tick/range… bars: `'100T'`). */
+    setMeta(timeframe: string, provider: string, label?: string): void {
+        this.metaEl.textContent = `${provider ? `· ${provider.toUpperCase()} ` : ''}· ${label ?? timeframeLabel(timeframe)}`;
         this.fit();
     }
 

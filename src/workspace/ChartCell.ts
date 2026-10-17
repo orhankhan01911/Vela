@@ -20,6 +20,8 @@ import { MarketStatusTracker } from '../widget/market-status';
 import { SessionShadingTracker, parseSessionSpec } from '../widget/session-shading';
 import { timeframeMs } from '../widget/timeframe';
 import { Watermark } from '../widget/watermark';
+import { currentIntervalLabel } from '../widget/interval-menu';
+import { activeIntervalSection, onIntervalSectionsChanged } from '../widget/interval-sections';
 import { CellControls } from '../widget/cell-controls';
 import { ChartContextMenu } from '../widget/context-menu';
 import { WidgetHistory } from '../widget/history';
@@ -261,6 +263,10 @@ export class ChartCell {
     private readonly cellControls: CellControls;
     private readonly contextMenu: ChartContextMenu;
     private readonly offMarket: () => void;
+    /** Interval sections changed (a bar size edited): the legend label follows. */
+    private readonly offIntervals: () => void = onIntervalSectionsChanged(() => {
+        if (!this.destroyed) this.refreshIntervalLabel();
+    });
     /** The cell's durable market state — the seed vocabulary plus the venue mirror the
      *  persisted document carries (`provider` = the symbol's parsed prefix). */
     private state: CellSeed & Pick<CellState, 'provider'>;
@@ -598,9 +604,9 @@ export class ChartCell {
         this.state.provider = parseSymbol(symbol).provider ?? undefined;
         this.state.timeframe = timeframe;
         this.state.session = normalizeSession(this.inner?.market.session);
-        this.watermark?.update(symbol, timeframe);
+        this.watermark?.update(symbol, timeframe, this.intervalLabel(timeframe));
         this.statusline?.setSymbol(symbol);
-        this.statusline?.setMeta(timeframe, this.inner?.data.displayPrefix(symbol) ?? this.state.provider ?? '');
+        this.statusline?.setMeta(timeframe, this.inner?.data.displayPrefix(symbol) ?? this.state.provider ?? '', this.intervalLabel(timeframe));
         if (this.inner) this.statusline?.onChart(this.inner); // drop the old market's resting OHLC
     }
 
@@ -1026,7 +1032,24 @@ export class ChartCell {
         this.state.priceStyle = style;
         this.inner?.renderer.set('priceStyle', style);
         this.syncStatuslineColors(); // the OHLC ink follows the newly active style's colors
+        this.refreshIntervalLabel(); // tick/range… bars on or off: "· 100T" instead of "· 15m"
         this.deps.onPriceStyleChanged(this.id);
+    }
+
+    /** The interval label when an interval section's bars (ticks, ranges…) are on, else undefined. */
+    private intervalLabel(timeframe: string): string | undefined {
+        if (!this.inner) return undefined;
+        const ctx = { chart: this.inner, symbol: this.state.symbol ?? '', timeframe, priceStyle: this.priceStyle } as unknown as WidgetContext;
+        return activeIntervalSection(ctx) ? currentIntervalLabel(timeframe, ctx) : undefined;
+    }
+
+    /** Re-write the legend meta and the watermark with the current interval label. */
+    private refreshIntervalLabel(): void {
+        const tf = this.state.timeframe ?? '60';
+        const symbol = this.state.symbol ?? '';
+        const label = this.intervalLabel(tf);
+        this.watermark?.update(symbol, tf, label);
+        this.statusline?.setMeta(tf, this.inner?.data.displayPrefix(symbol) ?? this.state.provider ?? '', label);
     }
 
     /** OHLC/change ink in the status line follows the ACTIVE price style's configured
@@ -1596,6 +1619,7 @@ export class ChartCell {
 
     destroy(): void {
         this.destroyed = true;
+        this.offIntervals();
         this.offMarket();
         this.cellControls.destroy();
         this.contextMenu.destroy();
