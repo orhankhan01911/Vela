@@ -123,6 +123,8 @@ export class DrawingSettingsPopup {
     private el: HTMLDivElement | null = null;
     private tipEl: HTMLDivElement | null = null; // floating hover-label (above/below the toolbar)
     private textPanel: HTMLDivElement | null = null;
+    /** Re-clamps the bar into the part of the screen a phone keyboard leaves visible (visualViewport). */
+    private readonly onViewport = (): void => this.reposition();
     private readonly settingsDialog: DrawingSettingsDialog;
     private colorPop: Popover | null = null;
     private colorOwner: HTMLElement | null = null;
@@ -192,6 +194,11 @@ export class DrawingSettingsPopup {
         // multi-selection has no label field, so its text styling always sits on the bar.
         const textOnBar = multi || schema.textIsContent === true || !paths.has('text.value');
 
+        const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+        vv?.removeEventListener('resize', this.onViewport);
+        vv?.removeEventListener('scroll', this.onViewport);
+        vv?.addEventListener('resize', this.onViewport);
+        vv?.addEventListener('scroll', this.onViewport);
         const el = document.createElement('div');
         el.className = 'vela-dpop';
         el.style.cssText = `position:absolute;z-index:22;background:${t.background};border:1px solid var(--vela-border);border-radius:var(--vela-radius-lg);box-shadow:var(--vela-shadow);color:${t.textColor};font:var(--vela-font-size-md) ${t.fontFamily};display:flex;flex-direction:column;pointer-events:auto;overflow:hidden;`;
@@ -389,6 +396,9 @@ export class DrawingSettingsPopup {
 
     close(): void {
         document.removeEventListener('pointerdown', this.onOutside);
+        const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+        vv?.removeEventListener('resize', this.onViewport);
+        vv?.removeEventListener('scroll', this.onViewport);
         this.closeColorPopover();
         this.closeMenu();
         this.hideTip();
@@ -467,7 +477,9 @@ export class DrawingSettingsPopup {
         });
 
         const tools = document.createElement('div');
-        tools.style.cssText = `display:flex;align-items:center;justify-content:flex-start;gap:0;transform:scale(0.8);transform-origin:left center;`;
+        // Shrunk on desktop; full size where a finger taps it (the 80% buttons were ~24 px tall on phones).
+        const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+        tools.style.cssText = `display:flex;align-items:center;justify-content:flex-start;gap:0;flex-wrap:wrap;${coarse ? '' : 'transform:scale(0.8);transform-origin:left center;'}`;
         if (withColorAndSize) {
             // text color defaults to the ACTUAL rendered color (theme text color when unset)
             tools.append(
@@ -515,7 +527,7 @@ export class DrawingSettingsPopup {
             if (top < 4) top = anchor.y + anchor.h + gap; // no room above → below
         }
         el.style.left = `${Math.max(4, Math.min(left, host.width - w - 4))}px`;
-        el.style.top = `${Math.max(4, Math.min(top, host.height - h - 4))}px`;
+        el.style.top = `${Math.max(4, Math.min(top, visibleBottom(host) - h - 4))}px`;
     }
 
     /** Keep the toolbar where it is when its size changes (a panel toggled, or the user dragged it) —
@@ -529,7 +541,7 @@ export class DrawingSettingsPopup {
         const left = parseFloat(el.style.left) || 0;
         const top = parseFloat(el.style.top) || 0;
         el.style.left = `${Math.max(4, Math.min(left, host.width - w - 4))}px`;
-        el.style.top = `${Math.max(4, Math.min(top, host.height - h - 4))}px`;
+        el.style.top = `${Math.max(4, Math.min(top, visibleBottom(host) - h - 4))}px`;
     }
 
 
@@ -1138,3 +1150,14 @@ function sized(svg: string, size: number = ICON): string {
     return svg.replace('<svg ', `<svg width="${size}" height="${size}" `);
 }
 
+
+/**
+ * The bottom of the host area the user can actually see, in host coordinates: a phone's on-screen keyboard
+ * shrinks the visual viewport, and a toolbar placed under it hid the text format row (2026-10-17, Pixel Fold
+ * and iPhone).
+ */
+function visibleBottom(host: DOMRect): number {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!vv) return host.height;
+    return Math.max(0, Math.min(host.height, vv.offsetTop + vv.height - host.top));
+}
