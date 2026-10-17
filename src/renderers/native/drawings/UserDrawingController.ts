@@ -12,7 +12,7 @@ import type {
     SnapMode,
     ToolbarDefinition,
 } from '../../../core/drawings';
-import { deserializeDrawing, getDrawingType, resetDrawingSettings, Callout, Magnifier, PriceAlert, TextLabel } from '../../../core/drawings';
+import { deserializeDrawing, getDrawingType, resetDrawingSettings, shownOnBarMs, Callout, Magnifier, PriceAlert, TextLabel } from '../../../core/drawings';
 import type { Unsubscribe } from '../../../core/util/types';
 import { contrastColor, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE } from '../../shared/drawing-geometry';
 import { withAlpha } from '../core/chartConfig';
@@ -175,7 +175,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
         this.interaction = new DrawingInteraction({
             projector: () => this.deps.projector(),
             activeTool: () => this.activeTool,
-            drawings: () => this.drawings,
+            drawings: () => this.shownDrawings(),
             hoveredId: () => this.hoveredId,
             selectedIds: () => this.selectedIds,
             emit: (i) => this.emit(i),
@@ -425,7 +425,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
      *  `withSelection` so a hit on a member of a multi-selection removes the selection's
      *  unlocked members — whichever member was hit, locked or not. */
     deleteAt(x: number, y: number, withSelection = false): boolean {
-        const hit = topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE);
+        const hit = topDrawingAt(this.shownDrawings(), x, y, this.deps.projector(), HIT_TOLERANCE);
         if (!hit) return false;
         const ids = deleteTargets(hit, this.selectedIds, this.drawings, withSelection);
         if (ids.length === 0) return false;
@@ -515,7 +515,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
         }
         // A tap lands with no preceding pointermove (touch), so refresh the hover target for THIS press.
         if (this.activeTool == null) {
-            if (topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE) instanceof PriceAlert) this.alertPressedOn = true;
+            if (topDrawingAt(this.shownDrawings(), x, y, this.deps.projector(), HIT_TOLERANCE) instanceof PriceAlert) this.alertPressedOn = true;
             this.updateHover(x, y);
         }
         this.interaction.down(x, y, snap, shift, mod); // the popup self-dismisses on any outside press
@@ -566,7 +566,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
     private updateHover(x: number, y: number, mod = false): void {
         let id: string | null = null;
         if (!mod && this.activeTool == null && !this.interaction.isPlacing() && !this.interaction.isDragging()) {
-            id = topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE)?.id ?? null;
+            id = topDrawingAt(this.shownDrawings(), x, y, this.deps.projector(), HIT_TOLERANCE)?.id ?? null;
         }
         if (id !== this.hoveredId) {
             this.hoveredId = id;
@@ -849,7 +849,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
      *  opens settings). Returns true only when a drawing is under the cursor. */
     dblClick(x: number, y: number): boolean {
         if (this.interaction.finishPlacing(true)) return true; // double-click finishes a polyline (drops the dup point)
-        const hit = topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE);
+        const hit = topDrawingAt(this.shownDrawings(), x, y, this.deps.projector(), HIT_TOLERANCE);
         if (isInlineEditable(hit)) {
             this.editTextInline(hit.id); // double-click a callout / text label → edit its text in place
             return true;
@@ -1025,6 +1025,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
             sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             sctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
             this.painter.seriesLook = this.deps.seriesLook();
+            this.painter.barMs = this.deps.chartBarMs();
             this.painter.paintAll(sctx, drawings, proj, theme, EMPTY_TARGETS);
             const slices = out.get(paneId) ?? [];
             slices.push({ beforeZ, canvas });
@@ -1059,6 +1060,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
         // stack painted their bodies on the backend layers, so only their handles come back on top
         // — buried under the candles they'd be unusable.
         this.painter.seriesLook = this.deps.seriesLook();
+        this.painter.barMs = this.deps.chartBarMs();
         const onTop = (d: Drawing) => !this.isInterleaved(d) || this.lifted.has(d.id);
         this.painter.paintAll(ctx, this.drawings.filter(onTop), proj, this.deps.theme(), targets);
         this.painter.paintHighlights(ctx, this.drawings.filter((d) => !onTop(d)), proj, handleIdsFor(targets));
@@ -1191,6 +1193,12 @@ export class UserDrawingController implements IDrawingsRendererPort {
         }, this.onPopupDismissed);
     }
 
+    /** The drawings shown on the chart's current timeframe (the Visibility tab hides the rest): only these can be hit. */
+    private shownDrawings(): Drawing[] {
+        const barMs = this.deps.chartBarMs();
+        return this.drawings.filter((d) => shownOnBarMs(d.intervals, barMs));
+    }
+
     /** A click on a drawing opens its settings toolbar (text labels edit text here too). */
     private openSettingsById(id: string, _x: number, _y: number): void {
         const drawing = this.drawings.find((d) => d.id === id);
@@ -1242,6 +1250,9 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 if (doc.style) d.style = { ...doc.style };
                 if (doc.text !== undefined) d.text = doc.text ? { ...doc.text } : undefined;
                 if (doc.props !== undefined) d.applyProps(doc.props);
+                // The settings dialog edits anchors (Coordinates tab) and intervals (Visibility tab) too.
+                if (doc.anchors) d.anchors = doc.anchors.map((p) => ({ time: p.time, price: p.price }));
+                if ('intervals' in doc) d.intervals = doc.intervals ? { ...doc.intervals } : undefined;
                 this.render();
                 this.emit({ kind: 'edit', doc });
             },

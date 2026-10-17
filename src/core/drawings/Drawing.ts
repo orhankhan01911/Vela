@@ -2,6 +2,7 @@ import type { DrawingPoint, FreeAxis, Projector } from './geometry';
 import type { DrawingStyle, DrawingText } from './style';
 import { defaultStyle, defaultText } from './style';
 import type { SettingsSchema } from './schema';
+import { compactIntervals, type IntervalVisibility } from './intervals';
 
 /**
  * The interactive user-drawing types. The lean-core set ships first; new types
@@ -113,6 +114,8 @@ export interface SerializedDrawing {
      *  anywhere in the stack, under the candles or between two indicators included. */
     zIndex: number;
     createdAt: number;
+    /** Timeframes the drawing shows on (the settings dialog's Visibility tab); absent = every timeframe. */
+    intervals?: IntervalVisibility;
     /** Per-type extras (e.g. box `extend`) — keeps the base closed. */
     props?: Record<string, unknown>;
 }
@@ -134,6 +137,8 @@ export abstract class Drawing {
     text?: DrawingText;
     locked = false;
     visible = true;
+    /** Timeframes the drawing shows on; undefined = all. See `intervals.ts`. */
+    intervals?: IntervalVisibility;
     zIndex = 0;
     readonly createdAt: number;
 
@@ -147,6 +152,7 @@ export abstract class Drawing {
         this.text = init.text ? { ...init.text } : undefined;
         this.locked = init.locked ?? false;
         this.visible = init.visible ?? true;
+        this.intervals = compactIntervals(init.intervals);
         this.zIndex = init.zIndex ?? 0;
         this.createdAt = init.createdAt ?? Date.now();
         if (init.props) this.readProps(init.props);
@@ -264,6 +270,7 @@ export abstract class Drawing {
             text: this.text ? { ...this.text } : undefined,
             locked: this.locked,
             visible: this.visible,
+            intervals: compactIntervals(this.intervals),
             zIndex: this.zIndex,
             createdAt: this.createdAt,
             props: this.writeProps(),

@@ -59,6 +59,8 @@ export class DrawingStore {
         if (patch.paneId !== undefined) d.paneId = patch.paneId;
         if (patch.locked !== undefined) d.locked = patch.locked;
         if (patch.visible !== undefined) d.visible = patch.visible;
+        // `serialize()` always carries the key (undefined = every timeframe), so an edit can clear it.
+        if ('intervals' in patch) d.intervals = patch.intervals ? { ...patch.intervals } : undefined;
         if (patch.zIndex !== undefined) d.zIndex = patch.zIndex;
         if (patch.props !== undefined) d.applyProps(patch.props); // per-type extras (e.g. fib levels)
         this.emit();

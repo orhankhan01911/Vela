@@ -6,12 +6,23 @@ import {
     FibRetracement,
     FixedRangeVolumeProfile,
     FixedRangeTpoProfile,
+    INTERVAL_UNITS,
     LINE_STYLE_OPTIONS,
+    DEFAULT_DRAWING_COLOR,
+    TEXT_SIZE_OPTIONS,
     MachFigure,
     PositionTool,
     clonePlain,
+    compactIntervals,
     createDrawing,
+    defaultRange,
+    effectiveFillColor,
+    getDrawingType,
+    type IntervalRange,
+    type IntervalUnit,
+    type IntervalVisibility,
 } from '../../../core/drawings';
+import type { SettingsField } from '../../../core/drawings/schema';
 import { Menu } from '../../../ui/components/menu';
 import { contrastColor } from '../../shared/drawing-geometry';
 import { applyChromeTokens } from '../../shared/theme-tokens';
@@ -21,7 +32,19 @@ import { fieldGrid, fieldRow, fieldSection, buildFieldControl } from '../../../u
 import type { SelectOption } from '../../../ui/components/select';
 import type { SettingsActions } from './DrawingSettingsPopup';
 
-export type DrawingDialogKind = 'position' | 'frvp' | 'frtpo' | 'levels';
+/** Which builder fills the dialog: `settings` is the generic tabbed dialog every drawing has; the others are
+ *  the older single-purpose names, kept so callers still work (they open the same dialog on the right tab). */
+export type DrawingDialogKind = 'settings' | 'position' | 'frvp' | 'frtpo' | 'levels';
+
+/** The dialog's tabs, TradingView's order. Only the tabs a drawing has are shown. */
+export type DrawingDialogTab = 'inputs' | 'style' | 'text' | 'coordinates' | 'visibility';
+const TAB_LABEL: Record<DrawingDialogTab, string> = {
+    inputs: 'Inputs',
+    style: 'Style',
+    text: 'Text',
+    coordinates: 'Coordinates',
+    visibility: 'Visibility',
+};
 
 const LEVEL_UNITS: readonly SelectOption[] = [
     { value: 'price', label: 'Price' },
@@ -31,23 +54,26 @@ const FRVP_ANCHOR: readonly SelectOption[] = [
     { value: 'right', label: 'Right' },
     { value: 'left', label: 'Left' },
 ];
-
-const TITLES: Record<DrawingDialogKind, string> = {
-    position: 'Position size',
-    frvp: 'Volume profile',
-    frtpo: 'TPO profile',
-    levels: 'Levels',
-};
+const WIDTH_OPTIONS: readonly SelectOption[] = [1, 2, 3, 4].map((w) => ({ value: String(w), label: `${w}px` }));
+const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
+/** Schema paths the dialog never shows: the toolbar owns them (lock) or they are per-tool icons. */
+const SKIP_PATHS = new Set(['locked', 'visible', 'glyph', 'size']);
+/** Drawings whose one anchor only carries a price (or only a time): the Coordinates tab shows that one value. */
+const PRICE_ONLY = new Set(['hline', 'hray']);
+const TIME_ONLY = new Set(['vline']);
 
 /**
- * Settings dialog opened from the drawing toolbar's gear. Same shell and field
- * language as the indicator inputs dialog: live edits, Cancel restores the
- * open-time snapshot, Ok keeps them.
+ * The drawing settings dialog (TradingView's layout, 2026-10-17): the tool's name as the title, then tabs —
+ * Inputs (sizing / profile tools), Style, Text, Coordinates, Visibility — and a footer with Template, Cancel and
+ * Ok. The floating toolbar keeps only the quick controls; everything else lives here. Edits apply live,
+ * Cancel restores the open-time snapshot, Ok keeps them. Same shell and field language as the indicator dialog.
  */
 export class DrawingSettingsDialog {
     private ui: Dialog | null = null;
     private templateMenu: Menu | null = null;
     private theme: VelaTheme;
+    /** The tab to show when the dialog rebuilds itself (template apply / reset). */
+    private activeTab: DrawingDialogTab | null = null;
 
     constructor(private readonly host: HTMLElement, theme: VelaTheme) {
         this.theme = theme;
@@ -65,28 +91,54 @@ export class DrawingSettingsDialog {
         return this.ui?.contains(node) === true;
     }
 
-    open(drawing: Drawing, actions: SettingsActions, kind: DrawingDialogKind, keepSnapshot?: SerializedDrawing): void {
+    /** The tabs `drawing` gets, in order. */
+    static tabsFor(drawing: Drawing): DrawingDialogTab[] {
+        const tabs: DrawingDialogTab[] = [];
+        const custom = drawing instanceof PositionTool || drawing instanceof FixedRangeVolumeProfile || drawing instanceof FixedRangeTpoProfile;
+        if (custom) tabs.push('inputs');
+        if (drawing.editableLevels() || styleFields(drawing).length > 0) tabs.push('style');
+        if (drawing.schema().fields.some((f) => f.path.startsWith('text.'))) tabs.push('text');
+        if (!(drawing instanceof PositionTool) && drawing.anchors.length > 0) tabs.push('coordinates');
+        tabs.push('visibility');
+        return tabs;
+    }
+
+    open(drawing: Drawing, actions: SettingsActions, kind: DrawingDialogKind = 'settings', keepSnapshot?: SerializedDrawing, tab?: DrawingDialogTab): void {
+        const keepTab = keepSnapshot ? this.activeTab : null;
         this.close();
         // `drawing` is the instance the toolbar opened on; every edit since has replaced it.
         const live = actions.resolve() ?? drawing;
         // Cancel restores the state from BEFORE the dialog first opened — a template apply /
         // reset re-opens the dialog (to repaint its fields) but must keep that original.
         const snapshot = keepSnapshot ?? clonePlain(live.serialize());
-        const grid = fieldGrid({ variant: 'inputs' });
-        grid.style.padding = '16px 20px';
-        grid.style.overflowY = 'auto';
-        grid.style.overflowX = 'hidden';
-        grid.style.flex = '1 1 auto';
-        if (kind === 'position' && live instanceof PositionTool) this.buildPosition(grid, live, actions);
-        else if (kind === 'frvp' && live instanceof FixedRangeVolumeProfile) this.buildFrvp(grid, live, actions);
-        else if (kind === 'frtpo' && live instanceof FixedRangeTpoProfile) this.buildFrtpo(grid, live, actions);
-        else if (kind === 'levels') this.buildLevels(grid, live, actions);
-        else return;
+        const tabs = DrawingSettingsDialog.tabsFor(live);
+        const wanted: DrawingDialogTab = tab ?? keepTab ?? (kind === 'levels' ? 'style' : kind === 'settings' ? tabs[0]! : 'inputs');
+        const first = tabs.includes(wanted) ? wanted : tabs[0]!;
+
+        const bodies = new Map<DrawingDialogTab, HTMLElement>();
+        for (const t of tabs) {
+            const grid = fieldGrid({ variant: 'inputs' });
+            grid.style.padding = '16px 20px';
+            grid.style.overflowY = 'auto';
+            grid.style.overflowX = 'hidden';
+            grid.style.flex = '1 1 auto';
+            grid.style.alignContent = 'start';
+            grid.dataset.tab = t;
+            if (t === 'inputs') {
+                if (live instanceof PositionTool) this.buildPosition(grid, live, actions);
+                else if (live instanceof FixedRangeVolumeProfile) this.buildFrvp(grid, live, actions);
+                else if (live instanceof FixedRangeTpoProfile) this.buildFrtpo(grid, live, actions);
+            } else if (t === 'style') this.buildStyle(grid, live, actions);
+            else if (t === 'text') this.buildText(grid, live, actions);
+            else if (t === 'coordinates') this.buildCoordinates(grid, live, actions);
+            else this.buildVisibility(grid, live, actions);
+            bodies.set(t, grid);
+        }
 
         let ui: Dialog;
         ui = new Dialog({
             host: this.host,
-            title: TITLES[kind],
+            title: getDrawingType(live.type)?.label ?? 'Settings',
             // Non-modal: live-edit dialog — a modal machine locks pointer events on the
             // whole body, killing the chart and the body-portaled popovers.
             modal: false,
@@ -94,7 +146,7 @@ export class DrawingSettingsDialog {
             align: 'center',
             draggable: true,
             flush: true,
-            className: 'vela-dialog--form',
+            className: 'vela-dialog--form vela-drawing-dialog',
             closeOnEscape: false,
             footer: (foot) => {
                 foot.append(
@@ -111,7 +163,39 @@ export class DrawingSettingsDialog {
             onOpenChange: (open) => { if (!open && this.ui === ui) this.close(); },
         });
         applyChromeTokens(ui.panel, this.theme);
-        ui.body.appendChild(grid);
+
+        // Tab strip: the indicator dialog's look (bold labels, underline on the active one).
+        const strip = document.createElement('div');
+        strip.setAttribute('role', 'tablist');
+        strip.style.cssText = 'display:flex;gap:16px;padding:0 20px;border-bottom:1px solid var(--vela-border);flex:0 0 auto;overflow-x:auto;scrollbar-width:none;';
+        const tabEls = new Map<DrawingDialogTab, HTMLElement>();
+        const activate = (t: DrawingDialogTab): void => {
+            this.activeTab = t;
+            for (const [k, el] of tabEls) {
+                const on = k === t;
+                el.style.borderBottomColor = on ? 'var(--vela-fg-bright)' : 'transparent';
+                el.style.color = on ? 'inherit' : 'var(--vela-fg-muted)';
+                el.setAttribute('aria-selected', String(on));
+                bodies.get(k)!.style.display = on ? 'grid' : 'none';
+            }
+        };
+        for (const t of tabs) {
+            const el = document.createElement('button');
+            el.type = 'button';
+            el.setAttribute('role', 'tab');
+            el.dataset.tab = t;
+            el.className = 'vela-drawing-tab';
+            el.textContent = TAB_LABEL[t];
+            el.style.cssText =
+                'background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;padding:10px 0 8px;font:inherit;font-weight:600;font-size:13px;line-height:20px;cursor:pointer;white-space:nowrap;color:inherit;';
+            el.addEventListener('click', () => activate(t));
+            strip.appendChild(el);
+            tabEls.set(t, el);
+        }
+        ui.body.appendChild(strip);
+        for (const b of bodies.values()) ui.body.appendChild(b);
+        activate(first);
+
         const onBackdropDown = (e: Event): void => {
             if (e.target !== ui.backdrop && e.target !== ui.positioner) return;
             // An open portaled popover (color picker, select list) is part of the
@@ -130,9 +214,252 @@ export class DrawingSettingsDialog {
                 actions.restore?.(snapshot);
                 this.close();
             }
+            // Typing in a field must not reach the chart's keyboard shortcuts.
+            if ((e.target as HTMLElement | null)?.closest('input, textarea')) e.stopPropagation();
         });
         this.ui = ui;
         ui.show();
+    }
+
+    /** Style tab: the tool's line/background row first (TradingView's "Line" row is color + width + style),
+     *  then every other look setting from the drawing's schema, then the tool's own sections (Fib, levels). */
+    private buildStyle(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
+        const fields = styleFields(drawing);
+        const has = (p: string): boolean => fields.some((f) => f.path === p);
+        const done = new Set<string>();
+        if (has('style.lineColor') || has('style.lineWidth') || has('style.lineStyle')) {
+            const controls: HTMLElement[] = [];
+            if (has('style.lineColor')) controls.push(this.colorControl(drawing, 'style.lineColor', actions, DEFAULT_DRAWING_COLOR));
+            const wf = fields.find((f) => f.path === 'style.lineWidth');
+            if (wf) {
+                // Markers (highlighter 4-60 px) take a number; hairline tools the 1-4 px list.
+                if ((wf.min ?? 1) > 1 || (wf.max ?? 4) > 10) controls.push(this.numberControl(drawing, wf, actions));
+                else controls.push(this.selectControl('style.lineWidth', WIDTH_OPTIONS, String(drawing.style.lineWidth ?? 1), actions, (v) => Number(v)));
+            }
+            if (has('style.lineStyle')) controls.push(this.selectControl('style.lineStyle', LINE_STYLE_OPTIONS, String(drawing.style.lineStyle ?? 'solid'), actions));
+            grid.appendChild(fieldRow({ label: 'Line', control: controls, fit: true }));
+            done.add('style.lineColor').add('style.lineWidth').add('style.lineStyle');
+        }
+        if (has('style.fillColor')) {
+            const fill = effectiveFillColor(drawing, this.theme) ?? drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR;
+            grid.appendChild(fieldRow({ label: 'Background', control: [this.colorControl(drawing, 'style.fillColor', actions, fill)], fit: true }));
+            done.add('style.fillColor');
+        }
+        for (const f of fields) {
+            if (done.has(f.path)) continue;
+            const row = this.schemaRow(drawing, f, actions);
+            if (row) grid.appendChild(row);
+        }
+        if (drawing.editableLevels()) {
+            if (!(drawing instanceof MachFigure)) {
+                const sizes = drawing as unknown as { numbersSize?: string; labelsSize?: string };
+                grid.appendChild(fieldRow({ label: 'Numbers size', control: [this.selectControl('numbersSize', SIZE_OPTIONS, sizes.numbersSize ?? 'small', actions)], fit: true }));
+                grid.appendChild(fieldRow({ label: 'Labels size', control: [this.selectControl('labelsSize', SIZE_OPTIONS, sizes.labelsSize ?? 'normal', actions)], fit: true }));
+            }
+            this.buildLevels(grid, drawing, actions);
+        }
+    }
+
+    /** Text tab: the text itself, then its color, size, bold/italic and position. */
+    private buildText(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
+        const fields = drawing.schema().fields.filter((f) => f.path.startsWith('text.'));
+        const has = (p: string): boolean => fields.some((f) => f.path === p);
+        const text = drawing.text;
+        if (has('text.value')) {
+            const ta = buildFieldControl({
+                kind: 'textarea',
+                value: text?.value ?? '',
+                rows: 3,
+                autoGrow: true,
+                maxLines: 8,
+                placeholder: 'Add text',
+                onChange: (v) => actions.patch({ 'text.value': v }),
+            });
+            ta.el.classList.add('vela-field-span');
+            grid.appendChild(ta.el);
+        }
+        const style: HTMLElement[] = [];
+        if (has('text.color')) style.push(this.colorControl(drawing, 'text.color', actions, text?.color || this.theme.textColor));
+        if (has('text.size')) style.push(this.selectControl('text.size', SIZE_OPTIONS, text?.size ?? 'normal', actions));
+        if (style.length) grid.appendChild(fieldRow({ label: 'Font', control: style, fit: true }));
+        if (has('text.bold')) grid.appendChild(fieldRow({ label: 'Bold', bool: true, toggle: { checked: !!text?.bold, onChange: (v) => actions.patch({ 'text.bold': v }) } }));
+        if (has('text.italic')) grid.appendChild(fieldRow({ label: 'Italic', bool: true, toggle: { checked: !!text?.italic, onChange: (v) => actions.patch({ 'text.italic': v }) } }));
+        for (const f of fields) {
+            if (['text.value', 'text.color', 'text.size', 'text.bold', 'text.italic'].includes(f.path)) continue;
+            const row = this.schemaRow(drawing, f, actions);
+            if (row) grid.appendChild(row);
+        }
+    }
+
+    /** Coordinates tab: one row per anchor, price and bar time (local time, as the chart shows it). */
+    private buildCoordinates(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
+        const priceOnly = PRICE_ONLY.has(drawing.type);
+        const timeOnly = TIME_ONLY.has(drawing.type);
+        drawing.anchors.forEach((a, i) => {
+            const controls: HTMLElement[] = [];
+            if (!timeOnly) {
+                let cur = a.price;
+                const n = buildFieldControl({
+                    kind: 'number',
+                    value: roundPrice(a.price),
+                    step: priceStep(a.price),
+                    fill: false,
+                    commit: 'blur',
+                    title: 'Price',
+                    onChange: (v) => {
+                        if (!Number.isFinite(v)) { n.setValue?.(cur); return; }
+                        cur = v;
+                        actions.patch({ [`anchors.${i}.price`]: v });
+                    },
+                });
+                n.el.dataset.role = 'anchor-price';
+                n.el.style.width = '120px';
+                n.el.style.flex = 'none';
+                controls.push(n.el);
+            }
+            if (!priceOnly) {
+                let cur = a.time;
+                const t = buildFieldControl({
+                    kind: 'text',
+                    value: formatLocal(a.time),
+                    fill: false,
+                    placeholder: 'YYYY-MM-DD HH:MM',
+                    onChange: (v) => {
+                        const ms = parseLocal(v);
+                        if (ms == null) { t.setValue?.(formatLocal(cur)); return; }
+                        cur = ms;
+                        actions.patch({ [`anchors.${i}.time`]: ms });
+                    },
+                });
+                t.el.dataset.role = 'anchor-time';
+                t.el.style.width = '172px'; // the whole `YYYY-MM-DD HH:MM` must show, also at the 16px phone font
+                t.el.style.flex = 'none';
+                controls.push(t.el);
+            }
+            const label = drawing.anchors.length === 1 ? (priceOnly ? 'Price' : timeOnly ? 'Time' : 'Point') : `#${i + 1}`;
+            grid.appendChild(fieldRow({ label, control: controls, fit: true }));
+        });
+    }
+
+    /** Visibility tab: TradingView's "visibility on intervals" — one row per timeframe unit, a switch and a range. */
+    private buildVisibility(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
+        const current = (): IntervalVisibility => ({ ...(actions.resolve() ?? drawing).intervals });
+        const write = (unit: IntervalUnit, r: IntervalRange): void => {
+            const next = compactIntervals({ ...current(), [unit]: r });
+            actions.patch({ intervals: next });
+        };
+        for (const m of INTERVAL_UNITS) {
+            const r0 = drawing.intervals?.[m.unit] ?? defaultRange(m.unit);
+            let r: IntervalRange = { ...r0 };
+            const num = (key: 'from' | 'to'): HTMLElement => {
+                const c = buildFieldControl({
+                    kind: 'number',
+                    value: r[key],
+                    min: 1,
+                    max: m.max,
+                    step: 1,
+                    integer: true,
+                    clamp: true,
+                    compact: true,
+                    commit: 'blur',
+                    title: key === 'from' ? `${m.label} from` : `${m.label} to`,
+                    onChange: (v) => {
+                        const n = Math.min(m.max, Math.max(1, Math.round(v)));
+                        r = { ...r, [key]: n };
+                        if (r.from > r.to) r = key === 'from' ? { ...r, to: n } : { ...r, from: n };
+                        write(m.unit, r);
+                    },
+                });
+                c.el.dataset.role = `interval-${m.unit}-${key}`;
+                return c.el;
+            };
+            const dash = document.createElement('span');
+            dash.textContent = '-';
+            dash.style.cssText = 'opacity:0.6;padding:0 2px;';
+            grid.appendChild(fieldRow({
+                label: m.label,
+                toggle: { checked: r.on, onChange: (v) => { r = { ...r, on: v }; write(m.unit, r); } },
+                control: [num('from'), dash, num('to')],
+                fit: true,
+            }));
+        }
+    }
+
+    /** One generic row for a schema field (color, number, select, line style, switch, text). */
+    private schemaRow(drawing: Drawing, f: SettingsField, actions: SettingsActions): HTMLElement | null {
+        const cur = getByPath(drawing, f.path);
+        switch (f.kind) {
+            case 'boolean':
+                return fieldRow({ label: f.label, bool: true, toggle: { checked: !!cur, onChange: (v) => actions.patch({ [f.path]: v }) } });
+            case 'color':
+                return fieldRow({ label: f.label, control: [this.colorControl(drawing, f.path, actions, typeof cur === 'string' && cur ? cur : DEFAULT_DRAWING_COLOR)], fit: true });
+            case 'number':
+            case 'opacity':
+                return fieldRow({ label: f.label, control: [this.numberControl(drawing, f, actions)], fit: true });
+            case 'lineStyle':
+                return fieldRow({ label: f.label, control: [this.selectControl(f.path, LINE_STYLE_OPTIONS, String(cur ?? 'solid'), actions)], fit: true });
+            case 'select':
+                if (!f.options?.length) return null;
+                // Number-valued selects (e.g. a count) keep their number type.
+                return fieldRow({ label: f.label, control: [this.selectControl(f.path, f.options, String(cur ?? f.options[0]!.value), actions, typeof cur === 'number' ? Number : undefined)], fit: true });
+            case 'text':
+                return fieldRow({
+                    label: f.label,
+                    control: [buildFieldControl({ kind: 'text', value: String(cur ?? ''), fill: false, onChange: (v) => actions.patch({ [f.path]: v }) }).el],
+                    fit: true,
+                });
+            default:
+                return null;
+        }
+    }
+
+    private colorControl(drawing: Drawing, path: string, actions: SettingsActions, initial: string): HTMLElement {
+        let c = initial;
+        return buildFieldControl({
+            kind: 'color',
+            theme: this.theme,
+            get: () => c,
+            onChange: (v) => {
+                c = v;
+                actions.patch({ [path]: v });
+            },
+        }).el;
+    }
+
+    private numberControl(drawing: Drawing, f: SettingsField, actions: SettingsActions): HTMLElement {
+        const cur = Number(getByPath(drawing, f.path) ?? f.min ?? 0);
+        let last = cur;
+        const n = buildFieldControl({
+            kind: 'number',
+            value: cur,
+            min: f.min,
+            max: f.max,
+            step: f.step,
+            fill: false,
+            commit: 'blur',
+            onChange: (v) => {
+                if (!Number.isFinite(v)) { n.setValue?.(last); return; }
+                const clamped = Math.min(f.max ?? Infinity, Math.max(f.min ?? -Infinity, v));
+                last = clamped;
+                actions.patch({ [f.path]: clamped });
+            },
+        });
+        return n.el;
+    }
+
+    private selectControl(path: string, options: readonly SelectOption[], value: string, actions: SettingsActions, map?: (v: string) => unknown): HTMLElement {
+        const el = buildFieldControl({
+            kind: 'select',
+            options,
+            value,
+            fill: false,
+            theme: this.theme,
+            onChange: (v) => actions.patch({ [path]: map ? map(v) : v }),
+        }).el;
+        // Long choices ("Below the line") must not be cut off: size the list to its longest label.
+        const longest = Math.max(...options.map((o) => o.label.length));
+        if (longest > 8) el.style.minWidth = `${Math.min(220, 40 + longest * 8)}px`;
+        return el;
     }
 
     /** Bottom-left "Template ▾": save the current look under a name, re-apply a saved one,
@@ -695,6 +1022,59 @@ function writeTemplates(all: Record<string, Record<string, TemplateLook>>): void
 /** Just the look fields of a serialized drawing (never anchors/ids). */
 function pick(d: SerializedDrawing): Pick<SerializedDrawing, 'style' | 'text' | 'props'> {
     return { style: d.style, text: d.text, props: d.props };
+}
+
+/** The look settings of a drawing's schema (everything but its text, which has its own tab). */
+function styleFields(drawing: Drawing): SettingsField[] {
+    // Sizing / profile tools edit their numbers on the Inputs tab: their Style tab only takes colors and line styles.
+    const custom = drawing instanceof PositionTool || drawing instanceof FixedRangeVolumeProfile || drawing instanceof FixedRangeTpoProfile;
+    return drawing.schema().fields.filter(
+        (f) =>
+            !f.path.startsWith('text.') &&
+            !SKIP_PATHS.has(f.path) &&
+            !(f.kind === 'select' && !f.options?.length) &&
+            !(custom && (f.group === 'behavior' || (f.kind !== 'color' && f.kind !== 'lineStyle'))),
+    );
+}
+
+function getByPath(obj: unknown, path: string): unknown {
+    let cur: unknown = obj;
+    for (const k of path.split('.')) {
+        if (cur == null || typeof cur !== 'object') return undefined;
+        cur = (cur as Record<string, unknown>)[k];
+    }
+    return cur;
+}
+
+function priceStep(p: number): number {
+    const a = Math.abs(p);
+    return a >= 1000 ? 0.1 : a >= 1 ? 0.01 : 0.0001;
+}
+
+/** A price at the precision its size needs (2 decimals from 1, 6 below): a dragged anchor carries float noise. */
+function roundPrice(p: number): number {
+    const k = Math.abs(p) >= 1 ? 100 : 1e6;
+    return Math.round(p * k) / k;
+}
+
+function pad(n: number): string {
+    return String(n).padStart(2, '0');
+}
+
+/** `YYYY-MM-DD HH:MM` in the viewer's local time. */
+export function formatLocal(ms: number): string {
+    const d = new Date(ms);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Parses `YYYY-MM-DD HH:MM[:SS]` (or `YYYY-MM-DD`) as local time; null when it is not a valid date. */
+export function parseLocal(s: string): number | null {
+    const m = /^\s*(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*$/.exec(s);
+    if (!m) return null;
+    const [y, mo, d, h, mi, se] = [m[1], m[2], m[3], m[4] ?? '0', m[5] ?? '0', m[6] ?? '0'].map(Number) as number[];
+    if (mo! < 1 || mo! > 12 || d! < 1 || d! > 31 || h! > 23 || mi! > 59 || se! > 59) return null;
+    const ms = new Date(y!, mo! - 1, d!, h!, mi!, se!).getTime();
+    return Number.isFinite(ms) ? ms : null;
 }
 
 function btn(label: string, primary: boolean, onClick: () => void): HTMLButtonElement {

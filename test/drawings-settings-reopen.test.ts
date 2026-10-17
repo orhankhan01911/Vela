@@ -79,7 +79,7 @@ const ratios = (d: Drawing): number[] => (d as FibRetracement).levels.map((l) =>
 describe('drawing settings reopened from the same toolbar', () => {
     it('the levels dialog shows every ratio edited in an earlier session', async () => {
         const s = setup(fib());
-        s.barButton('Levels').click();
+        s.barButton('Settings').click();
         await settled();
         commit(s.ratioInputs()[1]!, 0.25);
         commit(s.ratioInputs()[2]!, 0.4);
@@ -87,7 +87,7 @@ describe('drawing settings reopened from the same toolbar', () => {
         await settled();
         expect(ratios(s.live()).slice(0, 3)).toEqual([0, 0.25, 0.4]);
 
-        s.barButton('Levels').click();
+        s.barButton('Settings').click();
         await settled();
         expect(s.ratioInputs().slice(0, 3).map((i) => Number(i.value))).toEqual([0, 0.25, 0.4]);
         s.popup.destroy();
@@ -95,14 +95,14 @@ describe('drawing settings reopened from the same toolbar', () => {
 
     it('cancelling a reopened levels dialog keeps the edits made before it opened', async () => {
         const s = setup(fib());
-        s.barButton('Levels').click();
+        s.barButton('Settings').click();
         await settled();
         commit(s.ratioInputs()[1]!, 0.25);
         commit(s.ratioInputs()[2]!, 0.4);
         s.dialogButton('Ok').click();
         await settled();
 
-        s.barButton('Levels').click();
+        s.barButton('Settings').click();
         await settled();
         commit(s.ratioInputs()[3]!, 0.55);
         s.dialogButton('Cancel').click();

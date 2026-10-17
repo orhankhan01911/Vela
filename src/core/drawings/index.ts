@@ -8,6 +8,7 @@ export { defaultStyle, defaultText, DEFAULT_DRAWING_COLOR } from './style';
 export type { FieldKind, SettingsField, SettingsSchema } from './schema';
 export { LINE_FIELDS, FILL_FIELDS, LINE_STYLE_OPTIONS, TEXT_FIELDS, TEXT_SIZE_OPTIONS } from './schema';
 export { Drawing, setByPath } from './Drawing';
+export { INTERVAL_UNITS, barUnit, compactIntervals, defaultRange, shownOnBarMs, type IntervalRange, type IntervalUnit, type IntervalVisibility } from './intervals';
 export type { DrawingTypeKey, AnchorSlot, SerializedDrawing } from './Drawing';
 export { effectiveFillColor, VALID_FILL, INVALID_FILL, type EffectiveColorTheme } from './effectiveColor';
 export { TrendLine } from './types/TrendLine';

@@ -25,7 +25,7 @@ import { NumberInput } from '../../../ui/components/number-input';
 import { TextArea } from '../../../ui/components/text-area';
 import { buildColorPicker } from '../../../ui/components/color-picker';
 import { Popover, closeOpenPopovers } from '../../../ui/components/popover';
-import { DrawingSettingsDialog } from './DrawingSettingsDialog';
+import { DrawingSettingsDialog, type DrawingDialogKind, type DrawingDialogTab } from './DrawingSettingsDialog';
 
 /** A `{ path: value }` patch emitted as the user edits a control. */
 export type SettingsPatch = Record<string, unknown>;
@@ -288,14 +288,15 @@ export class DrawingSettingsPopup {
             const reg = (d: Drawing): RegressionStyle => regOf(d)!;
             const styles = LINE_STYLE_OPTIONS.map((o) => o.value);
             bar.appendChild(swatch('Midline color', BRUSH_ICON, (d) => reg(d).midColor, 'reg.midColor'));
-            bar.appendChild(this.dropdown('Midline style', styles, common((d) => reg(d).midStyle), (s) => lineIcon(2, s), (v) => actions.patch({ 'reg.midStyle': v }), { label: styleLabel }));
-            bar.appendChild(swatch('Upper line color', BRUSH_ICON, (d) => reg(d).upperColor, 'reg.upperColor'));
-            bar.appendChild(this.dropdown('Upper line style', styles, common((d) => reg(d).upperStyle), (s) => lineIcon(2, s), (v) => actions.patch({ 'reg.upperStyle': v }), { label: styleLabel }));
-            bar.appendChild(swatch('Lower line color', BRUSH_ICON, (d) => reg(d).lowerColor, 'reg.lowerColor'));
-            bar.appendChild(this.dropdown('Lower line style', styles, common((d) => reg(d).lowerStyle), (s) => lineIcon(2, s), (v) => actions.patch({ 'reg.lowerStyle': v }), { label: styleLabel }));
-            bar.appendChild(swatch('Upper fill', BUCKET_ICON, (d) => reg(d).upperFill, 'reg.upperFill'));
-            bar.appendChild(swatch('Lower fill', BUCKET_ICON, (d) => reg(d).lowerFill, 'reg.lowerFill'));
-            bar.appendChild(this.toggle('Show R²', R2_ICON, common((d) => reg(d).showR2), (v) => actions.patch({ 'reg.showR2': v })));
+            // A multi-selection has no settings dialog: it keeps the full set on the bar.
+            if (multi) {
+                bar.appendChild(this.dropdown('Midline style', styles, common((d) => reg(d).midStyle), (s) => lineIcon(2, s), (v) => actions.patch({ 'reg.midStyle': v }), { label: styleLabel }));
+                bar.appendChild(swatch('Upper line color', BRUSH_ICON, (d) => reg(d).upperColor, 'reg.upperColor'));
+                bar.appendChild(swatch('Lower line color', BRUSH_ICON, (d) => reg(d).lowerColor, 'reg.lowerColor'));
+                bar.appendChild(swatch('Upper fill', BUCKET_ICON, (d) => reg(d).upperFill, 'reg.upperFill'));
+                bar.appendChild(swatch('Lower fill', BUCKET_ICON, (d) => reg(d).lowerFill, 'reg.lowerFill'));
+                bar.appendChild(this.toggle('Show R²', R2_ICON, common((d) => reg(d).showR2), (v) => actions.patch({ 'reg.showR2': v })));
+            }
         }
         // Anchored VWAP: midline color + style, band σ-multiplier, the two band-line colors, and the fill.
         const vwapOf = (d: Drawing): VwapStyle | undefined => (d as unknown as { vwap?: VwapStyle }).vwap;
@@ -304,16 +305,18 @@ export class DrawingSettingsPopup {
             const styles = LINE_STYLE_OPTIONS.map((o) => o.value);
             const MULTS = [0.5, 1, 1.5, 2, 2.5, 3, 4, 5];
             bar.appendChild(swatch('VWAP color', BRUSH_ICON, (d) => vwap(d).midColor, 'vwap.midColor'));
-            bar.appendChild(this.dropdown('VWAP style', styles, common((d) => vwap(d).midStyle), (s) => lineIcon(2, s), (v) => actions.patch({ 'vwap.midStyle': v }), { label: styleLabel }));
-            bar.appendChild(
+            if (multi) bar.appendChild(this.dropdown('VWAP style', styles, common((d) => vwap(d).midStyle), (s) => lineIcon(2, s), (v) => actions.patch({ 'vwap.midStyle': v }), { label: styleLabel }));
+            if (multi) bar.appendChild(
                 this.dropdown('Band multiplier', MULTS, common((d) => vwap(d).multiplier), () => BANDS_ICON, (v) => actions.patch({ 'vwap.multiplier': v }), {
                     label: (v) => `${v}σ`,
                     labelInTrigger: true,
                 }),
             );
-            bar.appendChild(swatch('Upper band color', BRUSH_ICON, (d) => vwap(d).upperColor, 'vwap.upperColor'));
-            bar.appendChild(swatch('Lower band color', BRUSH_ICON, (d) => vwap(d).lowerColor, 'vwap.lowerColor'));
-            bar.appendChild(swatch('Band fill', BUCKET_ICON, (d) => vwap(d).bandFill, 'vwap.bandFill'));
+            if (multi) {
+                bar.appendChild(swatch('Upper band color', BRUSH_ICON, (d) => vwap(d).upperColor, 'vwap.upperColor'));
+                bar.appendChild(swatch('Lower band color', BRUSH_ICON, (d) => vwap(d).lowerColor, 'vwap.lowerColor'));
+                bar.appendChild(swatch('Band fill', BUCKET_ICON, (d) => vwap(d).bandFill, 'vwap.bandFill'));
+            }
         }
         // Dedekind tessellation: max circle curvature (tessellation density).
         if (paths.has('maxCurvature')) {
@@ -357,7 +360,7 @@ export class DrawingSettingsPopup {
         if (paths.has('text.italic') && !textField) bar.appendChild(this.toggle('Italic', ITALIC_ICON, common((d) => !!d.text?.italic), (v) => actions.patch({ 'text.italic': v })));
         if (textField) bar.appendChild(this.iconBtn('Text', TYPE_ICON, () => this.toggleTextPanel(drawing, actions, !textOnBar)));
         const editableLevels = drawing.editableLevels();
-        if (editableLevels && every((d) => d.editableLevels() != null && !(d instanceof MachFigure))) {
+        if (multi && editableLevels && every((d) => d.editableLevels() != null && !(d instanceof MachFigure))) {
             const fib = (d: Drawing): { numbersSize?: string; labelsSize?: string } => d as unknown as { numbersSize?: string; labelsSize?: string };
             const sizes = TEXT_SIZE_OPTIONS.map((o) => o.value);
             bar.appendChild(this.dropdown('Numbers size', sizes, common((d) => fib(d).numbersSize ?? 'small'), (s) => numbersSizeIcon(s), (v) => actions.patch({ numbersSize: v }), { label: sizeLabel }));
@@ -368,15 +371,15 @@ export class DrawingSettingsPopup {
         // and a kebab overflow (z-order + reset) sits just right of delete. The gear panels edit
         // one drawing's own data (levels, sizing, profile rows) — they stay off a multi-selection.
         bar.appendChild(this.divider());
-        if (!multi && isFrvp) bar.appendChild(this.iconBtn('Settings', GEAR_ICON, () => this.settingsDialog.open(drawing, actions, 'frvp')));
-        if (!multi && isFrtpo) bar.appendChild(this.iconBtn('Settings', GEAR_ICON, () => this.settingsDialog.open(drawing, actions, 'frtpo')));
-        if (!multi && isPosition) bar.appendChild(this.iconBtn('Position size', GEAR_ICON, () => this.settingsDialog.open(drawing, actions, 'position')));
-        if (!multi && editableLevels) bar.appendChild(this.iconBtn('Levels', GEAR_ICON, () => this.settingsDialog.open(drawing, actions, 'levels')));
+        // Every drawing has the settings dialog (TradingView: Style / Text / Coordinates / Visibility); it opens on
+        // the tab that matters most for the tool (sizing, profile rows, levels).
+        const dialogKind: DrawingDialogKind = isFrvp ? 'frvp' : isFrtpo ? 'frtpo' : isPosition ? 'position' : editableLevels ? 'levels' : 'settings';
+        if (!multi) bar.appendChild(this.iconBtn('Settings', GEAR_ICON, () => this.settingsDialog.open(drawing, actions, dialogKind)));
         bar.appendChild(this.toggle('Lock', LOCK_ICON, common((d) => d.locked), (v) => actions.setLocked(v), UNLOCK_ICON));
         const del = this.iconBtn('Delete', TRASH_ICON, () => actions.remove());
         del.style.color = 'var(--vela-danger)';
         bar.appendChild(del);
-        bar.appendChild(this.kebabButton(actions));
+        bar.appendChild(this.kebabButton(actions, multi ? null : (tab) => this.settingsDialog.open(drawing, actions, dialogKind, undefined, tab)));
 
         el.append(bar);
         this.host.appendChild(el);
@@ -615,7 +618,7 @@ export class DrawingSettingsPopup {
     }
 
     /** The trailing kebab overflow — duplicate, z-order actions, reset settings. */
-    private kebabButton(actions: SettingsActions): HTMLButtonElement {
+    private kebabButton(actions: SettingsActions, openDialog: ((tab?: DrawingDialogTab) => void) | null): HTMLButtonElement {
         const b = this.base('More');
         b.innerHTML = sized(KEBAB_ICON);
         // Stop the trigger's own pointerdown from reaching `el` (which would pre-close the menu),
@@ -628,6 +631,12 @@ export class DrawingSettingsPopup {
                 return;
             }
             this.openActionMenu(b, [
+                ...(openDialog
+                    ? [
+                          { icon: GEAR_ICON, label: 'Settings\u2026', onClick: () => openDialog() },
+                          { icon: EYE_ICON, label: 'Visibility on intervals\u2026', onClick: () => openDialog('visibility') },
+                      ]
+                    : []),
                 { icon: CLONE_ICON, label: 'Duplicate', onClick: () => actions.duplicate() },
                 { icon: FRONT_ICON, label: 'Bring to front', onClick: () => actions.reorder('front') },
                 { icon: BACK_ICON, label: 'Send to back', onClick: () => actions.reorder('back') },
@@ -1070,6 +1079,7 @@ const KEBAB_ICON = icon('kebab');
 const CLONE_ICON = icon('clone');
 const RESET_ICON = icon('reset');
 const GEAR_ICON = icon('gear');
+const EYE_ICON = icon('eye');
 const CHEVRON_ICON = icon('chevron-down');
 const R2_ICON = icon('r-squared');
 const BANDS_ICON = icon('bands');
