@@ -71,6 +71,13 @@ interface LegendRow {
     el: HTMLElement;
     titleEl: HTMLElement;
     statusEl: HTMLElement;
+    /** Last status set through {@link InputsUI.setStatus} (drives the hover text and the
+     *  one-time pulse when a row turns live). */
+    status: 'idle' | 'loading' | 'live';
+    /** The row has been live at least once (the one-time pulse already played). */
+    wasLive: boolean;
+    /** Pending switch from the live dot to the loading dots (a quick reload never shows them). */
+    loadingTimer: ReturnType<typeof setTimeout> | null;
     /** The plot-values readout beside the title (one colored span per drawable plot). */
     valuesEl: HTMLElement;
     /** Latest plot values pushed by the renderer (kept so visibility toggles re-render). */
@@ -100,10 +107,15 @@ interface LegendRow {
     native: boolean;
 }
 
-/** Keyframes for the legend-row live pulse, injected once into the document (the load
- *  dots animate through the Web Animations API and need no stylesheet). */
-const STATUS_KEYFRAMES =
-    '@keyframes vela-ind-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.6)}}';
+/** What the legend status mark means, shown on hover (a tester read the old endless
+ *  green pulse as an alarm and could not tell what it was). */
+/** How long a live row may reload before its still dot gives way to the loading dots. */
+export const LIVE_RELOAD_GRACE_MS = 1000;
+
+export const LEGEND_STATUS_TIPS = {
+    loading: 'Loading data for this indicator',
+    live: 'Live: this indicator updates as new data arrives',
+} as const;
 
 /** Legend glyph size — the row's own font belongs to the indicator title beside them. */
 const LEGEND_ICON_PX = 16;
@@ -797,6 +809,11 @@ export class InputsUI {
         // so the buttons stay glued to the title (see syncRowActions).
         const statusEl = document.createElement('span');
         statusEl.style.cssText = 'display:none;box-sizing:border-box;flex:none;';
+        statusEl.dataset.legendStatus = 'idle';
+        this.tip(this.rowTips, id, statusEl, () => {
+            const st = this.rows.get(id)?.status ?? 'idle';
+            return st === 'idle' ? '' : LEGEND_STATUS_TIPS[st];
+        });
         // Title (+ optional "beta" exponent) wrapped so the superscript stays glued to the label and
         // survives title-text updates (which only touch the inner span). It shrinks — ellipsized —
         // only once the values readout has given up all its room (see valuesEl).
@@ -892,7 +909,7 @@ export class InputsUI {
         el.appendChild(controlsEl);
 
         this.attach(this.legendFor(paneId), el, !!opts.native);
-        const row: LegendRow = { id, title, inputs, values: { ...values }, props: opts.props ?? [], propValues: { ...(opts.propValues ?? {}) }, style: opts.style ?? [], styleValues: { ...(opts.styleValues ?? {}) }, el, titleEl, statusEl, valuesEl, plotValues: [], plotValuesKey: '', showValues: null, highlighted: false, paneId, hidden: false, eyeEl, gearEl: gear, controlsEl, extrasEl, calloutsEl, callouts: [], native: !!opts.native };
+        const row: LegendRow = { id, title, inputs, values: { ...values }, props: opts.props ?? [], propValues: { ...(opts.propValues ?? {}) }, style: opts.style ?? [], styleValues: { ...(opts.styleValues ?? {}) }, el, titleEl, statusEl, status: 'idle', wasLive: false, loadingTimer: null, valuesEl, plotValues: [], plotValuesKey: '', showValues: null, highlighted: false, paneId, hidden: false, eyeEl, gearEl: gear, controlsEl, extrasEl, calloutsEl, callouts: [], native: !!opts.native };
         this.rows.set(id, row);
         this.renderCallouts(row);
         this.syncFoldToggle(); // 2+ indicators grow the fold chevron; a folded legend hides the new row too
@@ -914,15 +931,44 @@ export class InputsUI {
     }
 
     /**
-     * Reflect an indicator's live status in its legend row: `'loading'` shows three pulsing
-     * dots (a fetch is in flight — the same load affordance as the chart's own bar-load dots,
-     * at legend scale), `'live'` a pulsing dot, `'idle'` nothing. Rendered just right of the title.
+     * Reflect an indicator's live status in its legend row: `'loading'` shows three softly
+     * fading dots (a fetch is in flight — the same load affordance as the chart's own bar-load
+     * dots, at legend scale), `'live'` a small STATIC dot, `'idle'` nothing. Rendered just right
+     * of the title; hovering it says what it means ({@link LEGEND_STATUS_TIPS}).
+     *
+     * The live dot used to pulse forever; with a dozen live indicators the legend blinked
+     * constantly and read as an alert. It now pulses ONCE, briefly, when a row turns live
+     * (first data, or data back after a reload), then stays still.
      */
     setStatus(id: string, status: 'idle' | 'loading' | 'live'): void {
         const row = this.rows.get(id);
         if (!row) return;
+        const prev = row.status;
+        row.status = status;
+        if (row.loadingTimer) {
+            clearTimeout(row.loadingTimer);
+            row.loadingTimer = null;
+        }
+        // A live row that reloads keeps its still dot; the loading dots only show if the
+        // reload takes longer than LIVE_RELOAD_GRACE_MS (most refreshes finish well before).
+        if (status === 'loading' && prev === 'live') {
+            row.status = 'live';
+            row.loadingTimer = setTimeout(() => {
+                row.loadingTimer = null;
+                this.paintStatus(row, 'loading');
+            }, LIVE_RELOAD_GRACE_MS);
+            return;
+        }
+        if (status === 'live' && prev === 'live' && row.statusEl.dataset.legendStatus === 'live') return; // already still
+        this.paintStatus(row, status);
+    }
+
+    private paintStatus(row: LegendRow, status: 'idle' | 'loading' | 'live'): void {
+        row.status = status;
         const el = row.statusEl;
+        el.dataset.legendStatus = status;
         el.replaceChildren(); // the load dots (and their Web Animations) die with the children
+        el.getAnimations?.().forEach((a) => a.cancel());
         if (status === 'idle') {
             el.style.cssText = 'display:none;box-sizing:border-box;flex:none;';
             return;
@@ -943,21 +989,15 @@ export class InputsUI {
             }
             return;
         }
-        // live — a pulsing filled dot
-        this.ensureStatusKeyframes();
+        // live — a small, still dot; one short pulse as it appears.
         el.style.cssText =
-            `display:inline-block;box-sizing:border-box;flex:none;width:8px;height:8px;border-radius:50%;` +
-            `margin-left:${LEGEND_TITLE_STATUS_GAP_PX}px;transform:translateY(1px);` +
-            `background:${this.theme.upColor};animation:vela-ind-pulse 1.2s ease-in-out infinite;`;
-    }
-
-    /** Inject the status keyframes once (idempotent). */
-    private ensureStatusKeyframes(): void {
-        if (typeof document === 'undefined' || document.getElementById('vela-ind-status-kf')) return;
-        const style = document.createElement('style');
-        style.id = 'vela-ind-status-kf';
-        style.textContent = STATUS_KEYFRAMES;
-        document.head.appendChild(style);
+            `display:inline-block;box-sizing:border-box;flex:none;width:6px;height:6px;border-radius:50%;` +
+            `margin-left:${LEGEND_TITLE_STATUS_GAP_PX}px;transform:translateY(1px);opacity:0.7;` +
+            `background:${this.theme.upColor};`;
+        if (!row.wasLive) {
+            row.wasLive = true;
+            el.animate?.([{ opacity: 0.7, transform: 'translateY(1px) scale(1)' }, { opacity: 1, transform: 'translateY(1px) scale(1.5)' }, { opacity: 0.7, transform: 'translateY(1px) scale(1)' }], { duration: 600, iterations: 1, easing: 'ease-out' });
+        }
     }
 
     /** Mark a row hidden/shown — swaps the eye glyph and dims the row; does NOT remove it. */
@@ -1041,6 +1081,7 @@ export class InputsUI {
     remove(id: string): void {
         const row = this.rows.get(id);
         for (const bubble of row?.callouts ?? []) bubble.destroy(); // an open panel must not outlive its row
+        if (row?.loadingTimer) clearTimeout(row.loadingTimer);
         row?.el.remove();
         this.rows.delete(id);
         this.disposeTips(this.rowTips, id);
