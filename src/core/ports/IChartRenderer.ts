@@ -456,6 +456,11 @@ export interface IChartRenderer {
     getVisibleRange(): VisibleRange | null;
     setVisibleRange(range: VisibleRange): void;
     /**
+     * TradingView's "Reset chart view" (Alt+R): the newest bars at the default zoom, every manual price scale dropped
+     * so auto scale resumes. OPTIONAL: without it the core frames the newest 200 bars with `setVisibleRange`.
+     */
+    resetView?(): void;
+    /**
      * Pan by a fraction of the visible width at constant zoom (positive ⇒ toward the
      * latest bars), behaving exactly like a pointer drag: same pan limits (including the
      * bounded whitespace past the newest bar), eased if the renderer animates pans.

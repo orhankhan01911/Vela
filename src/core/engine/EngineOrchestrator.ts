@@ -2374,6 +2374,17 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         this.renderer.setVisibleRange({ from: r.from + delta, to: r.to + delta });
     }
 
+    /** Back to the newest bars at the default zoom with auto scale (TradingView's Alt+R). */
+    resetView(): void {
+        if (this.renderer.resetView) {
+            this.renderer.resetView();
+            return;
+        }
+        const first = this.bars[Math.max(0, this.bars.length - 200)];
+        const last = this.bars[this.bars.length - 1];
+        if (first && last) this.renderer.setVisibleRange({ from: first.time, to: last.time });
+    }
+
     /** Frame a named preset (e.g. `'1M'`, `'YTD'`, `'ALL'`) over the loaded bars. */
     setVisibleRangePreset(preset: VisibleRangePreset): void {
         const range = presetToRange(preset, this.bars);

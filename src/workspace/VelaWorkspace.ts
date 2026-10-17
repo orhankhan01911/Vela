@@ -2372,7 +2372,7 @@ export class VelaWorkspace {
                 run: ov ? () => this.runOverride(ov) : () => this.downloadScreenshot(),
             });
         }
-        this.keymap.register({ id: 'chart.reset-view', keys: 'alt+r', label: 'Reset view (all history)', category: 'Chart', run: () => this.active.chart.setVisibleRangePreset('ALL') });
+        this.keymap.register({ id: 'chart.reset-view', keys: 'alt+r', label: 'Reset chart view (latest bars)', category: 'Chart', run: () => this.active.resetView() });
         this.keymap.register({ id: 'chart.toggle-log', keys: 'alt+l', label: 'Toggle logarithmic scale', category: 'Chart', run: () => this.active.chart.renderer.set('logScale', !this.active.chart.renderer.get('logScale')) });
         this.keymap.register({
             id: 'chart.toggle-percent',

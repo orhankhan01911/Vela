@@ -84,6 +84,22 @@ function parseChord(spec: string, mac: boolean): Chord {
     return chord;
 }
 
+/**
+ * The key a keystroke names, lowercased. With Alt held, macOS Option turns letters and digits into symbols or dead
+ * keys (Option+R types "®"), so `key` no longer names the key that was pressed: then the physical key from `code`
+ * (KeyR -> r, Digit2 -> 2) is used. A layout that still types a plain letter or digit with Alt keeps it (AZERTY
+ * Alt+A is code KeyQ but key "a").
+ */
+export function eventKey(ev: Pick<KeyboardEvent, 'key' | 'code' | 'altKey'>): string {
+    const k = ev.key.toLowerCase();
+    if (ev.altKey && !/^[a-z0-9]$/.test(k) && typeof ev.code === 'string') {
+        const m = /^(?:Key([A-Z])|Digit([0-9]))$/.exec(ev.code);
+        const ch = m?.[1] ?? m?.[2];
+        if (ch) return ch.toLowerCase();
+    }
+    return k;
+}
+
 function eventMatches(ev: KeyboardEvent, c: Chord): boolean {
     return (
         ev.ctrlKey === c.ctrl &&
@@ -92,7 +108,7 @@ function eventMatches(ev: KeyboardEvent, c: Chord): boolean {
         // Shift is part of producing many printable keys ('?', '+') — only enforce it
         // when the chord names a non-printable/letter key where shift is a real modifier.
         (c.key.length > 1 || /^[a-z0-9 ]$/.test(c.key) ? ev.shiftKey === c.shift : true) &&
-        ev.key.toLowerCase() === c.key
+        eventKey(ev) === c.key
     );
 }
 

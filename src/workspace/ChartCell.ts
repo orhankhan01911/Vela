@@ -1114,11 +1114,11 @@ export class ChartCell {
         inner.setVisibleRange(range);
     }
 
-    /** Reset this cell's view: re-enable auto scale and frame the full history —
-     *  the same action the chart context menu offers. */
+    /** Reset this cell's view like TradingView's "Reset chart view": auto scale back on and the newest bars at the
+     *  default zoom (it used to frame the whole history, which is the 'ALL' range preset). Context menu and Alt+R. */
     resetView(): void {
         this.inner?.renderer.set('autoScale', true);
-        this.inner?.setVisibleRangePreset('ALL');
+        this.inner?.resetView();
     }
 
     /** Rebuild the view-controls cluster (the maximize gate or state changed). */

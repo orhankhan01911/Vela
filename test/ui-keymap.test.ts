@@ -6,6 +6,7 @@ import { KeymapManager } from '../src/ui/keymap';
 
 interface EvInit {
     key: string;
+    code?: string;
     ctrlKey?: boolean;
     metaKey?: boolean;
     altKey?: boolean;
@@ -26,6 +27,30 @@ function ev(init: EvInit): KeyboardEvent {
 }
 
 describe('KeymapManager', () => {
+    it('macOS Option chords match the physical key (Option+R types "®")', () => {
+        const km = new KeymapManager({ platform: 'mac' });
+        const run = vi.fn();
+        km.register({ id: 'reset', keys: 'alt+r', label: 'Reset', run });
+        km.register({ id: 'two', keys: 'alt+2', label: 'Two', run });
+        expect(km.handleKeydown(ev({ key: '®', code: 'KeyR', altKey: true }))).toBe(true);
+        expect(km.handleKeydown(ev({ key: '™', code: 'Digit2', altKey: true }))).toBe(true);
+        // Dead key (Option+E / Option+N on a US Mac layout) still names its physical key.
+        km.register({ id: 'e', keys: 'alt+e', label: 'E', run });
+        expect(km.handleKeydown(ev({ key: 'Dead', code: 'KeyE', altKey: true }))).toBe(true);
+        expect(run).toHaveBeenCalledTimes(3);
+    });
+
+    it('a layout that types a plain letter with Alt keeps that letter (AZERTY Alt+A is code KeyQ)', () => {
+        const km = new KeymapManager({ platform: 'other' });
+        const a = vi.fn();
+        const q = vi.fn();
+        km.register({ id: 'a', keys: 'alt+a', label: 'A', run: a });
+        km.register({ id: 'q', keys: 'alt+q', label: 'Q', run: q });
+        expect(km.handleKeydown(ev({ key: 'a', code: 'KeyQ', altKey: true }))).toBe(true);
+        expect(a).toHaveBeenCalledTimes(1);
+        expect(q).not.toHaveBeenCalled();
+    });
+
     it('matches chords with order-insensitive modifiers and key aliases', () => {
         const km = new KeymapManager({ platform: 'other' });
         const run = vi.fn();

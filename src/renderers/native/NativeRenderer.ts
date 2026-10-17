@@ -3050,8 +3050,8 @@ export class NativeRenderer implements IChartRenderer {
         this.emitPaneAction({ type: 'maximize', paneId: pane.id, maximized });
     }
 
-    /** Re-fit the view and drop every manual scale (keyboard `0`). */
-    private resetView(): void {
+    /** Re-fit the view and drop every manual scale (keyboard `0`, Alt+R): the newest 200 bars at the right margin. */
+    resetView(): void {
         this.fitContent(); // clears all manual scales
         this.scheduler.invalidate(InvalidateLevel.Full);
         this.emitViewportChange();

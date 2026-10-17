@@ -455,6 +455,14 @@ export class Vela {
         return this;
     }
 
+    /**
+     * TradingView's "Reset chart view" (Alt+R): back to the newest bars at the default zoom, with auto scale on.
+     */
+    resetView(): this {
+        this.orchestrator.resetView();
+        return this;
+    }
+
     resize(): void {
         this.orchestrator.resize();
     }
