@@ -66,3 +66,9 @@ export const TEXT_FIELDS: SettingsField[] = [
     { path: 'text.bold', label: 'Bold', kind: 'boolean', group: 'text' },
     { path: 'text.italic', label: 'Italic', kind: 'boolean', group: 'text' },
 ];
+
+/** Text position along and across a full-width line (horizontal line): TradingView's text alignment. */
+export const LINE_TEXT_ALIGN_FIELDS: SettingsField[] = [
+    { path: 'text.hAlign', label: 'Text horizontal position', kind: 'select', options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }], group: 'text' },
+    { path: 'text.vAlign', label: 'Text vertical position', kind: 'select', options: [{ value: 'top', label: 'Above the line' }, { value: 'center', label: 'On the line' }, { value: 'bottom', label: 'Below the line' }], group: 'text' },
+];

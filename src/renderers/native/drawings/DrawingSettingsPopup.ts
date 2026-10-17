@@ -479,6 +479,18 @@ export class DrawingSettingsPopup {
             this.toggle('Bold', BOLD_ICON, !!text?.bold, (v) => actions.patch({ 'text.bold': v })),
             this.toggle('Italic', ITALIC_ICON, !!text?.italic, (v) => actions.patch({ 'text.italic': v })),
         );
+        const live = actions.resolve() ?? drawing;
+        const alignPaths = new Set(live.schema().fields.map((f) => f.path));
+        if (alignPaths.has('text.hAlign')) {
+            tools.append(
+                this.dropdown('Text position: left, center or right', ['left', 'center', 'right'], text?.hAlign ?? 'left', (v) => H_ALIGN_GLYPH[String(v)] ?? '', (v) => actions.patch({ 'text.hAlign': v }), { label: (v) => capitalize(String(v)) }),
+            );
+        }
+        if (alignPaths.has('text.vAlign')) {
+            tools.append(
+                this.dropdown('Text position: above, on or below the line', ['top', 'center', 'bottom'], text?.vAlign ?? 'top', (v) => V_ALIGN_GLYPH[String(v)] ?? '', (v) => actions.patch({ 'text.vAlign': v }), { label: (v) => V_ALIGN_LABEL[String(v)] ?? String(v) }),
+            );
+        }
 
         panel.append(ta.el, tools);
         this.el?.appendChild(panel);
@@ -1028,6 +1040,18 @@ const FRONT_ICON = icon('bring-front');
 const BACK_ICON = icon('send-back');
 const TRASH_ICON = icon('trash');
 const BOLD_ICON = icon('bold');
+/** Text-position glyphs (no kit icon exists): three bars aligned left / center / right, and a text bar above / on / below a line. */
+const H_ALIGN_GLYPH: Record<string, string> = {
+    left: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 5h12M3 9h7M3 13h10"/></svg>',
+    center: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 5h12M5.5 9h7M4 13h10"/></svg>',
+    right: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 5h12M8 9h7M5 13h10"/></svg>',
+};
+const V_ALIGN_GLYPH: Record<string, string> = {
+    top: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 6h8"/><path d="M2 12h14" stroke-dasharray="2 2"/></svg>',
+    center: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 9h3M13 9h3"/><path d="M6.5 9h5" stroke-width="2.4"/></svg>',
+    bottom: '<svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 6h14" stroke-dasharray="2 2"/><path d="M5 12h8"/></svg>',
+};
+const V_ALIGN_LABEL: Record<string, string> = { top: 'Above the line', center: 'On the line', bottom: 'Below the line' };
 const ITALIC_ICON = icon('italic');
 const GRIP_ICON = icon('grip');
 const KEBAB_ICON = icon('kebab');

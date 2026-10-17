@@ -2,8 +2,12 @@ import { FibLevels } from './FibLevels';
 import type { FibLevel } from './FibRatios';
 import { fibLevels } from '../levelPalette';
 
-/** Standard retracement ratios (0 → 1). */
-const LEVELS = fibLevels([0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]);
+/**
+ * Standard retracement ratios (0 → 1) on, plus TradingView's extension and negative levels off
+ * (a tick in the Levels dialog turns one on), so a new drawing offers the same 25 rows as TradingView.
+ */
+const EXTRA = [1.272, 1.414, 1.618, 2, 2.272, 2.414, 2.618, 3, 3.272, 3.414, 3.618, 4, 4.236, -0.236, -0.382, -0.618, -1, -1.618];
+const LEVELS = fibLevels([0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, ...EXTRA.map((ratio) => ({ ratio, enabled: false }))]);
 
 /**
  * Fibonacci retracement: horizontal levels between two swing anchors. Level 0 sits on the

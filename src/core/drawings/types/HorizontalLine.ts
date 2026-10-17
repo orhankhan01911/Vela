@@ -1,7 +1,7 @@
 import { Drawing, type AnchorSlot } from '../Drawing';
 import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
-import { LINE_FIELDS, TEXT_FIELDS } from '../schema';
+import { LINE_FIELDS, LINE_TEXT_ALIGN_FIELDS, TEXT_FIELDS } from '../schema';
 import { handleAt } from '../hittest';
 
 /** A single-price horizontal line spanning the full plot width. */
@@ -50,6 +50,6 @@ export class HorizontalLine extends Drawing {
     }
 
     schema(): SettingsSchema {
-        return { fields: [...LINE_FIELDS, ...TEXT_FIELDS] };
+        return { fields: [...LINE_FIELDS, ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS] };
     }
 }

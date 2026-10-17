@@ -2,6 +2,7 @@ import type { VelaTheme } from '../../../core/options';
 import type { Drawing, FrtpStyle, FrvpStyle, PositionLevelMode, SerializedDrawing } from '../../../core/drawings';
 import {
     DIRECTION_OPTIONS,
+    FibLevels,
     FibRetracement,
     FixedRangeVolumeProfile,
     FixedRangeTpoProfile,
@@ -543,6 +544,48 @@ export class DrawingSettingsDialog {
         levelRow('POC', 'showPoc', 'pocColor', 'pocStyle');
     }
 
+    /** TradingView's Fib style settings (2026-10-17): extend, background, trend line, what each level shows and where. */
+    private buildFibStyle(grid: HTMLElement, fib: FibLevels, actions: SettingsActions): void {
+        const toggle = (label: string, key: string, on: boolean): void => {
+            grid.appendChild(fieldRow({ label, bool: true, toggle: { checked: on, onChange: (v) => actions.patch({ [key]: v }) } }));
+        };
+        const select = (label: string, key: string, value: string, options: SelectOption[]): void => {
+            const sel = buildFieldControl({ kind: 'select', options, value, fill: false, theme: this.theme, onChange: (v) => actions.patch({ [key]: v }) });
+            grid.appendChild(fieldRow({ label, control: [sel.el] }));
+        };
+        grid.appendChild(fieldSection('Style', { variant: 'inputs', first: true }));
+        toggle('Trend line', 'trendline', fib.trendline);
+        toggle('Extend lines left', 'extendLeft', fib.extendLeft);
+        toggle('Extend lines right', 'extendRight', fib.extendRight);
+        toggle('Background', 'background', fib.background);
+        const op = buildFieldControl({
+            kind: 'number',
+            value: Math.round(fib.fillOpacity * 100),
+            min: 0,
+            max: 100,
+            step: 1,
+            fill: false,
+            commit: 'blur',
+            onChange: (n) => actions.patch({ fillOpacity: Math.min(100, Math.max(0, n)) / 100 }),
+        });
+        grid.appendChild(fieldRow({ label: 'Background opacity %', control: [op.el] }));
+        grid.appendChild(fieldSection('Labels', { variant: 'inputs' }));
+        toggle('Levels', 'showLevels', fib.showLevels);
+        toggle('Levels as percent', 'levelsAsPercent', fib.levelsAsPercent);
+        toggle('Prices', 'showPrices', fib.showPrices);
+        select('Labels horizontal', 'labelH', fib.labelH, [
+            { value: 'left', label: 'Left' },
+            { value: 'center', label: 'Center' },
+            { value: 'right', label: 'Right' },
+        ]);
+        select('Labels vertical', 'labelV', fib.labelV, [
+            { value: 'top', label: 'Top' },
+            { value: 'middle', label: 'Middle' },
+            { value: 'bottom', label: 'Bottom' },
+        ]);
+        grid.appendChild(fieldSection('Levels', { variant: 'inputs' }));
+    }
+
     private buildLevels(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
         const levels = drawing.editableLevels();
         if (!levels) return;
@@ -558,6 +601,7 @@ export class DrawingSettingsDialog {
                 },
             }));
         }
+        if (drawing instanceof FibLevels) this.buildFibStyle(grid, drawing, actions);
         if (drawing instanceof FibRetracement) {
             const fib = drawing;
             grid.appendChild(fieldRow({
@@ -592,13 +636,14 @@ export class DrawingSettingsDialog {
             const ratio = buildFieldControl({
                 kind: 'number',
                 value: curRatio,
-                min: 0,
+                min: isMach ? 0 : -100,
                 step: 0.01,
                 fill: isMach,
                 compact: !isMach,
                 commit: 'blur',
                 onChange: (n) => {
-                    if (n <= 0) {
+                    // Fib levels may be 0 or negative (TradingView's -0.618, -1); a Mach ratio must be positive.
+                    if (!Number.isFinite(n) || (isMach && n <= 0)) {
                         ratio.setValue?.(curRatio);
                         return;
                     }
@@ -606,6 +651,7 @@ export class DrawingSettingsDialog {
                     actions.patch({ [`levels.${i}.ratio`]: n });
                 },
             });
+            ratio.el.dataset.role = 'level-ratio';
             if (isMach) ratio.el.style.flex = '1';
             row.append(sw.el, col.el, ratio.el);
             if (!isMach) {

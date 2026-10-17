@@ -85,7 +85,8 @@ describe('drawings/FibRetracement', () => {
     it('exposes editable levels; disabling one drops it from the rendered lines', () => {
         const d = make();
         const levels = d.editableLevels()!;
-        expect(levels.length).toBe(7);
+        expect(levels.length).toBe(25); // TradingView's list: 7 standard on, 18 extension/negative off
+        expect(levels.filter((l) => l.enabled).length).toBe(7);
         const i = levels.findIndex((l) => l.ratio === 0.5);
         d.applySettings({ [`levels.${i}.enabled`]: false }); // toggle the 0.5 level off
         const lines = (d as FibLevels).levelLines(proj)!;

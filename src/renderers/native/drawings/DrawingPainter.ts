@@ -511,12 +511,24 @@ export class DrawingPainter {
     private paintFibRatios(ctx: CanvasRenderingContext2D, d: FibRatios, proj: Projector, theme: VelaTheme): void {
         const lines = d.entryLines(proj);
         if (!lines || lines.length === 0) return;
+        const fo = (d as unknown as { fillOpacity?: unknown }).fillOpacity;
+        const fillAlpha = typeof fo === 'number' ? fo : 0.06;
         for (const band of d.fillBands(proj)) {
             ctx.save();
-            ctx.globalAlpha = 0.06 * ctx.globalAlpha;
+            ctx.globalAlpha = fillAlpha * ctx.globalAlpha;
             ctx.fillStyle = band.color;
             ctx.fillRect(band.x, band.y, band.w, band.h);
             ctx.restore();
+        }
+        if ((d as { trendline?: unknown }).trendline === true) {
+            // TradingView's optional trend line: the swing the levels measure, dashed between the two anchors.
+            const pts = d.handlePoints(proj);
+            if (pts.length === 2) {
+                this.stroke(ctx, { ...d.style, lineColor: theme.textColor, lineStyle: 'dashed', lineWidth: 1 }, () => {
+                    ctx.moveTo(pts[0]![0], pts[0]![1]);
+                    ctx.lineTo(pts[1]![0], pts[1]![1]);
+                });
+            }
         }
         ctx.textBaseline = 'middle';
         const numFont = `${namedFontSize(d.numbersSize)}px ${theme.fontFamily}`;
@@ -529,7 +541,7 @@ export class DrawingPainter {
             ctx.fillStyle = l.color;
             ctx.font = numFont;
             ctx.textAlign = l.numberAlign;
-            ctx.fillText(l.numberText, l.numberX, l.numberY);
+            if (l.numberText) ctx.fillText(l.numberText, l.numberX, l.numberY);
             if (l.label) {
                 ctx.font = lblFont;
                 ctx.textAlign = 'center';
@@ -2039,7 +2051,7 @@ function formatMachRatio(ratio: number): string {
 
 /** Where a drawing's label paints. With `rotate`, the canvas is rotated by `angle`
  *  around `(cx, cy)` first, and `x`/`top` are in that rotated frame. */
-function labelLayout(d: Drawing, proj: Projector): {
+export function labelLayout(d: Drawing, proj: Projector): {
     x: number;
     top: number;
     align: CanvasTextAlign;
@@ -2053,8 +2065,16 @@ function labelLayout(d: Drawing, proj: Projector): {
     switch (d.type) {
         case 'text':
             return pts[0] ? { x: pts[0][0] + 2, top: pts[0][1] + 2, align: 'left' } : null;
-        case 'hline':
-            return pts[0] ? { x: pts[0][0] + 8, top: pts[0][1] - 4 - lh * lines, align: 'left' } : null; // above the line
+        case 'hline': {
+            // TradingView's horizontal-line text: left / center / right across the plot, and above / on / below the line.
+            if (!pts[0]) return null;
+            const y = pts[0][1];
+            const h = lh * lines;
+            const ha = text.hAlign ?? 'left';
+            const x = ha === 'right' ? proj.width - 8 : ha === 'center' ? proj.width / 2 : 8;
+            const top = text.vAlign === 'bottom' ? y + 4 : text.vAlign === 'center' ? y - h / 2 : y - 4 - h;
+            return { x, top, align: ha };
+        }
         case 'trendline':
         case 'ray':
         case 'extendedline':
