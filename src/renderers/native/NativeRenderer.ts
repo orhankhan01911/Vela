@@ -411,7 +411,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     readonly name = 'native';
-    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride', 'drawingsInteractive', 'priceAxisTicks'];
+    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'invertScale', 'scalePriceOnly', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride', 'drawingsInteractive', 'priceAxisTicks'];
 
     /** Apply a render feature live — mutate the field + invalidate, no engine re-run. */
     applyFeature(key: string, value: unknown): void {
@@ -526,6 +526,22 @@ export class NativeRenderer implements IChartRenderer {
                 }
                 this.scene.invertScale = Boolean(value);
                 break;
+            case 'scalePriceOnly': {
+                const next = Boolean(value);
+                const changed = next !== this.scene.scalePriceOnly;
+                this.scene.scalePriceOnly = next;
+                // Picking an autoscale mode means "fit the price": a price pane frozen by an
+                // earlier axis drag (a long press on the axis on a phone does that) resumes
+                // autoscale, or the choice would visibly do nothing.
+                if (changed && next) {
+                    const price = this.scene.panes.get(PRICE_PANE_ID);
+                    if (price) price.manualScale = null;
+                }
+                // It lives in getConfig(): tell config watchers (the workspace saves the chart's
+                // state on this) — the price-axis menu writes it through set(), not applyConfig().
+                if (changed) for (const cb of this.configChangedCbs) cb();
+                break;
+            }
             case 'autoScale':
                 // Auto on ⇒ drop every pane's frozen window so autoscale resumes (same as
                 // double-clicking the price axis). Auto off ⇒ freeze each pane's current
@@ -643,6 +659,7 @@ export class NativeRenderer implements IChartRenderer {
             case 'axisLabels': return this.scene.showAxisLabels;
             case 'scaleMode': return this.scene.scaleMode;
             case 'invertScale': return this.scene.invertScale;
+            case 'scalePriceOnly': return this.scene.scalePriceOnly;
             case 'paneScales': return this.paneScaleInfos();
             case 'autoScale': {
                 // Auto when the price pane isn't holding a frozen (manual) window.
@@ -796,6 +813,7 @@ export class NativeRenderer implements IChartRenderer {
                 mode: this.scene.scaleMode,
                 log: this.scene.logScale,
                 invert: this.scene.invertScale,
+                scalePriceOnly: this.scene.scalePriceOnly,
                 borderColor: s.borderColor ?? t.borderColor,
                 labelsVisible: this.scene.showAxisLabels,
                 currentPriceLine: this.scene.showPriceLine,
@@ -945,6 +963,7 @@ export class NativeRenderer implements IChartRenderer {
         this.scene.scaleMode = next.priceScale.mode;
         this.scene.logScale = next.priceScale.log;
         this.scene.invertScale = next.priceScale.invert;
+        this.scene.scalePriceOnly = next.priceScale.scalePriceOnly;
         s.borderColor = keepInherit(s.borderColor, next.priceScale.borderColor, prevTheme.borderColor);
         this.scene.showAxisLabels = next.priceScale.labelsVisible;
         this.scene.showPriceLine = next.priceScale.currentPriceLine;
@@ -3723,10 +3742,16 @@ export class NativeRenderer implements IChartRenderer {
             const masterModels = models.filter((m) => m.ownScale !== true);
             // User drawings do not expand the scale (placing one in the empty margin
             // must not yank the window to follow the cursor). Pine drawings still fold in.
-            let dr = this.chrome.paneDrawingsRange(masterModels, this.scene, pane === pricePane, vr);
+            // "Scale price chart only" (TradingView): the price pane fits the main series
+            // alone. Indicator series, their Pine drawings and force_overlay series are left
+            // out of the window (they still paint, clipped at the pane edge), so adding a VWAP
+            // or a pressure ring never squashes the candles. Price pane only.
+            const priceOnly = pane === pricePane && this.scene.scalePriceOnly;
+            const scaleModels = priceOnly ? [] : masterModels;
+            let dr = priceOnly ? null : this.chrome.paneDrawingsRange(masterModels, this.scene, pane === pricePane, vr);
             // force_overlay series render on the price pane whatever pane their indicator
             // owns — fold their visible range in here (their own pane excludes them).
-            if (pane === pricePane) {
+            if (pane === pricePane && !priceOnly) {
                 const or = overlaySeriesRange(this.scene.indicators.values(), i0, i1, (id) => this.scene.offsetOf(id));
                 if (or) dr = dr ? { min: Math.min(dr.min, or.min), max: Math.max(dr.max, or.max) } : or;
             }
@@ -3734,11 +3759,12 @@ export class NativeRenderer implements IChartRenderer {
             // the pane — unless layer content still paints at bar prices there (see below), or
             // nothing else on the pane can be measured: the bars then keep the scale, so the
             // axis stays on the price range while hidden instead of the {0,1} placeholder.
+            // With "Scale price chart only" the bars always own the price pane.
             const includeCandles = pane.kind === 'price'
-                && (!this.scene.candlesHidden || this.priceLayersAnchoredToBars(masterModels) || !this.paneHasMeasurableContent(masterModels, dr));
+                && (priceOnly || !this.scene.candlesHidden || this.priceLayersAnchoredToBars(masterModels) || !this.paneHasMeasurableContent(masterModels, dr));
             // Each pane logs (or not) on its OWN flag — the price pane from the scene setting,
             // study panes from their own — so a study going log never touches the price pane.
-            pane.scaleTarget = computePaneScale(masterModels, this.bars, includeCandles, i0, i1, dr, paneLogScale(this.scene, pane), (id) => this.scene.offsetOf(id), margins);
+            pane.scaleTarget = computePaneScale(scaleModels, this.bars, includeCandles, i0, i1, dr, paneLogScale(this.scene, pane), (id) => this.scene.offsetOf(id), margins);
             // Percent baseline for THIS pane (the first visible value it measures change from):
             // the first visible bar close on the price pane, else the master series' first
             // visible value. 0 ⇒ no reference yet, so the axis falls back to absolute.

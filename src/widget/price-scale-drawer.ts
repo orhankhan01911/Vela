@@ -6,6 +6,7 @@ import { iconEl } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
 import {
     invertWrite,
+    priceOnlyState,
     paneScaleAt,
     priceAxisItems,
     scaleChoiceOf,
@@ -91,6 +92,7 @@ export class PriceScaleDrawer {
         const items = priceAxisItems({
             auto: chart.renderer.get('autoScale') !== false,
             invert: pane ? pane.invert : this.flag('invertScale'),
+            priceOnly: priceOnlyState(pane, this.flag('scalePriceOnly')),
             choice: scaleChoiceOf(pane ?? { mode: String(chart.renderer.get('scaleMode') ?? 'price'), log: this.flag('logScale') }),
             axisLabels: this.flag('axisLabels'),
             priceLabel: this.flag('priceLabel'),
@@ -164,6 +166,16 @@ export class PriceScaleDrawer {
                     checked: item.checked,
                     onClick: () => {
                         chart.renderer.set('autoScale', chart.renderer.get('autoScale') === false);
+                        this.render();
+                    },
+                });
+                continue;
+            }
+            if (item.id === 'price-only') {
+                row(item.label, {
+                    checked: item.checked,
+                    onClick: () => {
+                        chart.renderer.set('scalePriceOnly', !this.flag('scalePriceOnly'));
                         this.render();
                     },
                 });

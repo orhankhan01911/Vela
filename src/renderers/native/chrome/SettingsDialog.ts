@@ -667,6 +667,7 @@ export class SettingsDialog {
             ), 'scales.price-scale.mode'),
         );
         body.append(sid(this.boolRow('Invert scale', config.priceScale.invert, (v) => this.emit({ priceScale: { invert: v } })), 'scales.price-scale.invert'));
+        body.append(sid(this.boolRow('Scale price chart only', config.priceScale.scalePriceOnly, (v) => this.emit({ priceScale: { scalePriceOnly: v } })), 'scales.price-scale.price-only'));
         body.append(sid(this.separator(), 'scales.price-scale'));
         body.append(sid(this.boolRow('Last Price Line', config.priceScale.currentPriceLine, (v) => this.emit({ priceScale: { currentPriceLine: v } })), 'scales.price-scale.last-price-line'));
         body.append(sid(this.boolRow('Last price label', config.priceScale.priceLabel, (v) => this.emit({ priceScale: { priceLabel: v } })), 'scales.price-scale.last-price-label'));

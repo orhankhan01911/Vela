@@ -180,7 +180,7 @@ describe('contributed rows sort together with the built-in ones', () => {
     it('every built-in row has a documented rank', () => {
         const zones = {
             body: BODY,
-            'price-axis': priceAxisItems(AXIS_STATE),
+            'price-axis': priceAxisItems({ ...AXIS_STATE, priceOnly: false }),
             'time-axis': timeAxisItems('Etc/UTC'),
         } as const;
         for (const [zone, items] of Object.entries(zones) as Array<[keyof typeof zones, MenuItemDescriptor[]]>) {

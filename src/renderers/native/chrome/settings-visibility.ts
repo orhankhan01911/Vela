@@ -193,6 +193,7 @@ export const BUILTIN_SETTINGS_IDS: readonly string[] = [
     'scales.price-scale',
     'scales.price-scale.mode',
     'scales.price-scale.invert',
+    'scales.price-scale.price-only',
     'scales.price-scale.last-price-line',
     'scales.price-scale.last-price-label',
     'scales.price-scale.countdown',

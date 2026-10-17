@@ -83,6 +83,12 @@ export function scaleWrites(choice: ScaleChoice, pane: PaneScaleInfo | null): Ar
     ];
 }
 
+/** The "Scale price chart only" row's state for a right-click on `pane`: the main
+ *  price scale carries it, a study pane does not (undefined hides the row). */
+export function priceOnlyState(pane: PaneScaleInfo | null, flag: boolean): boolean | undefined {
+    return mainScale(pane) ? flag : undefined;
+}
+
 /** Renderer write inverting one pane's axis (high at the bottom). */
 export function invertWrite(next: boolean, pane: PaneScaleInfo | null): [string, unknown] {
     return mainScale(pane) ? ['invertScale', next] : ['invertScale', { pane: pane!.id, value: next }];
@@ -92,6 +98,8 @@ export interface PriceAxisState {
     /** Autoscale on — the axis fits the visible data instead of a frozen window. */
     auto: boolean;
     invert: boolean;
+    /** "Scale price chart only" (main price scale only; undefined on a study pane hides the row). */
+    priceOnly?: boolean;
     choice: ScaleChoice;
     axisLabels: boolean;
     priceLabel: boolean;
@@ -102,6 +110,7 @@ export interface PriceAxisState {
 export function priceAxisItems(s: PriceAxisState): MenuItemDescriptor[] {
     return [
         { id: 'auto', label: 'Auto (fits data to screen)', checked: s.auto },
+        ...(s.priceOnly === undefined ? [] : [{ id: 'price-only', label: 'Scale price chart only', checked: s.priceOnly }]),
         { id: 'invert', label: 'Invert scale', checked: s.invert },
         ...SCALE_CHOICES.map(([choice, label], i) => ({
             id: `scale:${choice}`,
@@ -163,6 +172,7 @@ export const CONTEXT_MENU_BUILTIN_ORDER = {
     body: { 'reset-view': -30, 'remove-drawings': -20, 'remove-indicators': -10, settings: 1000 },
     'price-axis': {
         auto: -80,
+        'price-only': -75,
         invert: -70,
         'scale:regular': -60,
         'scale:percent': -50,

@@ -291,6 +291,10 @@ export interface ChartConfig {
         log: boolean;
         /** Inverted price axis (high at the bottom). */
         invert: boolean;
+        /** TradingView's "Scale price chart only": the price pane's autoscale fits the main
+         *  series alone, so overlays (VWAP bands, order-book pressure, Pine drawings) never
+         *  widen it. They still paint; whatever falls outside the window is clipped. */
+        scalePriceOnly: boolean;
         borderColor: string;
         labelsVisible: boolean;
         currentPriceLine: boolean;
@@ -752,6 +756,7 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
             mode: isScaleMode(ps.mode) ? ps.mode : base.priceScale.mode,
             log: isBool(ps.log) ? ps.log : base.priceScale.log,
             invert: isBool(ps.invert) ? ps.invert : base.priceScale.invert,
+            scalePriceOnly: isBool(ps.scalePriceOnly) ? ps.scalePriceOnly : base.priceScale.scalePriceOnly,
             borderColor: isColor(ps.borderColor) ? ps.borderColor : base.priceScale.borderColor,
             labelsVisible: isBool(ps.labelsVisible) ? ps.labelsVisible : base.priceScale.labelsVisible,
             currentPriceLine: isBool(ps.currentPriceLine) ? ps.currentPriceLine : base.priceScale.currentPriceLine,

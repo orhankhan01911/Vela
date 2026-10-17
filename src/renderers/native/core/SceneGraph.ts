@@ -168,6 +168,9 @@ export class SceneGraph {
     logScale = false;
     /** Inverted price axis on the price pane (high at the bottom). Study panes carry their own. */
     invertScale = false;
+    /** "Scale price chart only": the price pane autoscales to the main series alone
+     *  (overlays and their drawings stay out of the window). Price pane only. */
+    scalePriceOnly = false;
     /** Exchange tick size for the active symbol (e.g. 0.01), when known. Drives the
      *  price-axis decimals — the instrument's true precision instead of the zoom-derived
      *  formula. Undefined until symbol metadata loads (the formula is the fallback). */

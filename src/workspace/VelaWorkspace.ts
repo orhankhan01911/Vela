@@ -1767,7 +1767,12 @@ export class VelaWorkspace {
         chart.on('viewport:changed', (range) => this.propagateViewport(cell.id, range));
         // Style sync: any committed config edit (settings dialog, applyConfig) mirrors
         // this cell's style-link slice onto its same-group followers.
-        chart.renderer.onConfigChanged(() => this.propagateStylePrefs(cell.id));
+        // The config is cell state too (it rides getState() via getConfig()): mark it dirty so
+        // an edit is saved within the debounce, not only at page unload.
+        chart.renderer.onConfigChanged(() => {
+            this.propagateStylePrefs(cell.id);
+            this.markStateDirty();
+        });
         // A theme picked in ONE cell (its settings dialog's Canvas → Theme) re-skins the
         // WHOLE workspace — shared chrome plus every other cell.
         chart.on('theme:changed', (t) => this.setTheme(t));
