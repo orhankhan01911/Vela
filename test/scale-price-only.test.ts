@@ -57,11 +57,15 @@ function makeRenderer() {
 }
 
 describe('scalePriceOnly — the price pane fits the main series only', () => {
-    it('off (default): an overlay band, a price line and a force_overlay plot widen the window', () => {
+    it('ON by default (user choice 2026-10-17)', () => {
+        expect(new NativeRenderer().readFeature('scalePriceOnly')).toBe(true);
+    });
+
+    it('off: an overlay band, a price line and a force_overlay plot widen the window', () => {
         const { r, priceScale } = makeRenderer();
         r.mountIndicator(overlayModel());
         r.mountIndicator(studyWithForcedOverlay());
-        expect(r.readFeature('scalePriceOnly')).toBe(false);
+        r.applyFeature('scalePriceOnly', false);
         const s = priceScale();
         expect(s.max).toBeGreaterThanOrEqual(2000);
         expect(s.min).toBeLessThanOrEqual(10);
@@ -71,7 +75,6 @@ describe('scalePriceOnly — the price pane fits the main series only', () => {
         const { r, priceScale } = makeRenderer();
         r.mountIndicator(overlayModel());
         r.mountIndicator(studyWithForcedOverlay());
-        r.applyFeature('scalePriceOnly', true);
         const s = priceScale();
         expect(s.min).toBeGreaterThan(80);
         expect(s.min).toBeLessThan(90);
@@ -102,6 +105,7 @@ describe('scalePriceOnly — the price pane fits the main series only', () => {
     it('turning it on resumes autoscale on a price pane frozen by an axis drag', () => {
         const { r, anyR, priceScale } = makeRenderer();
         r.mountIndicator(overlayModel());
+        r.applyFeature('scalePriceOnly', false);
         const frozen = { min: 0, max: 1000 };
         anyR.scene.panes.get('price').manualScale = frozen;
         expect(priceScale().max).toBe(1000);
@@ -114,16 +118,30 @@ describe('scalePriceOnly — the price pane fits the main series only', () => {
         const { r } = makeRenderer();
         let n = 0;
         r.onConfigChanged(() => { n += 1; });
-        r.applyFeature('scalePriceOnly', true);
-        r.applyFeature('scalePriceOnly', true);
-        expect(n).toBe(1);
         r.applyFeature('scalePriceOnly', false);
+        r.applyFeature('scalePriceOnly', false);
+        expect(n).toBe(1);
+        r.applyFeature('scalePriceOnly', true);
         expect(n).toBe(2);
+    });
+
+    it('a saved choice (v2) stays; an older saved document (implicit false) becomes ON; a dialog edit is a choice', () => {
+        const r = new NativeRenderer();
+        r.applyConfig({ priceScale: { mode: 'price', scalePriceOnly: false } }); // older whole document: never chosen
+        expect(r.readFeature('scalePriceOnly')).toBe(true);
+        r.applyConfig({ priceScale: { mode: 'price', scalePriceOnly: false, priceOnlyVersion: 2 } }); // saved choice
+        expect(r.readFeature('scalePriceOnly')).toBe(false);
+        r.applyConfig({ priceScale: { scalePriceOnly: true } }); // settings dialog edit
+        expect(r.readFeature('scalePriceOnly')).toBe(true);
+        r.applyConfig({ priceScale: { scalePriceOnly: false } });
+        expect(r.readFeature('scalePriceOnly')).toBe(false);
+        expect((r.getConfig() as any).priceScale.priceOnlyVersion).toBe(2);
     });
 
     it('rides getConfig/applyConfig, so a saved chart keeps it', () => {
         const { r } = makeRenderer();
-        expect((r.getConfig() as any).priceScale.scalePriceOnly).toBe(false);
+        expect((r.getConfig() as any).priceScale.scalePriceOnly).toBe(true);
+        r.applyFeature('scalePriceOnly', false);
         r.applyFeature('scalePriceOnly', true);
         const cfg = r.getConfig() as any;
         expect(cfg.priceScale.scalePriceOnly).toBe(true);

@@ -224,6 +224,9 @@ export interface ChartStyle {
 }
 
 /** A fresh live style store with every value at its "inherit / current behavior" default. */
+/** `priceScale.priceOnlyVersion` written by this build (see the field). */
+export const PRICE_ONLY_VERSION = 2;
+
 export function defaultChartStyle(): ChartStyle {
     return {
         chartTypes: {},
@@ -295,6 +298,9 @@ export interface ChartConfig {
          *  series alone, so overlays (VWAP bands, order-book pressure, Pine drawings) never
          *  widen it. They still paint; whatever falls outside the window is clipped. */
         scalePriceOnly: boolean;
+        /** Version of `scalePriceOnly` in a saved document. 2 = written since it defaults ON (2026-10-17): its value
+         *  is a choice. A saved document without it holds the old default (false, never chosen): it is ignored. */
+        priceOnlyVersion: number;
         borderColor: string;
         labelsVisible: boolean;
         currentPriceLine: boolean;
@@ -756,7 +762,12 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
             mode: isScaleMode(ps.mode) ? ps.mode : base.priceScale.mode,
             log: isBool(ps.log) ? ps.log : base.priceScale.log,
             invert: isBool(ps.invert) ? ps.invert : base.priceScale.invert,
-            scalePriceOnly: isBool(ps.scalePriceOnly) ? ps.scalePriceOnly : base.priceScale.scalePriceOnly,
+            // Taken from a v2 document, or from a partial edit (the settings dialog sends one field, no `mode`);
+            // a whole older document carries the old default `false`, which nobody chose: the ON default stays.
+            scalePriceOnly: isBool(ps.scalePriceOnly) && (ps.priceOnlyVersion === PRICE_ONLY_VERSION || !('mode' in ps))
+                ? ps.scalePriceOnly
+                : base.priceScale.scalePriceOnly,
+            priceOnlyVersion: PRICE_ONLY_VERSION,
             borderColor: isColor(ps.borderColor) ? ps.borderColor : base.priceScale.borderColor,
             labelsVisible: isBool(ps.labelsVisible) ? ps.labelsVisible : base.priceScale.labelsVisible,
             currentPriceLine: isBool(ps.currentPriceLine) ? ps.currentPriceLine : base.priceScale.currentPriceLine,
