@@ -130,4 +130,24 @@ describe("TradingView's tools Vela lacked", () => {
         for (let i = 1; i < c.length; i += 1) expect(c[i]!.open).toBeCloseTo(c[i - 1]!.close, 9);
         expect(c[3]!.close).toBeCloseTo(30, 9); // ends the first leg on price 70
     });
+
+    it('anchored text / note stay at the same place on screen while the chart scrolls; a drag moves the pin', () => {
+        for (const type of ['anchoredtext', 'anchorednote'] as const) {
+            let shift = 0;
+            const p = (): Projector => ({ ...proj(), xOf: (t) => t - shift, pxToPoint: (x, y) => ({ time: x + shift, price: 100 - y }) });
+            const d = createDrawing(type, { paneId: 'price', anchors: [P(50, 60)], text: { value: 'pinned', size: 'normal' } as never })!;
+            expect(d.handlePoints(p())).toEqual([[50, 40]]);
+            shift = 30; // the chart scrolls by 30 px
+            expect(d.handlePoints(p())).toEqual([[50, 40]]); // still at the same pixels
+            d.anchors = [P(120, 70)]; // the user drags it
+            expect(d.handlePoints(p())).toEqual([[90, 30]]);
+            shift = 0;
+            expect(d.handlePoints(p())).toEqual([[90, 30]]);
+            expect(d.serialize().props).toMatchObject({ fx: 0.45, fy: 0.3 });
+            const back = deserializeDrawing({ ...d.serialize(), anchors: [P(0, 0)] })!; // a stale data point: the pin wins
+            expect(back.handlePoints(p())).toEqual([[90, 30]]);
+            expect(back.serialize().props).toMatchObject({ fx: 0.45, fy: 0.3 });
+            expect(d.timeExtent()).toBeNull();
+        }
+    });
 });

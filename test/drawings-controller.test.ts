@@ -559,8 +559,10 @@ describe('buildToolbar grouping', () => {
         const textGroup = definition.groups.find((g) => g.id === 'text');
         expect(textGroup?.sections?.[0]?.tools.map((t) => t.type)).toEqual([
             'text',
+            'anchoredtext',
             'callout',
             'note',
+            'anchorednote',
             'pricenote',
             'comment',
             'pricelabel',

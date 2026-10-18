@@ -13,7 +13,8 @@ const SIZE_PX: Record<string, number> = { tiny: 10, small: 12, normal: 14, large
  * background, wear a border, and wrap its words at a set width.
  */
 export class TextLabel extends PinnedLabel {
-    readonly type = 'text' as const;
+    // Widened so TradingView's anchored text (pinned to the screen) can reuse the whole tool.
+    readonly type: 'text' | 'anchoredtext' = 'text';
     // `!` (no initializer): the base constructor runs readProps first. Absent ⇒ off (TradingView's defaults).
     background!: boolean;
     backgroundColor!: string | undefined;

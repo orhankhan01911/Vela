@@ -522,7 +522,7 @@ export class DrawingPainter {
         ctx.textAlign = layout.align;
         ctx.fillStyle = text.color ?? theme.textColor;
         const lh = labelLineHeight(fs);
-        const tl = d.type === 'text' ? (d as TextLabel) : null;
+        const tl = d.type === 'text' || d.type === 'anchoredtext' ? (d as TextLabel) : null;
         const wrap = tl?.wrapPx() ?? null;
         const lines = wrap == null ? text.value.split('\n') : wrapLines(ctx, text.value, wrap);
         if (tl && (tl.background || tl.border)) {
@@ -549,7 +549,7 @@ export class DrawingPainter {
             ctx.fillStyle = ink;
         }
         lines.forEach((line, i) => ctx.fillText(line, layout.x, layout.top + i * lh));
-        if (d.type === 'text') this.paintTextFrame(ctx, d.id, layout.x, layout.top, lines, fs, theme);
+        if (tl) this.paintTextFrame(ctx, d.id, layout.x, layout.top, lines, fs, theme);
         ctx.restore();
     }
 
@@ -2502,6 +2502,7 @@ export function labelLayout(d: Drawing, proj: Projector): {
     const lh = labelLineHeight(namedFontSize(text.size));
     switch (d.type) {
         case 'text':
+        case 'anchoredtext':
             return pts[0] ? { x: pts[0][0] + 2, top: pts[0][1] + 2, align: 'left' } : null;
         case 'hline': {
             // TradingView's horizontal-line text: left / center / right across the plot, and above / on / below the line.

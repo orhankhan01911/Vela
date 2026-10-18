@@ -9,6 +9,7 @@ import { Projection } from './types/Projection';
 import { Forecast } from './types/Forecast';
 import { BarsPattern } from './types/BarsPattern';
 import { GhostFeed } from './types/GhostFeed';
+import { AnchoredText, AnchoredNote } from './types/Anchored';
 import { TimeCycles } from './types/TimeCycles';
 import { SineLine } from './types/SineLine';
 import { ArrowMarker } from './types/ArrowMarker';
@@ -1148,4 +1149,24 @@ registerDrawingType({
     coversSeries: true,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'dashed' },
     create: (init) => new GhostFeed(init),
+});
+const ANCHORED_TEXT_ICON = svg24('<path d="M7 7h10M12 7v11"/><path d="M3 3h4M3 3v4M21 3h-4M21 3v4M3 21h4M3 21v-4M21 21h-4M21 21v-4"/>');
+const ANCHORED_NOTE_ICON = svg24('<path d="M12 21s-6-6.2-6-11a6 6 0 0 1 12 0c0 4.8-6 11-6 11Z"/><circle cx="12" cy="10" r="2"/><path d="M3 3h3M3 3v3M21 3h-3M21 3v3"/>');
+registerDrawingType({
+    type: 'anchoredtext',
+    group: 'annotations',
+    label: 'Anchored Text',
+    icon: ANCHORED_TEXT_ICON,
+    coversSeries: true,
+    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    create: (init) => new AnchoredText(init),
+});
+registerDrawingType({
+    type: 'anchorednote',
+    group: 'annotations',
+    label: 'Anchored Note',
+    icon: ANCHORED_NOTE_ICON,
+    coversSeries: true,
+    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    create: (init) => new AnchoredNote(init),
 });

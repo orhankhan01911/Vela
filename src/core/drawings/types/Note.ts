@@ -13,7 +13,8 @@ export const NOTE_PIN = { r: 8, h: 24 } as const;
  * selected (or always, with `showText`).
  */
 export class Note extends PinnedLabel {
-    readonly type = 'note' as const;
+    // Widened so TradingView's anchored note (pinned to the screen) can reuse the whole tool.
+    readonly type: 'note' | 'anchorednote' = 'note';
     // `!` (no initializer): the base constructor runs readProps first.
     showText!: boolean;
 
