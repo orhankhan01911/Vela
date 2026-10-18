@@ -721,7 +721,17 @@ export class DrawingPainter {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         const note = remote && !url ? 'Image links are off on this chart' : !url ? 'Add an image in settings' : entry?.state === 'error' ? 'This image cannot be shown here' : 'Loading image…';
-        ctx.fillText(note, b.x + b.w / 2, b.y + b.h / 2);
+        // Wrapped to the box and clipped by it: a narrow box (a phone) must not spill the note over the candles.
+        ctx.beginPath();
+        ctx.rect(b.x, b.y, b.w, b.h);
+        ctx.clip();
+        const lines: string[] = [];
+        for (const word of note.split(' ')) {
+            const last = lines[lines.length - 1];
+            if (last !== undefined && ctx.measureText(`${last} ${word}`).width <= b.w - 8) lines[lines.length - 1] = `${last} ${word}`;
+            else lines.push(word);
+        }
+        lines.forEach((line, i) => ctx.fillText(line, b.x + b.w / 2, b.y + b.h / 2 + (i - (lines.length - 1) / 2) * 15));
         ctx.restore();
     }
 
