@@ -22,7 +22,7 @@ import {
     type IntervalUnit,
     type IntervalVisibility,
 } from '../../../core/drawings';
-import type { SettingsField } from '../../../core/drawings/schema';
+import { ALONG_LINE_TEXT_TYPES, type SettingsField } from '../../../core/drawings/schema';
 import { Menu } from '../../../ui/components/menu';
 import { contrastColor } from '../../shared/drawing-geometry';
 import { applyChromeTokens } from '../../shared/theme-tokens';
@@ -284,8 +284,21 @@ export class DrawingSettingsDialog {
         if (style.length) grid.appendChild(fieldRow({ label: 'Font', control: style, fit: true }));
         if (has('text.bold')) grid.appendChild(fieldRow({ label: 'Bold', bool: true, toggle: { checked: !!text?.bold, onChange: (v) => actions.patch({ 'text.bold': v }) } }));
         if (has('text.italic')) grid.appendChild(fieldRow({ label: 'Italic', bool: true, toggle: { checked: !!text?.italic, onChange: (v) => actions.patch({ 'text.italic': v }) } }));
+        // TradingView's one "Text alignment" row: vertical position, then horizontal.
+        const hf = fields.find((f) => f.path === 'text.hAlign');
+        const vf = fields.find((f) => f.path === 'text.vAlign');
+        if (hf?.options && vf?.options) {
+            const hDef = ALONG_LINE_TEXT_TYPES.has(drawing.type) ? 'center' : 'left';
+            grid.appendChild(
+                fieldRow({
+                    label: 'Text alignment',
+                    control: [this.selectControl('text.vAlign', vf.options, text?.vAlign ?? 'top', actions), this.selectControl('text.hAlign', hf.options, text?.hAlign ?? hDef, actions)],
+                    fit: true,
+                }),
+            );
+        }
         for (const f of fields) {
-            if (['text.value', 'text.color', 'text.size', 'text.bold', 'text.italic'].includes(f.path)) continue;
+            if (['text.value', 'text.color', 'text.size', 'text.bold', 'text.italic', 'text.hAlign', 'text.vAlign'].includes(f.path)) continue;
             const row = this.schemaRow(drawing, f, actions);
             if (row) grid.appendChild(row);
         }

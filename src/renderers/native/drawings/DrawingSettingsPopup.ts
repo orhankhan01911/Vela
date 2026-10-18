@@ -26,6 +26,7 @@ import { TextArea } from '../../../ui/components/text-area';
 import { buildColorPicker } from '../../../ui/components/color-picker';
 import { Popover, closeOpenPopovers } from '../../../ui/components/popover';
 import { DrawingSettingsDialog, type DrawingDialogKind, type DrawingDialogTab } from './DrawingSettingsDialog';
+import { ALONG_LINE_TEXT_TYPES } from '../../../core/drawings/schema';
 
 /** A `{ path: value }` patch emitted as the user edits a control. */
 export type SettingsPatch = Record<string, unknown>;
@@ -495,15 +496,18 @@ export class DrawingSettingsPopup {
             this.toggle('Italic', ITALIC_ICON, !!text?.italic, (v) => actions.patch({ 'text.italic': v })),
         );
         const live = actions.resolve() ?? drawing;
-        const alignPaths = new Set(live.schema().fields.map((f) => f.path));
+        const alignFields = new Map(live.schema().fields.map((f) => [f.path, f]));
+        const alignPaths = new Set(alignFields.keys());
+        // The drawing's own words for a position (a vertical line says Top / Middle / Bottom, not above / below it).
+        const optionLabel = (path: string, v: unknown): string | undefined => alignFields.get(path)?.options?.find((o) => o.value === v)?.label;
         if (alignPaths.has('text.hAlign')) {
             tools.append(
-                this.dropdown('Text position: left, center or right', ['left', 'center', 'right'], text?.hAlign ?? 'left', (v) => H_ALIGN_GLYPH[String(v)] ?? '', (v) => actions.patch({ 'text.hAlign': v }), { label: (v) => capitalize(String(v)) }),
+                this.dropdown('Text position: left, center or right', ['left', 'center', 'right'], text?.hAlign ?? (ALONG_LINE_TEXT_TYPES.has(live.type) ? 'center' : 'left'), (v) => H_ALIGN_GLYPH[String(v)] ?? '', (v) => actions.patch({ 'text.hAlign': v }), { label: (v) => optionLabel('text.hAlign', v) ?? capitalize(String(v)) }),
             );
         }
         if (alignPaths.has('text.vAlign')) {
             tools.append(
-                this.dropdown('Text position: above, on or below the line', ['top', 'center', 'bottom'], text?.vAlign ?? 'top', (v) => V_ALIGN_GLYPH[String(v)] ?? '', (v) => actions.patch({ 'text.vAlign': v }), { label: (v) => V_ALIGN_LABEL[String(v)] ?? String(v) }),
+                this.dropdown('Text position: above, on or below the line', ['top', 'center', 'bottom'], text?.vAlign ?? 'top', (v) => V_ALIGN_GLYPH[String(v)] ?? '', (v) => actions.patch({ 'text.vAlign': v }), { label: (v) => optionLabel('text.vAlign', v) ?? V_ALIGN_LABEL[String(v)] ?? String(v) }),
             );
         }
 

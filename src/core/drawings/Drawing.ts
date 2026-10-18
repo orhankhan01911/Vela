@@ -1,6 +1,7 @@
 import type { DrawingPoint, FreeAxis, Projector } from './geometry';
 import type { DrawingStyle, DrawingText } from './style';
 import { defaultStyle, defaultText } from './style';
+import { ALONG_LINE_TEXT_TYPES } from './schema';
 import type { SettingsSchema } from './schema';
 import { compactIntervals, type IntervalVisibility } from './intervals';
 
@@ -249,7 +250,7 @@ export abstract class Drawing {
     /** Apply a `{ 'dot.path': value }` patch (the popup emits these). */
     applySettings(patch: Record<string, unknown>): void {
         for (const [path, value] of Object.entries(patch)) {
-            if (path.startsWith('text.') && !this.text) this.text = defaultText();
+            if (path.startsWith('text.') && !this.text) this.text = { ...defaultText(), ...(ALONG_LINE_TEXT_TYPES.has(this.type) ? { hAlign: 'center' as const } : {}) };
             setByPath(this as unknown as Record<string, unknown>, path, value);
         }
     }

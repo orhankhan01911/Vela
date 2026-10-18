@@ -67,8 +67,18 @@ export const TEXT_FIELDS: SettingsField[] = [
     { path: 'text.italic', label: 'Italic', kind: 'boolean', group: 'text' },
 ];
 
-/** Text position along and across a full-width line (horizontal line): TradingView's text alignment. */
+/** Text position along and across a line (horizontal line and ray, trend lines, arrows): TradingView's text
+ *  alignment. Along a sloped line, left / center / right are its left end, middle and right end on screen. */
 export const LINE_TEXT_ALIGN_FIELDS: SettingsField[] = [
     { path: 'text.hAlign', label: 'Text horizontal position', kind: 'select', options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }], group: 'text' },
     { path: 'text.vAlign', label: 'Text vertical position', kind: 'select', options: [{ value: 'top', label: 'Above the line' }, { value: 'center', label: 'On the line' }, { value: 'bottom', label: 'Below the line' }], group: 'text' },
 ];
+
+/** Text position beside and along a vertical line: left of / on / right of it, at the top / middle / bottom. */
+export const VLINE_TEXT_ALIGN_FIELDS: SettingsField[] = [
+    { path: 'text.hAlign', label: 'Text horizontal position', kind: 'select', options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }], group: 'text' },
+    { path: 'text.vAlign', label: 'Text vertical position', kind: 'select', options: [{ value: 'top', label: 'Top' }, { value: 'center', label: 'Middle' }, { value: 'bottom', label: 'Bottom' }], group: 'text' },
+];
+
+/** Drawings whose text sits along the segment between their two anchors (it starts centered there). */
+export const ALONG_LINE_TEXT_TYPES: ReadonlySet<string> = new Set(['trendline', 'ray', 'extendedline', 'infoline', 'trendangle', 'arrow']);

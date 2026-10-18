@@ -2077,18 +2077,45 @@ export function labelLayout(d: Drawing, proj: Projector): {
             const top = text.vAlign === 'bottom' ? y + 4 : text.vAlign === 'center' ? y - h / 2 : y - 4 - h;
             return { x, top, align: ha };
         }
+        case 'hray': {
+            // From the anchor to the right edge: left = just past the anchor, center = halfway, right = the edge.
+            if (!pts[0]) return null;
+            const [ax, y] = pts[0];
+            const h = lh * lines;
+            const ha = text.hAlign ?? 'left';
+            const x = ha === 'right' ? proj.width - 8 : ha === 'center' ? (ax + proj.width) / 2 : ax + 8;
+            const top = text.vAlign === 'bottom' ? y + 4 : text.vAlign === 'center' ? y - h / 2 : y - 4 - h;
+            return { x, top, align: ha };
+        }
+        case 'vline': {
+            // TradingView's vertical-line text: left of / on / right of the line, at the top / middle / bottom of the pane.
+            if (!pts[0]) return null;
+            const x0 = pts[0][0];
+            const rect = proj.paneRect?.(d.paneId) ?? { top: 0, height: proj.height };
+            const h = lh * lines;
+            const ha = text.hAlign ?? 'left';
+            const x = ha === 'left' ? x0 - 6 : ha === 'right' ? x0 + 6 : x0;
+            const top = text.vAlign === 'bottom' ? rect.top + rect.height - 8 - h : text.vAlign === 'center' ? rect.top + (rect.height - h) / 2 : rect.top + 8;
+            return { x, top, align: ha === 'left' ? 'right' : ha === 'right' ? 'left' : 'center' };
+        }
         case 'trendline':
         case 'ray':
         case 'extendedline':
         case 'infoline':
-        case 'trendangle': {
+        case 'trendangle':
+        case 'arrow': {
+            // Along the segment between the anchors (left end / middle / right end, as seen on screen) and above /
+            // on / below it; the glyphs follow the segment, kept upright.
             if (pts.length < 2) return null;
             const [x1, y1] = pts[0]!;
             const [x2, y2] = pts[1]!;
+            const half = Math.hypot(x2 - x1, y2 - y1) / 2;
+            const h = lh * lines;
+            const ha = text.hAlign ?? 'center';
             return {
-                x: 0,
-                top: -6 - lh * lines,
-                align: 'center',
+                x: ha === 'left' ? -half : ha === 'right' ? half : 0,
+                top: text.vAlign === 'bottom' ? 6 : text.vAlign === 'center' ? -h / 2 : -6 - h,
+                align: ha,
                 rotate: { angle: uprightLineAngle(x1, y1, x2, y2), cx: (x1 + x2) / 2, cy: (y1 + y2) / 2 },
             };
         }

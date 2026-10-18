@@ -1,7 +1,7 @@
 import { Drawing, type AnchorSlot } from '../Drawing';
 import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
-import { LINE_FIELDS, TEXT_FIELDS } from '../schema';
+import { LINE_FIELDS, TEXT_FIELDS, LINE_TEXT_ALIGN_FIELDS } from '../schema';
 import { distToSegment, handleAt } from '../hittest';
 
 /**
@@ -53,6 +53,6 @@ export abstract class TwoPointLine extends Drawing {
     }
 
     schema(): SettingsSchema {
-        return { fields: [...LINE_FIELDS, ...TEXT_FIELDS] };
+        return { fields: [...LINE_FIELDS, ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS] };
     }
 }
