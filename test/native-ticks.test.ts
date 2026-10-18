@@ -2,16 +2,28 @@ import { describe, it, expect } from 'vitest';
 import { logPriceTicks, valueDecimals, priceTicks, tickDecimals, axisDecimals, formatPriceLabel, formatAxisValue, formatTimeStamp } from '../src/renderers/native/chrome/ticks';
 
 describe('native ticks · logPriceTicks', () => {
-    it('places 1/2/5 per decade over a wide (multi-decade) range', () => {
+    it('a wide (multi-decade) range keeps the decade marks and stays in order', () => {
         const ticks = logPriceTicks(1, 1000);
-        expect(ticks).toContain(1);
-        expect(ticks).toContain(2);
-        expect(ticks).toContain(5);
-        expect(ticks).toContain(10);
-        expect(ticks).toContain(100);
-        expect(ticks).toContain(1000);
-        // strictly increasing, all within range
+        for (const v of [1, 10, 100, 1000]) expect(ticks).toContain(v);
         for (let i = 1; i < ticks.length; i += 1) expect(ticks[i]!).toBeGreaterThan(ticks[i - 1]!);
+        for (const t of ticks) expect(t >= 1 && t <= 1000).toBe(true);
+    });
+
+    it('a tall pane fills each decade evenly (not just 20 000 / 50 000 / 100 000)', () => {
+        // BTC from 2019 on a weekly chart, a 700 px pane (about 14 labels).
+        const ticks = logPriceTicks(3_200, 126_000, 14);
+        expect(ticks.length).toBeGreaterThanOrEqual(10);
+        expect(ticks).toEqual(expect.arrayContaining([4_000, 10_000, 20_000, 30_000, 40_000, 50_000, 60_000, 80_000, 100_000]));
+        // Labels sit at roughly even gaps in log space: no gap over 3x the median.
+        const gaps = ticks.slice(1).map((t, i) => Math.log10(t) - Math.log10(ticks[i]!)).sort((a, b) => a - b);
+        const median = gaps[gaps.length >> 1]!;
+        expect(gaps[gaps.length - 1]!).toBeLessThan(median * 3);
+        // No float noise in the values.
+        for (const t of ticks) expect(String(t)).not.toMatch(/0000000|9999999/);
+    });
+
+    it('a short pane over many decades stays sparse', () => {
+        expect(logPriceTicks(0.001, 100_000, 6).length).toBeLessThanOrEqual(9);
     });
 
     it('falls back to dense linear nice-numbers over a sub-decade range (zoomed view)', () => {

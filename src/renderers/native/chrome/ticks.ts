@@ -38,19 +38,40 @@ export function priceDecimals(min: number, max: number, target = 6): number {
 }
 
 /**
- * Nice ticks for a logarithmic axis. Over a wide range (≥ ~1 decade) it places
- * 1/2/5 per decade; over a narrow range (the common zoomed view) log ≈ linear,
- * so it falls back to dense linear nice-numbers — positioned via the log mapping.
+ * Mantissa sets for log ticks, sparsest first. Each is roughly even in log space, so a decade
+ * gets labels at about equal pixel gaps (TradingView's log axis looks like this).
+ */
+const LOG_MANTISSAS: readonly (readonly number[])[] = [
+    [1],
+    [1, 3],
+    [1, 2, 5],
+    [1, 1.5, 2, 3, 5, 7],
+    [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8],
+    [1, 1.1, 1.2, 1.3, 1.5, 1.7, 2, 2.2, 2.5, 2.8, 3, 3.5, 4, 4.5, 5, 6, 7, 8, 9],
+];
+
+/**
+ * Nice ticks for a logarithmic axis. Over a narrow range (the common zoomed view) log ≈ linear,
+ * so it uses dense linear nice-numbers, positioned via the log mapping. Over a wide range it
+ * fills each decade with as many nice mantissas as the pane height allows (about `target`
+ * labels over the whole axis), not just 1/2/5: those left 20 000 / 50 000 / 100 000 with big
+ * empty gaps on a tall pane.
  */
 export function logPriceTicks(min: number, max: number, target = 6): number[] {
     if (min <= 0 || !(max > min) || !Number.isFinite(min) || !Number.isFinite(max)) return [];
-    if (Math.log10(max) - Math.log10(min) < 1.1) return priceTicks(min, max, target);
+    const decades = Math.log10(max) - Math.log10(min);
+    if (decades < 1.1) return priceTicks(min, max, target);
+    const perDecade = target / decades;
+    let set = LOG_MANTISSAS[0]!;
+    for (const m of LOG_MANTISSAS) if (m.length <= perDecade * 1.25) set = m;
     const out: number[] = [];
     const startExp = Math.floor(Math.log10(min));
     const endExp = Math.ceil(Math.log10(max));
     for (let e = startExp; e <= endExp; e += 1) {
-        for (const m of [1, 2, 5]) {
-            const v = m * Math.pow(10, e);
+        const p = Math.pow(10, e);
+        for (const m of set) {
+            // Round away float noise (1.1 × 10^4 = 11000.000000000002).
+            const v = Number((m * p).toPrecision(12));
             if (v >= min && v <= max) out.push(v);
         }
     }
