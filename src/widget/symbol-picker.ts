@@ -299,7 +299,7 @@ export class SymbolPicker {
         this.tabs.className = 'vela-sp-tabs';
         const head = doc.createElement('div');
         head.className = 'vela-sp-head';
-        for (const t of ['All', 'Stocks', 'ETFs', 'Crypto', 'Aggregated', 'Futures', 'Forex', 'Commodities']) {
+        for (const t of ['All', 'Stocks', 'ETFs', 'Crypto', 'Aggregated', 'Futures', 'Forex', 'Indices', 'Commodities', 'Bonds']) {
             const b = doc.createElement('button');
             b.className = 'vela-sp-tab';
             b.textContent = t;
@@ -501,7 +501,7 @@ export class SymbolPicker {
     }
 
     private computeRows(): SymbolDescriptor[] {
-        const TAB_TYPES: Record<string, string[]> = { Crypto: ['crypto'], Aggregated: ['aggregated'], Stocks: ['stock'], ETFs: ['etf'], Futures: ['futures', 'root'], Forex: ['forex'], Commodities: ['commodity'] };
+        const TAB_TYPES: Record<string, string[]> = { Crypto: ['crypto'], Aggregated: ['aggregated'], Stocks: ['stock'], ETFs: ['etf'], Futures: ['futures', 'root'], Forex: ['forex'], Indices: ['index'], Commodities: ['commodity'], Bonds: ['bond'] };
         const all = this.pool();
         const pool =
             this.activeTab === 'All'
