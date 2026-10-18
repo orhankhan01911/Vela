@@ -47,6 +47,18 @@ describe('framing across series replacements', () => {
         expect(v.rightOffset).toBe(DEFAULT_MARGINS.right); // pan reset to the newest bars
     });
 
+    it('at a wide zoom the right margin never fills the plot — the newest bars stay on screen', () => {
+        const { r, viewport, setViewport } = makeRenderer();
+        r.setBars(mkBars(500));
+        setViewport(80, 2); // footprint-wide cells: 10 bars across 800 px
+        r.setBars(mkBars(500)); // symbol switch
+        const v = viewport();
+        expect(v.barSpacing).toBe(80); // zoom still kept
+        // A 10-bar margin at 80 px would be the whole 800 px plot: empty future, no bars at all.
+        expect(v.rightOffset * v.barSpacing).toBeLessThanOrEqual(WIDTH / 4);
+        expect(v.rightOffset).toBeLessThan(DEFAULT_MARGINS.right);
+    });
+
     it('the kept zoom is not clamped to the new series depth — a progressive head is still backfilling', () => {
         const { r, viewport, setViewport } = makeRenderer();
         r.setBars(mkBars(500));

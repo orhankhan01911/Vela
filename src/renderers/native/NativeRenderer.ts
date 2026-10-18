@@ -3896,7 +3896,11 @@ export class NativeRenderer implements IChartRenderer {
         this.panVelocity = 0;
         for (const pane of this.scene.panes.values()) pane.manualScale = null; // re-frame ⇒ autoscale resumes
         for (const sl of this.scene.indicatorScales.values()) sl.manualScale = null;
-        const v: ViewportState = { barSpacing: clampBarSpacing(this.coords.getViewport().barSpacing), rightOffset: this.scene.style.margins.right };
+        const barSpacing = clampBarSpacing(this.coords.getViewport().barSpacing);
+        // The margin is counted in bars: at a wide zoom (footprint-sized cells) the default 10 bars
+        // can be the whole plot, leaving only empty future on screen. Keep it to a quarter of the width.
+        const fitsQuarter = Math.floor(this.coords.width / (4 * barSpacing * this.coords.spacingScale));
+        const v: ViewportState = { barSpacing, rightOffset: Math.min(this.scene.style.margins.right, Math.max(0, fitsQuarter)) };
         this.coords.setViewport(v);
         this.targetBarSpacing = v.barSpacing;
     }
