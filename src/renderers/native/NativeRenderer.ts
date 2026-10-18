@@ -4403,7 +4403,10 @@ export class NativeRenderer implements IChartRenderer {
         // a phone screen. This is the single highest-leverage lever available from
         // outside Vela's renderer (no public API exposed it) — see
         // project-options' docs/research/vela-perf-findings-2026-09-10.md.
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        // Touch phones only: a zoomed desktop (Firefox / Chrome at 240-300 %) has fewer CSS px in the same screen, so
+        // the full ratio costs no more device pixels than 100 % does, and a 2x cap there stretched (blurred) the chart.
+        const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+        const dpr = coarse ? Math.min(window.devicePixelRatio || 1, 2) : window.devicePixelRatio || 1;
         // The plot area is inset to the right of the toolbar gutter; the canvases fill the plot
         // sub-container (0-based), so the coordinate system / pointer coords stay unchanged.
         this.plot.style.left = `${this.toolbarGutter}px`;
