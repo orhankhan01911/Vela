@@ -155,7 +155,14 @@ export interface VelaEventMap extends Record<string, unknown> {
    * `chart.loadOlderHistory()`; false at the source's first bar, the depth cap, or after a failure.
    * Fires on change only.
    */
-  "history:edge": { atEdge: boolean; canLoadMore: boolean; oldestTime: number; barsLoaded: number };
+  "history:edge": {
+    atEdge: boolean;
+    canLoadMore: boolean;
+    /** Why no more can load: the source's first bar, a `from` floor, the 40,000-bar cap, or a failed page (retry in 30 s). */
+    stop: "start" | "floor" | "cap" | "retry" | null;
+    oldestTime: number;
+    barsLoaded: number;
+  };
   /** Replay mode began (or seeked): the chart shows history up to `cursorTime`, `remaining` bars are hidden. */
   "replay:start": { cursorTime: number; remaining: number };
   /** One hidden bar was revealed (it also fires `bar`, like a live bar). A bar played tick

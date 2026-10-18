@@ -1146,14 +1146,14 @@ describe('scroll-back paging — older bars as the view nears the oldest loaded 
         await chart.ready();
         await chart.historyComplete();
         await flush();
-        const edges: Array<{ atEdge: boolean; canLoadMore: boolean }> = [];
-        chart.on('history:edge', (e) => edges.push({ atEdge: e.atEdge, canLoadMore: e.canLoadMore }));
+        const edges: Array<{ atEdge: boolean; canLoadMore: boolean; stop?: string | null }> = [];
+        chart.on('history:edge', (e) => edges.push({ atEdge: e.atEdge, canLoadMore: e.canLoadMore, stop: e.stop }));
         chart.setHistoryPaging('manual');
 
         renderer.show(0, 100); // the oldest bar on screen
         await settle();
         expect(renderer.bars).toHaveLength(300); // nothing loaded by itself
-        expect(edges[edges.length - 1]).toEqual({ atEdge: true, canLoadMore: true });
+        expect(edges[edges.length - 1]).toEqual({ atEdge: true, canLoadMore: true, stop: null });
 
         expect(chart.loadOlderHistory(500)).toBe('loading');
         await chart.historyComplete();
@@ -1170,7 +1170,7 @@ describe('scroll-back paging — older bars as the view nears the oldest loaded 
         expect(chart.loadOlderHistory()).toBe('none'); // the load ran into the source's first bar
         renderer.show(0, 100);
         await settle();
-        expect(edges[edges.length - 1]).toEqual({ atEdge: true, canLoadMore: false });
+        expect(edges[edges.length - 1]).toEqual({ atEdge: true, canLoadMore: false, stop: 'start' }); // the source's first bar, not a failure
 
         renderer.show(1_500, 1_999); // away from the oldest bar
         await settle();

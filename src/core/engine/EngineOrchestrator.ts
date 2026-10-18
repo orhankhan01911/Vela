@@ -191,7 +191,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      *  edge (`history:edge`) and waits for `loadOlderHistory()`; `'off'` does neither. */
     private historyPaging: 'auto' | 'manual' | 'off' = 'auto';
     /** Last `history:edge` state sent (to emit on change only). */
-    private edgeSent: { atEdge: boolean; canLoadMore: boolean } | null = null;
+    private edgeSent: { atEdge: boolean; stop: 'start' | 'floor' | 'cap' | 'retry' | null } | null = null;
     /** When a scroll-back page last failed (a failing source is not asked again for a while). */
     private pageFailedAt = 0;
     private replayTimer: ReturnType<typeof setTimeout> | null = null;
@@ -451,10 +451,11 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const bars = this.bars;
         const n = bars.length;
         if (!this.feed.loadRange || this.config.market.data?.length || this.activeEngineStyle || n < 2) {
-            if (manual) this.emitEdge(false, false);
+            if (manual) this.emitEdge(false, null);
             return;
         }
-        const canLoadMore = this.canPageOlder();
+        const stop = this.pageStop();
+        const canLoadMore = stop === null;
         if (!manual && !canLoadMore) return;
         const firstAtOrAfter = (t: number): number => {
             let lo = 0;
@@ -470,7 +471,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const span = Math.max(1, firstAtOrAfter(window.right) - left);
         if (manual) {
             // Manual: the edge is the oldest bar ON SCREEN (the host shows its own control there).
-            this.emitEdge(left === 0, canLoadMore);
+            this.emitEdge(left === 0, stop);
             return;
         }
         if (left > Math.max(PAGE_EDGE_BARS, span / 2)) return;
@@ -479,9 +480,17 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
 
     /** Whether an older page can be asked for now (source, depth cap, genesis, floor, recent failure). */
     private canPageOlder(): boolean {
-        if (this.genesisGen === this.generation || this.reachedFrom()) return false;
-        if (Date.now() - this.pageFailedAt < 30_000) return false;
-        return this.rawBars.length < MAX_PAGED_BARS;
+        return this.pageStop() === null;
+    }
+
+    /** Why no older page can be asked for now: the source's first bar, a `from` floor, the depth cap, or a
+     *  recent failed page (retry after 30 s); null when one can. */
+    private pageStop(): 'start' | 'floor' | 'cap' | 'retry' | null {
+        if (this.genesisGen === this.generation) return 'start';
+        if (this.reachedFrom()) return 'floor';
+        if (this.rawBars.length >= MAX_PAGED_BARS) return 'cap';
+        if (Date.now() - this.pageFailedAt < 30_000) return 'retry';
+        return null;
     }
 
     /** Extend the loaded history by `bars` older bars, view kept. */
@@ -491,11 +500,11 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         this.extendDepth(this.generation, want);
     }
 
-    private emitEdge(atEdge: boolean, canLoadMore: boolean): void {
+    private emitEdge(atEdge: boolean, stop: 'start' | 'floor' | 'cap' | 'retry' | null): void {
         const prev = this.edgeSent;
-        if (prev && prev.atEdge === atEdge && prev.canLoadMore === canLoadMore) return;
-        this.edgeSent = { atEdge, canLoadMore };
-        this.events.emit('history:edge', { atEdge, canLoadMore, oldestTime: this.rawBars[0]?.time ?? 0, barsLoaded: this.rawBars.length });
+        if (prev && prev.atEdge === atEdge && prev.stop === stop) return;
+        this.edgeSent = { atEdge, stop };
+        this.events.emit('history:edge', { atEdge, canLoadMore: stop === null, stop, oldestTime: this.rawBars[0]?.time ?? 0, barsLoaded: this.rawBars.length });
     }
 
     /** Scroll-back paging mode (see {@link historyPaging}). Switching to manual reports the edge at once. */
