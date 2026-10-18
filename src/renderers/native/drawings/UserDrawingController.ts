@@ -137,7 +137,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
     // The inline on-chart text editor: its element, the id of the drawing it edits, the text it
     // opened with (so Escape can put it back), and the text the core currently holds (so an edit is
     // reported exactly when it actually changes).
-    private textEditor: { el: HTMLTextAreaElement; id: string; initial: string; stored: string } | null = null;
+    private textEditor: { el: HTMLTextAreaElement; id: string; initial: string; stored: string; css: string } | null = null;
 
     private readonly painter = new DrawingPainter();
     private readonly interaction: DrawingInteraction;
@@ -678,10 +678,18 @@ export class UserDrawingController implements IDrawingsRendererPort {
         ta.placeholder = TEXT_PLACEHOLDER;
         ta.spellcheck = false;
         ta.style.cssText = css;
-        // live: the canvas bubble / hit box follow the typed text (and the editor re-lays out around it)
+        // live: the canvas bubble / hit box follow the typed text (and the editor re-lays out around it).
+        // The text lands at once; the repaint is coalesced to one per frame, so a held Backspace or
+        // fast typing never queues a repaint per key (a tester saw deleting lag, 2026-10-18).
+        let frame = 0;
         const sync = (): void => {
             this.editedDrawing(id)?.applySettings({ 'text.value': ta.value });
-            this.render();
+            if (frame) return;
+            const paint = (): void => {
+                frame = 0;
+                if (this.textEditor?.el === ta) this.render();
+            };
+            frame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(paint) : (setTimeout(paint, 16) as unknown as number);
         };
         ta.addEventListener('input', sync);
         ta.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -711,7 +719,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
             else this.finishTextEditor(true); // clicking away keeps the text
         });
         this.overlayHost.appendChild(ta);
-        this.textEditor = { el: ta, id, initial, stored: initial };
+        this.textEditor = { el: ta, id, initial, stored: initial, css };
         ta.focus();
         // Caret at the end, nothing selected: reopening existing text with everything highlighted
         // reads as a rename/resize box rather than in-place editing (and one keystroke would
@@ -810,7 +818,12 @@ export class UserDrawingController implements IDrawingsRendererPort {
         if (!ed) return;
         const d = this.editedDrawing(ed.id);
         const css = d && this.inlineEditorCss(d, ed.el.value);
-        if (css) ed.el.style.cssText = css;
+        // Only when it moved or grew: rewriting the same style on every repaint wakes every
+        // DOM observer on the page for nothing.
+        if (css && ed.css !== css) {
+            ed.el.style.cssText = css;
+            ed.css = css;
+        }
     }
 
     private closeTextEditor(): void {
