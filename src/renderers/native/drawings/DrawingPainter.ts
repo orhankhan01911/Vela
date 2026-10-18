@@ -2675,6 +2675,13 @@ export function labelLayout(d: Drawing, proj: Projector): {
             const rect = proj.paneRect?.(d.paneId) ?? { top: 0, height: proj.height };
             const h = lh * lines;
             const ha = text.hAlign ?? 'left';
+            if ((d as { textVertical?: boolean }).textVertical) {
+                // Up the line: rotated a quarter turn around the line at the chosen height; left / right = which side.
+                const cy = text.vAlign === 'bottom' ? rect.top + rect.height - 8 : text.vAlign === 'center' ? rect.top + rect.height / 2 : rect.top + 8;
+                const along: CanvasTextAlign = text.vAlign === 'bottom' ? 'left' : text.vAlign === 'center' ? 'center' : 'right';
+                const off = ha === 'left' ? -6 - h : ha === 'right' ? 6 : -h / 2;
+                return { x: 0, top: off, align: along, rotate: { angle: -Math.PI / 2, cx: x0, cy } };
+            }
             const x = ha === 'left' ? x0 - 6 : ha === 'right' ? x0 + 6 : x0;
             const top = text.vAlign === 'bottom' ? rect.top + rect.height - 8 - h : text.vAlign === 'center' ? rect.top + (rect.height - h) / 2 : rect.top + 8;
             return { x, top, align: ha === 'left' ? 'right' : ha === 'right' ? 'left' : 'center' };

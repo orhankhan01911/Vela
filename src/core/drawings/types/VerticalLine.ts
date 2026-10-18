@@ -10,13 +10,16 @@ export class VerticalLine extends Drawing {
     readonly type = 'vline' as const;
     // `!` (no initializer): the base constructor runs readProps first. Absent ⇒ shown (TradingView's default).
     showTime!: boolean;
+    /** TradingView's vertical text: the label runs up the line instead of across it. */
+    textVertical!: boolean;
 
     protected override writeProps(): Record<string, unknown> {
-        return { showTime: this.showTime !== false };
+        return { showTime: this.showTime !== false, ...(this.textVertical ? { textVertical: true } : {}) };
     }
 
     protected override readProps(props: Record<string, unknown>): void {
         if (typeof props.showTime === 'boolean') this.showTime = props.showTime;
+        if (typeof props.textVertical === 'boolean') this.textVertical = props.textVertical;
     }
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
@@ -56,6 +59,6 @@ export class VerticalLine extends Drawing {
     }
 
     schema(): SettingsSchema {
-        return { fields: [...LINE_FIELDS, SHOW_TIME_FIELD, ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS] };
+        return { fields: [...LINE_FIELDS, SHOW_TIME_FIELD, ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS, { path: 'textVertical', label: 'Vertical text', kind: 'boolean', group: 'text' }] };
     }
 }

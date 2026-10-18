@@ -88,6 +88,9 @@ describe('drawing settings TradingView has', () => {
             const off = createDrawing(type, { paneId: 'price', anchors: [{ time: 50, price: 50 }], props: { showTime: false } })!;
             expect(deserializeDrawing(off.serialize())!.serialize().props).toMatchObject({ showTime: false });
         }
+        expect(paths('vline', 1)).toContain('textVertical');
+        const v = createDrawing('vline', { paneId: 'price', anchors: [{ time: 50, price: 50 }], props: { textVertical: true } })!;
+        expect(deserializeDrawing(v.serialize())!.serialize().props).toMatchObject({ textVertical: true });
     });
 
     it('comment: a bubble standing on its one point (bottom-left corner); old two-point comments keep their tail', () => {
