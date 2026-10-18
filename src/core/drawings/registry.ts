@@ -4,6 +4,14 @@ import { DEFAULT_DRAWING_COLOR } from './style';
 import { svg24 } from '../icons';
 import { ACCENT, BEARISH, BULLISH, INFO, MARKER, NEUTRAL } from '../palette';
 import { TrendLine } from './types/TrendLine';
+import { CyclicLines } from './types/CyclicLines';
+import { TimeCycles } from './types/TimeCycles';
+import { SineLine } from './types/SineLine';
+import { ArrowMarker } from './types/ArrowMarker';
+import { DateRange } from './types/DateRange';
+import { PriceRange } from './types/PriceRange';
+import { TrianglePattern } from './types/TrianglePattern';
+import { ElliottTriangle, ElliottDoubleCombo, ElliottTripleCombo } from './types/ElliottCombo';
 import { HorizontalLine } from './types/HorizontalLine';
 import { Ray } from './types/Ray';
 import { ExtendedLine } from './types/ExtendedLine';
@@ -1057,3 +1065,35 @@ registerDrawingType({
     defaultStyle: { lineColor: ACCENT, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new FixedRangeTpoProfile(init),
 });
+
+// ── TradingView tools added 2026-10-18 (cycles, ranges, arrow marker, triangle pattern, Elliott combos) ──
+const CYCLIC_ICON = svg24('<path d="M5 4v16M10 4v16M15 4v16M20 4v16"/>');
+const TIME_CYCLES_ICON = svg24('<path d="M2 18a5 5 0 0 1 10 0a5 5 0 0 1 10 0"/><path d="M2 18h20"/>');
+const SINE_ICON = svg24('<path d="M2 12c2.5-7 5-7 7.5 0s5 7 7.5 0 3.5-5 5-5"/>');
+const ARROW_MARKER_ICON = svg24('<path d="M4 19 15 9.5l-1.5-2L20 5l-2.5 6.5-2-1.5L5 20Z"/>');
+const DATE_RANGE_ICON = svg24('<path d="M5 4v16M19 4v16M7 12h10M9 10l-2 2 2 2M15 10l2 2-2 2"/>');
+const PRICE_RANGE_ICON = svg24('<path d="M4 5h16M4 19h16M12 7v10M10 9l2-2 2 2M10 15l2 2 2-2"/>');
+const TRIANGLE_PATTERN_ICON = svg24('<path d="M3 6 21 11M3 19 21 13"/><path d="M5 18 9 7.5 13 15.5 17 10"/>');
+const ELLIOTT_TRIANGLE_ICON = svg24('<path d="M3 20 7 5l3 12 3-9 3 6 3-3 2 2"/>');
+const ELLIOTT_COMBO_ICON = svg24('<path d="M3 19 8 8l4 8 4-11 5 10"/>');
+const SOLID = { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' as const };
+
+registerDrawingType({ type: 'cycliclines', group: 'measure', label: 'Cyclic Lines', icon: CYCLIC_ICON, defaultStyle: SOLID, create: (init) => new CyclicLines(init) });
+registerDrawingType({ type: 'timecycles', group: 'measure', label: 'Time Cycles', icon: TIME_CYCLES_ICON, defaultStyle: SOLID, create: (init) => new TimeCycles(init) });
+registerDrawingType({ type: 'sineline', group: 'measure', label: 'Sine Line', icon: SINE_ICON, defaultStyle: SOLID, create: (init) => new SineLine(init) });
+registerDrawingType({ type: 'daterange', group: 'measure', label: 'Date Range', icon: DATE_RANGE_ICON, defaultStyle: SOLID, create: (init) => new DateRange(init) });
+registerDrawingType({ type: 'pricerange', group: 'measure', label: 'Price Range', icon: PRICE_RANGE_ICON, defaultStyle: SOLID, create: (init) => new PriceRange(init) });
+registerDrawingType({
+    type: 'arrowmarker',
+    group: 'shapes',
+    label: 'Arrow Marker',
+    icon: ARROW_MARKER_ICON,
+    coversSeries: true, // a marker pointing at a candle reads over it, like TradingView's
+    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}99` },
+    create: (init) => new ArrowMarker(init),
+});
+const lettered = { group: 'patterns' as const, coversSeries: true, defaultStyle: SOLID };
+registerDrawingType({ type: 'trianglepattern', label: 'Triangle Pattern', icon: TRIANGLE_PATTERN_ICON, ...lettered, create: (init) => new TrianglePattern(init) });
+registerDrawingType({ type: 'elliotttriangle', label: 'Elliott Triangle Wave (ABCDE)', icon: ELLIOTT_TRIANGLE_ICON, ...lettered, create: (init) => new ElliottTriangle(init) });
+registerDrawingType({ type: 'elliottdoublecombo', label: 'Elliott Double Combo Wave (WXY)', icon: ELLIOTT_COMBO_ICON, ...lettered, create: (init) => new ElliottDoubleCombo(init) });
+registerDrawingType({ type: 'elliotttriplecombo', label: 'Elliott Triple Combo Wave (WXYXZ)', icon: ELLIOTT_COMBO_ICON, ...lettered, create: (init) => new ElliottTripleCombo(init) });

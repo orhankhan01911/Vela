@@ -67,16 +67,17 @@ const GANN_TYPES: DrawingTypeKey[] = ['gannfan', 'gannbox', 'gannsquare'];
 
 const GEOMETRY_TYPES: DrawingTypeKey[] = ['dedekind', 'sonic', 'supersonic', 'goldensonic', 'goldensupersonic'];
 
-const PATTERN_TYPES: DrawingTypeKey[] = ['xabcd', 'abcd', 'headshoulders'];
-const ELLIOTT_TYPES: DrawingTypeKey[] = ['elliottimpulse', 'elliottcorrection'];
+const PATTERN_TYPES: DrawingTypeKey[] = ['xabcd', 'abcd', 'trianglepattern', 'headshoulders'];
+const ELLIOTT_TYPES: DrawingTypeKey[] = ['elliottimpulse', 'elliottcorrection', 'elliotttriangle', 'elliottdoublecombo', 'elliotttriplecombo'];
 const HARMONIC_TYPES: DrawingTypeKey[] = ['gartley', 'bat', 'butterfly', 'crab', 'shark', 'cypher'];
 
-const MEASUREMENT_TYPES: DrawingTypeKey[] = ['position', 'datepricerange', 'magnifier'];
+const MEASUREMENT_TYPES: DrawingTypeKey[] = ['position', 'daterange', 'pricerange', 'datepricerange', 'magnifier'];
+const CYCLE_TYPES: DrawingTypeKey[] = ['cycliclines', 'timecycles', 'sineline'];
 const VOLUME_TYPES: DrawingTypeKey[] = ['anchoredvwap', 'fixedrangevp'];
 const TIME_PRICE_TYPES: DrawingTypeKey[] = ['fixedrangetpo'];
 
 const BRUSH_TYPES: DrawingTypeKey[] = ['freehand', 'highlighter'];
-const ARROW_TYPES: DrawingTypeKey[] = ['arrow', 'arrowmarkup', 'arrowmarkdown'];
+const ARROW_TYPES: DrawingTypeKey[] = ['arrow', 'arrowmarker', 'arrowmarkup', 'arrowmarkdown'];
 const SHAPE_TYPES: DrawingTypeKey[] = ['box', 'ellipse', 'triangle', 'polyline', 'circle', 'rotatedrect', 'path', 'arc', 'curve'];
 
 const TEXT_TYPES: DrawingTypeKey[] = ['text', 'callout', 'note', 'pricenote', 'comment', 'pricelabel', 'signpost'];
@@ -124,6 +125,7 @@ const TOOLBAR_LAYOUT: readonly ToolbarGroupLayout[] = [
         label: 'Measurements',
         sections: [
             { label: 'Measurements', types: MEASUREMENT_TYPES },
+            { label: 'Cycles', types: CYCLE_TYPES },
             { label: 'Volume', types: VOLUME_TYPES },
             { label: 'Time and Price', types: TIME_PRICE_TYPES },
         ],

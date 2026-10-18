@@ -49,6 +49,8 @@ describe('drawings/Magnifier', () => {
         const measure = definition.groups.find((g) => g.id === 'measurements');
         expect(measure?.sections?.find((s) => s.label === 'Measurements')?.tools.map((t) => t.type)).toEqual([
             'position',
+            'daterange',
+            'pricerange',
             'datepricerange',
             'magnifier',
         ]);

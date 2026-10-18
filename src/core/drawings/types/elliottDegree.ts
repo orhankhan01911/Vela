@@ -29,3 +29,18 @@ export const ELLIOTT_DEGREE_FIELD: SettingsField = {
 export function degreeOf(v: unknown): string {
     return typeof v === 'string' && Object.prototype.hasOwnProperty.call(ELLIOTT_DEGREES, v) ? v : DEFAULT_DEGREE;
 }
+
+/**
+ * Write any capital letters in a degree's corrective style (as its A shows): Primary circles them (Ⓐ), Intermediate
+ * brackets them ((A)), Minute brackets lower case ((a)), Minuette / Cycle use lower case, and so on.
+ */
+export function degreeLetters(degree: string, letters: readonly string[]): string[] {
+    const sample = ELLIOTT_DEGREES[degreeOf(degree)]!.correction[0]!; // the style's "A"
+    if (sample === 'Ⓐ') return letters.map((l) => String.fromCodePoint(0x24b6 + l.charCodeAt(0) - 65));
+    const core = /[Aa]/.exec(sample);
+    if (!core) return [...letters];
+    const pre = sample.slice(0, core.index);
+    const post = sample.slice(core.index + 1);
+    const lower = core[0] === 'a';
+    return letters.map((l) => `${pre}${lower ? l.toLowerCase() : l}${post}`);
+}
