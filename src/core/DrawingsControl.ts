@@ -205,6 +205,11 @@ export class DrawingsControl {
         return this;
     }
 
+    /** True when {@link paste} has drawings to place (a menu greys its Paste row otherwise). */
+    canPaste(): boolean {
+        return this.ctrl.supported && this.ctrl.canPaste();
+    }
+
     /** Every drawing as plain JSON, in paint order. */
     all(): SerializedDrawing[] {
         return this.ctrl.all();

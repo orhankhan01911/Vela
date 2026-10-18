@@ -30,6 +30,7 @@ export { DataWindow, dataWindowSections, type DataWindowSection, type DataWindow
 export { ShortcutsHelp } from './shortcuts-help';
 export { ChartContextMenu, type ContextMenuCallbacks } from './context-menu';
 export { CONTEXT_MENU_BUILTIN_ORDER } from './context-menu-model';
+export { REMOVE_LOCKED_KEY, removeLockedDrawings, removableDrawingIds, setRemoveLockedDrawings } from './remove-prefs';
 export {
     registerWidgetAction,
     unregisterWidgetAction,
@@ -57,13 +58,14 @@ export {
     type WidgetActionTarget,
     type WidgetContext,
     type ContextMenuPointer,
+    type ContextMenuGroup,
     type SidePanelDescriptor,
     type SidePanelHandle,
     type SidePanelButton,
 } from './contributions';
 export { parseTimeframe, timeframeMs, timeframeLabel, type ParsedTimeframe } from './timeframe';
 export { TIMEZONES, normalizeTimezone, tzOffset, tzMenuLabel, tzButtonLabel, type TimezoneEntry } from './timezones';
-export { decimalsFor, fmtPrice, fmtChange } from './format';
+export { decimalsFor, fmtPrice, fmtChange, priceDecimals } from './format';
 export {
     resolveIndicators,
     type IndicatorManifest,

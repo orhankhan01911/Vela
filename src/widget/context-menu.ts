@@ -20,6 +20,9 @@ import {
     type ScaleChoice,
     type Zone,
 } from './context-menu-model';
+import { priceDecimals } from './format';
+import { removableDrawingIds } from './remove-prefs';
+import { openTableView } from './table-view';
 import { resolveTimezone } from './timezones';
 
 /** Approximate chrome insets used only to classify the right-clicked zone. The price scale is at least this
@@ -38,7 +41,14 @@ export interface ContextMenuCallbacks {
     setTimezone?: (zone: string) => void;
     /** Live widget context for contributed `context:*` actions. */
     getContext?: () => WidgetContext;
+    /** Open the host's object tree; without it the menu has no Object tree row. */
+    openObjectTree?: () => void;
+    /** Shortcut hints by body row id, for the keys the host binds (`'reset-view': 'Alt+R'`), read when the menu opens. */
+    hints?: () => Readonly<Record<string, string>>;
 }
+
+/** Separates an action id from its submenu row id in a menu item id. */
+const SUB = '::';
 
 export class ChartContextMenu {
     private readonly menu: Menu;
@@ -127,10 +137,19 @@ export class ChartContextMenu {
     }
 
     private contributed(zone: Zone): ContributedRow[] {
-        return widgetActions(`context:${zone}`, this.context()).map((a) => ({
-            item: { id: `action:${a.id}`, label: a.label, icon: a.icon },
-            order: a.order,
-        }));
+        const ctx = this.context();
+        return widgetActions(`context:${zone}`, ctx).map((a) => {
+            const label = (ctx && a.labelFor?.(ctx)) || a.label;
+            const sub = ctx && a.submenu ? a.submenu(ctx) : null;
+            const item: MenuItemDescriptor = {
+                id: `action:${a.id}`,
+                label,
+                ...(a.icon ? { icon: a.icon } : {}),
+                ...(a.hint ? { hint: a.hint } : {}),
+                ...(sub ? { submenu: sub.map((r) => ({ ...r, id: `sub:${a.id}${SUB}${r.id}` })), disabled: sub.length === 0 } : {}),
+            };
+            return { item, order: a.order, ...(a.group ? { group: a.group } : {}) };
+        });
     }
 
     private itemsFor(zone: Zone): MenuItemDescriptor[] {
@@ -156,14 +175,33 @@ export class ChartContextMenu {
         }
         const chart = this.chart;
         return bodyItems({
-            drawings: chart?.drawings.supported ? chart.drawings.all().length : 0,
+            drawings: chart ? removableDrawingIds(chart).length : 0,
             indicators: chart?.indicators().length ?? 0,
+            price: this.pointerPrice(),
+            canPaste: chart?.drawings.supported ? chart.drawings.canPaste() : false,
+            cursorLocked: chart?.renderer.get('crosshairLockTime') != null,
+            objectTree: Boolean(this.cbs.openObjectTree),
+            ...(this.cbs.hints ? { hints: this.cbs.hints() } : {}),
         });
+    }
+
+    /** The right-clicked value as the scale writes it (the symbol's tick on the price pane), or null. */
+    private pointerPrice(): string | null {
+        const p = this.pointer.price;
+        if (p == null || !Number.isFinite(p)) return null;
+        const dp = priceDecimals(p, this.pointer.paneKind === 'price' ? this.chart?.renderer.priceMintick?.() : undefined);
+        return p.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
     }
 
     private run(id: string): void {
         const chart = this.chart;
         if (!chart) return;
+        if (id.startsWith('sub:')) {
+            const [actionId, subId] = id.slice('sub:'.length).split(SUB) as [string, string];
+            const ctx = this.context();
+            if (ctx) widgetActions(`context:${this.lastZone}`, ctx).find((a) => a.id === actionId)?.runItem?.(ctx, subId);
+            return;
+        }
         if (id.startsWith('action:')) {
             const ctx = this.context();
             if (ctx) widgetActions(`context:${this.lastZone}`, ctx).find((a) => a.id === id.slice('action:'.length))?.run(ctx);
@@ -191,8 +229,22 @@ export class ChartContextMenu {
             chart.renderer.openSettings(settingsSectionOf(id));
         } else if (id === 'reset-view') {
             this.cbs.resetView();
+        } else if (id === 'copy-price') {
+            const text = this.pointerPrice()?.replace(/,/g, '');
+            if (text) void globalThis.navigator?.clipboard?.writeText(text).catch(() => {});
+        } else if (id === 'paste') {
+            if (chart.drawings.supported) chart.drawings.paste();
+        } else if (id === 'lock-cursor') {
+            const locked = chart.renderer.get('crosshairLockTime') != null;
+            chart.renderer.set('crosshairLockTime', locked ? null : this.pointer.time);
+        } else if (id === 'table-view') {
+            openTableView(chart, this.host);
+        } else if (id === 'object-tree') {
+            this.cbs.openObjectTree?.();
         } else if (id === 'remove-drawings') {
-            if (chart.drawings.supported) for (const d of chart.drawings.all()) chart.drawings.remove(d.id);
+            // One undo step; locked drawings stay when "Always remove locked drawings" is off.
+            const ids = removableDrawingIds(chart);
+            if (ids.length) chart.drawings.removeMany(ids);
         } else if (id === 'remove-indicators') {
             for (const handle of chart.indicators()) handle.remove();
         }

@@ -166,3 +166,15 @@ describe('CrosshairRenderer under an override', () => {
         expect(rec.strokes[0]!.dash).toEqual([6, 4]);
     });
 });
+
+describe('crosshairLockTime feature', () => {
+    it('holds a bar time, reads it back, and clears on anything else', () => {
+        const r = new NativeRenderer();
+        expect(r.features).toContain('crosshairLockTime');
+        expect(r.readFeature('crosshairLockTime')).toBeNull();
+        r.applyFeature('crosshairLockTime', 1_700_000_000_000);
+        expect(r.readFeature('crosshairLockTime')).toBe(1_700_000_000_000);
+        r.applyFeature('crosshairLockTime', 'soon');
+        expect(r.readFeature('crosshairLockTime')).toBeNull();
+    });
+});

@@ -142,8 +142,26 @@ export interface WidgetActionDescriptor {
     mobile?: 'bar' | 'menu';
     /** Runtime gate — omitted ⇒ always shown. */
     when?: (ctx: WidgetContext) => boolean;
+    /** Context menus only: the row's text worked out when the menu opens (TradingView's
+     *  "Add alert on BTCUSDT at 81,782.00…"); `label` stays the fallback and the aria name. */
+    labelFor?: (ctx: WidgetContext) => string;
+    /** Context menus only: right-aligned shortcut hint (`'Alt+A'`). */
+    hint?: string;
+    /** Context menus only: the built-in group the row joins, so it sits inside that block
+     *  instead of a separated block of its own: `'clipboard'` (copy price, paste), `'trade'`
+     *  (alerts and orders), `'cursor'`, `'objects'` (table view, object tree, templates),
+     *  `'remove'`. Omitted: contributed rows form their own block. */
+    group?: ContextMenuGroup;
+    /** Context menus only: makes the row a submenu (TradingView's "Chart template ›"). The
+     *  rows are worked out when the menu opens; picking one calls {@link runItem}. */
+    submenu?: (ctx: WidgetContext) => ReadonlyArray<{ id: string; label: string; checked?: boolean; disabled?: boolean; separatorBefore?: boolean }>;
+    /** Runs a picked {@link submenu} row (its `id`). */
+    runItem?: (ctx: WidgetContext, id: string) => void;
     run: (ctx: WidgetContext) => void;
 }
+
+/** The blocks of the chart-body menu, top to bottom (see {@link WidgetActionDescriptor.group}). */
+export type ContextMenuGroup = 'view' | 'clipboard' | 'trade' | 'cursor' | 'objects' | 'remove';
 
 /** Where a topbar action lands on the mobile layout (see {@link WidgetActionDescriptor.mobile}). */
 export function mobilePlacement(action: Pick<WidgetActionDescriptor, 'align' | 'mobile'>): 'bar' | 'menu' {

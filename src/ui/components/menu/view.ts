@@ -360,7 +360,9 @@ export class Menu {
     openAt(clientX: number, clientY: number): void {
         const api = this.api;
         api.setOpen(true);
-        api.reposition({ getAnchorRect: () => ({ x: clientX, y: clientY, width: 0, height: 0 }) });
+        // `overlap`: a tall menu opened low on the screen slides up over the pointer instead of running off the
+        // bottom (TradingView's right-click menu does the same).
+        api.reposition({ getAnchorRect: () => ({ x: clientX, y: clientY, width: 0, height: 0 }), overlap: true });
     }
 
     close(): void {

@@ -326,6 +326,9 @@ export class NativeRenderer implements IChartRenderer {
     private resizeSplitStart: PaneSplit | null = null; // the two panes' shared span when the drag began
     /** The user drawings take part in pointer input (the runtime `drawingsInteractive` feature). */
     private drawingsInteractive = true;
+    /** TradingView's "Lock vertical cursor line by time": the crosshair's vertical line stays on this bar's time
+     *  while the horizontal line follows the pointer. Null = unlocked. Runtime-only (never in getConfig). */
+    private crosshairLockTime: number | null = null;
     private hoverSeparatorY: number | null = null; // pixel y of the separator under the cursor (drives its hover highlight)
 
     // ── pane management (merge / reorder / collapse / maximize) ──
@@ -411,7 +414,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     readonly name = 'native';
-    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'invertScale', 'scalePriceOnly', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride', 'drawingsInteractive', 'priceAxisTicks'];
+    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'invertScale', 'scalePriceOnly', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride', 'drawingsInteractive', 'priceAxisTicks', 'crosshairLockTime'];
 
     /** Apply a render feature live — mutate the field + invalidate, no engine re-run. */
     applyFeature(key: string, value: unknown): void {
@@ -573,6 +576,10 @@ export class NativeRenderer implements IChartRenderer {
                 // and a reload can never leave it stuck. `null` restores the configured crosshair.
                 this.scene.crosshairOverride = sanitizeCrosshairOverride(value);
                 break;
+            case 'crosshairLockTime':
+                this.crosshairLockTime = typeof value === 'number' && Number.isFinite(value) ? value : null;
+                if (this.lastPointer) this.handlePointerMove(this.lastPointer.x, this.lastPointer.y);
+                return;
             case 'drawingsInteractive':
                 // Runtime-only (never in getConfig), like `crosshairOverride`: a pick takes the
                 // plot's presses for itself, and a reload can never leave the drawings inert.
@@ -680,6 +687,7 @@ export class NativeRenderer implements IChartRenderer {
             case 'tradeMarkers': return { ...this.scene.tradeMarkers, colors: { ...this.scene.tradeMarkers.colors } };
             case 'marks': return { visible: this.scene.marks.visible, groups: { ...this.scene.marks.groups } };
             case 'crosshairOverride': return this.scene.crosshairOverride ? { ...this.scene.crosshairOverride } : null;
+            case 'crosshairLockTime': return this.crosshairLockTime;
             case 'drawingsInteractive': return this.drawingsInteractive;
             case 'priceAxisTicks': return this.priceAxisTicks.hook;
             case 'keyboard': return this.keyboardEnabled;
@@ -2836,16 +2844,19 @@ export class NativeRenderer implements IChartRenderer {
             return;
         }
         const inData = x >= 0 && y >= 0 && x <= this.coords.width && y <= this.coords.height;
-        this.scene.crosshair = inData ? { x, y } : null;
         this.lastPointer = inData ? { x, y } : null;
+        const px = x; // the pointer itself: hover targets (separator, marks) follow it, not the lock
+        // A locked vertical line sits on its bar, wherever the pointer is across.
+        if (this.crosshairLockTime !== null) x = this.coords.logicalToX(Math.round(this.coords.timeToLogical(this.crosshairLockTime)));
+        this.scene.crosshair = inData ? { x, y } : null;
         // The separator spans data + gutter, so its hover highlight tracks the full width (not just
         // the data area) — the divider stays a visible, grabbable handle over the scale too.
-        this.hoverSeparatorY = x >= 0 && y >= 0 && y <= this.coords.height ? this.separatorHoverY(y) : null;
+        this.hoverSeparatorY = px >= 0 && y >= 0 && y <= this.coords.height ? this.separatorHoverY(y) : null;
         // Cursor tier: repaint only the crosshair overlay, not the data layer.
         this.scheduler.invalidate(InvalidateLevel.Cursor);
         // A multi-group mark stack fans out while the pointer is over it (or over the gaps of its fan).
-        this.setMarksExpanded(inData ? this.chrome.markStackAt(x, y) : null);
-        this.setMarkHover(inData ? (this.chrome.markGlyphAt(x, y)?.cluster.key ?? null) : null);
+        this.setMarksExpanded(inData ? this.chrome.markStackAt(px, y) : null);
+        this.setMarkHover(inData ? (this.chrome.markGlyphAt(px, y)?.cluster.key ?? null) : null);
 
         // Only report a time/value when the cursor is over a real bar (not the
         // right-offset whitespace) — matches LWC emitting null off any data point.

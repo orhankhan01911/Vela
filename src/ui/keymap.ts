@@ -192,6 +192,11 @@ export class KeymapManager {
         else this.rebinds.set(id, Array.isArray(keys) ? [...keys] : [keys]);
     }
 
+    /** A chord as this platform writes it (`'mod+v'` → `Ctrl+V`, or `⌘V` on a Mac). */
+    display(spec: string): string {
+        return displayChord(spec, this.mac);
+    }
+
     /** Snapshot for a shortcuts help panel / rebinding UI. */
     bindings(): ResolvedBinding[] {
         return [...this.descriptors.values()].map((d) => {

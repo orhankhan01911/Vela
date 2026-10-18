@@ -924,6 +924,12 @@ export class VelaWorkspace {
     }
 
     /** The context handed to contributed actions/attachments (rebuilt per invocation). */
+    /** The chart-body menu's shortcut hints: the reset binding as rebound, and the drawings layer's paste chord. */
+    private menuHints(): Record<string, string> {
+        const reset = this.keymap.bindings().find((b) => b.id === 'chart.reset-view')?.display[0];
+        return { ...(reset ? { 'reset-view': reset } : {}), paste: this.keymap.display('mod+v') };
+    }
+
     context(): WorkspaceWidgetContext {
         return buildContext({
             // Null during early construction (the topbar projects actions before cells exist).
@@ -1654,6 +1660,7 @@ export class VelaWorkspace {
                 timezone: () => this.timezone,
                 setTimezone: (zone) => this.setTimezone(zone),
                 context: () => this.context(),
+                menuHints: () => this.menuHints(),
                 activate: (id) => this.setActiveCell(id),
                 multiCell: () => !this.monoLayout && this.def.cells.length > 1,
                 isMaximized: (id) => this.maximizedId === id,

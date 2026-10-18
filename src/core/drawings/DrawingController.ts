@@ -345,6 +345,11 @@ export class DrawingController {
         if (docs.length) this.clipboard = docs;
     }
 
+    /** True when {@link paste} would place something. */
+    canPaste(): boolean {
+        return this.enabled && this.clipboard.length > 0;
+    }
+
     paste(): Drawing[] {
         if (!this.enabled || this.clipboard.length === 0) return [];
         return this.insertClones(this.clipboard);

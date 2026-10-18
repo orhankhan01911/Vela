@@ -159,6 +159,8 @@ export interface CellDeps {
     setTimezone(zone: string): void;
     /** The live widget-context builder (per-cell context menus project contributed actions). */
     context(): WidgetContext;
+    /** Shortcut hints for the chart-body menu rows, by row id (the workspace keymap's chords). */
+    menuHints?(): Readonly<Record<string, string>>;
     /** The shared manifest can no longer change instance sets: it resolved, or the
      *  workspace has no `indicators` option so nothing will ever resolve. Gates the
      *  ledger's pending fallback in `dehydrate` — once settled, a live empty set means
@@ -519,6 +521,8 @@ export class ChartCell {
             // Right-clicking activates the cell first (capture-phase pointerdown), so the
             // context the actions receive is this cell's — the active one.
             getContext: () => this.deps.context(),
+            openObjectTree: () => this.deps.context().togglePanel('objects', true),
+            ...(this.deps.menuHints ? { hints: () => this.deps.menuHints!() } : {}),
         });
         this.contextMenu.onChart(this.inner);
         this.inner.renderer.onCrosshairMove((e) => {

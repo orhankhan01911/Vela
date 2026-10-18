@@ -179,7 +179,7 @@ describe('ChartContextMenu — the pointer on the action context', () => {
         fake.move({ time: 1, price: 2, paneKind: 'price' });
         host.fire('contextmenu', { clientX: 300, clientY: 200 });
         const items = menus[0]!.items;
-        expect(items.map((i) => i.id)).toEqual(['action:test.copy-price', 'reset-view', 'remove-drawings', 'remove-indicators', 'settings:Canvas']);
+        expect(items.map((i) => i.id)).toEqual(['action:test.copy-price', 'reset-view', 'copy-price', 'paste', 'lock-cursor', 'table-view', 'remove-drawings', 'remove-indicators', 'settings:Canvas']);
         expect(items[0]).toMatchObject({ label: 'Copy price', icon: 'clone', separatorBefore: false });
         expect(items[1]!.separatorBefore).toBe(true);
         expect(menus[0]!.opened).toBe(1);

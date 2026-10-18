@@ -149,16 +149,54 @@ export function timeAxisItems(timezone: string): MenuItemDescriptor[] {
     ];
 }
 
-/** Chart-body items. The two removals stay VISIBLE with nothing to remove — disabled, so
+/** What the chart-body menu shows; every field but the counts is optional, so a bare host still gets
+ *  TradingView's shape with what it can do. */
+export interface BodyMenuState {
+    drawings: number;
+    indicators: number;
+    /** The right-clicked price, formatted as the price scale shows it; null off the price pane. */
+    price?: string | null;
+    /** The drawings clipboard has something to paste. */
+    canPaste?: boolean;
+    /** The vertical cursor line is locked to a bar time. */
+    cursorLocked?: boolean;
+    /** The host has an object tree to open. */
+    objectTree?: boolean;
+    /** Shortcut hints by row id (`'reset-view': 'Alt+R'`). */
+    hints?: Readonly<Record<string, string>>;
+}
+
+/** Chart-body items, TradingView's right-click menu: reset | copy price, paste | lock the vertical cursor
+ *  line | table view, object tree | remove N drawings, remove N indicators | settings. Alerts and orders
+ *  come from the host (`group: 'trade'`). The removals stay VISIBLE with nothing to remove, disabled, so
  *  the menu keeps its shape. */
-export function bodyItems(counts: { drawings: number; indicators: number }): MenuItemDescriptor[] {
+export function bodyItems(s: BodyMenuState): MenuItemDescriptor[] {
+    const hint = (id: string): { hint?: string } => (s.hints?.[id] ? { hint: s.hints[id] } : {});
+    const count = (n: number, one: string): string => (n > 0 ? `Remove ${n} ${one}${n === 1 ? '' : 's'}` : `Remove ${one}s`);
     return [
-        { id: 'reset-view', label: 'Reset chart view', icon: 'reset' },
-        { id: 'remove-drawings', label: 'Remove drawings', icon: 'eraser', disabled: counts.drawings === 0, separatorBefore: true },
-        { id: 'remove-indicators', label: 'Remove indicators', icon: 'indicators', disabled: counts.indicators === 0 },
+        { id: 'reset-view', label: 'Reset chart view', icon: 'reset', ...hint('reset-view') },
+        { id: 'copy-price', label: s.price ? `Copy price ${s.price}` : 'Copy price', disabled: !s.price, separatorBefore: true },
+        { id: 'paste', label: 'Paste', disabled: !s.canPaste, ...hint('paste') },
+        { id: 'lock-cursor', label: 'Lock vertical cursor line by time', checked: Boolean(s.cursorLocked), separatorBefore: true },
+        { id: 'table-view', label: 'Table view', separatorBefore: true },
+        ...(s.objectTree ? [{ id: 'object-tree', label: 'Object tree' }] : []),
+        { id: 'remove-drawings', label: count(s.drawings, 'drawing'), disabled: s.drawings === 0, separatorBefore: true },
+        { id: 'remove-indicators', label: count(s.indicators, 'indicator'), disabled: s.indicators === 0 },
         settingsItem('body', 'Settings…', 'gear'),
     ];
 }
+
+/** The block each built-in body row belongs to; a contributed row with the same `group` joins it. */
+const BODY_GROUPS: Readonly<Record<string, string>> = {
+    'reset-view': 'view',
+    'copy-price': 'clipboard',
+    paste: 'clipboard',
+    'lock-cursor': 'cursor',
+    'table-view': 'objects',
+    'object-tree': 'objects',
+    'remove-drawings': 'remove',
+    'remove-indicators': 'remove',
+};
 
 /**
  * The rank of every built-in context-menu row, by zone and row id (`settings` is each
@@ -169,7 +207,19 @@ export function bodyItems(counts: { drawings: number; indicators: number }): Men
  * settings row, and `order: -100` leads the menu.
  */
 export const CONTEXT_MENU_BUILTIN_ORDER = {
-    body: { 'reset-view': -30, 'remove-drawings': -20, 'remove-indicators': -10, settings: 1000 },
+    body: {
+        'reset-view': -30,
+        'copy-price': -29,
+        paste: -28,
+        // -27..-26: the host's alert and order rows (`group: 'trade'`)
+        'lock-cursor': -25,
+        'table-view': -24,
+        'object-tree': -23,
+        // -22..-21: the host's object rows, e.g. chart templates (`group: 'objects'`)
+        'remove-drawings': -20,
+        'remove-indicators': -10,
+        settings: 1000,
+    },
     'price-axis': {
         auto: -80,
         'price-only': -75,
@@ -185,28 +235,32 @@ export const CONTEXT_MENU_BUILTIN_ORDER = {
     'time-axis': { timezone: -10, settings: 1000 },
 } as const satisfies Record<Zone, Record<string, number>>;
 
-/** A contributed row on its way into a context menu, with the action's `order`. */
+/** A contributed row on its way into a context menu, with the action's `order` and `group`. */
 export interface ContributedRow {
     item: MenuItemDescriptor;
     order?: number;
+    /** The built-in block it joins (see `WidgetActionDescriptor.group`); omitted, it forms its own. */
+    group?: string;
 }
 
 /**
  * One zone's menu: the built-in rows and the contributed ones interleaved by rank (see
- * {@link CONTEXT_MENU_BUILTIN_ORDER}). Separators fall between groups only, never at the
- * ends: each built-in group is a run the builder already separates, and consecutive
- * contributed rows form one group. `contributed` arrives in registration order within
- * equal `order`s (what `widgetActions` returns) and keeps it.
+ * {@link CONTEXT_MENU_BUILTIN_ORDER}). Separators fall between blocks only, never at the
+ * ends: each built-in group is a run the builder already separates, a contributed row with a
+ * `group` belongs to that built-in block, and consecutive other contributed rows form one block.
+ * `contributed` arrives in registration order within equal `order`s (what `widgetActions`
+ * returns) and keeps it.
  */
 export function composeMenu(zone: Zone, builtin: readonly MenuItemDescriptor[], contributed: readonly ContributedRow[]): MenuItemDescriptor[] {
     const ranks: Readonly<Record<string, number>> = CONTEXT_MENU_BUILTIN_ORDER[zone];
-    const rows: Array<{ item: MenuItemDescriptor; rank: number; group: number }> = [];
-    let group = 0;
+    const named: Readonly<Record<string, string>> = zone === 'body' ? BODY_GROUPS : {};
+    const rows: Array<{ item: MenuItemDescriptor; rank: number; group: string }> = [];
+    let run = 0;
     for (const item of builtin) {
-        if (item.separatorBefore) group += 1;
-        rows.push({ item, rank: ranks[item.id.startsWith('settings') ? 'settings' : item.id] ?? 0, group });
+        if (item.separatorBefore) run += 1;
+        rows.push({ item, rank: ranks[item.id.startsWith('settings') ? 'settings' : item.id] ?? 0, group: named[item.id] ?? `#${run}` });
     }
-    for (const { item, order } of contributed) rows.push({ item, rank: order ?? 0, group: -1 });
+    for (const { item, order, group } of contributed) rows.push({ item, rank: order ?? 0, group: group ?? '~contributed' });
     rows.sort((a, b) => a.rank - b.rank);
     return rows.map(({ item, group: g }, i) => ({ ...item, separatorBefore: i > 0 && rows[i - 1]!.group !== g }));
 }

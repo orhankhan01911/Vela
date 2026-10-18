@@ -149,20 +149,34 @@ describe('time-axis menu', () => {
 });
 
 describe('chart-body menu', () => {
-    it('keeps the removals visible but disabled when there is nothing to remove', () => {
-        const empty = bodyItems({ drawings: 0, indicators: 0 });
-        expect(empty.map((i) => i.id)).toEqual(['reset-view', 'remove-drawings', 'remove-indicators', 'settings:Canvas']);
-        expect(empty.filter((i) => i.disabled).map((i) => i.id)).toEqual(['remove-drawings', 'remove-indicators']);
+    const ids = (items: MenuItemDescriptor[]): string[] => items.map((i) => i.id);
 
-        const full = bodyItems({ drawings: 2, indicators: 1 });
-        expect(full.some((i) => i.disabled)).toBe(false);
+    it("has TradingView's rows and blocks", () => {
+        const items = bodyItems({ drawings: 21, indicators: 3, price: '81,782.00', canPaste: true, objectTree: true, hints: { 'reset-view': 'Alt+R', paste: 'Ctrl+V' } });
+        expect(items.map((i) => (i.separatorBefore ? `| ${i.label}` : i.label)).join(' ')).toBe(
+            'Reset chart view | Copy price 81,782.00 Paste | Lock vertical cursor line by time | Table view Object tree | Remove 21 drawings Remove 3 indicators | Settings…',
+        );
+        expect(items.find((i) => i.id === 'reset-view')!.hint).toBe('Alt+R');
+        expect(items.find((i) => i.id === 'paste')!.hint).toBe('Ctrl+V');
+        expect(items.some((i) => i.disabled)).toBe(false);
     });
 
-    it('every row carries an icon; the axis menus stay text-only beside their check marks', () => {
-        expect(bodyItems({ drawings: 0, indicators: 0 }).map((i) => [i.id, i.icon])).toEqual([
+    it('greys what cannot run and keeps the menu shape', () => {
+        const empty = bodyItems({ drawings: 0, indicators: 0 });
+        expect(ids(empty)).toEqual(['reset-view', 'copy-price', 'paste', 'lock-cursor', 'table-view', 'remove-drawings', 'remove-indicators', 'settings:Canvas']);
+        expect(empty.filter((i) => i.disabled).map((i) => i.id)).toEqual(['copy-price', 'paste', 'remove-drawings', 'remove-indicators']);
+        expect(empty.find((i) => i.id === 'remove-drawings')!.label).toBe('Remove drawings');
+        expect(bodyItems({ drawings: 1, indicators: 1 }).find((i) => i.id === 'remove-drawings')!.label).toBe('Remove 1 drawing');
+    });
+
+    it('checks the cursor-lock row while the line is locked', () => {
+        expect(bodyItems({ drawings: 0, indicators: 0, cursorLocked: true }).find((i) => i.id === 'lock-cursor')!.checked).toBe(true);
+        expect(bodyItems({ drawings: 0, indicators: 0 }).find((i) => i.id === 'lock-cursor')!.checked).toBe(false);
+    });
+
+    it('icons only on reset and settings, like TradingView; the axis menus stay text-only', () => {
+        expect(bodyItems({ drawings: 0, indicators: 0 }).filter((i) => i.icon).map((i) => [i.id, i.icon])).toEqual([
             ['reset-view', 'reset'],
-            ['remove-drawings', 'eraser'],
-            ['remove-indicators', 'indicators'],
             ['settings:Canvas', 'gear'],
         ]);
         expect(priceAxisItems(AXIS_STATE).some((i) => i.icon)).toBe(false);
@@ -171,7 +185,7 @@ describe('chart-body menu', () => {
 });
 
 describe('contributed rows sort together with the built-in ones', () => {
-    const BODY = bodyItems({ drawings: 1, indicators: 1 });
+    const BODY = bodyItems({ drawings: 1, indicators: 1, objectTree: true });
     const row = (id: string, order?: number): { item: MenuItemDescriptor; order?: number } => ({ item: { id, label: id }, ...(order !== undefined ? { order } : {}) });
     const ids = (items: MenuItemDescriptor[]): string[] => items.map((i) => i.id);
     /** Ids with a `|` where a separator is drawn. */
@@ -197,28 +211,28 @@ describe('contributed rows sort together with the built-in ones', () => {
     });
 
     it('an action without order lands after the built-in actions and before Settings…', () => {
-        expect(shape(composeMenu('body', BODY, [row('a')]))).toBe('reset-view | remove-drawings remove-indicators | a | settings:Canvas');
+        expect(shape(composeMenu('body', BODY, [row('a')]))).toBe('reset-view | copy-price paste | lock-cursor | table-view object-tree | remove-drawings remove-indicators | a | settings:Canvas');
     });
 
     it('a negative order leads the menu, separated from the built-in rows', () => {
-        expect(shape(composeMenu('body', BODY, [row('copy', -100)]))).toBe('copy | reset-view | remove-drawings remove-indicators | settings:Canvas');
+        expect(shape(composeMenu('body', BODY, [row('copy', -100)]))).toBe('copy | reset-view | copy-price paste | lock-cursor | table-view object-tree | remove-drawings remove-indicators | settings:Canvas');
     });
 
     it('an order between two built-in ranks lands between those rows', () => {
-        expect(ids(composeMenu('body', BODY, [row('x', -25), row('y', 1001)]))).toEqual(['reset-view', 'x', 'remove-drawings', 'remove-indicators', 'settings:Canvas', 'y']);
+        expect(ids(composeMenu('body', BODY, [row('x', -21), row('y', 1001)]))).toEqual(['reset-view', 'copy-price', 'paste', 'lock-cursor', 'table-view', 'object-tree', 'x', 'remove-drawings', 'remove-indicators', 'settings:Canvas', 'y']);
         // Splitting a built-in group separates the action from both halves.
-        expect(shape(composeMenu('body', BODY, [row('x', -15)]))).toBe('reset-view | remove-drawings | x | remove-indicators | settings:Canvas');
+        expect(shape(composeMenu('body', BODY, [row('x', -15)]))).toBe('reset-view | copy-price paste | lock-cursor | table-view object-tree | remove-drawings | x | remove-indicators | settings:Canvas');
     });
 
     it('ties keep registration order, the built-in row first', () => {
-        expect(ids(composeMenu('body', BODY, [row('b'), row('a'), row('c', 0)])).slice(3, 6)).toEqual(['b', 'a', 'c']);
+        expect(ids(composeMenu('body', BODY, [row('b'), row('a'), row('c', 0)])).slice(8, 11)).toEqual(['b', 'a', 'c']);
         expect(ids(composeMenu('body', BODY, [row('tie', -30)])).slice(0, 2)).toEqual(['reset-view', 'tie']);
         expect(ids(composeMenu('body', BODY, [row('last', 1000)])).slice(-2)).toEqual(['settings:Canvas', 'last']);
     });
 
     it('consecutive contributed rows form one group, and no separator opens or closes the menu', () => {
         const items = composeMenu('body', BODY, [row('a', -200), row('b', -100), row('c'), row('d')]);
-        expect(shape(items)).toBe('a b | reset-view | remove-drawings remove-indicators | c d | settings:Canvas');
+        expect(shape(items)).toBe('a b | reset-view | copy-price paste | lock-cursor | table-view object-tree | remove-drawings remove-indicators | c d | settings:Canvas');
         expect(items[0]!.separatorBefore).toBe(false);
         expect(composeMenu('body', [], [row('a'), row('b')]).some((i) => i.separatorBefore)).toBe(false);
     });
@@ -230,11 +244,18 @@ describe('contributed rows sort together with the built-in ones', () => {
         expect(shape(composeMenu('time-axis', timeAxisItems('Etc/UTC'), [row('t')]))).toBe('timezone | t | settings:Scales and lines');
     });
 
+    it('a row with a group joins that block without separators of its own', () => {
+        const alert = { item: { id: 'alert', label: 'Add alert' }, order: -27, group: 'trade' };
+        expect(shape(composeMenu('body', BODY, [alert]))).toBe('reset-view | copy-price paste | alert | lock-cursor | table-view object-tree | remove-drawings remove-indicators | settings:Canvas');
+        const tpl = { item: { id: 'tpl', label: 'Chart template' }, order: -22, group: 'objects' };
+        expect(shape(composeMenu('body', BODY, [tpl]))).toBe('reset-view | copy-price paste | lock-cursor | table-view object-tree tpl | remove-drawings remove-indicators | settings:Canvas');
+    });
+
     it('rows pass through untouched apart from their separator', () => {
         const item: MenuItemDescriptor = { id: 'action:x', label: 'Copy price', icon: 'clone', separatorBefore: true };
         const [first] = composeMenu('body', BODY, [{ item, order: -100 }]);
         expect(first).toEqual({ id: 'action:x', label: 'Copy price', icon: 'clone', separatorBefore: false });
-        expect(composeMenu('body', BODY, [])[3]).toMatchObject({ id: 'settings:Canvas', icon: 'gear', separatorBefore: true });
+        expect(composeMenu('body', BODY, []).slice(-1)[0]).toMatchObject({ id: 'settings:Canvas', icon: 'gear', separatorBefore: true });
     });
 });
 
