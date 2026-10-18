@@ -1102,30 +1102,62 @@ export class DrawingPainter {
     private paintMeasureBox(ctx: CanvasRenderingContext2D, d: MeasureBox, proj: Projector, theme: VelaTheme): void {
         const pts = d.handlePoints(proj);
         if (pts.length < 2) return;
-        const x = Math.min(pts[0]![0], pts[1]![0]);
-        const y = Math.min(pts[0]![1], pts[1]![1]);
-        const w = Math.abs(pts[1]![0] - pts[0]![0]);
-        const h = Math.abs(pts[1]![1] - pts[0]![1]);
-        const color = d.isUp() ? BULLISH : BEARISH;
+        const [x1, y1] = pts[0]!;
+        const [x2, y2] = pts[1]!;
+        const x = Math.min(x1, x2);
+        const y = Math.min(y1, y2);
+        const w = Math.abs(x2 - x1);
+        const h = Math.abs(y2 - y1);
+        // TradingView's ranges: the date range in its line color, the price and date & price ranges blue up / red down.
+        const color = d.type === 'daterange' ? d.style.lineColor || theme.textColor : d.isUp() ? BULLISH : BEARISH;
         ctx.save();
         ctx.globalAlpha = 0.12 * ctx.globalAlpha;
         ctx.fillStyle = color;
         ctx.fillRect(x, y, w, h);
         ctx.restore();
-        ctx.setLineDash(dashPattern(d.style.lineStyle, d.style.lineWidth));
-        ctx.strokeStyle = color;
-        ctx.lineWidth = d.style.lineWidth;
-        ctx.strokeRect(x, y, w, h);
-        ctx.setLineDash([]);
+        const line = (ax: number, ay: number, bx: number, by: number): void =>
+            this.stroke(ctx, { ...d.style, lineColor: color }, () => {
+                ctx.moveTo(ax, ay);
+                ctx.lineTo(bx, by);
+            });
+        const arrow = (ax: number, ay: number, bx: number, by: number): void => {
+            line(ax, ay, bx, by);
+            if (Math.hypot(bx - ax, by - ay) > 12) this.paintArrowhead(ctx, [ax, ay], [bx, by], { ...d.style, lineColor: color });
+        };
+        const showTime = d.type !== 'pricerange';
+        const showPriceAxis = d.type !== 'daterange';
+        if (d.type === 'daterange') {
+            line(x, y, x, y + h); // the two time edges
+            line(x + w, y, x + w, y + h);
+        } else if (d.type === 'pricerange') {
+            line(x, y, x + w, y); // the two price edges
+            line(x, y + h, x + w, y + h);
+        } else {
+            ctx.setLineDash(dashPattern(d.style.lineStyle, d.style.lineWidth));
+            ctx.strokeStyle = color;
+            ctx.lineWidth = d.style.lineWidth;
+            ctx.strokeRect(x, y, w, h);
+            ctx.setLineDash([]);
+        }
+        if (showTime) arrow(x1, y + h / 2, x2, y + h / 2); // across, pointing the way time ran
+        if (showPriceAxis) arrow(x + w / 2, y1, x + w / 2, y2); // up or down, the way price moved
         const lines = d.measureLabel(proj);
+        if (!lines.length) return;
+        // The plate: outside the box, past the end the price moved to (below a fall, above a rise).
         const fs = namedFontSize(d.text?.size ?? 'normal');
-        ctx.fillStyle = d.text?.color ?? theme.textColor;
         ctx.font = `${fs}px ${theme.fontFamily}`;
+        const lh = Math.round(fs * 1.35);
+        const pw = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 16;
+        const ph = lines.length * lh + 8;
+        const below = d.type === 'daterange' ? false : !d.isUp();
+        const py = below ? y + h + 6 : y - 6 - ph;
+        roundRect(ctx, x + w / 2 - pw / 2, py, pw, ph, 4);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.fillStyle = d.text?.color ?? contrastColor(color);
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        const lh = Math.round(fs * 1.35);
-        const startY = y + h / 2 - ((lines.length - 1) * lh) / 2;
-        lines.forEach((line, i) => ctx.fillText(line, x + w / 2, startY + i * lh));
+        lines.forEach((l, i) => ctx.fillText(l, x + w / 2, py + 4 + lh / 2 + i * lh));
         ctx.textAlign = 'left';
         ctx.textBaseline = 'alphabetic';
     }

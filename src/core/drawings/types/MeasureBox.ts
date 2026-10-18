@@ -57,12 +57,26 @@ export abstract class MeasureBox extends Drawing {
     // Placed click-move-click (the inherited 'click' mode): first click sets a corner, the second
     // sets the opposite one — consistent with the box/Gann tools.
 
-    /** The measurement lines, filtered by the enabled toggles. */
+    /** The measurement lines, filtered by the enabled toggles (plus TradingView's volume line under the time). */
     measureLabel(proj: Projector): string[] {
         const lines: string[] = [];
         if (this.showPrice) lines.push(this.priceLabel());
         if (this.showDate) lines.push(this.timeLabel(proj));
+        const vol = this.showDate ? this.volumeLabel(proj) : '';
+        if (vol) lines.push(vol);
         return lines;
+    }
+
+    /** `Vol 11.36K`: the volume of the bars between the two points, or '' when the feed has none. */
+    protected volumeLabel(proj: Projector): string {
+        const a = this.anchors[0];
+        const b = this.anchors[1];
+        if (!a || !b || !proj.barsInRange) return '';
+        const bars = proj.barsInRange(Math.min(a.time, b.time), Math.max(a.time, b.time));
+        const v = bars.reduce((sum, bar) => sum + (bar.volume ?? 0), 0);
+        if (!(v > 0)) return '';
+        const [n, unit] = v >= 1e9 ? [v / 1e9, 'B'] : v >= 1e6 ? [v / 1e6, 'M'] : v >= 1e3 ? [v / 1e3, 'K'] : [v, ''];
+        return `Vol ${n.toFixed(unit ? 2 : 0)}${unit}`;
     }
 
     /** Up (later price ≥ earlier) → green; else red. */
