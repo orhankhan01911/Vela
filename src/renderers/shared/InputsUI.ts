@@ -476,14 +476,29 @@ export class InputsUI {
         }
         // Inline values in a block (not flex items), so a readout cut at the plot edge ends in
         // an ellipsis rather than a clipped number that reads as a different value.
-        row.valuesEl.style.display = 'block';
-        row.valuesEl.replaceChildren();
+        if (row.valuesEl.style.display !== 'block') row.valuesEl.style.display = 'block';
+        // Reuse the spans and change only the text that changed (in place, on the text node): the
+        // values refresh on every crosshair move and live tick, and rebuilding the spans each time
+        // was a DOM change per indicator per frame that woke every page-wide DOM observer (a
+        // tester saw the chart slow down as indicators were added, 2026-10-18).
+        const spans = row.valuesEl.children;
+        while (spans.length > row.plotValues.length) row.valuesEl.lastElementChild!.remove();
         row.plotValues.forEach((v, i) => {
-            const span = document.createElement('span');
-            span.textContent = v.value;
-            span.style.color = v.color;
-            if (i > 0) span.style.marginLeft = `${LEGEND_VALUES_GAP_PX}px`;
-            row.valuesEl.appendChild(span);
+            let span = spans[i] as HTMLElement | undefined;
+            if (!span) {
+                span = document.createElement('span');
+                span.appendChild(document.createTextNode(''));
+                if (i > 0) span.style.marginLeft = `${LEGEND_VALUES_GAP_PX}px`;
+                row.valuesEl.appendChild(span);
+            }
+            const text = span.firstChild;
+            if (text && text.nodeType === 3) {
+                if (text.nodeValue !== v.value) text.nodeValue = v.value;
+            } else span.textContent = v.value;
+            if (span.dataset.color !== v.color) {
+                span.style.color = v.color;
+                span.dataset.color = v.color;
+            }
         });
     }
 

@@ -700,6 +700,7 @@ export class Statusline {
         const bar = this.hoverBar ?? this.lastBar;
         if (!bar) {
             this.ohlcEl.replaceChildren();
+            delete this.ohlcEl.dataset.shape;
             this.changeEl.textContent = '';
             return;
         }
@@ -709,23 +710,48 @@ export class Statusline {
         // ONE ink for the whole readout — OHLC values and the change share it, so the
         // row always reads in the color the plot wears at this bar.
         const ink = up ? (this.upColor ?? 'var(--vela-up)') : (this.downColor ?? 'var(--vela-down)');
-        const cell = (k: string, v: number) => {
-            const s = doc.createElement('span');
-            if (k) s.append(`${k} `);
-            const b = doc.createElement('b');
-            b.textContent = fmtPrice(v, dp);
-            b.style.color = ink;
-            s.appendChild(b);
-            return s;
-        };
         // Bar-shaped styles read out all four values at the full level and just the close
         // below it; a one-line style (line/area/baseline) plots a single series, so its
         // readout is that value — the close — at every level. The minimal level keeps the
         // percent delta alone.
         const { level } = this.layout;
-        this.ohlcEl.replaceChildren(...readoutCells(level, this.readout).map((c) => cell(c.label, bar[c.key])));
-        this.changeEl.textContent = level === 'minimal' ? fmtChangePct(bar.open, bar.close) : fmtChange(bar.open, bar.close, dp);
-        this.changeEl.dataset.dir = up ? 'up' : 'down';
-        this.changeEl.style.color = ink;
+        const cells = readoutCells(level, this.readout);
+        // The cells are built once per layout and then only their text changes, in place: this
+        // runs on every crosshair move and live tick, and rebuilding the spans each time was a DOM
+        // change per frame that woke every page-wide DOM observer (tester report 2026-10-18).
+        const shape = cells.map((c) => c.label).join('|');
+        if (this.ohlcEl.dataset.shape !== shape || this.ohlcEl.childElementCount !== cells.length) {
+            this.ohlcEl.replaceChildren(
+                ...cells.map((c) => {
+                    const sp = doc.createElement('span');
+                    if (c.label) sp.append(`${c.label} `);
+                    const b = doc.createElement('b');
+                    b.appendChild(doc.createTextNode(''));
+                    sp.appendChild(b);
+                    return sp;
+                }),
+            );
+            this.ohlcEl.dataset.shape = shape;
+        }
+        cells.forEach((c, i) => {
+            const b = this.ohlcEl.children[i]!.lastElementChild as HTMLElement;
+            const text = fmtPrice(bar[c.key], dp);
+            const node = b.firstChild;
+            if (node && node.nodeType === 3) {
+                if (node.nodeValue !== text) node.nodeValue = text;
+            } else b.textContent = text;
+            if (b.dataset.ink !== ink) {
+                b.style.color = ink;
+                b.dataset.ink = ink;
+            }
+        });
+        const change = level === 'minimal' ? fmtChangePct(bar.open, bar.close) : fmtChange(bar.open, bar.close, dp);
+        const changeNode = this.changeEl.firstChild;
+        if (changeNode && changeNode.nodeType === 3 && this.changeEl.childNodes.length === 1) {
+            if (changeNode.nodeValue !== change) changeNode.nodeValue = change;
+        } else if (this.changeEl.textContent !== change) this.changeEl.textContent = change;
+        const dir = up ? 'up' : 'down';
+        if (this.changeEl.dataset.dir !== dir) this.changeEl.dataset.dir = dir;
+        if (this.changeEl.style.color !== ink) this.changeEl.style.color = ink;
     }
 }
