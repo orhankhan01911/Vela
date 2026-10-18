@@ -1138,6 +1138,45 @@ describe('scroll-back paging — older bars as the view nears the oldest loaded 
         expect(renderer.setBarsCalls.every((c) => c.preserveView)).toBe(true);
     });
 
+    it('manual mode: reports the edge instead of loading, then loads on request', async () => {
+        const feed = new SwitchFeed();
+        feed.depth['AAA'] = 2_000;
+        const renderer = new PagingRenderer();
+        const chart = make({ symbol: 'AAA', timeframe: '60', bars: 300, volume: false }, { renderer, engines: [], dataFeed: feed });
+        await chart.ready();
+        await chart.historyComplete();
+        await flush();
+        const edges: Array<{ atEdge: boolean; canLoadMore: boolean }> = [];
+        chart.on('history:edge', (e) => edges.push({ atEdge: e.atEdge, canLoadMore: e.canLoadMore }));
+        chart.setHistoryPaging('manual');
+
+        renderer.show(0, 100); // the oldest bar on screen
+        await settle();
+        expect(renderer.bars).toHaveLength(300); // nothing loaded by itself
+        expect(edges[edges.length - 1]).toEqual({ atEdge: true, canLoadMore: true });
+
+        expect(chart.loadOlderHistory(500)).toBe('loading');
+        await chart.historyComplete();
+        await flush();
+        expect(renderer.bars).toHaveLength(800);
+
+        // Everything else the source has, then nothing more.
+        renderer.show(0, 100);
+        await settle();
+        expect(chart.loadOlderHistory(5_000)).toBe('loading');
+        await chart.historyComplete();
+        await flush();
+        expect(renderer.bars).toHaveLength(2_000);
+        expect(chart.loadOlderHistory()).toBe('none'); // the load ran into the source's first bar
+        renderer.show(0, 100);
+        await settle();
+        expect(edges[edges.length - 1]).toEqual({ atEdge: true, canLoadMore: false });
+
+        renderer.show(1_500, 1_999); // away from the oldest bar
+        await settle();
+        expect(edges[edges.length - 1]!.atEdge).toBe(false);
+    });
+
     it('stops at the source\'s first bar: no endless refetch of an empty page', async () => {
         const feed = new SwitchFeed();
         feed.depth['AAA'] = 400;

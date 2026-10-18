@@ -149,6 +149,13 @@ export interface VelaEventMap extends Record<string, unknown> {
     oldestTime: number;
     barsLoaded: number;
   };
+  /**
+   * Manual scroll-back paging (`chart.setHistoryPaging('manual')`): the oldest loaded bar came on
+   * screen (`atEdge`) or left it. `canLoadMore` = an older page can be asked for with
+   * `chart.loadOlderHistory()`; false at the source's first bar, the depth cap, or after a failure.
+   * Fires on change only.
+   */
+  "history:edge": { atEdge: boolean; canLoadMore: boolean; oldestTime: number; barsLoaded: number };
   /** Replay mode began (or seeked): the chart shows history up to `cursorTime`, `remaining` bars are hidden. */
   "replay:start": { cursorTime: number; remaining: number };
   /** One hidden bar was revealed (it also fires `bar`, like a live bar). A bar played tick

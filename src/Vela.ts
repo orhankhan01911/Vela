@@ -335,6 +335,20 @@ export class Vela {
         return this.orchestrator.historyComplete();
     }
 
+    /** Scroll-back paging: `'auto'` (default) loads older bars by itself as the view nears the
+     *  oldest one; `'manual'` only reports it (`history:edge`) and loads on
+     *  {@link loadOlderHistory}; `'off'` never pages. */
+    setHistoryPaging(mode: 'auto' | 'manual' | 'off'): void {
+        this.orchestrator.setHistoryPaging(mode);
+    }
+
+    /** Load `bars` (default 1000) more older bars now, view kept. `'loading'` = on its way
+     *  (`history:complete` says when it landed), `'busy'` = a load is running, `'none'` =
+     *  nothing older can be had. */
+    loadOlderHistory(bars?: number): 'loading' | 'busy' | 'none' {
+        return this.orchestrator.loadOlderHistory(bars);
+    }
+
     /**
      * A renderer-agnostic snapshot of the graphic elements the core has generated
      * (series, fills, drawings, tables, …) — a deterministic check that a feature was
