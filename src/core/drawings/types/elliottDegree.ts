@@ -25,6 +25,7 @@ export const ELLIOTT_DEGREE_FIELD: SettingsField = {
     group: 'text',
 };
 
+/** A known degree name, else the default. Own keys only: a stored "toString" / "__proto__" must not pass. */
 export function degreeOf(v: unknown): string {
-    return typeof v === 'string' && v in ELLIOTT_DEGREES ? v : DEFAULT_DEGREE;
+    return typeof v === 'string' && Object.prototype.hasOwnProperty.call(ELLIOTT_DEGREES, v) ? v : DEFAULT_DEGREE;
 }

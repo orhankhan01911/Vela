@@ -62,6 +62,11 @@ describe('drawings/patterns', () => {
         const corr = createDrawing('elliottcorrection', { paneId: 'price', anchors: [at(0, 20), at(1, 30), at(2, 20), at(3, 26)], props: { degree: 'Primary' } })! as PatternDrawing;
         expect(corr.vertexLabels()).toEqual(['', 'Ⓐ', 'Ⓑ', 'Ⓒ']);
         expect(corr.schema().fields.map((f) => f.path)).toContain('degree');
+        // A stored degree that names an Object.prototype key falls back to the default instead of crashing.
+        for (const degree of ['toString', '__proto__', 'constructor']) {
+            const bad = createDrawing('elliottcorrection', { paneId: 'price', anchors: [at(0, 20), at(1, 30), at(2, 20), at(3, 26)], props: { degree } })! as PatternDrawing;
+            expect(bad.vertexLabels()).toEqual(['', 'A', 'B', 'C']);
+        }
     });
 
     it('Elliott waves saved before the origin point keep their old 5 / 3 points and labels', () => {
