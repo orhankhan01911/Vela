@@ -79,6 +79,14 @@ const CSS = `
 .vela-widget-style-chip:focus-visible { outline: 2px solid var(--vela-focus); outline-offset: -2px; }
 .vela-widget-style-chip[hidden] { display: none; }
 .vela-widget-style-chip[data-current='1'] { background: var(--vela-hover-strong); color: var(--vela-fg-bright); }
+/* The chart-type menu trigger always carries a chevron, so it reads as a dropdown. When the current
+   type already shows as a highlighted favorite button, the trigger is the chevron alone (no second
+   copy of the same icon), like the timeframe caret. */
+.vela-widget-style[data-menu='1'] { gap: 2px; padding: 0 4px 0 7px; }
+.vela-widget-style[data-menu='1'][data-caret='1'] { width: 18px; flex: none; padding: 0; justify-content: center; color: var(--vela-fg-muted); }
+.vela-widget-style[data-menu='1'][data-caret='1']:hover { color: var(--vela-fg-bright); }
+.vela-widget-topbar .vela-widget-style[data-menu='1'] .vela-icon + .vela-icon { font-size: 14px; width: 14px; height: 14px; }
+.vela-widget-topbar .vela-widget-style[data-menu='1'][data-caret='1'] .vela-icon { font-size: 14px; width: 14px; height: 14px; }
 .vela-widget-tf-caret {
     all: unset;
     display: inline-flex;
@@ -635,6 +643,7 @@ export class Topbar {
             b.addEventListener('click', () => this.opts.onPriceStyle(id));
             this.styleChipsHost.appendChild(b);
         }
+        this.renderStyleButton(doc);
         this.onHairlineSync();
     }
 
@@ -650,6 +659,8 @@ export class Topbar {
             if (this.el.scrollWidth <= this.el.clientWidth + 1) break;
             chip.hidden = true;
         }
+        // The current chip may have been dropped: the chart-type button shows the icon again.
+        this.renderStyleButton(this.styleButton.ownerDocument);
     }
 
     setPriceStyle(style: string): void {
@@ -686,12 +697,24 @@ export class Topbar {
     }
 
     private renderStyleButton(doc: Document): void {
+        // Before the constructor has made the chips host, there are no favorite buttons yet.
+        const current = [...(this.styleChipsHost?.children ?? [])].find(
+            (c) => (c as HTMLElement).dataset.current === '1' && !(c as HTMLElement).hidden,
+        );
+        const caretOnly = current !== undefined;
+        if (this.styleButton.dataset.caret === (caretOnly ? '1' : '0') && this.styleButton.dataset.style === this.priceStyle) return;
         this.styleButton.replaceChildren();
-        const icon = priceStyleIcon(this.priceStyle);
-        // Icon-only entry (like the reference app); the label lives in the tooltip and the
-        // dropdown rows. Unknown plugin styles without an icon fall back to their label.
-        if (icon) this.styleButton.appendChild(iconEl(icon, doc));
-        else this.styleButton.appendChild(doc.createTextNode(priceStyleLabel(this.priceStyle)));
+        this.styleButton.dataset.menu = '1';
+        this.styleButton.dataset.caret = caretOnly ? '1' : '0';
+        this.styleButton.dataset.style = this.priceStyle;
+        if (!caretOnly) {
+            const icon = priceStyleIcon(this.priceStyle);
+            // Icon entry (like the reference app); the label lives in the tooltip and the dropdown
+            // rows. Unknown plugin styles without an icon fall back to their label.
+            if (icon) this.styleButton.appendChild(iconEl(icon, doc));
+            else this.styleButton.appendChild(doc.createTextNode(priceStyleLabel(this.priceStyle)));
+        }
+        this.styleButton.appendChild(iconEl('chevron-down', doc));
         this.styleButton.setAttribute('aria-label', `Chart style — ${priceStyleLabel(this.priceStyle)}`);
     }
 
