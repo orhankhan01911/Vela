@@ -770,8 +770,10 @@ export class InputsUI {
             `padding:${LEGEND_ROW_PAD_Y}px ${LEGEND_ROW_PAD_X}px;margin-left:-${LEGEND_ROW_PAD_X}px;` +
             `max-width:calc(100% + ${LEGEND_ROW_PAD_X}px);min-height:${LEGEND_ROW_MIN_H}px;box-sizing:border-box;` +
             `color:${this.theme.textColor};user-select:none;-webkit-user-select:none;`;
-        // Reveal actions only from the TITLE (not the plot-values readout). Leave still
-        // closes on the whole row so the pointer can move title → buttons without flicker.
+        // Hovering anywhere on the row (title or values) reveals its eye/gear/✕, like
+        // TradingView: a tester hovered the values, saw nothing and found no way to remove
+        // an indicator (2026-10-17). Leave closes on the whole row.
+        el.addEventListener('mouseenter', () => this.setRowHighlighted(id, true));
         el.addEventListener('mouseleave', () => { if (this.selectedId !== id) this.setRowHighlighted(id, false); });
         // Left-click the row (but not one of its control buttons) selects the indicator,
         // outlining it with the same neutral border as the settings inputs; a double-click
@@ -819,7 +821,6 @@ export class InputsUI {
         // only once the values readout has given up all its room (see valuesEl).
         const titleWrap = document.createElement('span');
         titleWrap.style.cssText = 'white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis;';
-        titleWrap.addEventListener('mouseenter', () => this.setRowHighlighted(id, true));
         const titleEl = document.createElement('span');
         titleEl.textContent = title;
         // Every indicator title reads in the chrome text color: where a study is computed
@@ -1025,8 +1026,8 @@ export class InputsUI {
     }
 
     /**
-     * Show or hide a row's outline and eye/gear/✕ controls together — driven by title
-     * hover and selection (plot values do not open the chip). An idle unselected row
+     * Show or hide a row's outline and eye/gear/✕ controls together — driven by row
+     * hover and selection. An idle unselected row
      * shows just its title (+ values). Exception: a hidden indicator keeps its eye
      * visible even when idle, so it can be un-hidden without hovering.
      */
