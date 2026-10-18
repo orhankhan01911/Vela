@@ -81,6 +81,16 @@ const SINGLE_LOAD_BARS = 5_000;
  */
 const CHUNK_BARS = 10_000;
 /**
+ * Scroll-back paging (TradingView's "more history as you scroll left or zoom out"): when the
+ * view's left edge comes within this many bars of the oldest loaded bar (or half a screen,
+ * whichever is more), the next older page loads behind the chart. A page is at least
+ * {@link PAGE_MIN_BARS} bars or two screens, and paging stops at {@link MAX_PAGED_BARS}
+ * (memory and indicator re-run cost) or at the source's first bar.
+ */
+const PAGE_EDGE_BARS = 50;
+const PAGE_MIN_BARS = 1_000;
+const MAX_PAGED_BARS = 40_000;
+/**
  * A progressive source's FIRST paint waits for at least this many bars (or the full ask,
  * whichever is smaller): the first paint is the frame the renderer sizes the view against,
  * and framing onto a 2-3 bar head draws a few giant candles that later view-preserved
@@ -175,6 +185,10 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     // ── bar replay: `rawBars` holds the history up to the cursor, the rest waits here ──
     /** Bars still hidden right of the replay cursor, oldest first; null ≡ replay off. */
     private replayQueue: OHLCV[] | null = null;
+    /** The generation whose history reached the source's first bar (scroll-back paging stops). */
+    private genesisGen = -1;
+    /** When a scroll-back page last failed (a failing source is not asked again for a while). */
+    private pageFailedAt = 0;
     private replayTimer: ReturnType<typeof setTimeout> | null = null;
     private replayPlaying = false;
     private replayIntervalMs = 1_000;
@@ -414,7 +428,41 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             }
             // An active chart-type data engine streams in newly-visible data as the user scrolls.
             if (this.activeEngineStyle) this.typeEngines.get(this.activeEngineStyle)?.onViewport?.({ from: window.left, to: window.right });
+            this.maybePageOlder(window);
         }, VIEWPORT_DEBOUNCE_MS);
+    }
+
+    /**
+     * Scroll-back paging: the view's left edge reached the oldest loaded bars, so an older page
+     * loads behind the chart, view kept in place (the same backward backfill a deeper `bars`
+     * runs). One page at a time; stops at the source's first bar, at a `from` floor and at
+     * {@link MAX_PAGED_BARS}. Not for fixed data, a replay, or a series-replacing chart type
+     * (those ask for raw depth themselves, see `ensureRawDepth`).
+     */
+    private maybePageOlder(window: VisibleBarRange): void {
+        if (this.switchingMarket || this.historyState === 'backfill' || this.replayQueue !== null) return;
+        if (!this.feed.loadRange || this.config.market.data?.length || this.activeEngineStyle) return;
+        if (this.genesisGen === this.generation || this.reachedFrom()) return;
+        if (Date.now() - this.pageFailedAt < 30_000) return;
+        const bars = this.bars;
+        const n = bars.length;
+        if (n < 2 || this.rawBars.length >= MAX_PAGED_BARS) return;
+        const firstAtOrAfter = (t: number): number => {
+            let lo = 0;
+            let hi = n;
+            while (lo < hi) {
+                const mid = (lo + hi) >> 1;
+                if (bars[mid]!.time < t) lo = mid + 1;
+                else hi = mid;
+            }
+            return lo;
+        };
+        const left = firstAtOrAfter(window.left);
+        const span = Math.max(1, firstAtOrAfter(window.right) - left);
+        if (left > Math.max(PAGE_EDGE_BARS, span / 2)) return;
+        const want = Math.min(MAX_PAGED_BARS, this.rawBars.length + Math.max(PAGE_MIN_BARS, span * 2));
+        this.resetHistoryTracking();
+        this.extendDepth(this.generation, want);
     }
 
     private async init(): Promise<void> {
@@ -1057,6 +1105,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (this.historyCompleted) return;
         this.historyCompleted = true;
         this.historyState = 'complete';
+        if (reason === 'genesis') this.genesisGen = this.generation;
+        if (reason === 'aborted') this.pageFailedAt = Date.now();
         this.notifySessionsBars('complete');
         this.events.emit('history:complete', { reason, oldestTime: this.rawBars[0]?.time ?? 0, barsLoaded: this.rawBars.length });
         this.resolveHistoryComplete();

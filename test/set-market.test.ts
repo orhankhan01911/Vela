@@ -1091,3 +1091,75 @@ describe('load states — the cleared chart + the loading affordance', () => {
         expect(renderer.loading).toBe(false);
     });
 });
+
+describe('scroll-back paging — older bars as the view nears the oldest loaded bar', () => {
+    /** Renderer whose viewport changes the test drives. */
+    class PagingRenderer extends FakeRenderer {
+        viewportCb: ((r: VisibleRange) => void) | null = null;
+        override onViewportChange(cb: (r: VisibleRange) => void): Unsubscribe {
+            this.viewportCb = cb;
+            return () => {
+                this.viewportCb = null;
+            };
+        }
+        /** Show the bars [from, to) by index of what is loaded now. */
+        show(from: number, to: number): void {
+            const b = this.bars;
+            this.viewportCb?.({ from: b[Math.max(0, from)]!.time, to: b[Math.min(b.length - 1, to)]!.time });
+        }
+    }
+    const settle = async (): Promise<void> => {
+        await new Promise((r) => setTimeout(r, 200)); // the viewport debounce
+        await flush();
+    };
+
+    it('reaching the left edge loads an older page, view kept; the middle of the chart does not', async () => {
+        const feed = new SwitchFeed();
+        feed.depth['AAA'] = 5_000;
+        const renderer = new PagingRenderer();
+        const chart = make({ symbol: 'AAA', timeframe: '60', bars: 300, volume: false }, { renderer, engines: [], dataFeed: feed });
+        await chart.ready();
+        await chart.historyComplete();
+        await flush();
+        expect(renderer.bars).toHaveLength(300);
+        const newest = renderer.bars[299]!.time;
+
+        renderer.show(200, 299); // well away from the oldest bar
+        await settle();
+        expect(renderer.bars).toHaveLength(300);
+
+        renderer.setBarsCalls = [];
+        renderer.show(10, 110); // near the oldest bar
+        await settle();
+        await chart.historyComplete();
+        await flush();
+        expect(renderer.bars.length).toBeGreaterThanOrEqual(1_300); // a page of at least 1 000 older bars
+        expect(renderer.bars[renderer.bars.length - 1]!.time).toBe(newest);
+        expect(renderer.setBarsCalls.every((c) => c.preserveView)).toBe(true);
+    });
+
+    it('stops at the source\'s first bar: no endless refetch of an empty page', async () => {
+        const feed = new SwitchFeed();
+        feed.depth['AAA'] = 400;
+        const renderer = new PagingRenderer();
+        const chart = make({ symbol: 'AAA', timeframe: '60', bars: 300, volume: false }, { renderer, engines: [], dataFeed: feed });
+        await chart.ready();
+        await chart.historyComplete();
+        await flush();
+
+        renderer.show(0, 100);
+        await settle();
+        await chart.historyComplete();
+        await flush();
+        expect(renderer.bars).toHaveLength(400); // everything the source has
+
+        renderer.show(0, 100);
+        await settle();
+        await chart.historyComplete();
+        await flush();
+        const calls = feed.rangeCalls.length;
+        renderer.show(0, 100);
+        await settle();
+        expect(feed.rangeCalls.length).toBe(calls); // genesis reached: not asked again
+    });
+});
