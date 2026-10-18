@@ -7,6 +7,7 @@ import { TrendLine } from './types/TrendLine';
 import { CyclicLines } from './types/CyclicLines';
 import { Projection } from './types/Projection';
 import { Forecast } from './types/Forecast';
+import { BarsPattern } from './types/BarsPattern';
 import { TimeCycles } from './types/TimeCycles';
 import { SineLine } from './types/SineLine';
 import { ArrowMarker } from './types/ArrowMarker';
@@ -1126,4 +1127,14 @@ registerDrawingType({
     coversSeries: true, // its plates over the candles like TradingView's
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new Forecast(init),
+});
+const BARS_PATTERN_ICON = svg24('<path d="M6 4v16M5 8h2v6H5zM12 6v12M11 9h2v5h-2zM18 3v14M17 6h2v7h-2z"/>');
+registerDrawingType({
+    type: 'barspattern',
+    group: 'measure',
+    label: 'Bars Pattern',
+    icon: BARS_PATTERN_ICON,
+    coversSeries: true, // the copy reads over the candles it is compared with
+    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    create: (init) => new BarsPattern(init),
 });

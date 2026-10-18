@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDrawing, deserializeDrawing, getDrawingType, type Projector, type SegmentDrawing, type PatternDrawing, type MeasureBox, type FixedRangeVolumeProfile, type Forecast } from '../src/core/drawings';
+import { createDrawing, deserializeDrawing, getDrawingType, type Projector, type SegmentDrawing, type PatternDrawing, type MeasureBox, type FixedRangeVolumeProfile, type Forecast, type BarsPattern } from '../src/core/drawings';
 
 /** Linear projector: x = time, y = 100 − price, single pane 'price' (200 × 100 px). */
 function proj(): Projector {
@@ -102,5 +102,22 @@ describe("TradingView's tools Vela lacked", () => {
         bars.splice(0, 0, { time: 30, open: 54, high: 61, low: 53, close: 58 });
         expect(f.status(p)).toBe('success');
         expect(f.changeLabel()).toBe('10.00 (20.00%) in 0s');
+    });
+
+    it('bars pattern: copies the bars between its points, moves as one, mirrors and flips', () => {
+        const src = [0, 10, 20].map((t, i) => ({ time: t, open: 50 + i, high: 55 + i, low: 45 + i, close: 52 + i }));
+        const p: Projector = { ...proj(), barsInRange: (from, to) => src.filter((b) => b.time >= from && b.time <= to) };
+        const d = createDrawing('barspattern', { paneId: 'price', anchors: [P(0, 40), P(20, 40)] })! as BarsPattern;
+        d.onPlaced(p);
+        expect(d.anchors[0]).toEqual({ time: 0, price: 50 });
+        expect(d.patternBars(p).map((b) => b.x)).toEqual([0, 10, 20]);
+        d.anchors = d.translateBody(100, 10, d.anchors);
+        const moved = d.patternBars(p);
+        expect(moved[0]).toEqual({ x: 100, open: 40, high: 35, low: 45, close: 38 }); // y = 100 − (60 + offset)
+        d.flipped = true;
+        expect(d.patternBars(p)[0]!.close).toBe(42); // 60 − 2 → y 40 + 2
+        const back = deserializeDrawing(d.serialize())! as BarsPattern;
+        expect(back.bars.length).toBe(3);
+        expect(back.flipped).toBe(true);
     });
 });

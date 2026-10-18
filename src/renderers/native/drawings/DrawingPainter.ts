@@ -1,5 +1,5 @@
 import type { Drawing, Projector, DrawingStyle, Box, TrendLine, TextLabel, Ellipse } from '../../../core/drawings';
-import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast } from '../../../core/drawings';
+import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP } from '../../../core/palette';
@@ -263,6 +263,10 @@ export class DrawingPainter {
         }
         if (d instanceof Forecast) {
             this.paintForecast(ctx, d, proj, theme);
+            return;
+        }
+        if (d instanceof BarsPattern) {
+            this.paintBarsPattern(ctx, d, proj, theme);
             return;
         }
         if (d instanceof PositionTool) {
@@ -655,6 +659,58 @@ export class DrawingPainter {
             ctx.fillText(label, cx, proj.height + 11.5);
             ctx.restore();
         }
+    }
+
+    /** TradingView's bars pattern: the copied bars in the tool's color (down bars filled, up bars hollow), as candles,
+     *  HL bars or a close line; a dashed span marks the range while nothing is copied yet. */
+    private paintBarsPattern(ctx: CanvasRenderingContext2D, d: BarsPattern, proj: Projector, theme: VelaTheme): void {
+        const ink = d.style.lineColor || theme.textColor;
+        const bars = d.patternBars(proj);
+        if (!bars.length) {
+            const b = d.bounds(proj);
+            if (b) this.stroke(ctx, { ...d.style, lineStyle: 'dashed' }, () => ctx.rect(b.x, b.y, b.w, b.h));
+            return;
+        }
+        const step = bars.length > 1 ? Math.abs(bars[1]!.x - bars[0]!.x) : 8;
+        const half = Math.max(1, Math.min(8, step * 0.35));
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = ink;
+        ctx.fillStyle = ink;
+        if (d.mode === 'line') {
+            ctx.beginPath();
+            bars.forEach((b, i) => (i ? ctx.lineTo(b.x, b.close) : ctx.moveTo(b.x, b.close)));
+            ctx.lineWidth = Math.max(1, d.style.lineWidth);
+            ctx.stroke();
+            ctx.restore();
+            return;
+        }
+        for (const b of bars) {
+            const x = Math.round(b.x) + 0.5;
+            ctx.beginPath();
+            ctx.moveTo(x, b.high);
+            ctx.lineTo(x, b.low);
+            if (d.mode === 'bars') {
+                ctx.moveTo(x - half, b.open);
+                ctx.lineTo(x, b.open);
+                ctx.moveTo(x, b.close);
+                ctx.lineTo(x + half, b.close);
+                ctx.stroke();
+                continue;
+            }
+            ctx.stroke();
+            const top = Math.min(b.open, b.close);
+            const h = Math.max(1, Math.abs(b.close - b.open));
+            if (b.close > b.open) ctx.fillRect(x - half, top, half * 2, h); // pixel y grows down: a down bar
+            else {
+                ctx.fillStyle = theme.background;
+                ctx.fillRect(x - half, top, half * 2, h);
+                ctx.fillStyle = ink;
+                ctx.strokeRect(x - half, top, half * 2, h);
+            }
+        }
+        ctx.restore();
     }
 
     /** TradingView's forecast: the curve, a plate under the source (price, time), the change above the target and,

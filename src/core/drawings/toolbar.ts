@@ -72,7 +72,7 @@ const ELLIOTT_TYPES: DrawingTypeKey[] = ['elliottimpulse', 'elliottcorrection', 
 const HARMONIC_TYPES: DrawingTypeKey[] = ['gartley', 'bat', 'butterfly', 'crab', 'shark', 'cypher'];
 
 const MEASUREMENT_TYPES: DrawingTypeKey[] = ['position', 'forecast', 'projection', 'daterange', 'pricerange', 'datepricerange', 'magnifier'];
-const CYCLE_TYPES: DrawingTypeKey[] = ['cycliclines', 'timecycles', 'sineline'];
+const CYCLE_TYPES: DrawingTypeKey[] = ['cycliclines', 'timecycles', 'sineline', 'barspattern'];
 const VOLUME_TYPES: DrawingTypeKey[] = ['anchoredvwap', 'fixedrangevp', 'anchoredvp'];
 const TIME_PRICE_TYPES: DrawingTypeKey[] = ['fixedrangetpo'];
 

@@ -35,6 +35,7 @@ export type DrawingTypeKey =
     | 'anchoredvp'
     | 'projection'
     | 'forecast'
+    | 'barspattern'
     | 'fixedrangetpo'
     | 'pricealert'
     | 'pitchfork'
