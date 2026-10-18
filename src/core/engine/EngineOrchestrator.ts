@@ -1712,6 +1712,9 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             data: this.dataControl,
             pushData: (data) => this.renderer.setNativeData?.(id, data),
             pushPending: (ranges) => this.renderer.setNativeData?.(`${id}-pending`, ranges),
+            saveSettings: (values) => {
+                if (this.typeEngines.get(id) === engine) this.renderer.applyConfig?.({ chartTypes: { [id]: values } });
+            },
             ...series,
         });
     }

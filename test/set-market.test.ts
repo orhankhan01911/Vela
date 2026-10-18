@@ -137,6 +137,17 @@ class FakeRenderer implements IChartRenderer {
     timeline: string[] = [];
     applyFeature(): void {}
     readFeature(key: string): unknown { return key === 'priceStyle' ? this.priceStyleFeature : undefined; }
+    // chart-type settings bags (`chartTypes.<id>`), the slice of applyConfig the type engines use
+    typeBags: Record<string, Record<string, unknown>> = {};
+    private typeSettingsCbs: ((typeId: string, values: Record<string, unknown>) => void)[] = [];
+    onChartTypeSettingsChange(cb: (typeId: string, values: Record<string, unknown>) => void): () => void { this.typeSettingsCbs.push(cb); return () => {}; }
+    applyConfig(config: unknown): void {
+        const ct = (config as { chartTypes?: Record<string, Record<string, unknown>> }).chartTypes ?? {};
+        for (const [id, vals] of Object.entries(ct)) {
+            this.typeBags[id] = { ...(this.typeBags[id] ?? {}), ...vals };
+            for (const cb of this.typeSettingsCbs) cb(id, { ...this.typeBags[id] });
+        }
+    }
     mount(_c: HTMLElement, _t: VelaTheme): void {}
     setTheme(): void {}
     resize(): void {}
@@ -626,6 +637,39 @@ describe('setMarket — in-place market switch', () => {
         expect(stops).toBe(1); // the old engine was stopped (its host captured the old market)
         expect(hosts).toHaveLength(2);
         expect(hosts[1]!.symbol).toBe('BBB');
+    });
+
+    it('an engine saves its own settings: they come back through onSettings and seed the next market\'s engine', async () => {
+        const hosts: SeriesDataEngineHost[] = [];
+        const seen: Record<string, unknown>[][] = [];
+        registerChartType({
+            id: 'probe-style',
+            dataEngine: () => {
+                const mine: Record<string, unknown>[] = [];
+                seen.push(mine);
+                return {
+                    start: (host) => { hosts.push(host); },
+                    onSettings: (v) => { mine.push(v); },
+                    suspend: () => {}, resume: () => {}, stop: () => {},
+                };
+            },
+        });
+        const feed = new SwitchFeed();
+        const renderer = new FakeRenderer();
+        renderer.priceStyleFeature = 'probe-style';
+        const chart = make({ symbol: 'AAA', timeframe: '60', volume: false }, { renderer, engines: [], dataFeed: feed });
+        await chart.ready();
+        await flush();
+        hosts[0]!.saveSettings?.({ boxFor: 'AAA', box: 25 });
+        expect(renderer.typeBags['probe-style']).toEqual({ boxFor: 'AAA', box: 25 });
+        expect(seen[0]).toContainEqual({ boxFor: 'AAA', box: 25 });
+
+        await chart.setMarket({ symbol: 'BBB' });
+        await flush();
+        expect(hosts[1]!.symbol).toBe('BBB');
+        expect(seen[1]![0]).toEqual({ boxFor: 'AAA', box: 25 }); // seeded before start
+        hosts[0]!.saveSettings?.({ box: 1 }); // the stopped engine's late save is dropped
+        expect(renderer.typeBags['probe-style']!.box).toBe(25);
     });
 
     it('an identity switch silences the active type engine and blanks its channels for the gap', async () => {

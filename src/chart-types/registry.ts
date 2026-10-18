@@ -62,6 +62,13 @@ export interface SeriesDataEngineHost {
      * replay is running, for an offline series, or when that many bars are already held.
      */
     ensureDepth?: (bars: number) => void;
+    /**
+     * Store values in the type's own settings bag (`chartTypes.<id>`), exactly as the settings dialog does: they
+     * persist with the chart, reach the renderer's `<id>-settings` channel and come back through `onSettings`. For
+     * an engine that keeps state tied to the market, e.g. a Renko box size typed for one symbol and converted for
+     * the next. Ignored once the engine is no longer this chart's engine for the type.
+     */
+    saveSettings?: (values: Record<string, unknown>) => void;
 }
 
 /**

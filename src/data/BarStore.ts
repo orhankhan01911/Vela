@@ -58,10 +58,7 @@ export class BarStore {
     /** Merge `bars` into the series (dedup by time, incoming wins); keeps it sorted. Returns the merged set. */
     merge(key: string, bars: OHLCV[]): OHLCV[] {
         if (bars.length === 0) return this.series.get(key) ?? [];
-        const byTime = new Map<number, OHLCV>();
-        for (const b of this.series.get(key) ?? []) byTime.set(b.time, b);
-        for (const b of bars) byTime.set(b.time, b);
-        const merged = [...byTime.values()].sort((a, b) => a.time - b.time);
+        const merged = mergeSorted(this.series.get(key) ?? [], bars);
         this.series.set(key, merged);
         return merged;
     }
@@ -120,3 +117,52 @@ export class BarStore {
 
 /** Shared module-level store — survives chart re-creation so re-runs reuse bars. */
 export const sharedBarStore = new BarStore();
+
+/** Sorted by time with unique times (the shape every merged series has). */
+function isSortedUnique(bars: readonly OHLCV[]): boolean {
+    for (let i = 1; i < bars.length; i++) if (!(bars[i]!.time > bars[i - 1]!.time)) return false;
+    return true;
+}
+
+/** `bars` sorted by time, one bar per time (the LAST one given wins), as a new array. */
+function sortedUnique(bars: readonly OHLCV[]): OHLCV[] {
+    const byTime = new Map<number, OHLCV>();
+    for (const b of bars) byTime.set(b.time, b);
+    return [...byTime.values()].sort((a, b) => a.time - b.time);
+}
+
+/**
+ * `incoming` merged into `held` (dedup by time, incoming wins), sorted. Linear: a deep backfill merges a chunk into
+ * a held series of hundreds of thousands of one-second bars once per chunk, and the old Map + sort of everything
+ * cost ~0.3 s a chunk at 380 000 bars (2026-10-18). A chunk wholly before or after the held bars is one concat.
+ */
+export function mergeSorted(held: readonly OHLCV[], incoming: readonly OHLCV[]): OHLCV[] {
+    const inc = isSortedUnique(incoming) ? incoming : sortedUnique(incoming);
+    if (!isSortedUnique(held)) return sortedUnique([...held, ...inc]);
+    if (held.length === 0) return inc.slice();
+    if (inc[inc.length - 1]!.time < held[0]!.time) return inc.concat(held);
+    if (inc[0]!.time > held[held.length - 1]!.time) return held.concat(inc);
+    const out: OHLCV[] = new Array(held.length + inc.length);
+    let i = 0;
+    let j = 0;
+    let n = 0;
+    while (i < held.length && j < inc.length) {
+        const a = held[i]!;
+        const b = inc[j]!;
+        if (a.time < b.time) {
+            out[n++] = a;
+            i++;
+        } else if (b.time < a.time) {
+            out[n++] = b;
+            j++;
+        } else {
+            out[n++] = b;
+            j++;
+            i++;
+        }
+    }
+    while (i < held.length) out[n++] = held[i++]!;
+    while (j < inc.length) out[n++] = inc[j++]!;
+    out.length = n;
+    return out;
+}
