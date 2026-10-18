@@ -10,6 +10,8 @@ export interface RadialGeom {
     R0: number;
     a0: number;
     a1: number;
+    /** Vertical radius ÷ horizontal radius (an ellipse); absent ⇒ 1, a circle. */
+    sy?: number;
 }
 
 /** True if a cursor angle falls within the arc sweep [a0, a1] (a0 ≤ a1, going clockwise on canvas). */
@@ -46,11 +48,14 @@ export abstract class RadialFib extends FibRatios {
     override hitTest(px: number, py: number, proj: Projector, tol: number): boolean {
         const g = this.radial(proj);
         if (g) {
-            const dist = Math.hypot(px - g.cx, py - g.cy);
-            const ang = Math.atan2(py - g.cy, px - g.cx);
+            // On an ellipse, measure in the circle it is squashed from (close enough for a few px of tolerance).
+            const sy = g.sy && g.sy > 1e-6 ? g.sy : 1;
+            const dy = (py - g.cy) / sy;
+            const dist = Math.hypot(px - g.cx, dy);
+            const ang = Math.atan2(dy, px - g.cx);
             if (angleInSweep(ang, g.a0, g.a1)) {
                 for (const lv of this.levels) {
-                    if (lv.enabled && Math.abs(dist - g.R0 * lv.ratio) <= tol) return true;
+                    if (lv.enabled && Math.abs(dist - g.R0 * lv.ratio) <= tol / Math.min(1, sy)) return true;
                 }
             }
         }

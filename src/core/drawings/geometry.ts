@@ -30,6 +30,8 @@ export interface SegmentGeometry {
     segments: Array<[number, number, number, number]>;
     /** A polygon `[x, y][]` to fill between lines, or null when there's no fill. */
     fill: Array<[number, number]> | null;
+    /** Thin dashed guide segments (a channel's middle line), drawn in the line color; not grabbable. */
+    dashed?: Array<[number, number, number, number]>;
 }
 
 /**

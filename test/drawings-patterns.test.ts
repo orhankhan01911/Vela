@@ -42,13 +42,26 @@ describe('drawings/patterns', () => {
         expect(d.priceRange()).toEqual({ min: 40, max: 70 });
     });
 
-    it('Elliott impulse / correction label 1–5 and A–C with no ratios', () => {
-        const imp = createDrawing('elliottimpulse', { paneId: 'price', anchors: [at(0, 10), at(1, 20), at(2, 15), at(3, 30), at(4, 25)] })! as PatternDrawing;
-        expect(imp.vertexLabels()).toEqual(['1', '2', '3', '4', '5']);
+    it("Elliott impulse / correction start at an unlabelled origin like TradingView's (0, 1–5 and 0, A–C), no ratios", () => {
+        const imp = createDrawing('elliottimpulse', { paneId: 'price', anchors: [at(0, 5), at(1, 10), at(2, 20), at(3, 15), at(4, 30), at(5, 25)] })! as PatternDrawing;
+        expect(imp.anchorSchema().min).toBe(6);
+        expect(imp.vertexLabels()).toEqual(['', '1', '2', '3', '4', '5']);
         expect(imp.legRatios()).toBe(false);
-        const corr = createDrawing('elliottcorrection', { paneId: 'price', anchors: [at(0, 30), at(1, 20), at(2, 26)] })! as PatternDrawing;
-        expect(corr.anchorSchema().min).toBe(3);
-        expect(corr.vertexLabels()).toEqual(['A', 'B', 'C']);
+        const corr = createDrawing('elliottcorrection', { paneId: 'price', anchors: [at(0, 20), at(1, 30), at(2, 20), at(3, 26)] })! as PatternDrawing;
+        expect(corr.anchorSchema().min).toBe(4);
+        expect(corr.vertexLabels()).toEqual(['', 'A', 'B', 'C']);
+        // A new one round-trips with its origin point.
+        const back = deserializeDrawing(imp.serialize())! as PatternDrawing;
+        expect(back.anchorSchema().min).toBe(6);
+    });
+
+    it('Elliott waves saved before the origin point keep their old 5 / 3 points and labels', () => {
+        const oldImp = deserializeDrawing({ id: 'e1', type: 'elliottimpulse', paneId: 'price', anchors: [at(0, 10), at(1, 20), at(2, 15), at(3, 30), at(4, 25)], style: { lineColor: '#fff', lineWidth: 1, lineStyle: 'solid' } } as never)! as PatternDrawing;
+        expect(oldImp.anchorSchema().min).toBe(5);
+        expect(oldImp.vertexLabels()).toEqual(['1', '2', '3', '4', '5']);
+        expect(deserializeDrawing(oldImp.serialize())!.anchorSchema().min).toBe(5); // stays old after a save
+        const oldCorr = deserializeDrawing({ id: 'e2', type: 'elliottcorrection', paneId: 'price', anchors: [at(0, 30), at(1, 20), at(2, 26)], style: { lineColor: '#fff', lineWidth: 1, lineStyle: 'solid' } } as never)! as PatternDrawing;
+        expect(oldCorr.vertexLabels()).toEqual(['A', 'B', 'C']);
     });
 
     it('Head & shoulders has 7 vertices, peaks labelled, neckline through the troughs', () => {

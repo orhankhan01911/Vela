@@ -67,6 +67,9 @@ export const TEXT_FIELDS: SettingsField[] = [
     { path: 'text.italic', label: 'Italic', kind: 'boolean', group: 'text' },
 ];
 
+/** TradingView's "Price label" on horizontal line / ray / cross line: the price in a chip on the price scale. */
+export const SHOW_PRICE_FIELD: SettingsField = { path: 'showPrice', label: 'Price label on the scale', kind: 'boolean', group: 'behavior' };
+
 /** TradingView's text alignment on line tools (horizontal line and ray, trend lines, arrows, vertical line) and boxes
  *  (inside the box). Along
  *  a sloped line, left / center / right are its left end, middle and right end on screen; on a vertical line they

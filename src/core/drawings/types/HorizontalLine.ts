@@ -1,12 +1,23 @@
 import { Drawing, type AnchorSlot } from '../Drawing';
 import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
-import { LINE_FIELDS, LINE_TEXT_ALIGN_FIELDS, TEXT_FIELDS } from '../schema';
+import { LINE_FIELDS, LINE_TEXT_ALIGN_FIELDS, SHOW_PRICE_FIELD, TEXT_FIELDS } from '../schema';
 import { handleAt } from '../hittest';
 
-/** A single-price horizontal line spanning the full plot width. */
+/** A single-price horizontal line spanning the full plot width. Like TradingView's, it shows its price on the
+ *  price scale unless `showPrice` is off. */
 export class HorizontalLine extends Drawing {
     readonly type = 'hline' as const;
+    // `!` (no initializer): the base constructor runs readProps first. Absent ⇒ shown (TradingView's default).
+    showPrice!: boolean;
+
+    protected override writeProps(): Record<string, unknown> {
+        return { showPrice: this.showPrice !== false };
+    }
+
+    protected override readProps(props: Record<string, unknown>): void {
+        if (typeof props.showPrice === 'boolean') this.showPrice = props.showPrice;
+    }
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         // One anchor; only its price (y) matters — its time pins the drag handle.
@@ -50,6 +61,6 @@ export class HorizontalLine extends Drawing {
     }
 
     schema(): SettingsSchema {
-        return { fields: [...LINE_FIELDS, ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS] };
+        return { fields: [...LINE_FIELDS, SHOW_PRICE_FIELD, ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS] };
     }
 }

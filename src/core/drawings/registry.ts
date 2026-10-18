@@ -149,7 +149,15 @@ export function resetDrawingSettings(drawing: Drawing): void {
 /** Rehydrate a {@link Drawing} from a plain record, or null for an unknown type. */
 export function deserializeDrawing(doc: SerializedDrawing): Drawing | null {
     const meta = REGISTRY.get(doc.type);
-    return meta ? meta.create(doc) : null;
+    return meta ? meta.create(legacyElliott(doc)) : null;
+}
+
+/** Elliott waves gained TradingView's unlabelled origin point (impulse 5 → 6 points, correction 3 → 4). A record
+ *  saved before that has the old count and no `origin` flag: mark it so it keeps its old shape and labels. */
+function legacyElliott(doc: SerializedDrawing): SerializedDrawing {
+    const old = doc.type === 'elliottimpulse' ? 5 : doc.type === 'elliottcorrection' ? 3 : 0;
+    if (!old || doc.props?.origin !== undefined || (doc.anchors?.length ?? 0) !== old) return doc;
+    return { ...doc, props: { ...(doc.props ?? {}), origin: false } };
 }
 
 // ── built-in lean-core types ──

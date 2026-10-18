@@ -4,12 +4,25 @@ import type { SettingsSchema } from '../schema';
 import { LINE_FIELDS, TEXT_FIELDS, LINE_TEXT_ALIGN_FIELDS } from '../schema';
 import { distToSegment, handleAt } from '../hittest';
 
-/** A two-point trend line. Both endpoints move freely on time + price. */
+/** A two-point trend line. Both endpoints move freely on time + price. Like TradingView's, it can extend past
+ *  either point to the pane edge and carry an arrow at either end. */
 export class TrendLine extends Drawing {
     readonly type = 'trendline' as const;
+    // `!` (no initializer): the base constructor runs readProps before subclass fields would initialize.
+    extendLeft!: boolean;
+    extendRight!: boolean;
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         return { min: 2, max: 2, slots: [{ role: 'p1', free: 'both' }, { role: 'p2', free: 'both' }] };
+    }
+
+    protected override writeProps(): Record<string, unknown> {
+        return { extendLeft: !!this.extendLeft, extendRight: !!this.extendRight };
+    }
+
+    protected override readProps(props: Record<string, unknown>): void {
+        if (typeof props.extendLeft === 'boolean') this.extendLeft = props.extendLeft;
+        if (typeof props.extendRight === 'boolean') this.extendRight = props.extendRight;
     }
 
     private pixels(proj: Projector): [number, number, number, number] | null {
@@ -22,8 +35,21 @@ export class TrendLine extends Drawing {
         return [proj.xOf(a.time), y1, proj.xOf(b.time), y2];
     }
 
-    hitTest(px: number, py: number, proj: Projector, tol: number): boolean {
+    /** The segment as drawn, left point first: an extended side is carried to the pane edge (x = 0 or width). */
+    drawnPixels(proj: Projector): [number, number, number, number] | null {
         const p = this.pixels(proj);
+        if (!p || (!this.extendLeft && !this.extendRight)) return p;
+        let [x1, y1, x2, y2] = p;
+        if (Math.abs(x2 - x1) < 1e-6) return p; // vertical: nothing to extend along x
+        if (x1 > x2) [x1, y1, x2, y2] = [x2, y2, x1, y1];
+        const slope = (y2 - y1) / (x2 - x1);
+        if (this.extendLeft) { y1 += (0 - x1) * slope; x1 = 0; }
+        if (this.extendRight) { y2 += (proj.width - x2) * slope; x2 = proj.width; }
+        return [x1, y1, x2, y2];
+    }
+
+    hitTest(px: number, py: number, proj: Projector, tol: number): boolean {
+        const p = this.drawnPixels(proj);
         return p != null && distToSegment(px, py, p[0], p[1], p[2], p[3]) <= tol;
     }
 
@@ -51,11 +77,25 @@ export class TrendLine extends Drawing {
         return { min: Math.min(a.price, b.price), max: Math.max(a.price, b.price) };
     }
 
+    // An extended side reaches the pane edge, so it stays visible however far the points scroll off.
+    override timeExtent(): { min: number; max: number } | null {
+        const a = this.anchors[0];
+        const b = this.anchors[1];
+        if (!a || !b) return null;
+        return {
+            min: this.extendLeft ? Number.NEGATIVE_INFINITY : Math.min(a.time, b.time),
+            max: this.extendRight ? Number.POSITIVE_INFINITY : Math.max(a.time, b.time),
+        };
+    }
+
     schema(): SettingsSchema {
         return {
             fields: [
                 ...LINE_FIELDS,
-                { path: 'style.arrowRight', label: 'Arrow', kind: 'boolean', group: 'line' },
+                { path: 'style.arrowLeft', label: 'Left end arrow', kind: 'boolean', group: 'line' },
+                { path: 'style.arrowRight', label: 'Right end arrow', kind: 'boolean', group: 'line' },
+                { path: 'extendLeft', label: 'Extend left', kind: 'boolean', group: 'behavior' },
+                { path: 'extendRight', label: 'Extend right', kind: 'boolean', group: 'behavior' },
                 ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS,
             ],
         };

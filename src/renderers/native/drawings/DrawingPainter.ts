@@ -1,4 +1,4 @@
-import type { Drawing, Projector, DrawingStyle } from '../../../core/drawings';
+import type { Drawing, Projector, DrawingStyle, Box, TrendLine } from '../../../core/drawings';
 import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, Note, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
@@ -333,12 +333,19 @@ export class DrawingPainter {
             case 'arrow': {
                 const pts = d.handlePoints(proj);
                 if (pts.length < 2) return;
+                // A trend line may extend past either point (TradingView); the arrow tool never does.
+                const tl = d.type === 'trendline' ? (d as TrendLine) : null;
+                const seg = tl?.drawnPixels(proj) ?? [pts[0]![0], pts[0]![1], pts[1]![0], pts[1]![1]];
                 this.stroke(ctx, d.style, () => {
-                    ctx.moveTo(pts[0]![0], pts[0]![1]);
-                    ctx.lineTo(pts[1]![0], pts[1]![1]);
+                    ctx.moveTo(seg[0], seg[1]);
+                    ctx.lineTo(seg[2], seg[3]);
                 });
-                if (d.style.arrowRight) this.paintArrowhead(ctx, pts[0]!, pts[1]!, d.style);
-                if (d.style.arrowLeft) this.paintArrowhead(ctx, pts[1]!, pts[0]!, d.style);
+                // An end's arrow sits on its point, unless the line carries on past that point.
+                const firstIsLeft = pts[0]![0] <= pts[1]![0];
+                const firstExtended = !!tl && (firstIsLeft ? tl.extendLeft : tl.extendRight);
+                const secondExtended = !!tl && (firstIsLeft ? tl.extendRight : tl.extendLeft);
+                if (d.style.arrowRight && !secondExtended) this.paintArrowhead(ctx, pts[0]!, pts[1]!, d.style);
+                if (d.style.arrowLeft && !firstExtended) this.paintArrowhead(ctx, pts[1]!, pts[0]!, d.style);
                 break;
             }
             case 'ellipse': {
@@ -444,9 +451,12 @@ export class DrawingPainter {
             case 'box': {
                 const pts = d.handlePoints(proj);
                 if (pts.length < 2) return;
-                const x = Math.min(pts[0]![0], pts[1]![0]);
+                // TradingView's rectangle: a side can extend to the pane edge (that side has no border then).
+                const bx = d as Box;
+                const span = bx.spanX(proj) ?? { x1: Math.min(pts[0]![0], pts[1]![0]), x2: Math.max(pts[0]![0], pts[1]![0]) };
+                const x = span.x1;
                 const y = Math.min(pts[0]![1], pts[1]![1]);
-                const w = Math.abs(pts[1]![0] - pts[0]![0]);
+                const w = span.x2 - span.x1;
                 const h = Math.abs(pts[1]![1] - pts[0]![1]);
                 if (d.style.fillColor) {
                     ctx.save();
@@ -456,8 +466,27 @@ export class DrawingPainter {
                     ctx.restore();
                 }
                 this.applyStroke(ctx, d.style);
-                ctx.strokeRect(x, y, w, h);
+                if (!bx.extendLeft && !bx.extendRight) ctx.strokeRect(x, y, w, h);
+                else {
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x + w, y);
+                    ctx.moveTo(x, y + h);
+                    ctx.lineTo(x + w, y + h);
+                    if (!bx.extendLeft) { ctx.moveTo(x, y); ctx.lineTo(x, y + h); }
+                    if (!bx.extendRight) { ctx.moveTo(x + w, y); ctx.lineTo(x + w, y + h); }
+                    ctx.stroke();
+                }
                 ctx.setLineDash([]);
+                if (bx.middleLine) {
+                    ctx.save();
+                    this.applyStroke(ctx, { ...d.style, lineStyle: 'dashed', lineWidth: 1 });
+                    ctx.beginPath();
+                    ctx.moveTo(x, y + h / 2);
+                    ctx.lineTo(x + w, y + h / 2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
                 break;
             }
             default:
@@ -554,6 +583,39 @@ export class DrawingPainter {
         ctx.textBaseline = 'alphabetic';
     }
 
+    /** TradingView's price label for horizontal lines / rays / cross lines: each one's price in a chip of its line
+     *  color on the price scale, right of the plot (the alert marker's chip). Its own pass on the top canvas, for
+     *  every visible drawing: one painted under the candles lives on a plot-sized layer that cannot reach the axis. */
+    paintAxisPrices(ctx: CanvasRenderingContext2D, drawings: readonly Drawing[], proj: Projector, theme: VelaTheme): void {
+        for (const d of drawings) {
+            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs) || !showsAxisPrice(d)) continue;
+            const a = d.anchors[0];
+            const y = a ? proj.yOf(a.price, d.paneId) : null;
+            const rect = proj.paneRect?.(d.paneId);
+            if (!a || y == null || (rect && (rect.height <= 0 || y < rect.top || y > rect.top + rect.height))) continue;
+            this.paintAxisPrice(ctx, d, y, proj, theme);
+        }
+    }
+
+    private paintAxisPrice(ctx: CanvasRenderingContext2D, d: Drawing, y: number, proj: Projector, theme: VelaTheme): void {
+        const a = d.anchors[0]!;
+        const W = proj.width;
+        const ink = d.style.lineColor || theme.textColor;
+        const priceStr = a.price >= 100 ? a.price.toFixed(2) : formatPriceTag(a.price);
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.font = `600 11px ${theme.fontFamily}`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        const chipW = Math.max(54, ctx.measureText(priceStr).width + 14);
+        roundRect(ctx, W + 1, y - 9.5, chipW, 19, 4);
+        ctx.fillStyle = ink;
+        ctx.fill();
+        ctx.fillStyle = contrastColor(ink);
+        ctx.fillText(priceStr, W + 8, y + 0.5);
+        ctx.restore();
+    }
+
     /** Paint a concentric-ring fib tool (circles / arcs / wedge): each enabled level as an arc of
      *  radius R0·ratio over the tool's angular sweep, plus any bounding lines + a ratio label per ring. */
     private paintRadialFib(ctx: CanvasRenderingContext2D, d: RadialFib, proj: Projector, theme: VelaTheme): void {
@@ -567,14 +629,16 @@ export class DrawingPainter {
                 const r = g.R0 * lv.ratio;
                 if (r < 0.5) continue;
                 this.applyStroke(ctx, { ...d.style, lineColor: lv.color });
+                const sy = g.sy ?? 1;
                 ctx.beginPath();
-                ctx.arc(g.cx, g.cy, r, g.a0, g.a1);
+                if (sy === 1) ctx.arc(g.cx, g.cy, r, g.a0, g.a1);
+                else ctx.ellipse(g.cx, g.cy, r, r * sy, 0, g.a0, g.a1);
                 ctx.stroke();
                 ctx.setLineDash([]);
                 ctx.fillStyle = lv.color;
                 ctx.font = font;
                 ctx.textAlign = 'left';
-                ctx.fillText(String(lv.ratio), g.cx + Math.cos(mid) * r + 3, g.cy + Math.sin(mid) * r);
+                ctx.fillText(String(lv.ratio), g.cx + Math.cos(mid) * r + 3, g.cy + Math.sin(mid) * r * sy);
             }
             ctx.textBaseline = 'alphabetic';
             ctx.textAlign = 'left';
@@ -1760,6 +1824,12 @@ export class DrawingPainter {
                 ctx.lineTo(s[2], s[3]);
             });
         }
+        for (const s of g.dashed ?? []) {
+            this.stroke(ctx, { ...d.style, lineStyle: 'dashed', lineWidth: 1 }, () => {
+                ctx.moveTo(s[0], s[1]);
+                ctx.lineTo(s[2], s[3]);
+            });
+        }
     }
 
     /** Paint an info line: the segment + a midpoint box reading price change, percent, and bar count
@@ -1939,6 +2009,11 @@ function isTransparent(color: string): boolean {
 }
 
 /** Format a price for a Price Label tag — decimals scaled to the magnitude, with grouping. */
+/** A horizontal line / ray / cross line whose price label is on (TradingView's default: absent ⇒ on). */
+function showsAxisPrice(d: Drawing): boolean {
+    return (d.type === 'hline' || d.type === 'hray' || d.type === 'crossline') && (d as { showPrice?: boolean }).showPrice !== false;
+}
+
 function formatPriceTag(p: number): string {
     const d = valueDecimals(p);
     return p.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -2122,8 +2197,10 @@ export function labelLayout(d: Drawing, proj: Projector): {
         case 'box': {
             // TradingView's rectangle text: inside the box, at its left / center / right and top / middle / bottom.
             if (pts.length < 2) return null;
-            const x1 = Math.min(pts[0]![0], pts[1]![0]);
-            const x2 = Math.max(pts[0]![0], pts[1]![0]);
+            // An extended side moves that edge to the pane edge.
+            const span = (d as Box).spanX?.(proj);
+            const x1 = span?.x1 ?? Math.min(pts[0]![0], pts[1]![0]);
+            const x2 = span?.x2 ?? Math.max(pts[0]![0], pts[1]![0]);
             const y1 = Math.min(pts[0]![1], pts[1]![1]);
             const y2 = Math.max(pts[0]![1], pts[1]![1]);
             const h = lh * lines;

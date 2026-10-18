@@ -24,10 +24,20 @@ describe('drawings/FibCircles', () => {
     });
 
     it('hit-tests concentric rings at R0·ratio (full circles)', () => {
+        // A vertical pair spans no rectangle: a circle through both points, centred between them (50,35), radius 15.
         const d = make();
-        expect(d.hitTest(80, 50, proj, 2)).toBe(true); // ring 1 (radius 30) to the right of center
-        expect(d.hitTest(50, 65, proj, 2)).toBe(true); // ring 0.5 (radius 15) below center
-        expect(d.hitTest(50, 50, proj, 2)).toBe(false); // dead center — no zero-radius ring
+        expect(d.hitTest(65, 35, proj, 2)).toBe(true); // ring 1 to the right of center
+        expect(d.hitTest(50, 42.5, proj, 2)).toBe(true); // ring 0.5 (radius 7.5) below center
+        expect(d.hitTest(50, 35, proj, 2)).toBe(false); // dead center — no zero-radius ring
+    });
+
+    it("centres on the middle of the two points and fits level 1 in their rectangle, like TradingView's", () => {
+        // px (20,30) and (80,50): centre (50,40), half-width 30, half-height 10.
+        const d = createDrawing('fibcircles', { paneId: 'price', anchors: [{ time: 20, price: 70 }, { time: 80, price: 50 }] })!;
+        expect(d.hitTest(80, 40, proj, 2)).toBe(true); // level 1, right end
+        expect(d.hitTest(50, 50, proj, 2)).toBe(true); // level 1, bottom
+        expect(d.hitTest(65, 40, proj, 2)).toBe(true); // level 0.5, right end
+        expect(d.hitTest(50, 40, proj, 2)).toBe(false);
     });
 
     it('reports the anchor price span + round-trips', () => {
