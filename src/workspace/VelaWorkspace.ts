@@ -334,6 +334,7 @@ export class VelaWorkspace {
     private favs: string[] = [];
     /** Favorite timeframes — the shared topbar's quick-switch chips, one set for the grid. */
     private tfFavs: string[] = [];
+    private styleFavs: string[] = [];
     /** Live sync configuration (mutable copy of the option). */
     private readonly syncOpts: SyncOptions = {};
     // ── persistence (state surface + adapter plumbing) ──
@@ -450,6 +451,7 @@ export class VelaWorkspace {
         this.timezone = boot?.timezone ?? opts.timezone ?? 'Etc/UTC';
         if (boot?.favorites) this.favs = [...boot.favorites];
         if (boot?.timeframeFavorites) this.tfFavs = [...boot.timeframeFavorites];
+        if (boot?.styleFavorites) this.styleFavs = [...boot.styleFavorites];
         const sync = boot?.sync ?? opts.sync;
         for (const kind of SYNC_KINDS) this.applySyncSetting(kind, sync?.[kind]);
         // Single-chart mode pins the grid to '1' — a persisted document's layout is
@@ -548,6 +550,8 @@ export class VelaWorkspace {
             onTimeframe: (tf) => this.setActiveTimeframe(tf),
             onTimeframeFavorite: (tf, on) => this.setTimeframeFavorite(tf, on),
             onPriceStyle: (style) => this.active.setPriceStyle(style),
+            styleFavorites: this.styleFavs,
+            onStyleFavorite: (style, on) => this.setStyleFavorite(style, on),
             // Single-chart mode: no layout block at all — the topbar renders no layout
             // button and no sync switches (see TopbarOptions.layout).
             layout: this.monoLayout ? undefined : {
@@ -993,6 +997,7 @@ export class VelaWorkspace {
         if (this.activeId) state.activeCellId = this.activeId;
         if (this.favs.length > 0) state.favorites = [...this.favs];
         if (this.tfFavs.length > 0) state.timeframeFavorites = [...this.tfFavs];
+        if (this.styleFavs.length > 0) state.styleFavorites = [...this.styleFavs];
         if (this.trackSizes.size > 0) state.trackSizes = Object.fromEntries([...this.trackSizes].map(([k, v]) => [k, { ...v }]));
         const panels = this.dock.getState();
         if (panels) state.panels = panels;
@@ -1034,6 +1039,10 @@ export class VelaWorkspace {
         if (st.timeframeFavorites) {
             this.tfFavs = [...st.timeframeFavorites];
             this.topbar.setTimeframeFavorites(this.tfFavs);
+        }
+        if (st.styleFavorites) {
+            this.styleFavs = [...st.styleFavorites];
+            this.topbar.setStyleFavorites(this.styleFavs);
         }
         // Absent in documents written before the dock existed — those leave the column closed.
         this.dock.applyState(st.panels);
@@ -2180,6 +2189,14 @@ export class VelaWorkspace {
         if (on === this.tfFavs.includes(tf)) return;
         this.tfFavs = on ? [tf, ...this.tfFavs] : this.tfFavs.filter((f) => f !== tf);
         this.topbar.setTimeframeFavorites(this.tfFavs);
+        this.markStateDirty();
+    }
+
+    /** Star/unstar a chart type — a WORKSPACE preference like the timeframe favorites. */
+    private setStyleFavorite(style: string, on: boolean): void {
+        if (on === this.styleFavs.includes(style)) return;
+        this.styleFavs = on ? [...this.styleFavs, style] : this.styleFavs.filter((f) => f !== style);
+        this.topbar.setStyleFavorites(this.styleFavs);
         this.markStateDirty();
     }
 

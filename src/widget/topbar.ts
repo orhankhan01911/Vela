@@ -61,6 +61,24 @@ const CSS = `
 .vela-widget-tf-chips { display: inline-flex; align-items: center; gap: 2px; }
 .vela-widget-tf-chips:empty { display: none; }
 .vela-widget-tf[data-current='1'] { background: var(--vela-hover-strong); color: var(--vela-fg-bright); }
+/* Favorite chart types: icon buttons before the chart-type button, the current one highlighted. */
+.vela-widget-style-chips { display: inline-flex; align-items: center; gap: 2px; }
+.vela-widget-style-chips:empty { display: none; }
+.vela-widget-style-chip {
+    all: unset;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--vela-fg-muted);
+}
+.vela-widget-style-chip:hover { background: var(--vela-hover); color: var(--vela-fg-bright); }
+.vela-widget-style-chip:focus-visible { outline: 2px solid var(--vela-focus); outline-offset: -2px; }
+.vela-widget-style-chip[hidden] { display: none; }
+.vela-widget-style-chip[data-current='1'] { background: var(--vela-hover-strong); color: var(--vela-fg-bright); }
 .vela-widget-tf-caret {
     all: unset;
     display: inline-flex;
@@ -184,6 +202,13 @@ export interface TopbarOptions {
      *  chips never render — the host owns (and persists) the favorite set. */
     onTimeframeFavorite?: (tf: string, on: boolean) => void;
     onPriceStyle: (style: string) => void;
+    /** Favorite chart types — quick-switch icon buttons before the chart-type button, stars in its
+     *  menu rows (TradingView's favorite chart types). Push later changes with
+     *  {@link Topbar.setStyleFavorites}. */
+    styleFavorites?: readonly string[];
+    /** A chart-type menu star was toggled. Omitted, the menu carries no stars and no buttons
+     *  render — the host owns (and persists) the favorite set. */
+    onStyleFavorite?: (style: string, on: boolean) => void;
     /** Optional workspace LAYOUT dropdown (rendered after the style dropdown when
      *  given) — the grid-canvas picker composing uniform grids, with the workspace
      *  SYNC switches beside it. Everything is read live, so plugin-registered
@@ -233,6 +258,9 @@ export class Topbar {
     private readonly tfMenu: IntervalMenu;
     private readonly offIntervals: () => void;
     private readonly styleMenu: Menu;
+    /** Favorite chart types (quick-switch buttons) and the element holding their buttons. */
+    private styleFavs: string[] = [];
+    private readonly styleChipsHost: HTMLElement;
     private readonly tooltips: Tooltip[] = [];
     private readonly actionsHost: HTMLElement;
     /** Left-aligned contributed actions (`align: 'left'`) — right after the dropdowns. */
@@ -269,10 +297,13 @@ export class Topbar {
         const win = this.el.ownerDocument.defaultView;
         this.hairlineRaf = win?.requestAnimationFrame(() => {
             this.hairlineRaf = 0;
+            this.fitStyleChips();
             this.syncHairlines();
         }) ?? 0;
     };
     private hairlineRo: ResizeObserver | null = null;
+    /** Host additions to the bar (controls placed next to the chart-type button) change its width too. */
+    private barMo: MutationObserver | null = null;
     private hairlineRaf = 0;
 
     constructor(host: HTMLElement, opts: TopbarOptions) {
@@ -308,6 +339,9 @@ export class Topbar {
         this.styleButton = doc.createElement('button');
         this.styleButton.className = 'vela-widget-style';
         this.renderStyleButton(doc);
+        this.styleFavs = [...(opts.styleFavorites ?? [])];
+        this.styleChipsHost = doc.createElement('span');
+        this.styleChipsHost.className = 'vela-widget-style-chips';
         // No callback ⇒ no button: a host hiding the built-in picker (composition
         // without 'indicators', or the deprecated `indicatorPicker: false`) must not
         // show a dead entry point. An OVERRIDE of the slot renders through
@@ -402,7 +436,7 @@ export class Topbar {
                 case 'timeframes':
                     return [tfGroup];
                 case 'style':
-                    return [this.styleButton];
+                    return [this.styleChipsHost, this.styleButton];
                 case 'layout':
                     return this.layoutButton ? [this.layoutButton] : [];
                 case 'indicators':
@@ -442,6 +476,11 @@ export class Topbar {
         this.hairlineRo = new ResizeObserver(this.onHairlineSync);
         this.hairlineRo.observe(this.el);
         doc.defaultView?.addEventListener('resize', this.onHairlineSync);
+        if (typeof MutationObserver !== 'undefined') {
+            // Direct children only, plus `data-on` flips: the chips' own `hidden` toggles must not retrigger.
+            this.barMo = new MutationObserver(this.onHairlineSync);
+            this.barMo.observe(this.el, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-on'] });
+        }
         this.renderActions();
 
         this.tooltips.push(new Tooltip(this.tfCaret, { content: 'Timeframe', triggerId: 'vela-topbar-tf', host }));
@@ -484,7 +523,9 @@ export class Topbar {
             items: this.styleItems(),
             onSelect: (id) => opts.onPriceStyle(id),
             iconBadges: true,
+            ...(opts.onStyleFavorite ? { onFavorite: (id: string, on: boolean) => opts.onStyleFavorite!(id, on) } : {}),
         });
+        this.renderStyleChips();
     }
 
     setSymbol(symbol: string): void {
@@ -562,10 +603,60 @@ export class Topbar {
         this.onHairlineSync(); // the cluster width changed
     }
 
+    /** Reflect the favorite chart-type set — the quick-switch buttons and the menu stars. */
+    setStyleFavorites(favs: readonly string[]): void {
+        this.styleFavs = [...favs];
+        this.styleMenu.setItems(this.styleItems());
+        this.renderStyleChips();
+    }
+
+    /** Icon buttons for the starred chart types, in menu order; the current one highlighted. */
+    private renderStyleChips(): void {
+        const doc = this.el.ownerDocument;
+        this.styleChipsHost.replaceChildren();
+        if (this.opts.onStyleFavorite === undefined) return;
+        const listed = new Set(priceStyleIds().filter((id) => !chartType(id)?.intervalOnly));
+        for (const id of priceStyleIds()) {
+            if (!listed.has(id) || !this.styleFavs.includes(id)) continue;
+            const b = doc.createElement('button');
+            b.className = 'vela-widget-style-chip';
+            const label = priceStyleLabel(id);
+            const icon = priceStyleIcon(id);
+            if (icon) b.appendChild(iconEl(icon, doc));
+            else b.textContent = label;
+            b.title = label;
+            if (id === this.priceStyle) {
+                b.dataset.current = '1';
+                b.setAttribute('aria-current', 'true');
+                b.setAttribute('aria-label', `${label} (current chart type)`);
+            } else {
+                b.setAttribute('aria-label', `Switch chart type to ${label}`);
+            }
+            b.addEventListener('click', () => this.opts.onPriceStyle(id));
+            this.styleChipsHost.appendChild(b);
+        }
+        this.onHairlineSync();
+    }
+
+    /** A narrow bar drops favorite chart-type buttons from the end (the current one last) until the
+     *  bar fits, so the right-side actions stay on screen. The chart-type menu still lists them all. */
+    private fitStyleChips(): void {
+        const chips = [...this.styleChipsHost.children] as HTMLElement[];
+        if (chips.length === 0) return;
+        for (const c of chips) c.hidden = false;
+        // Others from the end first; the current one last (the chart-type button shows it anyway).
+        const order = [...chips.filter((c) => c.dataset.current !== '1').reverse(), ...chips.filter((c) => c.dataset.current === '1')];
+        for (const chip of order) {
+            if (this.el.scrollWidth <= this.el.clientWidth + 1) break;
+            chip.hidden = true;
+        }
+    }
+
     setPriceStyle(style: string): void {
         this.priceStyle = style;
         this.renderStyleButton(this.styleButton.ownerDocument);
         this.styleMenu.setItems(this.styleItems());
+        this.renderStyleChips();
         // Turning tick/range… bars on or off changes the interval label.
         this.renderTfChips();
     }
@@ -701,6 +792,7 @@ export class Topbar {
         this.hairlineRo?.disconnect();
         const win = this.el.ownerDocument.defaultView;
         win?.removeEventListener('resize', this.onHairlineSync);
+        this.barMo?.disconnect();
         if (this.hairlineRaf) win?.cancelAnimationFrame(this.hairlineRaf);
         this.tfMenu.destroy();
         this.offIntervals();
@@ -752,6 +844,7 @@ export class Topbar {
             icon: priceStyleIcon(id),
             checked: id === this.priceStyle,
             separatorBefore: i === BUILTIN_PRICE_STYLES.length,
+            ...(this.opts.onStyleFavorite ? { favorite: this.styleFavs.includes(id) } : {}),
         }));
     }
 }

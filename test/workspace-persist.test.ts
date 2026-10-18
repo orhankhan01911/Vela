@@ -164,6 +164,13 @@ describe('sanitizeState (the applyState gate)', () => {
         expect(empty!.timeframeFavorites).toBeUndefined();
     });
 
+    it('keeps favorite chart types (string entries only, empty sets dropped)', () => {
+        const doc = sanitizeState({ version: 1, layout: '1', styleFavorites: ['candles', 3, 'renko'], charts: [] });
+        expect(doc!.styleFavorites).toEqual(['candles', 'renko']);
+        const empty = sanitizeState({ version: 1, layout: '1', styleFavorites: [null], charts: [] });
+        expect(empty!.styleFavorites).toBeUndefined();
+    });
+
     it('dedupes chart entries by id — the LAST duplicate wins', () => {
         const doc = sanitizeState({
             version: 1,

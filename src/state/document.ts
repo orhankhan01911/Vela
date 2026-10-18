@@ -133,6 +133,8 @@ export interface WorkspaceState {
     favorites?: string[];
     /** Favorite timeframes (the topbar's quick-switch chips) — a SHARED preference. */
     timeframeFavorites?: string[];
+    /** Favorite chart types (the topbar's quick-switch icon buttons) — a SHARED preference. */
+    styleFavorites?: string[];
     /** The docked side panels: which one is open, and the widths the user dragged. */
     panels?: PanelsState;
     /** Per-chart state, one entry per SLOT (a single `c1` entry for the widget).
@@ -198,6 +200,10 @@ export function sanitizeState(doc: unknown): WorkspaceState | null {
     if (Array.isArray(d.timeframeFavorites)) {
         const favs = d.timeframeFavorites.filter((f): f is string => typeof f === 'string');
         if (favs.length > 0) out.timeframeFavorites = favs;
+    }
+    if (Array.isArray(d.styleFavorites)) {
+        const favs = d.styleFavorites.filter((f): f is string => typeof f === 'string');
+        if (favs.length > 0) out.styleFavorites = favs;
     }
     const sync = sanitizeSync(d.sync);
     if (sync) out.sync = sync;
