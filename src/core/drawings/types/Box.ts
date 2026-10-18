@@ -1,7 +1,7 @@
 import { Drawing, type AnchorSlot } from '../Drawing';
 import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
-import { LINE_FIELDS, TEXT_FIELDS } from '../schema';
+import { LINE_FIELDS, LINE_TEXT_ALIGN_FIELDS, TEXT_FIELDS } from '../schema';
 import { distToSegment, handleAt, pointInBox } from '../hittest';
 
 /** A rectangle defined by two opposite corners. Optional fill + border. */
@@ -64,6 +64,8 @@ export class Box extends Drawing {
                 ...LINE_FIELDS.map((f) => ({ ...f, label: f.label.replace('Line', 'Border') })),
                 { path: 'style.fillColor', label: 'Fill color', kind: 'color', group: 'fill' },
                 ...TEXT_FIELDS,
+                // TradingView's rectangle text alignment (inside the box).
+                ...LINE_TEXT_ALIGN_FIELDS,
             ],
         };
     }

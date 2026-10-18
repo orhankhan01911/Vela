@@ -2120,8 +2120,18 @@ export function labelLayout(d: Drawing, proj: Projector): {
             };
         }
         case 'box': {
+            // TradingView's rectangle text: inside the box, at its left / center / right and top / middle / bottom.
             if (pts.length < 2) return null;
-            return { x: (pts[0]![0] + pts[1]![0]) / 2, top: (pts[0]![1] + pts[1]![1]) / 2 - (lh * lines) / 2, align: 'center' };
+            const x1 = Math.min(pts[0]![0], pts[1]![0]);
+            const x2 = Math.max(pts[0]![0], pts[1]![0]);
+            const y1 = Math.min(pts[0]![1], pts[1]![1]);
+            const y2 = Math.max(pts[0]![1], pts[1]![1]);
+            const h = lh * lines;
+            const pad = 4;
+            const ha = text.hAlign ?? 'center';
+            const x = ha === 'left' ? x1 + pad : ha === 'right' ? x2 - pad : (x1 + x2) / 2;
+            const top = text.vAlign === 'top' ? y1 + pad : text.vAlign === 'bottom' ? y2 - pad - h : (y1 + y2) / 2 - h / 2;
+            return { x, top, align: ha };
         }
         default:
             return pts[0] ? { x: pts[0][0], top: pts[0][1], align: 'left' } : null;

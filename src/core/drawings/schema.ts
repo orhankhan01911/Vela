@@ -67,7 +67,8 @@ export const TEXT_FIELDS: SettingsField[] = [
     { path: 'text.italic', label: 'Italic', kind: 'boolean', group: 'text' },
 ];
 
-/** TradingView's text alignment on line tools (horizontal line and ray, trend lines, arrows, vertical line). Along
+/** TradingView's text alignment on line tools (horizontal line and ray, trend lines, arrows, vertical line) and boxes
+ *  (inside the box). Along
  *  a sloped line, left / center / right are its left end, middle and right end on screen; on a vertical line they
  *  are left of / on / right of it, and top / middle / bottom are those of the pane. */
 export const LINE_TEXT_ALIGN_FIELDS: SettingsField[] = [
