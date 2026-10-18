@@ -1,7 +1,7 @@
 import type { Projector } from '../geometry';
 import { extendRay } from '../hittest';
 import { FibRatios, type FibEntryLine, type FibLevel } from './FibRatios';
-import { fibLevels, LEVEL_AMBER, LEVEL_AQUA, LEVEL_BLUE, LEVEL_GREEN, LEVEL_ORANGE, LEVEL_PURPLE, LEVEL_RED, LEVEL_TEAL, LEVEL_UNITY } from '../levelPalette';
+import { fibLevels, LEVEL_AQUA, LEVEL_BLUE, LEVEL_CYAN, LEVEL_GREEN, LEVEL_ORANGE, LEVEL_PINK, LEVEL_RED, LEVEL_TEAL, LEVEL_UNITY } from '../levelPalette';
 
 /**
  * The Gann angles: price-per-time ratios relative to the 1×1 (the line through the second
@@ -10,22 +10,74 @@ import { fibLevels, LEVEL_AMBER, LEVEL_AQUA, LEVEL_BLUE, LEVEL_GREEN, LEVEL_ORAN
 const GANN_FAN_LEVELS = fibLevels([
     { ratio: 0.125, color: LEVEL_RED, label: '1/8' },
     { ratio: 0.25, color: LEVEL_ORANGE, label: '1/4' },
-    { ratio: 0.333, color: LEVEL_AMBER, label: '1/3' },
+    { ratio: 0.333, color: LEVEL_CYAN, label: '1/3' },
     { ratio: 0.5, color: LEVEL_GREEN, label: '1/2' },
     { ratio: 1, color: LEVEL_UNITY, label: '1/1' },
     { ratio: 2, color: LEVEL_TEAL, label: '2/1' },
     { ratio: 3, color: LEVEL_BLUE, label: '3/1' },
     { ratio: 4, color: LEVEL_AQUA, label: '4/1' },
-    { ratio: 8, color: LEVEL_PURPLE, label: '8/1' },
+    { ratio: 8, color: LEVEL_PINK, label: '8/1' },
 ]);
 
 /**
  * A Gann fan — rays from the first anchor at the Gann angles, scaled so the 1×1 passes
  * through the second anchor (which sets the price-per-time unit). Each angle is an editable
- * level (color / enabled / label) via the gear panel; rendered by the shared fib painter.
+ * level (color / enabled / label) via the gear panel; rendered by the shared fib painter. Like TradingView's, the
+ * wedges between neighbouring angles are filled (`background`, on by default) and the labels can be hidden.
  */
 export class GannFan extends FibRatios {
     readonly type = 'gannfan' as const;
+    // `!` (no initializer): the base constructor runs readProps first; the constructor fills the defaults.
+    background!: boolean;
+    fillOpacity!: number;
+    showLabels!: boolean;
+
+    constructor(init: ConstructorParameters<typeof FibRatios>[0]) {
+        super(init);
+        if (this.background === undefined) this.background = true;
+        if (this.fillOpacity === undefined) this.fillOpacity = 0.2;
+        if (this.showLabels === undefined) this.showLabels = true;
+    }
+
+    protected override writeProps(): Record<string, unknown> {
+        return { ...super.writeProps(), background: this.background, fillOpacity: this.fillOpacity, showLabels: this.showLabels };
+    }
+
+    protected override readProps(props: Record<string, unknown>): void {
+        super.readProps(props);
+        if (typeof props.background === 'boolean') this.background = props.background;
+        if (typeof props.fillOpacity === 'number') this.fillOpacity = Math.min(1, Math.max(0, props.fillOpacity));
+        if (typeof props.showLabels === 'boolean') this.showLabels = props.showLabels;
+    }
+
+    /** The wedge between each pair of neighbouring enabled angles, in the steeper one's color. */
+    override fillPolygons(proj: Projector): Array<{ color: string; pts: Array<[number, number]> }> {
+        const a = this.anchors[0];
+        const b = this.anchors[1];
+        if (!this.background || !a || !b) return [];
+        const x0 = proj.xOf(a.time);
+        const y0 = proj.yOf(a.price, this.paneId);
+        if (y0 == null) return [];
+        const xb = proj.xOf(b.time);
+        const far = (ratio: number): [number, number] | null => {
+            const ty = proj.yOf(a.price + (b.price - a.price) * ratio, this.paneId);
+            if (ty == null) return null;
+            const dx = xb - x0;
+            const dy = ty - y0;
+            const len = Math.hypot(dx, dy);
+            if (len < 1e-6) return null;
+            const k = 1e5 / len; // well past every pane edge; the canvas clips it
+            return [x0 + dx * k, y0 + dy * k];
+        };
+        const on = this.levels.filter((l) => l.enabled).sort((p, q) => p.ratio - q.ratio);
+        const out: Array<{ color: string; pts: Array<[number, number]> }> = [];
+        for (let i = 1; i < on.length; i += 1) {
+            const p = far(on[i - 1]!.ratio);
+            const q = far(on[i]!.ratio);
+            if (p && q) out.push({ color: on[i]!.color, pts: [[x0, y0], p, q] });
+        }
+        return out;
+    }
 
     defaultLevels(): readonly FibLevel[] {
         return GANN_FAN_LEVELS;
@@ -52,7 +104,7 @@ export class GannFan extends FibRatios {
                 y1,
                 x2,
                 y2,
-                numberText: lv.label ?? String(lv.ratio),
+                numberText: this.showLabels === false ? '' : lv.label ?? String(lv.ratio),
                 numberX: xb + 5,
                 numberY: ty,
                 numberAlign: 'left',

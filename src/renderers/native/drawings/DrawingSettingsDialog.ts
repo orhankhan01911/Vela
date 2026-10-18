@@ -4,6 +4,10 @@ import {
     DIRECTION_OPTIONS,
     FibLevels,
     FibRetracement,
+    GannBox,
+    GannFan,
+    GannSquare,
+    PitchforkBase,
     FixedRangeVolumeProfile,
     FixedRangeTpoProfile,
     INTERVAL_UNITS,
@@ -926,6 +930,67 @@ export class DrawingSettingsDialog {
         grid.appendChild(fieldSection('Levels', { variant: 'inputs' }));
     }
 
+    /** TradingView's Gann settings: fills (fan wedges, square arc rings, box rows / columns) and which labels show. */
+    private buildGannStyle(grid: HTMLElement, g: GannFan | GannSquare | GannBox, actions: SettingsActions): void {
+        const toggle = (label: string, key: string, on: boolean): void => {
+            grid.appendChild(fieldRow({ label, bool: true, toggle: { checked: on, onChange: (v) => actions.patch({ [key]: v }) } }));
+        };
+        grid.appendChild(fieldSection('Style', { variant: 'inputs', first: true }));
+        if (g instanceof GannBox) {
+            toggle('Price background', 'fillPrice', g.fillPrice);
+            toggle('Time background', 'fillTime', g.fillTime);
+        } else toggle(g instanceof GannSquare ? 'Arcs background' : 'Background', 'background', g.background);
+        const op = buildFieldControl({
+            kind: 'number',
+            value: Math.round(g.fillOpacity * 100),
+            min: 0,
+            max: 100,
+            step: 1,
+            fill: false,
+            commit: 'blur',
+            onChange: (n) => actions.patch({ fillOpacity: Math.min(100, Math.max(0, n)) / 100 }),
+        });
+        grid.appendChild(fieldRow({ label: 'Background opacity %', control: [op.el] }));
+        grid.appendChild(fieldSection('Labels', { variant: 'inputs' }));
+        if (g instanceof GannBox) {
+            toggle('Left labels', 'labelsLeft', g.labelsLeft);
+            toggle('Right labels', 'labelsRight', g.labelsRight);
+            toggle('Top labels', 'labelsTop', g.labelsTop);
+            toggle('Bottom labels', 'labelsBottom', g.labelsBottom);
+        } else toggle('Labels', 'showLabels', g.showLabels);
+        grid.appendChild(fieldSection('Levels', { variant: 'inputs' }));
+    }
+
+    /** TradingView's pitchfork settings: the median's color, the band fills and extending the lines back. */
+    private buildPitchforkStyle(grid: HTMLElement, pf: PitchforkBase, actions: SettingsActions): void {
+        grid.appendChild(fieldSection('Style', { variant: 'inputs', first: true }));
+        let cur = pf.medianColor || pf.style.lineColor;
+        const median = buildFieldControl({
+            kind: 'color',
+            theme: this.theme,
+            get: () => cur,
+            onChange: (v) => {
+                cur = v;
+                actions.patch({ medianColor: v });
+            },
+        });
+        grid.appendChild(fieldRow({ label: 'Median', control: [median.el] }));
+        grid.appendChild(fieldRow({ label: 'Extend lines', bool: true, toggle: { checked: pf.extendLines, onChange: (v) => actions.patch({ extendLines: v }) } }));
+        grid.appendChild(fieldRow({ label: 'Background', bool: true, toggle: { checked: pf.background, onChange: (v) => actions.patch({ background: v }) } }));
+        const op = buildFieldControl({
+            kind: 'number',
+            value: Math.round(pf.fillOpacity * 100),
+            min: 0,
+            max: 100,
+            step: 1,
+            fill: false,
+            commit: 'blur',
+            onChange: (n) => actions.patch({ fillOpacity: Math.min(100, Math.max(0, n)) / 100 }),
+        });
+        grid.appendChild(fieldRow({ label: 'Background opacity %', control: [op.el] }));
+        grid.appendChild(fieldSection('Levels', { variant: 'inputs' }));
+    }
+
     private buildLevels(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
         const levels = drawing.editableLevels();
         if (!levels) return;
@@ -942,6 +1007,8 @@ export class DrawingSettingsDialog {
             }));
         }
         if (drawing instanceof FibLevels) this.buildFibStyle(grid, drawing, actions);
+        if (drawing instanceof GannFan || drawing instanceof GannSquare || drawing instanceof GannBox) this.buildGannStyle(grid, drawing, actions);
+        if (drawing instanceof PitchforkBase) this.buildPitchforkStyle(grid, drawing, actions);
         if (drawing instanceof FibRetracement) {
             const fib = drawing;
             grid.appendChild(fieldRow({

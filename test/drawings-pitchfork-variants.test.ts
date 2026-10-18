@@ -74,7 +74,8 @@ describe('drawings/ModifiedSchiffPitchfork', () => {
 
 describe('drawings/InsidePitchfork', () => {
     const proj = fakeProjector();
-    const make = () => createDrawing('insidepitchfork', { paneId: 'price', anchors: forkAnchors })!;
+    // Tines only (level 1), so the hit checks see the median, tines and connectors alone (not the 0.5 lines).
+    const make = () => createDrawing('insidepitchfork', { paneId: 'price', anchors: forkAnchors, props: { levels: [{ ratio: 1, color: '#2962ff', enabled: true }] } })!;
 
     it('anchors the median at M with slope d = p3 − midpoint(p1,p2)', () => {
         const d = make();

@@ -149,7 +149,7 @@ export function resetDrawingSettings(drawing: Drawing): void {
 /** Rehydrate a {@link Drawing} from a plain record, or null for an unknown type. */
 export function deserializeDrawing(doc: SerializedDrawing): Drawing | null {
     const meta = REGISTRY.get(doc.type);
-    return meta ? meta.create(legacyComment(legacyElliott(doc))) : null;
+    return meta ? meta.create(legacyPitchfork(legacyComment(legacyElliott(doc)))) : null;
 }
 
 /** Elliott waves gained TradingView's unlabelled origin point (impulse 5 → 6 points, correction 3 → 4). A record
@@ -166,6 +166,15 @@ function legacyComment(doc: SerializedDrawing): SerializedDrawing {
     if (doc.type !== 'comment' || doc.props?.point !== undefined || (doc.anchors?.length ?? 0) !== 2) return doc;
     return { ...doc, props: { ...(doc.props ?? {}), point: false } };
 }
+
+/** Pitchforks gained TradingView's levels, fills and median color. A record saved before has no `levels`: give it
+ *  just the tines (level 1) in its line color, no fill and a median in the line color, so it draws as it did. */
+function legacyPitchfork(doc: SerializedDrawing): SerializedDrawing {
+    if (!PITCHFORK_TYPES.has(doc.type) || doc.props?.levels !== undefined) return doc;
+    const ink = doc.style?.lineColor ?? DEFAULT_DRAWING_COLOR;
+    return { ...doc, props: { ...(doc.props ?? {}), levels: [{ ratio: 1, color: ink, enabled: true }], background: false, medianColor: '' } };
+}
+const PITCHFORK_TYPES: ReadonlySet<string> = new Set(['pitchfork', 'schiffpitchfork', 'modifiedschiffpitchfork', 'insidepitchfork']);
 
 // ── built-in lean-core types ──
 // Trend line: the segment ends at two hollow anchor handles (TradingView-style toolbar glyph).

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDrawing, deserializeDrawing, TrendLine, Comment, Signpost, NOTE_PIN, statsOf, lineStatsRows, formatSpan, type Projector, type SegmentDrawing } from '../src/core/drawings';
+import { createDrawing, deserializeDrawing, TrendLine, Comment, Signpost, NOTE_PIN, GannFan, GannSquare, GannBox, TextLabel, PitchforkBase, statsOf, lineStatsRows, formatSpan, type Projector, type SegmentDrawing } from '../src/core/drawings';
 
 /** Linear projector: x = time, y = 100 − price, single pane 'price' (200 × 100 px). */
 function proj(): Projector {
@@ -116,5 +116,58 @@ describe('drawing settings TradingView has', () => {
         expect(n.hitTest(90, 45, proj(), 0)).toBe(false); // no text plate to hit while hidden
         expect(paths('note', 1)).toContain('showText');
         expect(createDrawing('note', { paneId: 'price', anchors: [{ time: 50, price: 50 }], props: { showText: true } })!.serialize().props).toEqual({ showText: true });
+    });
+
+    it('Gann fills like TradingView: fan wedges and square arc rings on, box rows / columns off until switched on', () => {
+        const two = [{ time: 40, price: 40 }, { time: 80, price: 60 }];
+        const fan = createDrawing('gannfan', { paneId: 'price', anchors: two })! as GannFan;
+        expect(fan.fillPolygons(proj()).length).toBe(fan.levels.filter((l) => l.enabled).length - 1);
+        fan.background = false;
+        expect(fan.fillPolygons(proj())).toEqual([]);
+        expect(deserializeDrawing(fan.serialize())!.serialize().props).toMatchObject({ background: false, showLabels: true });
+        const sq = createDrawing('gannsquare', { paneId: 'price', anchors: two })! as GannSquare;
+        expect(sq.fillPolygons(proj()).length).toBe(4); // one ring per arc
+        const box = createDrawing('gannbox', { paneId: 'price', anchors: two })! as GannBox;
+        expect(box.fillBands(proj())).toEqual([]);
+        box.fillPrice = true;
+        box.fillTime = true;
+        expect(box.fillBands(proj()).length).toBe(12); // 6 rows + 6 columns between the 7 levels
+        box.labelsRight = true;
+        box.labelsLeft = false;
+        const lines = box.entryLines(proj())!;
+        expect(lines.some((l) => l.numberAlign === 'left' && l.numberText === '0.5')).toBe(true);
+        expect(lines.some((l) => l.numberAlign === 'right' && l.numberText !== '')).toBe(false);
+    });
+
+    it('text: background, border and word wrap round-trip; a wrapped text is no wider than its wrap width', () => {
+        const long = 'one two three four five six seven eight nine ten eleven twelve';
+        const t = createDrawing('text', { paneId: 'price', anchors: [{ time: 50, price: 50 }], text: { value: long, size: 'normal' } as never })! as TextLabel;
+        expect(t.serialize().props).toBeUndefined(); // plain text stays as before
+        const wide = t.bounds(proj())!.w;
+        t.applySettings({ background: true, border: true, wordWrap: true, wrapWidth: 120 });
+        expect(t.bounds(proj())!.w).toBeLessThan(wide);
+        expect(t.bounds(proj())!.w).toBe(128);
+        const back = deserializeDrawing(t.serialize())! as TextLabel;
+        expect([back.background, back.border, back.wrapPx()]).toEqual([true, true, 120]);
+        for (const p of ['background', 'backgroundColor', 'border', 'borderColor', 'wordWrap', 'wrapWidth']) expect(paths('text', 1)).toContain(p);
+    });
+
+    it('pitchforks: TradingView levels (0.5 + 1 on), band fills and a red median; old saved ones draw as before', () => {
+        const three = [{ time: 40, price: 50 }, { time: 80, price: 70 }, { time: 80, price: 30 }];
+        for (const type of ['pitchfork', 'schiffpitchfork', 'modifiedschiffpitchfork', 'insidepitchfork'] as const) {
+            const pf = createDrawing(type, { paneId: 'price', anchors: three })! as PitchforkBase;
+            const g = pf.geometry(proj())!;
+            expect(g.colored!.length).toBe(1 + 2 * 2); // median + levels 0.5 and 1 on both sides
+            expect(g.fills!.length).toBe(4); // 0→0.5 and 0.5→1, each side
+            expect(pf.editableLevels()!.map((l) => l.ratio)).toEqual([0.25, 0.382, 0.5, 0.618, 0.75, 1, 1.5, 1.75, 2]);
+            const old = deserializeDrawing({ id: 'p', type, paneId: 'price', anchors: three, style: { lineColor: '#123456', lineWidth: 1, lineStyle: 'solid' } } as never)! as PitchforkBase;
+            const og = old.geometry(proj())!;
+            expect(og.fills).toEqual([]);
+            expect(og.colored!.map((c) => c.color)).toEqual(['#123456', '#123456', '#123456']); // median + the two tines
+        }
+        // Andrews: the tines are the level-1 lines through p2 / p3; the 0.5 lines run halfway to the median.
+        const pf = createDrawing('pitchfork', { paneId: 'price', anchors: three })! as PitchforkBase;
+        const starts = pf.geometry(proj())!.colored!.slice(1).map((c) => c.seg[1]);
+        expect(starts.map((y) => Math.round(y))).toEqual([40, 60, 30, 70]); // y 50 ± 10 (0.5) and ± 20 (1)
     });
 });

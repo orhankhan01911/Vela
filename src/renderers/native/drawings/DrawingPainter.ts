@@ -1,4 +1,4 @@
-import type { Drawing, Projector, DrawingStyle, Box, TrendLine } from '../../../core/drawings';
+import type { Drawing, Projector, DrawingStyle, Box, TrendLine, TextLabel } from '../../../core/drawings';
 import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
@@ -515,7 +515,32 @@ export class DrawingPainter {
         ctx.textAlign = layout.align;
         ctx.fillStyle = text.color ?? theme.textColor;
         const lh = labelLineHeight(fs);
-        const lines = text.value.split('\n');
+        const tl = d.type === 'text' ? (d as TextLabel) : null;
+        const wrap = tl?.wrapPx() ?? null;
+        const lines = wrap == null ? text.value.split('\n') : wrapLines(ctx, text.value, wrap);
+        if (tl && (tl.background || tl.border)) {
+            // TradingView's text background / border: a plate around the lines, the frame's own inset.
+            const w = Math.max(8, wrap ?? 0, ...lines.map((l) => ctx.measureText(l).width));
+            const bx = layout.x - TEXT_FRAME_INSET;
+            const by = layout.top - (lh - fs) / 2 - TEXT_FRAME_RISE;
+            const bw = (wrap ?? w) + TEXT_FRAME_INSET * 2;
+            const bh = lines.length * lh + TEXT_FRAME_RISE * 2;
+            const ink = text.color ?? theme.textColor;
+            ctx.save();
+            ctx.setLineDash([]);
+            roundRect(ctx, bx, by, bw, bh, 4);
+            if (tl.background) {
+                ctx.fillStyle = tl.backgroundColor ?? withAlpha(DEFAULT_DRAWING_COLOR, 0.3);
+                ctx.fill();
+            }
+            if (tl.border) {
+                ctx.lineWidth = 1;
+                ctx.strokeStyle = tl.borderColor ?? ink;
+                ctx.stroke();
+            }
+            ctx.restore();
+            ctx.fillStyle = ink;
+        }
         lines.forEach((line, i) => ctx.fillText(line, layout.x, layout.top + i * lh));
         if (d.type === 'text') this.paintTextFrame(ctx, d.id, layout.x, layout.top, lines, fs, theme);
         ctx.restore();
@@ -551,6 +576,18 @@ export class DrawingPainter {
             ctx.globalAlpha = fillAlpha * ctx.globalAlpha;
             ctx.fillStyle = band.color;
             ctx.fillRect(band.x, band.y, band.w, band.h);
+            ctx.restore();
+        }
+        for (const poly of d.fillPolygons(proj)) {
+            if (poly.pts.length < 3) continue;
+            ctx.save();
+            ctx.globalAlpha = fillAlpha * ctx.globalAlpha;
+            ctx.fillStyle = poly.color;
+            ctx.beginPath();
+            ctx.moveTo(poly.pts[0]![0], poly.pts[0]![1]);
+            for (let i = 1; i < poly.pts.length; i += 1) ctx.lineTo(poly.pts[i]![0], poly.pts[i]![1]);
+            ctx.closePath();
+            ctx.fill();
             ctx.restore();
         }
         if ((d as { trendline?: unknown }).trendline === true) {
@@ -1974,6 +2011,24 @@ export class DrawingPainter {
             ctx.fill();
             ctx.restore();
         }
+        for (const f of g.fills ?? []) {
+            if (f.pts.length < 3) continue;
+            ctx.save();
+            ctx.globalAlpha = (g.fillAlpha ?? 0.2) * ctx.globalAlpha;
+            ctx.fillStyle = f.color;
+            ctx.beginPath();
+            ctx.moveTo(f.pts[0]![0], f.pts[0]![1]);
+            for (let i = 1; i < f.pts.length; i += 1) ctx.lineTo(f.pts[i]![0], f.pts[i]![1]);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+        for (const { seg: s, color } of g.colored ?? []) {
+            this.stroke(ctx, { ...d.style, lineColor: color }, () => {
+                ctx.moveTo(s[0], s[1]);
+                ctx.lineTo(s[2], s[3]);
+            });
+        }
         for (const s of g.segments) {
             this.stroke(ctx, d.style, () => {
                 ctx.moveTo(s[0], s[1]);
@@ -2148,6 +2203,24 @@ function showsAxisTime(d: Drawing): boolean {
 function formatPriceTag(p: number): string {
     const d = valueDecimals(p);
     return p.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+/** Split text into lines no wider than `width` px at the context's current font, breaking at spaces (a single word
+ *  longer than the width keeps its own line); explicit newlines still break. */
+function wrapLines(ctx: CanvasRenderingContext2D, text: string, width: number): string[] {
+    const out: string[] = [];
+    for (const para of text.split('\n')) {
+        let line = '';
+        for (const word of para.split(' ')) {
+            const next = line ? `${line} ${word}` : word;
+            if (line && ctx.measureText(next).width > width) {
+                out.push(line);
+                line = word;
+            } else line = next;
+        }
+        out.push(line);
+    }
+    return out;
 }
 
 /** Begin a rounded-rectangle path (arcTo-based, no `ctx.roundRect` dependency). */

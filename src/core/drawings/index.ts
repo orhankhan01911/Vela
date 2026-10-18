@@ -95,6 +95,7 @@ export { PriceNote } from './types/PriceNote';
 export { Comment } from './types/Comment';
 export { Signpost, SIGNPOST_R } from './types/Signpost';
 export { GannFan } from './types/GannFan';
+export { PitchforkBase, PITCHFORK_LEVELS, PITCHFORK_MEDIAN, type PitchforkFrame } from './types/PitchforkBase';
 export { GannBox } from './types/GannBox';
 export { GannSquare, GANN_SQUARE_ARCS } from './types/GannSquare';
 export {

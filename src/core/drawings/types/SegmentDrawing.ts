@@ -16,6 +16,7 @@ export abstract class SegmentDrawing extends Drawing {
         const g = this.geometry(proj);
         if (!g) return false;
         if (this.style.fillColor && g.fill && pointInPolygon(px, py, g.fill)) return true;
+        if (g.colored?.some(({ seg: s }) => distToSegment(px, py, s[0], s[1], s[2], s[3]) <= tol)) return true;
         return g.segments.some((s) => distToSegment(px, py, s[0], s[1], s[2], s[3]) <= tol);
     }
 

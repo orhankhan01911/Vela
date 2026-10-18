@@ -32,6 +32,11 @@ export interface SegmentGeometry {
     fill: Array<[number, number]> | null;
     /** Thin dashed guide segments (a channel's middle line), drawn in the line color; not grabbable. */
     dashed?: Array<[number, number, number, number]>;
+    /** Segments in their own colors (pitchfork levels and median), grabbable like `segments`. */
+    colored?: Array<{ seg: [number, number, number, number]; color: string }>;
+    /** Filled areas in their own colors, painted first at `fillAlpha` (pitchfork level bands). */
+    fills?: Array<{ color: string; pts: Array<[number, number]> }>;
+    fillAlpha?: number;
 }
 
 /**

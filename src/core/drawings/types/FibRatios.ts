@@ -77,6 +77,12 @@ export abstract class FibRatios extends Drawing {
         return [];
     }
 
+    /** Optional filled areas between entries that are not axis-aligned bands (Gann fan wedges, Gann square arc
+     *  rings), painted under the lines at the tool's fill opacity; default none. */
+    fillPolygons(_proj: Projector): Array<{ color: string; pts: Array<[number, number]> }> {
+        return [];
+    }
+
     override editableLevels(): FibLevel[] | null {
         return this.levels;
     }

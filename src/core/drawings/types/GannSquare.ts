@@ -41,6 +41,49 @@ interface GannBox {
  */
 export class GannSquare extends FibRatios {
     readonly type = 'gannsquare' as const;
+    // `!` (no initializer): the base constructor runs readProps first; the constructor fills the defaults.
+    /** TradingView's arcs background: the rings between neighbouring arcs filled (on by default). */
+    background!: boolean;
+    fillOpacity!: number;
+    showLabels!: boolean;
+
+    constructor(init: ConstructorParameters<typeof FibRatios>[0]) {
+        super(init);
+        if (this.background === undefined) this.background = true;
+        if (this.fillOpacity === undefined) this.fillOpacity = 0.2;
+        if (this.showLabels === undefined) this.showLabels = true;
+    }
+
+    protected override writeProps(): Record<string, unknown> {
+        return { ...super.writeProps(), background: this.background, fillOpacity: this.fillOpacity, showLabels: this.showLabels };
+    }
+
+    protected override readProps(props: Record<string, unknown>): void {
+        super.readProps(props);
+        if (typeof props.background === 'boolean') this.background = props.background;
+        if (typeof props.fillOpacity === 'number') this.fillOpacity = Math.min(1, Math.max(0, props.fillOpacity));
+        if (typeof props.showLabels === 'boolean') this.showLabels = props.showLabels;
+    }
+
+    /** The ring between each arc and the one inside it (the innermost reaches the origin), in the outer arc's color. */
+    override fillPolygons(proj: Projector): Array<{ color: string; pts: Array<[number, number]> }> {
+        const g = this.background ? this.arcGeom(proj) : null;
+        if (!g || Math.abs(g.bx) < 1 || Math.abs(g.py) < 1) return [];
+        const N = 24;
+        const quarter = (k: number): Array<[number, number]> =>
+            Array.from({ length: N + 1 }, (_, i) => {
+                const t = (i / N) * (Math.PI / 2);
+                return [g.ox + k * g.bx * Math.cos(t), g.oy + k * g.py * Math.sin(t)] as [number, number];
+            });
+        const out: Array<{ color: string; pts: Array<[number, number]> }> = [];
+        let inner: Array<[number, number]> = [[g.ox, g.oy]];
+        for (const arc of GANN_SQUARE_ARCS) {
+            const outer = quarter(arc.k);
+            out.push({ color: arc.color, pts: [...outer, ...[...inner].reverse()] });
+            inner = outer;
+        }
+        return out;
+    }
 
     defaultLevels(): readonly FibLevel[] {
         return GRID_LEVELS;
@@ -77,7 +120,7 @@ export class GannSquare extends FibRatios {
             if (!lv.enabled) continue;
             const hy = proj.yOf(c1.price + lv.ratio * (c2.price - c1.price), this.paneId); // horizontal (price) line
             if (hy != null) {
-                out.push({ color: lv.color, x1: b.left, y1: hy, x2: b.right, y2: hy, numberText: lv.label ?? String(lv.ratio), numberX: b.left - 5, numberY: hy, numberAlign: 'right', labelX: b.left, labelY: hy });
+                out.push({ color: lv.color, x1: b.left, y1: hy, x2: b.right, y2: hy, numberText: this.showLabels === false ? '' : lv.label ?? String(lv.ratio), numberX: b.left - 5, numberY: hy, numberAlign: 'right', labelX: b.left, labelY: hy });
             }
             const vx = proj.xOf(c1.time + lv.ratio * (c2.time - c1.time)); // vertical (time) line — unlabelled
             out.push({ color: lv.color, x1: vx, y1: b.top, x2: vx, y2: b.bot, numberText: '', numberX: vx, numberY: b.top, numberAlign: 'center', labelX: vx, labelY: b.top });
@@ -92,7 +135,7 @@ export class GannSquare extends FibRatios {
                 v = b.oy + b.py; // steep → reaches the far horizontal edge at fraction x/y of the width
                 u = b.ox + (f.x / f.y) * b.bx;
             }
-            out.push({ color: f.color, x1: b.ox, y1: b.oy, x2: u, y2: v, numberText: f.label, numberX: u + 4, numberY: v, numberAlign: 'left', labelX: u + 4, labelY: v });
+            out.push({ color: f.color, x1: b.ox, y1: b.oy, x2: u, y2: v, numberText: this.showLabels === false ? '' : f.label, numberX: u + 4, numberY: v, numberAlign: 'left', labelX: u + 4, labelY: v });
         }
         return out;
     }
