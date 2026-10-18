@@ -575,7 +575,7 @@ describe('buildToolbar grouping', () => {
         expect(measureGroup?.tools.map((t) => t.type)).toEqual(expect.arrayContaining(['datepricerange', 'position']));
         // Long/Short Position is the group's default (tools[0] arms when the button is clicked directly).
         expect(measureGroup?.tools[0]?.type).toBe('position');
-        expect(measureGroup?.sections?.find((s) => s.label === 'Measurements')?.tools.map((t) => t.type)).toEqual(['position', 'daterange', 'pricerange', 'datepricerange', 'magnifier']);
+        expect(measureGroup?.sections?.find((s) => s.label === 'Measurements')?.tools.map((t) => t.type)).toEqual(['position', 'forecast', 'projection', 'daterange', 'pricerange', 'datepricerange', 'magnifier']);
         expect(measureGroup?.sections?.find((s) => s.label === 'Cycles')?.tools.map((t) => t.type)).toEqual(['cycliclines', 'timecycles', 'sineline']);
         expect(patternsGroup?.sections?.find((s) => s.label === 'Elliott Waves')?.tools.map((t) => t.type)).toEqual([
             'elliottimpulse',

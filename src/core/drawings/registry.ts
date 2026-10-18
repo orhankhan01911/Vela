@@ -5,6 +5,8 @@ import { svg24 } from '../icons';
 import { ACCENT, BEARISH, BULLISH, INFO, MARKER, NEUTRAL } from '../palette';
 import { TrendLine } from './types/TrendLine';
 import { CyclicLines } from './types/CyclicLines';
+import { Projection } from './types/Projection';
+import { Forecast } from './types/Forecast';
 import { TimeCycles } from './types/TimeCycles';
 import { SineLine } from './types/SineLine';
 import { ArrowMarker } from './types/ArrowMarker';
@@ -1106,3 +1108,22 @@ registerDrawingType({ type: 'trianglepattern', label: 'Triangle Pattern', icon: 
 registerDrawingType({ type: 'elliotttriangle', label: 'Elliott Triangle Wave (ABCDE)', icon: ELLIOTT_TRIANGLE_ICON, ...lettered, create: (init) => new ElliottTriangle(init) });
 registerDrawingType({ type: 'elliottdoublecombo', label: 'Elliott Double Combo Wave (WXY)', icon: ELLIOTT_COMBO_ICON, ...lettered, create: (init) => new ElliottDoubleCombo(init) });
 registerDrawingType({ type: 'elliotttriplecombo', label: 'Elliott Triple Combo Wave (WXYXZ)', icon: ELLIOTT_COMBO_ICON, ...lettered, create: (init) => new ElliottTripleCombo(init) });
+const PROJECTION_ICON = svg24('<path d="M4 20 18 6a10 10 0 0 1 2 10Z"/>');
+const FORECAST_ICON = svg24('<path d="M3 18c6 0 12-2 17-12"/><circle cx="3" cy="18" r="1.6"/><circle cx="20" cy="6" r="1.6"/>');
+registerDrawingType({
+    type: 'projection',
+    group: 'measure',
+    label: 'Projection',
+    icon: PROJECTION_ICON,
+    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}33` },
+    create: (init) => new Projection(init),
+});
+registerDrawingType({
+    type: 'forecast',
+    group: 'measure',
+    label: 'Forecast',
+    icon: FORECAST_ICON,
+    coversSeries: true, // its plates over the candles like TradingView's
+    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    create: (init) => new Forecast(init),
+});

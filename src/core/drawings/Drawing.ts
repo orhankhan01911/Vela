@@ -33,6 +33,8 @@ export type DrawingTypeKey =
     | 'anchoredvwap'
     | 'fixedrangevp'
     | 'anchoredvp'
+    | 'projection'
+    | 'forecast'
     | 'fixedrangetpo'
     | 'pricealert'
     | 'pitchfork'

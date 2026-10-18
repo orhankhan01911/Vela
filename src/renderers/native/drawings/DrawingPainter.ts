@@ -1,5 +1,5 @@
 import type { Drawing, Projector, DrawingStyle, Box, TrendLine, TextLabel, Ellipse } from '../../../core/drawings';
-import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows } from '../../../core/drawings';
+import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP } from '../../../core/palette';
@@ -259,6 +259,10 @@ export class DrawingPainter {
         }
         if (d instanceof MeasureBox) {
             this.paintMeasureBox(ctx, d, proj, theme);
+            return;
+        }
+        if (d instanceof Forecast) {
+            this.paintForecast(ctx, d, proj, theme);
             return;
         }
         if (d instanceof PositionTool) {
@@ -651,6 +655,43 @@ export class DrawingPainter {
             ctx.fillText(label, cx, proj.height + 11.5);
             ctx.restore();
         }
+    }
+
+    /** TradingView's forecast: the curve, a plate under the source (price, time), the change above the target and,
+     *  once known, SUCCESS (green) or FAILURE (red) above that. */
+    private paintForecast(ctx: CanvasRenderingContext2D, d: Forecast, proj: Projector, theme: VelaTheme): void {
+        const c = d.curve(proj);
+        if (c.length < 2) return;
+        const ink = d.style.lineColor || theme.textColor;
+        this.stroke(ctx, d.style, () => {
+            ctx.moveTo(c[0]![0], c[0]![1]);
+            for (let i = 1; i < c.length; i += 1) ctx.lineTo(c[i]![0], c[i]![1]);
+        });
+        const pts = d.handlePoints(proj);
+        const a = d.anchors[0];
+        if (pts.length < 2 || !a) return;
+        const plate = (lines: string[], cx: number, top: number, fill: string): number => {
+            ctx.font = `12px ${theme.fontFamily}`;
+            const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 16;
+            const h = lines.length * 16 + 8;
+            ctx.save();
+            ctx.setLineDash([]);
+            roundRect(ctx, cx - w / 2, top, w, h, 3);
+            ctx.fillStyle = fill;
+            ctx.fill();
+            ctx.fillStyle = contrastColor(fill);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            lines.forEach((l, i) => ctx.fillText(l, cx, top + 4 + 8 + i * 16));
+            ctx.restore();
+            return h;
+        };
+        const [sx, sy] = pts[0]!;
+        const [tx, ty] = pts[1]!;
+        plate([formatPriceTag(a.price), formatTimeStamp(a.time, this.timeZone, this.barMs || 60_000)], sx, sy + 8, ink);
+        const h = plate([d.changeLabel()], tx, ty - 8 - 24, ink);
+        const st = d.status(proj);
+        if (st !== 'pending') plate([st === 'success' ? 'SUCCESS' : 'FAILURE'], tx, ty - 8 - h - 4 - 24, st === 'success' ? VALID_FILL : INVALID_FILL);
     }
 
     /** TradingView's line stats (trend line, ray, extended line, info line): a box of price range, percent, bars,

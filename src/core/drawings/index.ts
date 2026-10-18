@@ -21,6 +21,8 @@ export { HorizontalRay } from './types/HorizontalRay';
 export { CrossLine } from './types/CrossLine';
 export { InfoLine } from './types/InfoLine';
 export { CyclicLines, MAX_CYCLES } from './types/CyclicLines';
+export { Projection } from './types/Projection';
+export { Forecast, type ForecastStatus } from './types/Forecast';
 export { TimeCycles } from './types/TimeCycles';
 export { SineLine } from './types/SineLine';
 export { ArrowMarker } from './types/ArrowMarker';

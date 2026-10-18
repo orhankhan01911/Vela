@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDrawing, deserializeDrawing, getDrawingType, type Projector, type SegmentDrawing, type PatternDrawing, type MeasureBox, type FixedRangeVolumeProfile } from '../src/core/drawings';
+import { createDrawing, deserializeDrawing, getDrawingType, type Projector, type SegmentDrawing, type PatternDrawing, type MeasureBox, type FixedRangeVolumeProfile, type Forecast } from '../src/core/drawings';
 
 /** Linear projector: x = time, y = 100 − price, single pane 'price' (200 × 100 px). */
 function proj(): Projector {
@@ -80,5 +80,27 @@ describe("TradingView's tools Vela lacked", () => {
         expect(d.layout(p)!.x1).toBe(100); // a new bar extends it
         expect(d.handlePoints(p).length).toBe(1);
         expect(deserializeDrawing(d.serialize())!.type).toBe('anchoredvp');
+    });
+
+    it('projection: a sector around the first point, radius to the second, swept to the third', () => {
+        const d = createDrawing('projection', { paneId: 'price', anchors: [P(20, 20), P(80, 20), P(20, 80)] })! as SegmentDrawing;
+        const fill = d.geometry(proj())!.fill!;
+        expect(fill[0]).toEqual([20, 80]);
+        const r = fill.slice(1).map(([x, y]) => Math.hypot(x - 20, y - 80));
+        expect(Math.min(...r)).toBeCloseTo(60, 6);
+        expect(Math.max(...r)).toBeCloseTo(60, 6);
+        expect(d.hitTest(40, 60, proj(), 1)).toBe(true); // inside the quarter
+    });
+
+    it('forecast: success once a bar reaches the target in time, failure when the time passes, else pending', () => {
+        const bars: Array<{ time: number; open: number; high: number; low: number; close: number }> = [];
+        const p: Projector = { ...proj(), barsInRange: (from, to) => bars.filter((b) => b.time >= from && b.time <= to) };
+        const f = createDrawing('forecast', { paneId: 'price', anchors: [P(10, 50), P(50, 60)] })! as Forecast;
+        expect(f.status(p)).toBe('pending');
+        bars.push({ time: 20, open: 50, high: 55, low: 49, close: 54 }, { time: 60, open: 54, high: 56, low: 53, close: 55 });
+        expect(f.status(p)).toBe('failure'); // past the target time, never at 60
+        bars.splice(0, 0, { time: 30, open: 54, high: 61, low: 53, close: 58 });
+        expect(f.status(p)).toBe('success');
+        expect(f.changeLabel()).toBe('10.00 (20.00%) in 0s');
     });
 });
