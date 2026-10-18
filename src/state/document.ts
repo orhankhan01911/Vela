@@ -70,6 +70,9 @@ export interface CellState {
     timeframe?: string;
     priceStyle?: string;
     bars?: number;
+    /** History as a span: days back from now, or a start date (UTC ms). See `workspace/history-depth.ts`. */
+    historyDays?: number;
+    historySince?: number;
     /** Trading session shown (`'extended'` persisted; absent = regular, the default). */
     session?: string;
     /** Symbol watermark visibility — a per-chart display pref. */
@@ -230,6 +233,9 @@ function sanitizeCell(raw: unknown): CellState | null {
     if (typeof c.timeframe === 'string') out.timeframe = c.timeframe;
     if (typeof c.priceStyle === 'string') out.priceStyle = c.priceStyle;
     if (typeof c.bars === 'number' && Number.isFinite(c.bars) && c.bars > 0) out.bars = c.bars;
+    // One span at most; a start date wins (as `historyMode` reads it).
+    if (typeof c.historySince === 'number' && Number.isFinite(c.historySince) && c.historySince > 0) out.historySince = c.historySince;
+    else if (typeof c.historyDays === 'number' && Number.isFinite(c.historyDays) && c.historyDays > 0) out.historyDays = c.historyDays;
     if (c.session === 'regular' || c.session === 'extended') out.session = c.session;
     if (typeof c.watermark === 'boolean') out.watermark = c.watermark;
     if (typeof c.replayWatermark === 'boolean') out.replayWatermark = c.replayWatermark;

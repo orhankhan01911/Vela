@@ -64,11 +64,18 @@ type ConfigPatch = Record<string, unknown>;
  *  `color` is a swatch opening the themed picker (any CSS color, alpha included).
  *  `id` is the row's stable visibility id (defaults to the label's slug) — hiding a
  *  heading's id hides its whole group (see `settings-visibility.ts`). */
-export type HostSettingsRow =
+export type HostSettingsRow = (
     | { kind: 'heading'; label: string; id?: string }
     | { kind: 'toggle'; label: string; get: () => boolean; set: (v: boolean) => void; id?: string }
     | { kind: 'select'; label: string; options: readonly SettingsSelectOption[]; get: () => string; set: (v: string) => void; id?: string }
-    | { kind: 'color'; label: string; get: () => string; set: (v: string) => void; id?: string };
+    | { kind: 'color'; label: string; get: () => string; set: (v: string) => void; id?: string }
+    /** A calendar date (`yyyy-mm-dd`); `max` caps the picker (e.g. today). */
+    | { kind: 'date'; label: string; get: () => string; set: (v: string) => void; max?: () => string; id?: string }
+) & {
+    /** Shown only while this holds — re-read after every change made in the same section
+     *  (a mode select showing the one field of its mode). */
+    visible?: () => boolean;
+};
 
 /** A host-contributed settings tab (see `RendererControl.setSettingsSections`). */
 export interface HostSettingsSection {
@@ -623,12 +630,26 @@ export class SettingsDialog {
                 if (rows.length === 0) continue;
                 // 'symbol' inlines rows into the CURRENT pane (a section title, no tab).
                 body.append(placement === 'symbol' ? this.sectionTitle(hs.title) : this.section(hs.title));
+                // Rows with `visible` are re-checked after any change in this section.
+                const gated: Array<[HTMLElement, () => boolean]> = [];
+                const regate = (): void => {
+                    for (const [el, vis] of gated) el.style.display = vis() ? '' : 'none';
+                };
+                const after = <T,>(fn: (v: T) => void) => (v: T): void => {
+                    fn(v);
+                    regate();
+                };
                 for (const hr of rows) {
-                    if (hr.kind === 'heading') body.append(this.sectionTitle(hr.label));
-                    else if (hr.kind === 'toggle') body.append(this.boolRow(hr.label, hr.get(), (v) => hr.set(v)));
-                    else if (hr.kind === 'color') body.append(this.colorRow(hr.label, hr.get(), (v) => hr.set(v)));
-                    else body.append(this.selectRowLabeled(hr.label, hr.get(), normalizeSelectOptions(hr.options), (v) => hr.set(v)));
+                    let el: HTMLElement;
+                    if (hr.kind === 'heading') el = this.sectionTitle(hr.label);
+                    else if (hr.kind === 'toggle') el = this.boolRow(hr.label, hr.get(), after((v: boolean) => hr.set(v)));
+                    else if (hr.kind === 'color') el = this.colorRow(hr.label, hr.get(), after((v: string) => hr.set(v)));
+                    else if (hr.kind === 'date') el = this.dateRow(hr.label, hr.get(), hr.max?.() ?? '', after((v: string) => hr.set(v)));
+                    else el = this.selectRowLabeled(hr.label, hr.get(), normalizeSelectOptions(hr.options), after((v: string) => hr.set(v)));
+                    if (hr.visible) gated.push([el, hr.visible]);
+                    body.append(el);
                 }
+                regate();
             }
         };
         // ══ CHART-TYPE SDK SECTIONS — each registered type's declarative settings tab.
@@ -1486,6 +1507,25 @@ export class SettingsDialog {
             controls.push(u);
         }
         return this.rowWith(label, controls);
+    }
+
+    /** A calendar date field (`yyyy-mm-dd`); `onChange` fires once a whole date is picked or typed. */
+    private dateRow(label: string, value: string, max: string, onChange: (v: string) => void): HTMLElement {
+        const h = buildFieldControl({ kind: 'text', value, fill: false, onChange: (v) => { if (/^\d{4}-\d{2}-\d{2}$/.test(v)) onChange(v); } });
+        const input = h.el.querySelector('input');
+        if (input) {
+            input.type = 'date';
+            if (max) input.max = max;
+            input.style.colorScheme = 'inherit';
+            // A date reads mm/dd/yyyy plus the calendar button: the text field's default width cuts the month off.
+            input.style.minWidth = '9.5em';
+            h.el.style.minWidth = '10.5em';
+            // A day picked from the calendar fires `change` without a blur (the text field commits on blur/Enter).
+            input.addEventListener('change', () => {
+                if (/^\d{4}-\d{2}-\d{2}$/.test(input.value)) onChange(input.value);
+            });
+        }
+        return this.rowWith(label, [h.el]);
     }
 
     /** A dropdown whose option values differ from their display labels. */

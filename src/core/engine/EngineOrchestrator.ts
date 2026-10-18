@@ -487,6 +487,21 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         }
     }
 
+    /** Bars at or after the market's time floor (`market.from`): a start date / span of days loads no older bars. */
+    private clipFrom(bars: OHLCV[]): OHLCV[] {
+        const from = this.config.market.from;
+        if (!from || bars.length === 0 || bars[0]!.time >= from) return bars;
+        let i = 0;
+        while (i < bars.length && bars[i]!.time < from) i += 1;
+        return bars.slice(i);
+    }
+
+    /** Whether the held history already reaches the time floor. */
+    private reachedFrom(): boolean {
+        const from = this.config.market.from;
+        return !!from && this.rawBars.length > 0 && this.rawBars[0]!.time <= from;
+    }
+
     private async loadMarketInner(gen: number, opts: { firstLoad: boolean }): Promise<void> {
         const market = this.config.market;
         const requested = market.bars ?? 500;
@@ -513,6 +528,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                     this.mergeHistoryIntoReplay(bars); // a replay started before the history converged keeps its cut
                     return;
                 }
+                bars = this.clipFrom(bars);
                 this.setBarSeries(bars, painted ? { preserveView: true } : undefined);
                 if (!painted && bars.length > 0) {
                     painted = true;
@@ -562,11 +578,12 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             // Paint the newest chunk, stream the rest in behind it. The first chunk is a full
             // CHUNK_BARS, not a token head: at this depth the round trips are what cost, so
             // each one carries as much as the source answers well.
-            const head = await this.feed.load({ ...market, bars: Math.min(requested, CHUNK_BARS) });
+            const loaded = await this.feed.load({ ...market, bars: Math.min(requested, CHUNK_BARS) });
             if (this.generation !== gen) return;
+            const head = this.clipFrom(loaded);
             this.setBarSeries(head);
             if (opts.firstLoad) this.activateBarLayers(); // bar-following layers ride the FIRST candles
-            if (head.length > 0 && requested > head.length) {
+            if (head.length > 0 && requested > head.length && head.length === loaded.length) {
                 this.historyState = 'backfill';
                 void this.backfillHistory(gen, requested);
             } else {
@@ -579,12 +596,12 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             if (this.generation !== gen) return;
             this.setBarSeries(preview);
             if (opts.firstLoad) this.activateBarLayers(); // bar-following layers follow the FIRST candles, not the deep fetch
-            const full = await this.feed.load(market);
+            const full = this.clipFrom(await this.feed.load(market));
             if (this.generation !== gen) return;
             this.setBarSeries(full, { preserveView: true });
             this.completeHistory('depth');
         } else {
-            const bars = await this.feed.load(market);
+            const bars = this.clipFrom(await this.feed.load(market));
             if (this.generation !== gen) return;
             this.setBarSeries(bars);
             if (opts.firstLoad) this.activateBarLayers();
@@ -688,7 +705,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             // exactly like a timeframe change; the cache keys the sessions apart.
             (next.session !== undefined && next.session !== m.session) ||
             next.data !== undefined;
-        const depthChanged = next.bars !== undefined && next.bars !== m.bars;
+        const fromChanged = next.from !== undefined && (next.from ?? undefined) !== m.from;
+        const depthChanged = (next.bars !== undefined && next.bars !== m.bars) || fromChanged;
         // A switch that keeps the symbol and its clock (timeframe, session) carries a running
         // replay over: the new series is cut where the old one stood — see `carryReplay`.
         const sameClock =
@@ -791,6 +809,10 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             if (next.symbol !== undefined) m.symbol = next.symbol;
             if (next.timeframe !== undefined) m.timeframe = next.timeframe;
             if (next.bars !== undefined) m.bars = next.bars;
+            if (next.from !== undefined) {
+                if (next.from) m.from = next.from;
+                else delete m.from;
+            }
             if (next.session !== undefined) m.session = next.session;
             // Carrying the window is not enough — the incoming series must REACH it, or
             // the viewport clamp throws the user somewhere else (sessions cover very
@@ -952,6 +974,15 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      * a trim leaves every value they already computed valid.
      */
     private extendDepth(gen: number, requested: number): void {
+        // A time floor first: bars older than it go, and history that reaches it is complete.
+        const clipped = this.clipFrom(this.rawBars);
+        const trimmed = clipped.length !== this.rawBars.length;
+        if (trimmed) this.setBarSeries(clipped, { preserveView: true });
+        if (trimmed || this.reachedFrom()) {
+            if (this.rawBars.length > requested) this.setBarSeries(this.rawBars.slice(this.rawBars.length - requested), { preserveView: true });
+            this.completeHistory('depth');
+            return;
+        }
         if (this.rawBars.length > requested) {
             this.setBarSeries(this.rawBars.slice(this.rawBars.length - requested), { preserveView: true });
             this.completeHistory('depth');
@@ -977,7 +1008,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      */
     private async backfillHistory(gen: number, requested: number): Promise<void> {
         try {
-            while (this.generation === gen && this.rawBars.length < requested && this.rawBars.length > 0) {
+            while (this.generation === gen && this.rawBars.length < requested && this.rawBars.length > 0 && !this.reachedFrom()) {
                 const remaining = requested - this.rawBars.length;
                 // A flat chunk per request: only depths past SINGLE_LOAD_BARS reach this loop,
                 // so there is no small near-window to fill quickly — every remaining round trip
@@ -991,7 +1022,10 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 // Merge against the CURRENT array — live ticks appended during the fetch —
                 // keeping only genuinely older bars (the existing boundary bar wins).
                 const oldest = this.rawBars[0]!.time;
-                const head = chunk.filter((b) => b.time < oldest);
+                const from = this.config.market.from ?? -Infinity;
+                const older = chunk.filter((b) => b.time < oldest);
+                const head = older.filter((b) => b.time >= from);
+                if (head.length === 0 && older.length > 0) break; // the next bar back is before the time floor: done
                 if (head.length === 0) {
                     this.completeHistory('genesis'); // nothing older exists at the source
                     return;

@@ -768,6 +768,29 @@ describe('setMarket — in-place market switch', () => {
         expect(events).toEqual([]);
     });
 
+    it('a time floor (`from`) stops the history at that bar time, with `bars` as the ceiling', async () => {
+        const feed = new SwitchFeed();
+        feed.depth.AAA = 15_000; // hourly bars from 1_700_000_000_000
+        const renderer = new FakeRenderer();
+        const chart = make({ symbol: 'AAA', timeframe: '60', bars: 500, volume: false }, { renderer, engines: [], dataFeed: feed });
+        await chart.ready();
+        const newest = 1_700_000_000_000 + 14_999 * 3_600_000;
+        const from = newest - 7_000 * 3_600_000; // 7 001 bars back, inside a deep (chunked) load
+
+        await chart.setMarket({ bars: 12_000, from }); // a span asks more bars than it needs
+        await chart.historyComplete();
+        expect(renderer.bars[0]!.time).toBe(from); // stopped AT the floor, not 12 000 bars back
+        expect(renderer.bars.length).toBe(7_001);
+
+        await chart.setMarket({ from: newest - 99 * 3_600_000 }); // a later date: a trim, no fetch
+        await chart.historyComplete();
+        expect(renderer.bars.length).toBe(100);
+
+        await chart.setMarket({ from: null }); // floor removed: back to the bar count
+        await chart.historyComplete();
+        expect(renderer.bars.length).toBe(12_000);
+    });
+
     it('rapid double switch: the last call wins, the superseded one resolves silently', async () => {
         const feed = new SwitchFeed();
         feed.gatedLoads.add('SLOW');

@@ -27,6 +27,9 @@ export interface MarketConfig {
     symbol?: string;
     timeframe?: string;
     bars?: number;
+    /** Oldest bar time to load (ms): history stops there even when `bars` would reach further back (a start date
+     *  or a span of days, `workspace/history-depth.ts`). `bars` stays the ceiling. Absent = no time floor. */
+    from?: number;
     /** Trading session to show ({@link MarketSession}). Absent = the provider's default
      *  (`regular` on session markets); continuous markets ignore it entirely. */
     session?: MarketSession;
@@ -54,6 +57,8 @@ export interface MarketSwitch {
     symbol?: string;
     timeframe?: string;
     bars?: number;
+    /** Oldest bar time to load ({@link MarketConfig.from}); `null` removes the floor. */
+    from?: number | null;
     /** Switch the shown trading session (reloads like a timeframe change). */
     session?: MarketSession;
     data?: OHLCV[];

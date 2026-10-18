@@ -19,6 +19,7 @@ import { Statusline, statuslineInkOf, type StatuslinePart } from '../widget/stat
 import { MarketStatusTracker } from '../widget/market-status';
 import { SessionShadingTracker, parseSessionSpec } from '../widget/session-shading';
 import { timeframeMs } from '../widget/timeframe';
+import { HISTORY_DAY_CHOICES, historyBars, historyFrom, historyMode, isoDay, parseIsoDay } from './history-depth';
 import { Watermark } from '../widget/watermark';
 import { currentIntervalLabel } from '../widget/interval-menu';
 import { activeIntervalSection, onIntervalSectionsChanged } from '../widget/interval-sections';
@@ -53,6 +54,10 @@ export interface CellSeed {
     timeframe?: string;
     priceStyle?: string;
     bars?: number;
+    /** History as a span instead of a bar count (see `history-depth.ts`): days back from now, or a start date
+     *  (UTC midnight, ms). One of the two at most; neither = `bars`. */
+    historyDays?: number;
+    historySince?: number;
     /** Trading session to show (markets that have one; `regular` is the default). */
     session?: string;
     /** Offline bars for this cell — replaces the provider (boot-only). */
@@ -320,6 +325,8 @@ export class ChartCell {
             timeframe: seed.timeframe,
             priceStyle: seed.priceStyle,
             bars: seed.bars,
+            ...(seed.historyDays ? { historyDays: seed.historyDays } : {}),
+            ...(seed.historySince ? { historySince: seed.historySince } : {}),
             session: normalizeSession(seed.session),
         };
         const doc = gridHost.ownerDocument;
@@ -339,7 +346,8 @@ export class ChartCell {
                 ...deps.chartDefaults,
                 symbol,
                 timeframe: seed.timeframe,
-                bars: seed.bars,
+                bars: historyBars(this.state, seed.timeframe),
+                from: historyFrom(this.state),
                 priceStyle: seed.priceStyle,
                 session: normalizeSession(seed.session),
                 data: seed.data,
@@ -711,7 +719,7 @@ export class ChartCell {
         const symbol = this.state.symbol;
         if (!chart || !symbol) return;
         const now = Date.now();
-        const requestedSpan = Math.max(this.state.bars ?? 1000, this.rangeBars) * timeframeMs(this.state.timeframe ?? '60');
+        const requestedSpan = Math.max(this.depth() ?? 1000, this.rangeBars) * timeframeMs(this.state.timeframe ?? '60');
         const fallbackSpan = Number.isFinite(requestedSpan) ? Math.max(3 * 86_400_000, requestedSpan) : 3 * 86_400_000;
         const range = chart.getVisibleRange() ?? { from: now - fallbackSpan, to: now };
         this.sessionShading.track(chart.data, symbol, { session: this.session, timeframe: this.timeframe, range });
@@ -788,11 +796,37 @@ export class ChartCell {
                 ...shadeRows,
             ],
         };
+        // History: a bar count, a number of days or a start date (see `history-depth.ts`). Only the mode's own
+        // field shows; a span is turned into bars for each timeframe loaded.
+        const reloadDepth = (): void => {
+            this.jumpBars = 0;
+            this.deps.onStateDirty();
+            void this.inner?.setMarket({ bars: Math.max(this.depth() ?? 500, this.rangeBars), from: historyFrom(this.state) ?? null });
+        };
         const advanced = {
             title: 'Advanced',
             id: 'advanced',
             placement: 'end' as const,
             rows: [
+                {
+                    kind: 'select' as const,
+                    label: 'History',
+                    id: 'history',
+                    options: [
+                        ['bars', 'Number of bars'],
+                        ['days', 'Number of days'],
+                        ['since', 'From a date'],
+                    ] as const,
+                    get: () => historyMode(this.state),
+                    set: (v: string) => {
+                        if (v === historyMode(this.state)) return;
+                        delete this.state.historyDays;
+                        delete this.state.historySince;
+                        if (v === 'days') this.state.historyDays = 7;
+                        else if (v === 'since') this.state.historySince = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()) - 7 * 86_400_000;
+                        reloadDepth();
+                    },
+                },
                 {
                     kind: 'select' as const,
                     label: 'Bars to fetch',
@@ -801,10 +835,35 @@ export class ChartCell {
                     get: () => String(this.state.bars ?? 1000),
                     set: (v: string) => {
                         this.state.bars = Number(v);
-                        this.jumpBars = 0;
-                        this.deps.onStateDirty();
-                        void this.inner?.setMarket({ bars: Math.max(this.state.bars, this.rangeBars) });
+                        reloadDepth();
                     },
+                    visible: () => historyMode(this.state) === 'bars',
+                },
+                {
+                    kind: 'select' as const,
+                    label: 'Days to load',
+                    id: 'days',
+                    options: HISTORY_DAY_CHOICES.map((d) => [String(d), d === 1 ? '1 day' : `${d} days`] as const),
+                    get: () => String(this.state.historyDays ?? 7),
+                    set: (v: string) => {
+                        this.state.historyDays = Number(v);
+                        reloadDepth();
+                    },
+                    visible: () => historyMode(this.state) === 'days',
+                },
+                {
+                    kind: 'date' as const,
+                    label: 'Load from',
+                    id: 'since',
+                    get: () => isoDay(this.state.historySince ?? Date.now()),
+                    max: () => isoDay(Date.now()),
+                    set: (v: string) => {
+                        const ms = parseIsoDay(v);
+                        if (ms == null || ms === this.state.historySince) return;
+                        this.state.historySince = ms;
+                        reloadDepth();
+                    },
+                    visible: () => historyMode(this.state) === 'since',
                 },
             ],
         };
@@ -1009,7 +1068,10 @@ export class ChartCell {
         if (!this.inner || symbol === this.symbol) return;
         this.unresolvedToasted = null; // a re-picked symbol gets a fresh verdict
         // A jump's borrowed depth stays with the market it was for: the new symbol loads the cell's own depth.
-        void this.inner.setMarket(this.jumpBars ? { symbol, bars: this.ownBars() } : { symbol });
+        // A span (days / start date) is re-measured from now on every load.
+        void this.inner.setMarket(
+            this.jumpBars || historyMode(this.state) !== 'bars' ? { symbol, bars: this.ownBars(), from: this.jumpBars ? null : (historyFrom(this.state) ?? null) } : { symbol },
+        );
         this.jumpBars = 0;
         this.projectMarket(symbol, this.timeframe);
         this.deps.onMarketChanged(this.id);
@@ -1020,9 +1082,9 @@ export class ChartCell {
         // Leaving range mode: drop the chip AND its fetch budget (back to the cell's own bars).
         this.activeRangeId = null;
         this.rangeBars = 0;
-        const bars = this.jumpBars ? this.ownBars() : this.state.bars; // a jump's depth stays with its timeframe
+        const bars = this.jumpBars ? this.ownBars() : this.depth(timeframe); // a jump's depth stays with its timeframe
         this.jumpBars = 0;
-        void this.inner.setMarket({ timeframe, bars });
+        void this.inner.setMarket({ timeframe, bars, from: historyFrom(this.state) ?? null });
         this.projectMarket(this.symbol, timeframe);
         this.deps.onMarketChanged(this.id);
     }
@@ -1082,12 +1144,13 @@ export class ChartCell {
         this.activeRangeId = preset.id;
         this.jumpBars = 0; // the chip sets its own depth below
         const tfChanged = preset.tf !== this.timeframe;
-        const deeper = preset.bars > Math.max(this.state.bars ?? 500, this.rangeBars);
+        const deeper = preset.bars > Math.max(this.depth(preset.tf) ?? 500, this.rangeBars);
         this.rangeBars = preset.bars;
         if (tfChanged || deeper) {
             this.pendingRange = preset;
             void this.inner
-                .setMarket({ timeframe: preset.tf, bars: Math.max(this.state.bars ?? 500, this.rangeBars), visibleRange: preset.preset })
+                // A range chip frames its own window: the History start date / span must not cut it.
+                .setMarket({ timeframe: preset.tf, bars: Math.max(this.depth(preset.tf) ?? 500, this.rangeBars), from: null, visibleRange: preset.preset })
                 .then(() => {
                     if (!this.destroyed && this.pendingRange === preset) {
                         this.inner?.setVisibleRangePreset(preset.preset);
@@ -1101,7 +1164,12 @@ export class ChartCell {
 
     /** The cell's own history depth: its "Bars to fetch" (default 500), deeper while a range chip needs it. */
     private ownBars(): number {
-        return Math.max(this.state.bars ?? 500, this.rangeBars);
+        return Math.max(this.depth() ?? 500, this.rangeBars);
+    }
+
+    /** Bars the cell's History setting asks for on `timeframe` (a count, or a span in bars of that timeframe). */
+    private depth(timeframe: string | undefined = this.state.timeframe ?? this.inner?.market.timeframe): number | undefined {
+        return historyBars(this.state, timeframe);
     }
 
     /**
@@ -1124,7 +1192,8 @@ export class ChartCell {
         // No first-paint `visibleRange`: a framed load is ONE request, which a paging source answers with a single
         // page (Bybit: 1000 bars). Unframed, a deep load paints its newest chunk and pages the rest in behind it;
         // the window is framed once that history is complete.
-        const loading = inner.setMarket(tf ? { timeframe: tf, bars } : { bars });
+        // A jump into the past goes behind the History start date / span (borrowed, like its depth).
+        const loading = inner.setMarket(tf ? { timeframe: tf, bars, from: null } : { bars, from: null });
         if (tf) {
             this.projectMarket(this.symbol, tf);
             this.deps.onMarketChanged(this.id);
@@ -1558,16 +1627,27 @@ export class ChartCell {
         const symbol = prefixedSymbol(cs);
         const session = normalizeSession(cs.session) ?? 'regular';
         const bars = typeof cs.bars === 'number' && Number.isFinite(cs.bars) && cs.bars > 0 ? cs.bars : 0;
-        const next: { symbol?: string; timeframe?: string; bars?: number; session?: MarketSession } = {};
+        const next: { symbol?: string; timeframe?: string; bars?: number; from?: number | null; session?: MarketSession } = {};
         if (symbol && symbol !== this.symbol) next.symbol = symbol;
         if (cs.timeframe && cs.timeframe !== this.timeframe) next.timeframe = cs.timeframe;
         if (session !== this.session) {
             this.state.session = session;
             next.session = session;
         }
-        if (bars > 0 && bars !== this.state.bars) {
-            this.state.bars = bars;
-            next.bars = Math.max(bars, this.rangeBars);
+        const days = typeof cs.historyDays === 'number' && cs.historyDays > 0 ? cs.historyDays : undefined;
+        const since = typeof cs.historySince === 'number' && cs.historySince > 0 ? cs.historySince : undefined;
+        const spanChanged = days !== this.state.historyDays || since !== this.state.historySince;
+        if (spanChanged) {
+            delete this.state.historyDays;
+            delete this.state.historySince;
+            if (since) this.state.historySince = since;
+            else if (days) this.state.historyDays = days;
+        }
+        if ((bars > 0 && bars !== this.state.bars) || spanChanged) {
+            if (bars > 0) this.state.bars = bars;
+            const want = this.depth(next.timeframe ?? this.timeframe);
+            if (want) next.bars = Math.max(want, this.rangeBars);
+            next.from = historyFrom(this.state) ?? null;
         }
         if (Object.keys(next).length > 0) void this.inner.setMarket(next);
     }
