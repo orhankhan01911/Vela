@@ -82,7 +82,7 @@ describe('Menu iconBadges', () => {
         menu.destroy();
     });
 
-    it('coexists with checkmarks: the mark column leads, the badge follows', () => {
+    it('with checkmarks, the tile carries the check: no mark column, a checked row inverts its tile', () => {
         const h = host();
         const menu = new Menu({
             host: h,
@@ -96,15 +96,16 @@ describe('Menu iconBadges', () => {
         });
         const list = h.querySelector('.vela-menu')!;
         expect(rows(list)).toEqual([
-            ['vela-menu-mark', 'vela-menu-badge', 'vela-menu-label'],
-            ['vela-menu-mark', 'vela-menu-badge', 'vela-menu-label'],
-            ['vela-menu-mark', 'vela-menu-badge', 'vela-menu-label'],
+            ['vela-menu-badge', 'vela-menu-label'],
+            ['vela-menu-badge', 'vela-menu-label'],
+            ['vela-menu-badge', 'vela-menu-label'],
         ]);
-        // The ✓ stays in the mark column, never inside the badge.
-        const first = list.querySelector('.vela-menu-item')!;
-        expect(first.getAttribute('data-checkmark')).toBe('1');
-        expect(first.querySelector('.vela-menu-mark .vela-icon')).not.toBeNull();
-        expect(first.querySelector('.vela-menu-badge')!.childElementCount).toBe(0);
+        // An icon-less checked row gets a ✓ tile; an unchecked one keeps an empty slot.
+        const [first, second] = Array.from(list.querySelectorAll('.vela-menu-item'));
+        expect(first!.getAttribute('data-checkmark')).toBe('1');
+        expect(first!.querySelector('.vela-menu-badge .vela-icon')).not.toBeNull();
+        expect(second!.hasAttribute('data-checkmark')).toBe(false);
+        expect(second!.querySelector('.vela-menu-badge')!.childElementCount).toBe(0);
         menu.destroy();
     });
 

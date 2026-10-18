@@ -214,12 +214,14 @@ class Surface {
         // Reserve the leading mark column only when THIS level actually holds checkable
         // rows — an all-action list (e.g. the chart-body context menu) keeps its natural
         // left edge instead of carrying an empty gutter.
-        const markable = this.checkmarks
-            && this.items.some((i) => !(i.submenu && i.submenu.length > 0) && !i.toggle && i.checked !== undefined);
         // Same for icons: once a row of this level carries one, the others keep an empty
         // icon slot (an empty badge in badge mode) so every label shares one left edge.
         const iconic = this.items.some((i) => !!i.icon);
         const badged = this.iconBadges && iconic;
+        // In badge mode the tile itself carries the checked state (it inverts, and an
+        // icon-less checked row gets a ✓ tile), so no row pays for a separate mark column.
+        const markable = this.checkmarks && !badged
+            && this.items.some((i) => !(i.submenu && i.submenu.length > 0) && !i.toggle && i.checked !== undefined);
         if (badged) this.list.dataset.badges = '1';
         else delete this.list.dataset.badges;
         for (const item of this.items) {
@@ -249,6 +251,8 @@ class Surface {
                     li.dataset.checkmark = '1';
                 }
                 li.appendChild(mark);
+            } else if (badged && this.checkmarks && !branch && !item.toggle && item.checked) {
+                li.dataset.checkmark = '1';
             } else if (!branch && !item.toggle && item.checked) {
                 // Selection reads from the row surface: a stronger background wash
                 // marks the active entry (hover stays the lighter wash).
@@ -257,7 +261,8 @@ class Surface {
             if (badged) {
                 const badge = doc.createElement('span');
                 badge.className = 'vela-menu-badge';
-                if (item.icon) badge.appendChild(iconEl(item.icon, doc));
+                const glyph = item.icon || (li.dataset.checkmark ? 'check' : '');
+                if (glyph) badge.appendChild(iconEl(glyph, doc));
                 li.appendChild(badge);
             } else if (item.icon) {
                 li.appendChild(iconEl(item.icon, doc));

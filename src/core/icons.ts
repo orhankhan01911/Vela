@@ -101,6 +101,12 @@ registerIcon(
     S('<rect x="2.2" y="3.2" width="11.6" height="10.6" rx="1.4"/><path d="M5.2 1.8v2.8M10.8 1.8v2.8M2.2 6.8h11.6"/>'),
 );
 registerIcon('datawindow', S('<rect x="1.8" y="2.5" width="12.4" height="11" rx="1.5"/><path d="M4.5 5.5h4M4.5 8h7M4.5 10.5h5.5"/>'));
+// Context-menu rows: clipboard, a ruled table, a layout template, a cursor line held at a time.
+registerIcon('copy', S('<rect x="5.2" y="5.2" width="8.6" height="8.6" rx="1.4"/><path d="M10.8 5.2V3.6a1.4 1.4 0 0 0-1.4-1.4H3.6a1.4 1.4 0 0 0-1.4 1.4v5.8a1.4 1.4 0 0 0 1.4 1.4h1.6"/>'));
+registerIcon('paste', S('<path d="M10.5 3h1.1a1.4 1.4 0 0 1 1.4 1.4v8.2a1.4 1.4 0 0 1-1.4 1.4H4.4A1.4 1.4 0 0 1 3 12.6V4.4A1.4 1.4 0 0 1 4.4 3h1.1"/><rect x="5.5" y="1.8" width="5" height="2.6" rx="0.8"/><path d="M5.8 8h4.4M5.8 10.6h3"/>'));
+registerIcon('table', S('<rect x="1.8" y="2.5" width="12.4" height="11" rx="1.5"/><path d="M1.8 6.2h12.4M1.8 9.8h12.4M6.2 6.2v7.3"/>'));
+registerIcon('template', S('<rect x="1.8" y="1.8" width="12.4" height="12.4" rx="1.5"/><path d="M1.8 5.8h12.4M6.6 5.8v8.4"/>'));
+registerIcon('cursor-line', S('<path d="M5 1.8v12.4" stroke-dasharray="1.5 1.7"/><rect x="7.6" y="7.4" width="6.6" height="5.4" rx="1.1"/><path d="M9.3 7.4V6a1.6 1.6 0 0 1 3.2 0v1.4"/>'));
 registerIcon('camera', S('<path d="M5.5 4 6.5 2.5h3L10.5 4h3A1 1 0 0 1 14.5 5v7.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><circle cx="8" cy="8.5" r="2.6"/>'));
 registerIcon(
     'gear',

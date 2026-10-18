@@ -175,13 +175,13 @@ export function bodyItems(s: BodyMenuState): MenuItemDescriptor[] {
     const count = (n: number, one: string): string => (n > 0 ? `Remove ${n} ${one}${n === 1 ? '' : 's'}` : `Remove ${one}s`);
     return [
         { id: 'reset-view', label: 'Reset chart view', icon: 'reset', ...hint('reset-view') },
-        { id: 'copy-price', label: s.price ? `Copy price ${s.price}` : 'Copy price', disabled: !s.price, separatorBefore: true },
-        { id: 'paste', label: 'Paste', disabled: !s.canPaste, ...hint('paste') },
-        { id: 'lock-cursor', label: 'Lock vertical cursor line by time', checked: Boolean(s.cursorLocked), separatorBefore: true },
-        { id: 'table-view', label: 'Table view', separatorBefore: true },
-        ...(s.objectTree ? [{ id: 'object-tree', label: 'Object tree' }] : []),
-        { id: 'remove-drawings', label: count(s.drawings, 'drawing'), disabled: s.drawings === 0, separatorBefore: true },
-        { id: 'remove-indicators', label: count(s.indicators, 'indicator'), disabled: s.indicators === 0 },
+        { id: 'copy-price', label: s.price ? `Copy price ${s.price}` : 'Copy price', icon: 'copy', disabled: !s.price, separatorBefore: true },
+        { id: 'paste', label: 'Paste', icon: 'paste', disabled: !s.canPaste, ...hint('paste') },
+        { id: 'lock-cursor', label: 'Lock vertical cursor line by time', icon: 'cursor-line', checked: Boolean(s.cursorLocked), separatorBefore: true },
+        { id: 'table-view', label: 'Table view', icon: 'table', separatorBefore: true },
+        ...(s.objectTree ? [{ id: 'object-tree', label: 'Object tree', icon: 'objects' }] : []),
+        { id: 'remove-drawings', label: count(s.drawings, 'drawing'), icon: 'eraser', disabled: s.drawings === 0, separatorBefore: true },
+        { id: 'remove-indicators', label: count(s.indicators, 'indicator'), icon: 'trash', disabled: s.indicators === 0 },
         settingsItem('body', 'Settings…', 'gear'),
     ];
 }

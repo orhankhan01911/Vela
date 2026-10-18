@@ -174,9 +174,18 @@ describe('chart-body menu', () => {
         expect(bodyItems({ drawings: 0, indicators: 0 }).find((i) => i.id === 'lock-cursor')!.checked).toBe(false);
     });
 
-    it('icons only on reset and settings, like TradingView; the axis menus stay text-only', () => {
-        expect(bodyItems({ drawings: 0, indicators: 0 }).filter((i) => i.icon).map((i) => [i.id, i.icon])).toEqual([
+    it('every body row carries an icon (one clean tile column); the axis menus stay text-only', () => {
+        const rows = bodyItems({ drawings: 0, indicators: 0, objectTree: true });
+        expect(rows.filter((i) => !i.icon).map((i) => i.id)).toEqual([]);
+        expect(rows.map((i) => [i.id, i.icon])).toEqual([
             ['reset-view', 'reset'],
+            ['copy-price', 'copy'],
+            ['paste', 'paste'],
+            ['lock-cursor', 'cursor-line'],
+            ['table-view', 'table'],
+            ['object-tree', 'objects'],
+            ['remove-drawings', 'eraser'],
+            ['remove-indicators', 'trash'],
             ['settings:Canvas', 'gear'],
         ]);
         expect(priceAxisItems(AXIS_STATE).some((i) => i.icon)).toBe(false);

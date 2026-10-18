@@ -64,11 +64,17 @@ export const MENU_CSS = `
 .vela-menu-item[data-checkmark] { color: var(--vela-fg-bright); }
 /* Badge mode (iconBadges): the row icon sits in a rounded tile and the row grows to fit
    it. An icon-less row of the same level keeps an invisible slot, so labels align. */
-.vela-menu[data-badges] > .vela-menu-item { padding: 5px 10px 5px 6px; }
+/* Compact: an icon menu is scanned by its tiles, so rows, gaps and separators run tighter
+   than a plain list's. */
+.vela-menu[data-badges] { padding: 4px; min-width: 0; font-size: 12.5px; }
+.vela-menu[data-badges] > .vela-menu-item { padding: 3px 10px 3px 4px; gap: 8px; }
+.vela-menu[data-badges] > .vela-menu-item .vela-menu-hint { padding-left: 14px; }
+.vela-menu[data-badges] > .vela-menu-sep { margin: 3px 4px; }
 .vela-menu-item .vela-menu-badge {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     padding: 3px;
+    font-size: 13px;
     flex: none;
     box-sizing: border-box;
     display: inline-flex;
@@ -81,7 +87,7 @@ export const MENU_CSS = `
     transition: background var(--vela-dur-fast) var(--vela-ease), border-color var(--vela-dur-fast) var(--vela-ease), color var(--vela-dur-fast) var(--vela-ease);
 }
 .vela-menu-item .vela-menu-badge:empty { background: transparent; border-color: transparent; }
-.vela-menu-item .vela-menu-badge .vela-icon { color: inherit; }
+.vela-menu-item .vela-menu-badge .vela-icon { width: 13px; height: 13px; font-size: 13px; color: inherit; }
 .vela-menu-item[data-highlighted] .vela-menu-badge:not(:empty) { color: var(--vela-fg-bright); }
 /* The selected tile inverts: a bright fill under the surface-colored glyph. After the
    hover rule, so a selected row keeps its tile while highlighted. */
