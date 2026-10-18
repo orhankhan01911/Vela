@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDrawing, deserializeDrawing, getDrawingType, type Projector, type SegmentDrawing, type PatternDrawing, type MeasureBox, type FixedRangeVolumeProfile, type Forecast, type BarsPattern } from '../src/core/drawings';
+import { createDrawing, deserializeDrawing, getDrawingType, type Projector, type SegmentDrawing, type PatternDrawing, type MeasureBox, type FixedRangeVolumeProfile, type Forecast, type BarsPattern, type GhostFeed } from '../src/core/drawings';
 
 /** Linear projector: x = time, y = 100 − price, single pane 'price' (200 × 100 px). */
 function proj(): Projector {
@@ -119,5 +119,15 @@ describe("TradingView's tools Vela lacked", () => {
         const back = deserializeDrawing(d.serialize())! as BarsPattern;
         expect(back.bars.length).toBe(3);
         expect(back.flipped).toBe(true);
+    });
+
+    it('ghost feed: one made-up candle per bar along the path, each opening on the last close', () => {
+        const p: Projector = { ...proj(), barsBetween: (a, b) => (b - a) / 10 };
+        const g = createDrawing('ghostfeed', { paneId: 'price', anchors: [P(0, 50), P(40, 70), P(60, 60)] })! as GhostFeed;
+        const c = g.ghostCandles(p);
+        expect(c.length).toBe(6); // 4 bars up, 2 bars down
+        expect(c.map((k) => k.x)).toEqual([10, 20, 30, 40, 50, 60]);
+        for (let i = 1; i < c.length; i += 1) expect(c[i]!.open).toBeCloseTo(c[i - 1]!.close, 9);
+        expect(c[3]!.close).toBeCloseTo(30, 9); // ends the first leg on price 70
     });
 });

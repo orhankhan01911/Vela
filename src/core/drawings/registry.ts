@@ -8,6 +8,7 @@ import { CyclicLines } from './types/CyclicLines';
 import { Projection } from './types/Projection';
 import { Forecast } from './types/Forecast';
 import { BarsPattern } from './types/BarsPattern';
+import { GhostFeed } from './types/GhostFeed';
 import { TimeCycles } from './types/TimeCycles';
 import { SineLine } from './types/SineLine';
 import { ArrowMarker } from './types/ArrowMarker';
@@ -1137,4 +1138,14 @@ registerDrawingType({
     coversSeries: true, // the copy reads over the candles it is compared with
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new BarsPattern(init),
+});
+const GHOST_FEED_ICON = svg24('<path d="M5 7v10M4 10h2v4H4zM10 5v10M9 7h2v5H9zM15 9v10M14 11h2v5h-2zM20 4v10M19 6h2v5h-2z" stroke-dasharray="2 1.5"/>');
+registerDrawingType({
+    type: 'ghostfeed',
+    group: 'measure',
+    label: 'Ghost Feed',
+    icon: GHOST_FEED_ICON,
+    coversSeries: true,
+    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'dashed' },
+    create: (init) => new GhostFeed(init),
 });

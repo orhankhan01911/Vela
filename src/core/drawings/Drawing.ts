@@ -36,6 +36,7 @@ export type DrawingTypeKey =
     | 'projection'
     | 'forecast'
     | 'barspattern'
+    | 'ghostfeed'
     | 'fixedrangetpo'
     | 'pricealert'
     | 'pitchfork'

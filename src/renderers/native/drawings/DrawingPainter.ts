@@ -1,5 +1,5 @@
 import type { Drawing, Projector, DrawingStyle, Box, TrendLine, TextLabel, Ellipse } from '../../../core/drawings';
-import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern } from '../../../core/drawings';
+import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP } from '../../../core/palette';
@@ -205,6 +205,10 @@ export class DrawingPainter {
         if (d.type === 'highlighter' && d instanceof SegmentDrawing) {
             this.paintHighlighter(ctx, d, proj);
             this.paintLabel(ctx, d, proj, theme);
+            return;
+        }
+        if (d instanceof GhostFeed) {
+            this.paintGhostFeed(ctx, d, proj);
             return;
         }
         if (d instanceof SegmentDrawing) {
@@ -659,6 +663,34 @@ export class DrawingPainter {
             ctx.fillText(label, cx, proj.height + 11.5);
             ctx.restore();
         }
+    }
+
+    /** TradingView's ghost feed: made-up candles along the clicked path, in the chart's own candle colors, faded. */
+    private paintGhostFeed(ctx: CanvasRenderingContext2D, d: GhostFeed, proj: Projector): void {
+        const candles = d.ghostCandles(proj);
+        if (!candles.length) {
+            this.paintSegments(ctx, d, proj); // still placing the first leg
+            return;
+        }
+        const step = candles.length > 1 ? Math.abs(candles[1]!.x - candles[0]!.x) : 8;
+        const half = Math.max(1, Math.min(8, step * 0.35));
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.globalAlpha *= 0.6;
+        ctx.lineWidth = 1;
+        for (const c of candles) {
+            const up = c.close <= c.open; // pixel y grows down
+            const col = up ? this.seriesLook.upColor : this.seriesLook.downColor;
+            const x = Math.round(c.x) + 0.5;
+            ctx.strokeStyle = col;
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            ctx.moveTo(x, c.high);
+            ctx.lineTo(x, c.low);
+            ctx.stroke();
+            ctx.fillRect(x - half, Math.min(c.open, c.close), half * 2, Math.max(1, Math.abs(c.close - c.open)));
+        }
+        ctx.restore();
     }
 
     /** TradingView's bars pattern: the copied bars in the tool's color (down bars filled, up bars hollow), as candles,
