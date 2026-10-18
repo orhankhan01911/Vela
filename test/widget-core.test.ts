@@ -185,6 +185,14 @@ describe('filterSymbols', () => {
         { ticker: 'SOLUSDT', description: 'Solana' },
     ];
 
+    it('lists a row made for exactly this query first, even when no field contains the text', () => {
+        const made = { ticker: 'BTC~XMR', description: 'BTC / XMR ratio', provider: 'pair', matches: 'btcusdt.p/xmrusdt.p' };
+        const pool = [...list, made];
+        expect(filterSymbols(pool, ' BTCUSDT.P/XMRUSDT.P ').map((s) => s.ticker)[0]).toBe('BTC~XMR');
+        // another query does not force it in
+        expect(filterSymbols(pool, 'SOL').map((s) => s.ticker)).toEqual(['SOLUSDT']);
+    });
+
     it('ranks ticker prefix above substring above description matches', () => {
         expect(filterSymbols(list, 'BTC').map((s) => s.ticker)).toEqual(['BTCUSDT', 'WBTCUSDT']);
         expect(filterSymbols(list, 'bitcoin').map((s) => s.ticker)).toEqual(['BTCUSDT', 'WBTCUSDT']);

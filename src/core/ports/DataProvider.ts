@@ -8,6 +8,12 @@ import type { Unsubscribe } from '../util/types';
  */
 export interface SymbolDescriptor {
     /** The ticker exactly as the provider expects it (e.g. `BTCUSDT`, `BTCUSDT.P`). */
+    /**
+     * The exact query this row was made for (a plugin that builds rows from what was typed, e.g. a pair named
+     * `BTCUSDT.P/ETHUSDT.P`). The matcher lists such a row first for that query even when neither its ticker nor
+     * its description contains the typed text.
+     */
+    matches?: string;
     ticker: string;
     /** Human-readable label (e.g. `Bitcoin / TetherUS`). */
     description?: string;

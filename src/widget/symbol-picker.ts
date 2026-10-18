@@ -103,11 +103,15 @@ export function filterSymbols(list: readonly SymbolDescriptor[], query: string, 
         return [...pinned, ...rest].slice(0, limit);
     }
     const qLower = term.toLowerCase();
-    const prefix: SymbolDescriptor[] = [];
+    // Rows a plugin built for exactly this query (`SymbolDescriptor.matches`) lead.
+    const raw = query.trim().toLowerCase();
+    const made = list.filter((s) => s.matches !== undefined && s.matches.trim().toLowerCase() === raw);
+    const prefix: SymbolDescriptor[] = [...made];
     const substr: SymbolDescriptor[] = [];
     const desc: SymbolDescriptor[] = [];
     const venue: SymbolDescriptor[] = [];
     for (const s of pool) {
+        if (made.includes(s)) continue;
         const t = s.ticker.toUpperCase();
         if (t.startsWith(q)) prefix.push(s);
         else if (t.includes(q)) substr.push(s);
@@ -468,9 +472,13 @@ export class SymbolPicker {
      *  keystroke; an async hook resolves onto the next repaint (stale-while-revalidate
      *  in between, the raw pool before the first resolve). */
     private pool(): readonly SymbolDescriptor[] {
-        const raw = this.source();
+        const all = this.source();
         const hook = symbolRanking();
-        if (!hook) return raw;
+        if (!hook) return all;
+        // Rows a plugin built for the current query (`matches`) change with every keystroke: they skip the
+        // ranking cache (its key would not see them change) and ride after the ranked pool.
+        const made = all.filter((s) => s.matches !== undefined);
+        const raw = made.length ? all.filter((s) => s.matches === undefined) : all;
         const key = `${raw.length}:${raw[0]?.ticker ?? ''}:${raw[raw.length - 1]?.ticker ?? ''}`;
         if (this.ranked?.key !== key && !this.ranking) {
             this.ranking = true;
@@ -488,7 +496,8 @@ export class SymbolPicker {
                     this.refresh(); // repaint the (possibly open) list with the ranked pool
                 });
         }
-        return this.ranked?.result ?? raw;
+        const ranked = this.ranked?.result ?? raw;
+        return made.length ? [...ranked, ...made] : ranked;
     }
 
     private computeRows(): SymbolDescriptor[] {
