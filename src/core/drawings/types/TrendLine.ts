@@ -3,6 +3,7 @@ import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
 import { LINE_FIELDS, TEXT_FIELDS, LINE_TEXT_ALIGN_FIELDS } from '../schema';
 import { distToSegment, handleAt } from '../hittest';
+import { LINE_STATS_FIELDS, statsOf, type LineStats } from './lineStats';
 
 /** A two-point trend line. Both endpoints move freely on time + price. Like TradingView's, it can extend past
  *  either point to the pane edge and carry an arrow at either end. */
@@ -11,18 +12,21 @@ export class TrendLine extends Drawing {
     // `!` (no initializer): the base constructor runs readProps before subclass fields would initialize.
     extendLeft!: boolean;
     extendRight!: boolean;
+    /** TradingView's stats box; read through `statsOf`. */
+    stats!: Partial<LineStats> | undefined;
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         return { min: 2, max: 2, slots: [{ role: 'p1', free: 'both' }, { role: 'p2', free: 'both' }] };
     }
 
     protected override writeProps(): Record<string, unknown> {
-        return { extendLeft: !!this.extendLeft, extendRight: !!this.extendRight };
+        return { extendLeft: !!this.extendLeft, extendRight: !!this.extendRight, stats: statsOf(this)! };
     }
 
     protected override readProps(props: Record<string, unknown>): void {
         if (typeof props.extendLeft === 'boolean') this.extendLeft = props.extendLeft;
         if (typeof props.extendRight === 'boolean') this.extendRight = props.extendRight;
+        if (props.stats && typeof props.stats === 'object') this.stats = { ...(props.stats as Partial<LineStats>) };
     }
 
     private pixels(proj: Projector): [number, number, number, number] | null {
@@ -96,6 +100,7 @@ export class TrendLine extends Drawing {
                 { path: 'style.arrowRight', label: 'Right end arrow', kind: 'boolean', group: 'line' },
                 { path: 'extendLeft', label: 'Extend left', kind: 'boolean', group: 'behavior' },
                 { path: 'extendRight', label: 'Extend right', kind: 'boolean', group: 'behavior' },
+                ...LINE_STATS_FIELDS,
                 ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS,
             ],
         };

@@ -3,10 +3,21 @@ import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
 import { LINE_FIELDS, TEXT_FIELDS, LINE_TEXT_ALIGN_FIELDS } from '../schema';
 import { distToSegment, extendRay, handleAt } from '../hittest';
+import { LINE_STATS_FIELDS, statsOf, type LineStats } from './lineStats';
 
 /** A ray: a line through two anchors that extends to the right chart edge. */
 export class Ray extends Drawing {
     readonly type = 'ray' as const;
+    /** TradingView's stats box; read through `statsOf`. */
+    stats!: Partial<LineStats> | undefined;
+
+    protected override writeProps(): Record<string, unknown> {
+        return { stats: statsOf(this)! };
+    }
+
+    protected override readProps(props: Record<string, unknown>): void {
+        if (props.stats && typeof props.stats === 'object') this.stats = { ...(props.stats as Partial<LineStats>) };
+    }
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         return { min: 2, max: 2, slots: [{ role: 'p1', free: 'both' }, { role: 'p2', free: 'both' }] };
@@ -52,6 +63,6 @@ export class Ray extends Drawing {
     }
 
     schema(): SettingsSchema {
-        return { fields: [...LINE_FIELDS, ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS] };
+        return { fields: [...LINE_FIELDS, ...LINE_STATS_FIELDS, ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS] };
     }
 }

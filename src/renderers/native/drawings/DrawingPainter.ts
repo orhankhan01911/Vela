@@ -1,12 +1,12 @@
 import type { Drawing, Projector, DrawingStyle, Box, TrendLine } from '../../../core/drawings';
-import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, Note, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs } from '../../../core/drawings';
+import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP } from '../../../core/palette';
 import { withAlpha } from '../../../core/color';
 import { barTransformFor } from '../../../core/price-styles/BarTransform';
 import type { OHLCV } from '../../../core/model/ohlcv';
-import { valueDecimals } from '../chrome/ticks';
+import { valueDecimals, formatTimeStamp } from '../chrome/ticks';
 
 const HANDLE_RADIUS = 4.5; // px radius of the round drag handles
 /** Handle chrome is fixed (not the drawing's line color) so tools with atypical accents —
@@ -64,6 +64,8 @@ export class DrawingPainter {
      *  series' own so the inset reads as a finer copy of the chart. */
     /** The chart's bar duration (ms): drawings limited to other timeframes (Visibility tab) are skipped. 0 = show all. */
     barMs = 0;
+    /** The chart's timezone (axis time labels read like the crosshair's time chip). */
+    timeZone = 'UTC';
     seriesLook: { style: string; upColor: string; downColor: string; lineColor: string } = {
         style: 'candles',
         upColor: BULLISH,
@@ -594,6 +596,72 @@ export class DrawingPainter {
             const rect = proj.paneRect?.(d.paneId);
             if (!a || y == null || (rect && (rect.height <= 0 || y < rect.top || y > rect.top + rect.height))) continue;
             this.paintAxisPrice(ctx, d, y, proj, theme);
+        }
+        // TradingView's time label for vertical lines / cross lines: the time in a chip of the line color on the time axis.
+        for (const d of drawings) {
+            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs) || !showsAxisTime(d)) continue;
+            const a = d.anchors[0];
+            const x = a ? proj.xOf(a.time) : null;
+            if (!a || x == null || x < 0 || x > proj.width) continue;
+            const ink = d.style.lineColor || theme.textColor;
+            const label = formatTimeStamp(a.time, this.timeZone, this.barMs || 60_000);
+            ctx.save();
+            ctx.setLineDash([]);
+            ctx.font = `600 11px ${theme.fontFamily}`;
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'center';
+            const w = ctx.measureText(label).width + 14;
+            const cx = Math.max(w / 2 + 1, Math.min(proj.width - w / 2 - 1, x));
+            roundRect(ctx, cx - w / 2, proj.height + 2, w, 18, 4);
+            ctx.fillStyle = ink;
+            ctx.fill();
+            ctx.fillStyle = contrastColor(ink);
+            ctx.fillText(label, cx, proj.height + 11.5);
+            ctx.restore();
+        }
+    }
+
+    /** TradingView's line stats (trend line, ray, extended line, info line): a box of price range, percent, bars,
+     *  time span, distance and angle by the first point, the middle or the second point, below and right of it. Its own
+     *  pass on the top canvas like the axis prices, so the candles never cover it. */
+    paintLineStats(ctx: CanvasRenderingContext2D, drawings: readonly Drawing[], proj: Projector, theme: VelaTheme): void {
+        for (const d of drawings) {
+            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs)) continue;
+            const s = statsOf(d as Drawing & { stats?: unknown });
+            const a = d.anchors[0];
+            const b = d.anchors[1];
+            if (!s || !anyStats(s) || !a || !b) continue;
+            const pts = d.handlePoints(proj);
+            if (pts.length < 2) continue;
+            const p: [number, number, number, number] = [pts[0]![0], pts[0]![1], pts[1]![0], pts[1]![1]];
+            const rows = lineStatsRows(s, a, b, p, proj);
+            if (rows.length === 0) continue;
+            const ax = s.position === 'left' ? p[0] : s.position === 'right' ? p[2] : (p[0] + p[2]) / 2;
+            const ay = s.position === 'left' ? p[1] : s.position === 'right' ? p[3] : (p[1] + p[3]) / 2;
+            const rect = proj.paneRect?.(d.paneId) ?? { top: 0, height: proj.height };
+            if (ay < rect.top || ay > rect.top + rect.height || ax < 0 || ax > proj.width) continue;
+            ctx.save();
+            ctx.setLineDash([]);
+            ctx.font = `12px ${theme.fontFamily}`;
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'left';
+            const padX = 12;
+            const rowH = 22;
+            const w = Math.ceil(Math.max(...rows.map((r) => ctx.measureText(r).width))) + padX * 2;
+            const h = rows.length * rowH + 10;
+            // Below and right of the point, flipped back inside the pane near its right or bottom edge.
+            let x = ax + 12;
+            let y = ay + 12;
+            if (x + w > proj.width - 2) x = ax - 12 - w;
+            if (y + h > rect.top + rect.height - 2) y = ay - 12 - h;
+            x = Math.max(2, x);
+            y = Math.max(rect.top + 2, y);
+            roundRect(ctx, x, y, w, h, 4);
+            ctx.fillStyle = STATS_FILL;
+            ctx.fill();
+            ctx.fillStyle = STATS_TEXT;
+            rows.forEach((r, i) => ctx.fillText(r, x + padX, y + 5 + rowH * i + rowH / 2));
+            ctx.restore();
         }
     }
 
@@ -1359,9 +1427,49 @@ export class DrawingPainter {
         this.paintBubble(ctx, d, proj, theme, 5); // squared-off corners
     }
 
-    /** A Comment is a Callout with fully-rounded (balloon) corners. */
+    /** TradingView's comment: a rounded bubble standing on its point, the bottom-left corner the sharp tip on it.
+     *  An old two-point comment keeps its balloon with a tail. */
     private paintComment(ctx: CanvasRenderingContext2D, d: Comment, proj: Projector, theme: VelaTheme): void {
-        this.paintBubble(ctx, d, proj, theme, 999); // clamped to min(w,h)/2 → a rounded balloon
+        if (d.tailed) {
+            this.paintBubble(ctx, d, proj, theme, 999); // clamped to min(w,h)/2 → a rounded balloon
+            return;
+        }
+        const p = d.points(proj);
+        if (!p) return;
+        const [ax, ay] = p[0];
+        const { lines, tw, lh } = this.measureText(ctx, d, theme, 'Comment');
+        const padX = 14;
+        const padY = 10;
+        const w = tw + padX * 2;
+        const h = lines.length * lh + padY * 2;
+        const x = ax;
+        const y = ay - h;
+        const r = Math.min(h / 2, 18);
+        const path = (): void => {
+            ctx.beginPath();
+            ctx.moveTo(x, y + r);
+            ctx.arcTo(x, y, x + r, y, r);
+            ctx.arcTo(x + w, y, x + w, y + r, r);
+            ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+            ctx.lineTo(x, y + h); // the sharp tip on the point
+            ctx.closePath();
+        };
+        const fill = effectiveFillColor(d, theme) ?? d.style.lineColor;
+        ctx.save();
+        ctx.fillStyle = fill;
+        path();
+        ctx.fill();
+        ctx.restore();
+        if (d.style.lineColor && d.style.lineColor !== fill) {
+            this.applyStroke(ctx, d.style);
+            path();
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        ctx.fillStyle = d.text?.color ?? contrastColor(fill);
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+        lines.forEach((line, i) => ctx.fillText(line, x + padX, y + padY + i * lh));
     }
 
     private paintBubble(ctx: CanvasRenderingContext2D, d: CalloutBase, proj: Projector, theme: VelaTheme, maxRadius: number): void {
@@ -1453,15 +1561,38 @@ export class DrawingPainter {
         return { lines, tw, fs, lh: labelLineHeight(fs) };
     }
 
-    /** A Note: free text on a rounded plate anchored at the point (top-left). */
+    /** TradingView's note: a map pin with its tip on the point; the text shows in a plate above the pin while it is
+     *  hovered or selected (or always, with `showText`). */
     private paintNote(ctx: CanvasRenderingContext2D, d: Note, proj: Projector, theme: VelaTheme): void {
         const pts = d.handlePoints(proj);
         if (!pts.length) return;
         const [ax, ay] = pts[0]!;
+        const ink = d.style.lineColor || theme.textColor;
+        const { r, h } = NOTE_PIN;
+        const cy = ay - h + r; // the head's centre
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        // The head's circle, closed by two tangents meeting at the tip.
+        const tipD = ay - cy;
+        const half = Math.acos(r / tipD);
+        ctx.arc(ax, cy, r, Math.PI / 2 + half, Math.PI / 2 - half);
+        ctx.lineTo(ax, ay);
+        ctx.closePath();
+        ctx.fillStyle = ink;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(ax, cy, r * 0.38, 0, Math.PI * 2);
+        ctx.fillStyle = theme.background;
+        ctx.fill();
+        ctx.restore();
+        if (!d.showText && !handleIdsFor(this.targets).has(d.id)) return;
         const { lines, tw, lh } = this.measureText(ctx, d, theme, 'Note');
-        const padX = 8;
-        const padY = 5;
-        this.paintTextPlate(ctx, d, theme, ax, ay, tw + padX * 2, lines.length * lh + padY * 2, lines, lh, padX, padY);
+        const padX = 10;
+        const padY = 7;
+        const w = tw + padX * 2;
+        const bh = lines.length * lh + padY * 2;
+        this.paintTextPlate(ctx, d, theme, ax - w / 2, ay - h - 6 - bh, w, bh, lines, lh, padX, padY);
     }
 
     /** A Price Note: a box joined to the pinned point by a leader + a dot, showing that point's
@@ -1505,26 +1636,51 @@ export class DrawingPainter {
         ctx.fillText(priceStr, cx, cy + 0.5);
     }
 
-    /** A Signpost: a sign plate on a pole rising from a pinned level (a base nub). */
+    /** TradingView's signpost: a thin pole from the bar up (or down) to a round badge with a flag, its label in a plate
+     *  above the badge. */
     private paintSignpost(ctx: CanvasRenderingContext2D, d: Signpost, proj: Projector, theme: VelaTheme): void {
         const p = d.points(proj);
         if (!p) return;
         const [bx, by] = p[0];
         const [sx, sy] = p[1];
-        const { lines, tw, lh } = this.measureText(ctx, d, theme, 'Signpost');
+        const ink = d.style.lineColor || theme.textColor;
+        const R = SIGNPOST_R;
+        if (Math.abs(sy - by) > R) {
+            this.stroke(ctx, { ...d.style, lineWidth: 1 }, () => {
+                ctx.moveTo(bx, by);
+                ctx.lineTo(sx, sy + (by > sy ? R : -R));
+            });
+        }
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(sx, sy, R, 0, Math.PI * 2);
+        ctx.fillStyle = ink;
+        ctx.fill();
+        // The flag: a pole and a pennant, in the badge's contrast ink.
+        const fg = contrastColor(ink);
+        ctx.strokeStyle = fg;
+        ctx.fillStyle = fg;
+        ctx.lineWidth = 1.6;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(sx - 4.5, sy + 7);
+        ctx.lineTo(sx - 4.5, sy - 7);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(sx - 4.5, sy - 7);
+        ctx.lineTo(sx + 6, sy - 3.5);
+        ctx.lineTo(sx - 4.5, sy);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        if (!d.text?.value) return;
+        const { lines, tw, lh } = this.measureText(ctx, d, theme, '');
         const padX = 9;
-        const padY = 6;
+        const padY = 5;
         const w = tw + padX * 2;
         const h = lines.length * lh + padY * 2;
-        this.stroke(ctx, d.style, () => {
-            ctx.moveTo(bx, by);
-            ctx.lineTo(sx, sy);
-        });
-        ctx.fillStyle = d.style.lineColor;
-        ctx.beginPath();
-        ctx.arc(bx, by, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-        this.paintTextPlate(ctx, d, theme, sx - w / 2, sy - h / 2, w, h, lines, lh, padX, padY);
+        this.paintTextPlate(ctx, d, theme, sx - w / 2, sy - R - 6 - h, w, h, lines, lh, padX, padY);
     }
 
     /** A price alert: dashed stub + ring at the plot edge, a chip with the price on the axis, and
@@ -1832,8 +1988,7 @@ export class DrawingPainter {
         }
     }
 
-    /** Paint an info line: the segment + a midpoint box reading price change, percent, and bar count
-     *  (green when up, red when down). */
+    /** Paint an info line's segment; its stats box is painted on top of the candles by `paintLineStats`. */
     private paintInfoLine(ctx: CanvasRenderingContext2D, d: Drawing, proj: Projector): void {
         const pts = d.handlePoints(proj);
         if (pts.length < 2) return;
@@ -1843,35 +1998,6 @@ export class DrawingPainter {
             ctx.moveTo(x1, y1);
             ctx.lineTo(x2, y2);
         });
-        const a = d.anchors[0];
-        const b = d.anchors[1];
-        if (!a || !b) return;
-        const priceChange = b.price - a.price;
-        const pct = a.price !== 0 ? (priceChange / a.price) * 100 : 0;
-        const bars = proj.barsBetween ? Math.abs(Math.round(proj.barsBetween(a.time, b.time))) : 0;
-        const sign = priceChange >= 0 ? '+' : '';
-        const txt = `${sign}${priceChange.toFixed(2)} (${sign}${pct.toFixed(2)}%)  ${bars} bars`;
-        const mx = (x1 + x2) / 2;
-        const my = (y1 + y2) / 2;
-        ctx.font = '11px monospace';
-        const bw = ctx.measureText(txt).width + 12;
-        const bh = 18;
-        const bx = mx - 2;
-        const by = my - bh - 4; // sits just above the midpoint
-        ctx.save();
-        ctx.globalAlpha = 0.9 * ctx.globalAlpha;
-        roundRect(ctx, bx, by, bw, bh, 3);
-        ctx.fillStyle = BADGE_FILL;
-        ctx.fill();
-        ctx.strokeStyle = BADGE_STROKE;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.restore();
-        ctx.fillStyle = priceChange >= 0 ? BULLISH : BEARISH;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(txt, bx + 6, by + bh / 2);
-        ctx.textBaseline = 'alphabetic';
     }
 
     /** Paint a trend angle: the segment + a faint dashed baseline, an arc, and a degree readout at
@@ -2014,12 +2140,21 @@ function showsAxisPrice(d: Drawing): boolean {
     return (d.type === 'hline' || d.type === 'hray' || d.type === 'crossline') && (d as { showPrice?: boolean }).showPrice !== false;
 }
 
+/** A vertical line / cross line whose time label is on (TradingView's default: absent ⇒ on). */
+function showsAxisTime(d: Drawing): boolean {
+    return (d.type === 'vline' || d.type === 'crossline') && (d as { showTime?: boolean }).showTime !== false;
+}
+
 function formatPriceTag(p: number): string {
     const d = valueDecimals(p);
     return p.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
 /** Begin a rounded-rectangle path (arcTo-based, no `ctx.roundRect` dependency). */
+/** TradingView's line stats box: a translucent neutral grey with light text, the same on light and dark charts. */
+const STATS_FILL = 'rgba(80, 84, 94, 0.92)'; // palette-exempt: neutral stats box like TradingView's
+const STATS_TEXT = '#f2f4f8'; // palette-exempt: ~7:1 on STATS_FILL
+
 /** Neutral fill of the position tool's centre (size + ratio) box; white text on it is ~9:1. */
 const POSITION_CENTER_FILL = '#4c525e'; // palette-exempt: neutral position-tool centre label box
 

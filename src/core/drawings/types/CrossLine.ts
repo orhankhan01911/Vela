@@ -1,22 +1,24 @@
 import { Drawing, type AnchorSlot } from '../Drawing';
 import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
-import { LINE_FIELDS, SHOW_PRICE_FIELD, TEXT_FIELDS } from '../schema';
+import { LINE_FIELDS, SHOW_PRICE_FIELD, SHOW_TIME_FIELD, TEXT_FIELDS } from '../schema';
 import { handleAt } from '../hittest';
 
 /** A full-width horizontal + full-height vertical line crossing at a single anchor. Like TradingView's, it shows
- *  its price on the price scale unless `showPrice` is off. */
+ *  its price on the price scale and its time on the time axis unless `showPrice` / `showTime` is off. */
 export class CrossLine extends Drawing {
     readonly type = 'crossline' as const;
     // `!` (no initializer): the base constructor runs readProps first. Absent ⇒ shown (TradingView's default).
     showPrice!: boolean;
+    showTime!: boolean;
 
     protected override writeProps(): Record<string, unknown> {
-        return { showPrice: this.showPrice !== false };
+        return { showPrice: this.showPrice !== false, showTime: this.showTime !== false };
     }
 
     protected override readProps(props: Record<string, unknown>): void {
         if (typeof props.showPrice === 'boolean') this.showPrice = props.showPrice;
+        if (typeof props.showTime === 'boolean') this.showTime = props.showTime;
     }
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
@@ -60,6 +62,6 @@ export class CrossLine extends Drawing {
     }
 
     schema(): SettingsSchema {
-        return { fields: [...LINE_FIELDS, SHOW_PRICE_FIELD, ...TEXT_FIELDS] };
+        return { fields: [...LINE_FIELDS, SHOW_PRICE_FIELD, SHOW_TIME_FIELD, ...TEXT_FIELDS] };
     }
 }

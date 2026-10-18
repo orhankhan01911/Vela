@@ -61,6 +61,8 @@ export interface UserDrawingDeps {
     seriesLook(): { style: string; upColor: string; downColor: string; lineColor: string };
     /** One chart bar in ms (the chart's own timeframe) — pickers drop choices at/above it. */
     chartBarMs(): number;
+    /** The chart's timezone — axis time labels on vertical lines match the crosshair's time chip. */
+    timeZone?(): string;
     /** Snap a data point to the nearest candle (time + OHLC), per magnet `mode` + the cursor pixel. */
     snap(point: DrawingPoint, paneId: string, mode: SnapMode, cursorPx?: { x: number; y: number }): DrawingPoint;
     /** Set the sticky magnet mode (driven by the toolbar's 3-state button). */
@@ -1065,7 +1067,10 @@ export class UserDrawingController implements IDrawingsRendererPort {
         this.painter.paintAll(ctx, this.drawings.filter(onTop), proj, this.deps.theme(), targets);
         this.painter.paintHighlights(ctx, this.drawings.filter((d) => !onTop(d)), proj, handleIdsFor(targets));
         // Price labels on the scale for every horizontal line, including ones painted under the candles.
+        this.painter.timeZone = this.deps.timeZone?.() ?? 'UTC';
         this.painter.paintAxisPrices(ctx, this.drawings, proj, this.deps.theme());
+        // Line stats boxes (info line, trend lines) likewise sit over the candles, as TradingView's do.
+        this.painter.paintLineStats(ctx, this.drawings, proj, this.deps.theme());
         // A Ctrl-drag moves COPIES that are not in the store yet: paint them here, in full and with
         // handles, so they read as the real drawings they are about to become.
         const clones = this.interaction.dragClones();

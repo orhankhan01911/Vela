@@ -7,30 +7,15 @@ import { SegmentDrawing } from './SegmentDrawing';
 const ARC_SAMPLES = 40;
 
 /**
- * A half-ellipse dome over a base chord (p1→p2) with an apex (p3) whose height sets the bulge.
- * The apex is pinned to the chord's horizontal midpoint, so the dome stays symmetric about
- * the chord's perpendicular bisector.
+ * TradingView's arc: half an ellipse on the chord p1→p2 (its diameter) that passes through the third point. The
+ * ellipse's other axis is square to the chord; the third point can sit anywhere beside the chord, so dragging it
+ * both bulges and leans the arc. Arcs saved when the third point was pinned over the chord's middle draw unchanged.
  */
 export class Arc extends SegmentDrawing {
     readonly type = 'arc' as const;
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         return { min: 3, max: 3, slots: [{ role: 'p1', free: 'both' }, { role: 'p2', free: 'both' }, { role: 'apex', free: 'both' }] };
-    }
-
-    private pinApex(): void {
-        const a = this.anchors[0];
-        const b = this.anchors[1];
-        const apex = this.anchors[2];
-        if (a && b && apex) apex.time = (a.time + b.time) / 2;
-    }
-
-    override onPlaced(): void {
-        this.pinApex();
-    }
-
-    override constrainHandleDrag(): void {
-        this.pinApex(); // keep the apex on the chord's midpoint whichever handle moved
     }
 
     private px(proj: Projector, i: number): [number, number] | null {
@@ -44,12 +29,8 @@ export class Arc extends SegmentDrawing {
         const A = this.px(proj, 0);
         const B = this.px(proj, 1);
         if (!A || !B) return null;
-        const apex = this.anchors[2];
-        if (!apex || this.anchors.length < 3) {
-            return { segments: [[A[0], A[1], B[0], B[1]]], fill: null }; // chord only (placing)
-        }
-        const ay = proj.yOf(apex.price, this.paneId);
-        if (ay == null) return null;
+        const C = this.anchors.length >= 3 ? this.px(proj, 2) : null;
+        if (!C) return { segments: [[A[0], A[1], B[0], B[1]]], fill: null }; // chord only (placing)
         const Mx = (A[0] + B[0]) / 2;
         const My = (A[1] + B[1]) / 2;
         const hx = (B[0] - A[0]) / 2; // half-chord vector
@@ -58,18 +39,24 @@ export class Arc extends SegmentDrawing {
         if (len < 1e-6) return { segments: [[A[0], A[1], B[0], B[1]]], fill: null };
         let nx = -hy / len; // unit normal to the chord
         let ny = hx / len;
-        const off = (ay - My) * ny; // apex offset along the normal (apex x is pinned to Mx, so its x term is 0)
+        // The third point in the chord's frame: c along the half-chord (−1…1 between the ends), off along the normal.
+        const dx = C[0] - Mx;
+        const dy = C[1] - My;
+        let off = dx * nx + dy * ny;
         if (off < 0) {
             nx = -nx;
             ny = -ny;
+            off = -off;
         }
-        const h = Math.abs(off); // dome height
+        const c = Math.max(-0.995, Math.min(0.995, (dx * hx + dy * hy) / (len * len)));
+        // cos t = c and sin t · k = off on the ellipse, so its other semi-axis is k = off / sin t.
+        const k = off / Math.sqrt(1 - c * c);
         const pts: Array<[number, number]> = [];
         for (let i = 0; i <= ARC_SAMPLES; i += 1) {
             const t = (i / ARC_SAMPLES) * Math.PI; // 0 → π sweeps B → A over the dome
-            const c = Math.cos(t);
-            const s = Math.sin(t);
-            pts.push([Mx + c * hx + s * h * nx, My + c * hy + s * h * ny]);
+            const cs = Math.cos(t);
+            const sn = Math.sin(t);
+            pts.push([Mx + cs * hx + sn * k * nx, My + cs * hy + sn * k * ny]);
         }
         const segments: Array<[number, number, number, number]> = [];
         for (let i = 1; i < pts.length; i += 1) segments.push([pts[i - 1]![0], pts[i - 1]![1], pts[i]![0], pts[i]![1]]);

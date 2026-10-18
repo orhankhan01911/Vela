@@ -18,12 +18,14 @@ describe('drawings/annotations (Wave 13)', () => {
         expect(mk('pricelabel', 1)).toBeInstanceOf(PinnedLabel);
     });
 
-    it('Price Note / Comment / Signpost share the two-anchor CalloutBase rig', () => {
-        for (const t of ['pricenote', 'comment', 'signpost'] as const) {
+    it('Price Note / Comment / Signpost share the CalloutBase rig (a new comment stands on one point, like TradingView\'s)', () => {
+        for (const t of ['pricenote', 'signpost'] as const) {
             const d = mk(t, 2);
             expect(d.anchorSchema()).toMatchObject({ min: 2, max: 2 });
             expect(d).toBeInstanceOf(CalloutBase); // siblings of Callout, each with its own painter branch
         }
+        expect(mk('comment', 1).anchorSchema()).toMatchObject({ min: 1, max: 1 });
+        expect(mk('comment', 1)).toBeInstanceOf(CalloutBase);
     });
 
     it('Price Label + Price Note show the auto price — no text.value field, styling kept', () => {

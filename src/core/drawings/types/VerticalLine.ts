@@ -1,12 +1,23 @@
 import { Drawing, type AnchorSlot } from '../Drawing';
 import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
-import { LINE_FIELDS, TEXT_FIELDS, LINE_TEXT_ALIGN_FIELDS } from '../schema';
+import { LINE_FIELDS, SHOW_TIME_FIELD, TEXT_FIELDS, LINE_TEXT_ALIGN_FIELDS } from '../schema';
 import { handleAt } from '../hittest';
 
-/** A vertical line at a single time, spanning the full pane height. */
+/** A vertical line at a single time, spanning the full pane height. Like TradingView's, it shows its time on the
+ *  time axis unless `showTime` is off. */
 export class VerticalLine extends Drawing {
     readonly type = 'vline' as const;
+    // `!` (no initializer): the base constructor runs readProps first. Absent ⇒ shown (TradingView's default).
+    showTime!: boolean;
+
+    protected override writeProps(): Record<string, unknown> {
+        return { showTime: this.showTime !== false };
+    }
+
+    protected override readProps(props: Record<string, unknown>): void {
+        if (typeof props.showTime === 'boolean') this.showTime = props.showTime;
+    }
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         // One anchor; only its time (x) matters — its price pins the drag handle.
@@ -45,6 +56,6 @@ export class VerticalLine extends Drawing {
     }
 
     schema(): SettingsSchema {
-        return { fields: [...LINE_FIELDS, ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS] };
+        return { fields: [...LINE_FIELDS, SHOW_TIME_FIELD, ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS] };
     }
 }

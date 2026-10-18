@@ -149,7 +149,7 @@ export function resetDrawingSettings(drawing: Drawing): void {
 /** Rehydrate a {@link Drawing} from a plain record, or null for an unknown type. */
 export function deserializeDrawing(doc: SerializedDrawing): Drawing | null {
     const meta = REGISTRY.get(doc.type);
-    return meta ? meta.create(legacyElliott(doc)) : null;
+    return meta ? meta.create(legacyComment(legacyElliott(doc))) : null;
 }
 
 /** Elliott waves gained TradingView's unlabelled origin point (impulse 5 → 6 points, correction 3 → 4). A record
@@ -158,6 +158,13 @@ function legacyElliott(doc: SerializedDrawing): SerializedDrawing {
     const old = doc.type === 'elliottimpulse' ? 5 : doc.type === 'elliottcorrection' ? 3 : 0;
     if (!old || doc.props?.origin !== undefined || (doc.anchors?.length ?? 0) !== old) return doc;
     return { ...doc, props: { ...(doc.props ?? {}), origin: false } };
+}
+
+/** Comments became TradingView's one-point bubble. A record saved before has two points (target + balloon) and no
+ *  `point` flag: mark it so it keeps its tail. */
+function legacyComment(doc: SerializedDrawing): SerializedDrawing {
+    if (doc.type !== 'comment' || doc.props?.point !== undefined || (doc.anchors?.length ?? 0) !== 2) return doc;
+    return { ...doc, props: { ...(doc.props ?? {}), point: false } };
 }
 
 // ── built-in lean-core types ──
@@ -276,6 +283,7 @@ registerDrawingType({
     group: 'annotations',
     label: 'Text',
     icon: TEXT_ICON,
+    coversSeries: true, // text over the candles like TradingView's: a candle never paints over the words
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new TextLabel(init),
 });
@@ -288,6 +296,7 @@ registerDrawingType({
     group: 'annotations',
     label: 'Callout',
     icon: CALLOUT_ICON,
+    coversSeries: true, // text over the candles like TradingView's: a candle never paints over the words
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
     create: (init) => new Callout(init),
 });
@@ -303,6 +312,7 @@ registerDrawingType({
     group: 'annotations',
     label: 'Note',
     icon: NOTE_ICON,
+    coversSeries: true, // text over the candles like TradingView's: a candle never paints over the words
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
     create: (init) => new Note(init),
 });
@@ -312,6 +322,7 @@ registerDrawingType({
     group: 'annotations',
     label: 'Price Note',
     icon: PRICE_NOTE_ICON,
+    coversSeries: true, // text over the candles like TradingView's: a candle never paints over the words
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
     create: (init) => new PriceNote(init),
 });
@@ -321,6 +332,7 @@ registerDrawingType({
     group: 'annotations',
     label: 'Comment',
     icon: COMMENT_ICON,
+    coversSeries: true, // text over the candles like TradingView's: a candle never paints over the words
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
     create: (init) => new Comment(init),
 });
@@ -330,6 +342,7 @@ registerDrawingType({
     group: 'annotations',
     label: 'Price Label',
     icon: PRICE_LABEL_ICON,
+    coversSeries: true, // text over the candles like TradingView's: a candle never paints over the words
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
     create: (init) => new PriceLabel(init),
 });
@@ -339,6 +352,7 @@ registerDrawingType({
     group: 'annotations',
     label: 'Signpost',
     icon: SIGNPOST_ICON,
+    coversSeries: true, // text over the candles like TradingView's: a candle never paints over the words
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
     create: (init) => new Signpost(init),
 });
