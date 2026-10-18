@@ -567,6 +567,7 @@ describe('buildToolbar grouping', () => {
             'comment',
             'pricelabel',
             'signpost',
+            'table',
         ]);
 
         const iconsGroup = definition.groups.find((g) => g.id === 'icons');

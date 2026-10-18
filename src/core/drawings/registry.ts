@@ -9,7 +9,7 @@ import { Projection } from './types/Projection';
 import { Forecast } from './types/Forecast';
 import { BarsPattern } from './types/BarsPattern';
 import { GhostFeed } from './types/GhostFeed';
-import { AnchoredText, AnchoredNote } from './types/Anchored';
+import { AnchoredText, AnchoredNote, TableDrawing } from './types/Anchored';
 import { TimeCycles } from './types/TimeCycles';
 import { SineLine } from './types/SineLine';
 import { ArrowMarker } from './types/ArrowMarker';
@@ -1169,4 +1169,14 @@ registerDrawingType({
     coversSeries: true,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new AnchoredNote(init),
+});
+const TABLE_ICON = svg24('<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 10h18M3 14.5h18M9 5v14M15 5v14"/>');
+registerDrawingType({
+    type: 'table',
+    group: 'annotations',
+    label: 'Table',
+    icon: TABLE_ICON,
+    coversSeries: true,
+    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    create: (init) => new TableDrawing({ text: { value: 'Level | Price\nHigh | \nLow | ', size: 'normal' } as never, ...init }),
 });

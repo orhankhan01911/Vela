@@ -8,7 +8,7 @@ import { TextLabel } from './TextLabel';
  * on each layout; when the user has moved the drawing (its data point is not the one last derived), the fraction
  * follows the new point instead.
  */
-class ScreenPin {
+export class ScreenPin {
     fx: number | null = null;
     fy: number | null = null;
     private last: DrawingPoint | null = null;
@@ -43,10 +43,11 @@ class ScreenPin {
 
 /** TradingView's anchored text: a text pinned to a place on the screen, not to a bar and price. */
 export class AnchoredText extends TextLabel {
-    override readonly type = 'anchoredtext' as const;
+    // Widened so the table (a grid pinned the same way) can reuse it.
+    override readonly type: 'anchoredtext' | 'table' = 'anchoredtext';
     // Created lazily: the base constructor runs readProps before subclass fields would initialize.
     private pinState?: ScreenPin;
-    private get pin(): ScreenPin {
+    protected get pin(): ScreenPin {
         return (this.pinState ??= new ScreenPin());
     }
 
@@ -103,5 +104,32 @@ export class AnchoredNote extends Note {
     protected override readProps(props: Record<string, unknown>): void {
         super.readProps(props);
         this.pin.read(props);
+    }
+}
+
+/** Approximate px font size for a named text size (the painter measures the glyphs exactly). */
+const TABLE_SIZE_PX: Record<string, number> = { tiny: 10, small: 12, normal: 14, large: 18, huge: 24, auto: 14 };
+
+/**
+ * TradingView's table: a grid of text pinned to a place on the screen. Its text is the content: each line a row,
+ * `|` between cells. Background and border colors are the text tool's.
+ */
+export class TableDrawing extends AnchoredText {
+    override readonly type = 'table' as const;
+
+    /** The cells, row by row (short rows padded so every row has as many cells as the widest). */
+    cells(): string[][] {
+        const rows = (this.text?.value ?? '').split('\n').slice(0, 50).map((r) => r.split('|').slice(0, 20).map((c) => c.trim()));
+        const cols = Math.max(1, ...rows.map((r) => r.length));
+        return rows.map((r) => [...r, ...Array.from({ length: cols - r.length }, () => '')]);
+    }
+
+    protected override box(proj: Projector): { x: number; y: number; w: number; h: number } | null {
+        const pts = this.handlePoints(proj); // resolves the screen pin
+        if (!pts.length) return null;
+        const fs = TABLE_SIZE_PX[this.text?.size ?? 'normal'] ?? 14;
+        const cells = this.cells();
+        const widths = cells[0]!.map((_, c) => Math.max(...cells.map((r) => r[c]!.length)) * fs * 0.6 + 16);
+        return { x: pts[0]![0], y: pts[0]![1], w: widths.reduce((a, b) => a + b, 0), h: cells.length * (fs * 1.4 + 8) };
     }
 }

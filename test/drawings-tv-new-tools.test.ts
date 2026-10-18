@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDrawing, deserializeDrawing, getDrawingType, type Projector, type SegmentDrawing, type PatternDrawing, type MeasureBox, type FixedRangeVolumeProfile, type Forecast, type BarsPattern, type GhostFeed } from '../src/core/drawings';
+import { createDrawing, deserializeDrawing, getDrawingType, type Projector, type SegmentDrawing, type PatternDrawing, type MeasureBox, type FixedRangeVolumeProfile, type Forecast, type BarsPattern, type GhostFeed, type TableDrawing } from '../src/core/drawings';
 
 /** Linear projector: x = time, y = 100 − price, single pane 'price' (200 × 100 px). */
 function proj(): Projector {
@@ -149,5 +149,13 @@ describe("TradingView's tools Vela lacked", () => {
             expect(back.serialize().props).toMatchObject({ fx: 0.45, fy: 0.3 });
             expect(d.timeExtent()).toBeNull();
         }
+    });
+
+    it('table: rows from the text lines, cells split by |, padded to the widest row, pinned on screen', () => {
+        const t = createDrawing('table', { paneId: 'price', anchors: [P(20, 80)], text: { value: 'Level | Price | Note\nHigh | 82,000\nLow | 81,000 | swept', size: 'normal' } as never })! as TableDrawing;
+        expect(t.cells()).toEqual([['Level', 'Price', 'Note'], ['High', '82,000', ''], ['Low', '81,000', 'swept']]);
+        expect(t.hitTest(30, 30, proj(), 0)).toBe(true); // inside the grid from its corner (20, 20)
+        expect(t.timeExtent()).toBeNull();
+        expect(createDrawing('table', { paneId: 'price', anchors: [P(0, 50)] })!.text?.value).toContain('|'); // starts with a sample grid
     });
 });

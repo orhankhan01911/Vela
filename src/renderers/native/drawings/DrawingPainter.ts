@@ -1,5 +1,5 @@
 import type { Drawing, Projector, DrawingStyle, Box, TrendLine, TextLabel, Ellipse } from '../../../core/drawings';
-import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed } from '../../../core/drawings';
+import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP } from '../../../core/palette';
@@ -205,6 +205,10 @@ export class DrawingPainter {
         if (d.type === 'highlighter' && d instanceof SegmentDrawing) {
             this.paintHighlighter(ctx, d, proj);
             this.paintLabel(ctx, d, proj, theme);
+            return;
+        }
+        if (d instanceof TableDrawing) {
+            this.paintTable(ctx, d, proj, theme);
             return;
         }
         if (d instanceof GhostFeed) {
@@ -663,6 +667,58 @@ export class DrawingPainter {
             ctx.fillText(label, cx, proj.height + 11.5);
             ctx.restore();
         }
+    }
+
+    /** TradingView's table: a grid of cells from the pinned corner, header row bold, each column as wide as its
+     *  widest cell, on the background color with a border between cells. */
+    private paintTable(ctx: CanvasRenderingContext2D, d: TableDrawing, proj: Projector, theme: VelaTheme): void {
+        const pts = d.handlePoints(proj);
+        if (!pts.length) return;
+        const [x0, y0] = pts[0]!;
+        const fs = namedFontSize(d.text?.size ?? 'normal');
+        const font = (bold: boolean): string => `${bold || d.text?.bold ? '600 ' : ''}${d.text?.italic ? 'italic ' : ''}${fs}px ${theme.fontFamily}`;
+        const cells = d.cells();
+        const rowH = labelLineHeight(fs) + 8;
+        const widths = cells[0]!.map((_, c) =>
+            Math.max(...cells.map((r, ri) => {
+                ctx.font = font(ri === 0);
+                return ctx.measureText(r[c]!).width;
+            })) + 16,
+        );
+        const w = widths.reduce((a, b) => a + b, 0);
+        const h = cells.length * rowH;
+        const ink = d.text?.color ?? theme.textColor;
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.fillStyle = d.backgroundColor ?? theme.background;
+        ctx.fillRect(x0, y0, w, h);
+        ctx.strokeStyle = d.borderColor ?? withAlpha(ink, 0.35);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x0 + 0.5, y0 + 0.5, w, h);
+        ctx.beginPath();
+        for (let r = 1; r < cells.length; r += 1) {
+            ctx.moveTo(x0, Math.round(y0 + r * rowH) + 0.5);
+            ctx.lineTo(x0 + w, Math.round(y0 + r * rowH) + 0.5);
+        }
+        let x = x0;
+        for (let c = 0; c < widths.length - 1; c += 1) {
+            x += widths[c]!;
+            ctx.moveTo(Math.round(x) + 0.5, y0);
+            ctx.lineTo(Math.round(x) + 0.5, y0 + h);
+        }
+        ctx.stroke();
+        ctx.fillStyle = ink;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        cells.forEach((row, ri) => {
+            ctx.font = font(ri === 0);
+            let cx = x0;
+            row.forEach((cell, ci) => {
+                ctx.fillText(cell, cx + 8, y0 + ri * rowH + rowH / 2);
+                cx += widths[ci]!;
+            });
+        });
+        ctx.restore();
     }
 
     /** TradingView's ghost feed: made-up candles along the clicked path, in the chart's own candle colors, faded. */

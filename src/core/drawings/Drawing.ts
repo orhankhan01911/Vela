@@ -39,6 +39,7 @@ export type DrawingTypeKey =
     | 'ghostfeed'
     | 'anchoredtext'
     | 'anchorednote'
+    | 'table'
     | 'fixedrangetpo'
     | 'pricealert'
     | 'pitchfork'
