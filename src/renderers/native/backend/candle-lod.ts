@@ -19,6 +19,12 @@ export const CANDLE_BODY_MIN_SPACING = 3;
 export const CANDLE_WICK_W = 1.5;
 /** Below this spacing bars are bucketed per pixel column (aggregated). */
 export const CANDLE_AGG_MAX_SPACING = 1;
+/**
+ * OHLC bars keep their open/close ticks down to this spacing (a 1 px tick each side still fits
+ * between neighbours). Without them a zoomed-out bar chart is a row of plain sticks that looks
+ * exactly like a zoomed-out candle chart (tester report 2026-10-17: "bars turn into candles").
+ */
+export const BAR_TICK_MIN_SPACING = 2;
 
 /**
  * Wick line width (CSS px) for a given bar spacing. The body is `~spacing·0.7` wide

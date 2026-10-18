@@ -6,7 +6,7 @@ import type { SeriesSpec, LineLikeSeries, CandleSeries, LineStyle, CandleBarColo
 import { isLineLikeSeries, seriesShownOn } from '../../../core/model/series';
 import type { CoordinateSystem } from '../core/CoordinateSystem';
 import type { SceneGraph, PaneNode } from '../core/SceneGraph';
-import { candleTier, wickWidth, candleGeometry, snapY, aggregateCandleColumns } from './candle-lod';
+import { candleTier, wickWidth, candleGeometry, snapY, aggregateCandleColumns, BAR_TICK_MIN_SPACING } from './candle-lod';
 import { BASELINE_TOP_LINE, BASELINE_BOTTOM_LINE, BASELINE_FILL_ALPHA, BASELINE_FILL_ALPHA_FAR, withAlpha as cssWithAlpha, effectiveCandlePaint } from '../core/chartConfig';
 import type { IRenderBackend } from './IRenderBackend';
 import { Batch, type RGBA } from './gl/Batch';
@@ -715,7 +715,7 @@ export class WebGL2Backend implements IRenderBackend {
             return;
         }
         const tickW = Math.max(1, Math.round(spacing * 0.35));
-        const drawTicks = tier === 'full';
+        const drawTicks = spacing >= BAR_TICK_MIN_SPACING;
         for (let i = i0; i <= i1; i += 1) {
             const bar = bars[i];
             if (!bar || bar.high <= bar.low) continue;
