@@ -44,6 +44,7 @@ export { RegressionChannel, computeRegressionFit, type RegressionFit, type Regre
 export { AnchoredVwap, computeVwap, type VwapPoint, type VwapStyle, type VwapLayout } from './types/AnchoredVwap';
 export {
     FixedRangeVolumeProfile,
+    AnchoredVolumeProfile,
     buildEstimatedProfile,
     computeFixedRangeProfile,
     type FrvpBar,

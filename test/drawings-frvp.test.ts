@@ -146,6 +146,7 @@ describe('drawings/FixedRangeVolumeProfile', () => {
         expect(measure?.sections?.find((s) => s.label === 'Volume')?.tools.map((t) => t.type)).toEqual([
             'anchoredvwap',
             'fixedrangevp',
+            'anchoredvp',
         ]);
     });
 

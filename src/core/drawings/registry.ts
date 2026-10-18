@@ -33,7 +33,7 @@ import { DisjointChannel } from './types/DisjointChannel';
 import { FlatTopBottom } from './types/FlatTopBottom';
 import { RegressionChannel } from './types/RegressionChannel';
 import { AnchoredVwap } from './types/AnchoredVwap';
-import { FixedRangeVolumeProfile } from './types/FixedRangeVolumeProfile';
+import { FixedRangeVolumeProfile, AnchoredVolumeProfile } from './types/FixedRangeVolumeProfile';
 import { FixedRangeTpoProfile } from './types/FixedRangeTpoProfile';
 import { Pitchfork } from './types/Pitchfork';
 import { SchiffPitchfork } from './types/SchiffPitchfork';
@@ -1039,6 +1039,15 @@ registerDrawingType({
     icon: FRVP_ICON,
     defaultStyle: { lineColor: BULLISH, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new FixedRangeVolumeProfile(init),
+});
+
+registerDrawingType({
+    type: 'anchoredvp',
+    group: 'measure',
+    label: 'Anchored Volume Profile',
+    icon: FRVP_ICON,
+    defaultStyle: { lineColor: BULLISH, lineWidth: 1, lineStyle: 'solid' },
+    create: (init) => new AnchoredVolumeProfile(init),
 });
 
 // ── fixed-range TPO profile ──

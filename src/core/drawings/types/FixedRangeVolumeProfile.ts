@@ -289,7 +289,8 @@ export interface FrvpLayout {
  * recompute live as an endpoint is dragged or new bars arrive, via {@link Projector.barsInRange}.
  */
 export class FixedRangeVolumeProfile extends Drawing {
-    readonly type = 'fixedrangevp' as const;
+    // Widened so TradingView's anchored volume profile (one point, to the last bar) can reuse the whole tool.
+    readonly type: 'fixedrangevp' | 'anchoredvp' = 'fixedrangevp';
 
     /** Cosmetics + behavior (seeded from defaults, persisted via props). */
     frvp!: FrvpStyle;
@@ -307,13 +308,19 @@ export class FixedRangeVolumeProfile extends Drawing {
         return { min: 2, max: 2, slots: [{ role: 'start', free: 'x' }, { role: 'end', free: 'x' }] };
     }
 
-    /** Bars in the anchor time-range (inclusive), or null when either anchor / feed is missing. */
-    private barsInSpan(proj: Projector): FrvpBar[] | null {
+    /** The profile's time range [from, to]: between the two anchors (the anchored kind overrides it). */
+    protected timeSpan(_proj: Projector): [number, number] | null {
         const a = this.anchors[0];
         const b = this.anchors[1];
         if (!a || !b) return null;
-        const from = Math.min(a.time, b.time);
-        const to = Math.max(a.time, b.time);
+        return [Math.min(a.time, b.time), Math.max(a.time, b.time)];
+    }
+
+    /** Bars in the time range (inclusive), or null when an anchor / the feed is missing. */
+    private barsInSpan(proj: Projector): FrvpBar[] | null {
+        const span = this.timeSpan(proj);
+        if (!span) return null;
+        const [from, to] = span;
         const raw = proj.barsInRange?.(from, to) ?? null;
         if (!raw || raw.length < 1) return null;
         return raw.map((bar) => ({
@@ -345,14 +352,12 @@ export class FixedRangeVolumeProfile extends Drawing {
 
     /** Resolve the compute to pixel geometry for the painter + hit-test. */
     layout(proj: Projector): FrvpLayout | null {
-        const a = this.anchors[0];
-        const b = this.anchors[1];
-        if (!a || !b) return null;
+        const span = this.timeSpan(proj);
+        if (!span) return null;
         const computed = this.compute(proj);
         if (!computed) return null;
         const { profile } = computed;
-        const t0 = Math.min(a.time, b.time);
-        const t1 = Math.max(a.time, b.time);
+        const [t0, t1] = span;
         const x0 = proj.xOf(t0);
         const x1 = proj.xOf(t1);
         const spanW = Math.abs(x1 - x0);
@@ -459,10 +464,9 @@ export class FixedRangeVolumeProfile extends Drawing {
 
     priceRange(): { min: number; max: number } | null {
         if (this.cachedRange) return this.cachedRange;
-        const a = this.anchors[0];
-        const b = this.anchors[1];
-        if (!a || !b) return null;
-        return { min: Math.min(a.price, b.price), max: Math.max(a.price, b.price) };
+        if (this.anchors.length === 0) return null;
+        const ps = this.anchors.map((p) => p.price);
+        return { min: Math.min(...ps), max: Math.max(...ps) };
     }
 
     schema(): SettingsSchema {
@@ -511,5 +515,34 @@ export class FixedRangeVolumeProfile extends Drawing {
 
     protected override readProps(props: Record<string, unknown>): void {
         this.frvp = { ...defaultFrvpStyle(), ...(props as Partial<FrvpStyle>) };
+    }
+}
+
+/**
+ * TradingView's anchored volume profile: one point starts the profile, which runs to the newest bar and keeps
+ * growing as bars arrive. Everything else (rows, value area, POC / VAH / VAL, colors) is the fixed-range tool's.
+ */
+export class AnchoredVolumeProfile extends FixedRangeVolumeProfile {
+    override readonly type = 'anchoredvp' as const;
+
+    override anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
+        return { min: 1, max: 1, slots: [{ role: 'start', free: 'x' }] };
+    }
+
+    protected override timeSpan(proj: Projector): [number, number] | null {
+        const a = this.anchors[0];
+        if (!a) return null;
+        const bars = proj.barsInRange?.(a.time, Number.MAX_SAFE_INTEGER) ?? null;
+        const last = bars && bars.length ? bars[bars.length - 1]!.time : null;
+        return last == null || last < a.time ? null : [a.time, last];
+    }
+
+    override handlePoints(proj: Projector): Array<[number, number]> {
+        return super.handlePoints(proj).slice(0, 1); // one handle: the start
+    }
+
+    override timeExtent(): { min: number; max: number } | null {
+        const a = this.anchors[0];
+        return a ? { min: a.time, max: Number.POSITIVE_INFINITY } : null;
     }
 }

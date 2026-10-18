@@ -73,7 +73,7 @@ const HARMONIC_TYPES: DrawingTypeKey[] = ['gartley', 'bat', 'butterfly', 'crab',
 
 const MEASUREMENT_TYPES: DrawingTypeKey[] = ['position', 'daterange', 'pricerange', 'datepricerange', 'magnifier'];
 const CYCLE_TYPES: DrawingTypeKey[] = ['cycliclines', 'timecycles', 'sineline'];
-const VOLUME_TYPES: DrawingTypeKey[] = ['anchoredvwap', 'fixedrangevp'];
+const VOLUME_TYPES: DrawingTypeKey[] = ['anchoredvwap', 'fixedrangevp', 'anchoredvp'];
 const TIME_PRICE_TYPES: DrawingTypeKey[] = ['fixedrangetpo'];
 
 const BRUSH_TYPES: DrawingTypeKey[] = ['freehand', 'highlighter'];

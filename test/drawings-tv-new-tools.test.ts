@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDrawing, deserializeDrawing, getDrawingType, type Projector, type SegmentDrawing, type PatternDrawing, type MeasureBox } from '../src/core/drawings';
+import { createDrawing, deserializeDrawing, getDrawingType, type Projector, type SegmentDrawing, type PatternDrawing, type MeasureBox, type FixedRangeVolumeProfile } from '../src/core/drawings';
 
 /** Linear projector: x = time, y = 100 − price, single pane 'price' (200 × 100 px). */
 function proj(): Projector {
@@ -68,5 +68,17 @@ describe("TradingView's tools Vela lacked", () => {
         const pc = createDrawing('elliotttriangle', { paneId: 'price', anchors: pts(6), props: { degree: 'Primary' } })! as PatternDrawing;
         expect(pc.vertexLabels()).toEqual(['', 'Ⓐ', 'Ⓑ', 'Ⓒ', 'Ⓓ', 'Ⓔ']);
         expect(deserializeDrawing(tc.serialize())!.serialize().props).toMatchObject({ degree: 'Minute' });
+    });
+
+    it('anchored volume profile: one point, runs to the newest bar and grows with it', () => {
+        let bars = Array.from({ length: 10 }, (_, i) => ({ time: i * 10, open: 50, high: 55 + i, low: 45, close: 52, volume: 100 }));
+        const p: Projector = { ...proj(), barsInRange: (from, to) => bars.filter((b) => b.time >= from && b.time <= to) };
+        const d = createDrawing('anchoredvp', { paneId: 'price', anchors: [P(30, 50)] })! as FixedRangeVolumeProfile;
+        expect(d.anchorSchema().min).toBe(1);
+        expect([d.layout(p)!.x0, d.layout(p)!.x1]).toEqual([30, 90]);
+        bars = [...bars, { time: 100, open: 50, high: 70, low: 45, close: 60, volume: 100 }];
+        expect(d.layout(p)!.x1).toBe(100); // a new bar extends it
+        expect(d.handlePoints(p).length).toBe(1);
+        expect(deserializeDrawing(d.serialize())!.type).toBe('anchoredvp');
     });
 });
