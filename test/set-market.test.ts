@@ -1177,6 +1177,40 @@ describe('scroll-back paging — older bars as the view nears the oldest loaded 
         expect(edges[edges.length - 1]!.atEdge).toBe(false);
     });
 
+    it('manual mode: an overlay chart type (footprint, TPO) pages like candles; a series-replacing one does not', async () => {
+        const engine = () => ({ start: () => {}, suspend: () => {}, resume: () => {}, stop: () => {} });
+        registerChartType({ id: 'overlay-probe', dataEngine: engine });
+        // The replacing probe pushes the raw bars as its series (a real one would build bricks).
+        registerChartType({
+            id: 'series-probe',
+            replacesSeries: true,
+            dataEngine: () => ({ ...engine(), start: (host: SeriesDataEngineHost) => host.setSeries?.(host.rawBars?.().slice() ?? []) }),
+        });
+        try {
+            for (const [style, pages] of [['overlay-probe', true], ['series-probe', false]] as const) {
+                const feed = new SwitchFeed();
+                feed.depth['AAA'] = 2_000;
+                const renderer = new PagingRenderer();
+                renderer.priceStyleFeature = style;
+                const chart = make({ symbol: 'AAA', timeframe: '60', bars: 300, volume: false }, { renderer, engines: [], dataFeed: feed });
+                await chart.ready();
+                await chart.historyComplete();
+                await flush();
+                const edges: boolean[] = [];
+                chart.on('history:edge', (e) => edges.push(e.atEdge));
+                chart.setHistoryPaging('manual');
+                renderer.show(0, 100);
+                await settle();
+                expect(edges[edges.length - 1] ?? false).toBe(pages);
+                expect(chart.loadOlderHistory(500)).toBe(pages ? 'loading' : 'none');
+                chart.destroy();
+            }
+        } finally {
+            unregisterChartType('overlay-probe');
+            unregisterChartType('series-probe');
+        }
+    });
+
     it('stops at the source\'s first bar: no endless refetch of an empty page', async () => {
         const feed = new SwitchFeed();
         feed.depth['AAA'] = 400;

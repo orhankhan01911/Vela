@@ -172,6 +172,12 @@ export class RendererControl {
         return this.renderer.priceColumnWidth?.() ?? 64;
     }
 
+    /** CSS x of a bar time from the plot's left edge (extrapolated before the first bar), so host overlays can
+     *  anchor to a bar; null when the renderer has no layout yet or lacks the seam. */
+    timeToX(ms: number): number | null {
+        return this.renderer.timeToX?.(ms) ?? null;
+    }
+
     /** Touch long-press on a price or time axis strip — silent no-op without the seam. */
     onAxisLongPress(cb: (e: AxisLongPressEvent) => void): Unsubscribe {
         return this.renderer.onAxisLongPress?.(cb) ?? (() => undefined);

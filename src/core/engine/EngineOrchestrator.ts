@@ -442,7 +442,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      * loads behind the chart, view kept in place (the same backward backfill a deeper `bars`
      * runs). One page at a time; stops at the source's first bar, at a `from` floor and at
      * {@link MAX_PAGED_BARS}. Not for fixed data, a replay, or a series-replacing chart type
-     * (those ask for raw depth themselves, see `ensureRawDepth`).
+     * (those ask for raw depth themselves, see `ensureRawDepth`); overlay types (footprint, TPO) page like candles.
      */
     private maybePageOlder(window: VisibleBarRange): void {
         if (this.historyPaging === 'off') return;
@@ -450,7 +450,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (this.switchingMarket || this.historyState === 'backfill' || this.replayQueue !== null) return;
         const bars = this.bars;
         const n = bars.length;
-        if (!this.feed.loadRange || this.config.market.data?.length || this.activeEngineStyle || n < 2) {
+        // A series-replacing type (Renko, tick bars) owns its own depth; overlay types (footprint, TPO) page like candles.
+        if (!this.feed.loadRange || this.config.market.data?.length || this.seriesStyle || n < 2) {
             if (manual) this.emitEdge(false, null);
             return;
         }
@@ -521,7 +522,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      */
     loadOlderHistory(bars = PAGE_MIN_BARS): 'loading' | 'busy' | 'none' {
         if (this.historyState === 'backfill') return 'busy';
-        if (this.switchingMarket || this.replayQueue !== null || !this.feed.loadRange || this.config.market.data?.length || this.activeEngineStyle) return 'none';
+        if (this.switchingMarket || this.replayQueue !== null || !this.feed.loadRange || this.config.market.data?.length || this.seriesStyle) return 'none';
         if (this.rawBars.length === 0 || !this.canPageOlder()) return 'none';
         this.pageOlder(bars);
         return 'loading';

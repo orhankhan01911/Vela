@@ -2246,6 +2246,13 @@ export class NativeRenderer implements IChartRenderer {
         return this.masterAxisW;
     }
 
+    /** CSS x (from the plot's left edge) of a bar time; null before bars are laid out. */
+    timeToX(ms: number): number | null {
+        if (this.coords.barCount === 0) return null;
+        const x = this.coords.timeToX(ms);
+        return Number.isFinite(x) ? x : null;
+    }
+
     /** After a chrome paint: widen (or, with slack, narrow) the master price column to fit the widest label just
      *  drawn. The resize runs on the next frame, never inside the paint. */
     private fitPriceColumn(): void {

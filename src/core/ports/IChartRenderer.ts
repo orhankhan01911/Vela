@@ -433,6 +433,8 @@ export interface IChartRenderer {
     onAxisLongPress?(cb: (e: AxisLongPressEvent) => void): Unsubscribe;
     /** Width in px of the pane master price column (it grows to fit long price labels). */
     priceColumnWidth?(): number;
+    /** CSS x (from the plot's left edge) of a bar time, extrapolated past the loaded bars; null before the first layout. */
+    timeToX?(ms: number): number | null;
 
     /**
      * Display an EXTERNAL crosshair at a data-space position — a ghost marker driven by
