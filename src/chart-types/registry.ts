@@ -69,6 +69,24 @@ export interface SeriesDataEngineHost {
      * the next. Ignored once the engine is no longer this chart's engine for the type.
      */
     saveSettings?: (values: Record<string, unknown>) => void;
+    /**
+     * Report the type's OWN history state, for a type that pages its own data (an order-flow grid, bars built from
+     * a trade archive, bricks folded from raw bars). The chart relays it as the `history:layer` event (and
+     * `chart.historyLayer()`), so a host can mark where what is DRAWN starts and show older data loading there.
+     */
+    reportHistory?: (state: HistoryLayerState) => void;
+}
+
+/** A chart type's own history state (see {@link SeriesDataEngineHost.reportHistory}). */
+export interface HistoryLayerState {
+    /** An older page is on its way. */
+    busy: boolean;
+    /** Time (ms) of the oldest bar the type draws; null before its first data. */
+    oldestTime: number | null;
+    /** Older data exists and will load when the view reaches the edge. */
+    more: boolean;
+    /** Why no more loads, when `more` is false and the reason is not "the data starts here" (e.g. a brick budget). */
+    note?: string;
 }
 
 /**

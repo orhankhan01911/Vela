@@ -37,7 +37,7 @@ import type { DataControl } from '../DataControl';
 import { timeframeToMs } from '../../data/timeframe';
 import { parseSymbol } from '../../data/ProviderRegistry';
 import { barTransformFor, parseExtendedTicker, type BarTransform } from '../price-styles/BarTransform';
-import { chartType, replacesSeries, type SeriesDataEngine } from '../../chart-types/registry';
+import { chartType, replacesSeries, type HistoryLayerState, type SeriesDataEngine } from '../../chart-types/registry';
 import { resolveTheme } from '../theme';
 import { applyPlotStyle, plotStyleSchema } from './plotStyle';
 import type { ReplayBounds, ReplayController, ReplayEndReason, ReplayStartOptions, ReplayState, ReplayTick, ReplayTickSource } from '../ReplayControl';
@@ -452,12 +452,11 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const n = bars.length;
         // A series-replacing type (Renko, tick bars) owns its own depth; overlay types (footprint, TPO) page like candles.
         if (!this.feed.loadRange || this.config.market.data?.length || this.seriesStyle || n < 2) {
-            if (manual) this.emitEdge(false, null);
+            this.emitEdge(false, null);
             return;
         }
         const stop = this.pageStop();
         const canLoadMore = stop === null;
-        if (!manual && !canLoadMore) return;
         const firstAtOrAfter = (t: number): number => {
             let lo = 0;
             let hi = n;
@@ -470,11 +469,9 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         };
         const left = firstAtOrAfter(window.left);
         const span = Math.max(1, firstAtOrAfter(window.right) - left);
-        if (manual) {
-            // Manual: the edge is the oldest bar ON SCREEN (the host shows its own control there).
-            this.emitEdge(left === 0, stop);
-            return;
-        }
+        // The edge is the oldest bar ON SCREEN (a host marks it: a manual control, or where auto paging loads).
+        this.emitEdge(left === 0, stop);
+        if (manual || !canLoadMore) return;
         if (left > Math.max(PAGE_EDGE_BARS, span / 2)) return;
         this.pageOlder(Math.max(PAGE_MIN_BARS, span * 2));
     }
@@ -498,6 +495,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     private pageOlder(bars: number): void {
         const want = Math.min(MAX_PAGED_BARS, this.rawBars.length + Math.max(1, Math.floor(bars)));
         this.resetHistoryTracking();
+        this.events.emit('history:page', { bars: want - this.rawBars.length, oldestTime: this.rawBars[0]?.time ?? 0 });
         this.extendDepth(this.generation, want);
     }
 
@@ -1781,6 +1779,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (this.activeEngineStyle) this.typeEngines.get(this.activeEngineStyle)?.suspend();
         this.activeEngineStyle = want;
         if (want) void this.startChartTypeEngine(want);
+        this.emitLayerHistory(); // a resumed type's last report is current again
     }
 
     /** Start (or resume) the active style's data engine, once bars are loaded. */
@@ -1832,8 +1831,29 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             saveSettings: (values) => {
                 if (this.typeEngines.get(id) === engine) this.renderer.applyConfig?.({ chartTypes: { [id]: values } });
             },
+            reportHistory: (state) => {
+                if (this.typeEngines.get(id) !== engine) return;
+                this.layerHistory.set(id, { ...state });
+                if (this.activeEngineStyle === id) this.emitLayerHistory();
+            },
             ...series,
         });
+    }
+
+    /** Each chart type's own history state, as its engine last reported it (`reportHistory`). */
+    private readonly layerHistory = new Map<string, HistoryLayerState>();
+
+    /** The active chart type's own history state, or null (no engine, or it never reported). */
+    historyLayer(): VelaEventMap['history:layer'] | null {
+        const id = this.activeEngineStyle;
+        const s = id ? this.layerHistory.get(id) : undefined;
+        if (!id || !s) return null;
+        return { style: id, replacesSeries: replacesSeries(id), ...s };
+    }
+
+    private emitLayerHistory(): void {
+        const s = this.historyLayer();
+        if (s) this.events.emit('history:layer', s);
     }
 
     /**

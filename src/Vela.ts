@@ -349,6 +349,12 @@ export class Vela {
         return this.orchestrator.loadOlderHistory(bars);
     }
 
+    /** The active chart type's own history state (a type that pages its own data, e.g. an order-flow grid or
+     *  bars built from a trade archive), or null. Changes arrive as `history:layer` events. */
+    historyLayer(): VelaEventMap['history:layer'] | null {
+        return this.orchestrator.historyLayer();
+    }
+
     /**
      * A renderer-agnostic snapshot of the graphic elements the core has generated
      * (series, fills, drawings, tables, …) — a deterministic check that a feature was

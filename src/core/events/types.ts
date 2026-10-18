@@ -150,10 +150,10 @@ export interface VelaEventMap extends Record<string, unknown> {
     barsLoaded: number;
   };
   /**
-   * Manual scroll-back paging (`chart.setHistoryPaging('manual')`): the oldest loaded bar came on
-   * screen (`atEdge`) or left it. `canLoadMore` = an older page can be asked for with
-   * `chart.loadOlderHistory()`; false at the source's first bar, the depth cap, or after a failure.
-   * Fires on change only.
+   * Scroll-back paging (`'auto'` and `'manual'`): the oldest loaded bar came on screen (`atEdge`)
+   * or left it. `canLoadMore` = an older page can be had (auto loads it by itself; manual waits
+   * for `chart.loadOlderHistory()`); false at the source's first bar, the depth cap, or after a
+   * failure. Fires on change only.
    */
   "history:edge": {
     atEdge: boolean;
@@ -163,6 +163,14 @@ export interface VelaEventMap extends Record<string, unknown> {
     oldestTime: number;
     barsLoaded: number;
   };
+  /** An older page of the chart's own bars started loading (`history:complete` says when it landed). */
+  "history:page": { bars: number; oldestTime: number };
+  /**
+   * The active chart type's OWN history state changed (a type that pages its own data, see
+   * `SeriesDataEngineHost.reportHistory`). `replacesSeries` = the type's bars ARE the view, so its
+   * `oldestTime` is where the chart starts; otherwise its layer is drawn over the chart's bars.
+   */
+  "history:layer": { style: string; replacesSeries: boolean; busy: boolean; oldestTime: number | null; more: boolean; note?: string };
   /** Replay mode began (or seeked): the chart shows history up to `cursorTime`, `remaining` bars are hidden. */
   "replay:start": { cursorTime: number; remaining: number };
   /** One hidden bar was revealed (it also fires `bar`, like a live bar). A bar played tick
