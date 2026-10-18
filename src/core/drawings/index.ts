@@ -24,6 +24,7 @@ export { CyclicLines, MAX_CYCLES } from './types/CyclicLines';
 export { Projection } from './types/Projection';
 export { AnchoredText, AnchoredNote, TableDrawing } from './types/Anchored';
 export { ImageDrawing, safeImageUrl } from './types/ImageDrawing';
+export { DoubleCurve } from './types/DoubleCurve';
 export { GhostFeed, type GhostCandle } from './types/GhostFeed';
 export { BarsPattern, type PatternBar } from './types/BarsPattern';
 export { Forecast, type ForecastStatus } from './types/Forecast';

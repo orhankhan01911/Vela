@@ -78,7 +78,7 @@ const TIME_PRICE_TYPES: DrawingTypeKey[] = ['fixedrangetpo'];
 
 const BRUSH_TYPES: DrawingTypeKey[] = ['freehand', 'highlighter'];
 const ARROW_TYPES: DrawingTypeKey[] = ['arrow', 'arrowmarker', 'arrowmarkup', 'arrowmarkdown'];
-const SHAPE_TYPES: DrawingTypeKey[] = ['box', 'ellipse', 'triangle', 'polyline', 'circle', 'rotatedrect', 'path', 'arc', 'curve'];
+const SHAPE_TYPES: DrawingTypeKey[] = ['box', 'ellipse', 'triangle', 'polyline', 'circle', 'rotatedrect', 'path', 'arc', 'curve', 'doublecurve'];
 
 const TEXT_TYPES: DrawingTypeKey[] = ['text', 'anchoredtext', 'callout', 'note', 'anchorednote', 'pricenote', 'comment', 'pricelabel', 'signpost', 'table', 'image'];
 const ICON_TYPES: DrawingTypeKey[] = ['iconstamp', 'flagmark'];

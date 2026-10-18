@@ -64,6 +64,9 @@ export class DrawingPainter {
      *  series' own so the inset reads as a finer copy of the chart. */
     /** The chart's bar duration (ms): drawings limited to other timeframes (Visibility tab) are skipped. 0 = show all. */
     barMs = 0;
+    /** Load image drawings from https links. Off by default: a drawing shared or pasted from someone else would make
+     *  every viewer's browser fetch its link (a tracking pixel). Inline image data always shows. */
+    allowRemoteImages = false;
     /** Called when an image drawing's picture finishes loading, so the layer repaints with it. */
     onAssetLoaded: (() => void) | null = null;
     private readonly images = new Map<string, { img: HTMLImageElement; state: 'loading' | 'ok' | 'error' }>();
@@ -681,7 +684,9 @@ export class DrawingPainter {
     private paintImage(ctx: CanvasRenderingContext2D, d: ImageDrawing, proj: Projector, theme: VelaTheme): void {
         const b = d.bounds(proj);
         if (!b) return;
-        const url = d.imageUrl();
+        const raw = d.imageUrl();
+        const remote = !!raw && !raw.startsWith('data:');
+        const url = remote && !this.allowRemoteImages ? null : raw;
         let entry = url ? this.images.get(url) : undefined;
         if (url && !entry && typeof Image !== 'undefined') {
             const img = new Image();
@@ -715,7 +720,7 @@ export class DrawingPainter {
         ctx.font = `12px ${theme.fontFamily}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        const note = !url ? 'Add an image link in settings' : entry?.state === 'error' ? 'This image cannot be shown here' : 'Loading image…';
+        const note = remote && !url ? 'Image links are off on this chart' : !url ? 'Add an image in settings' : entry?.state === 'error' ? 'This image cannot be shown here' : 'Loading image…';
         ctx.fillText(note, b.x + b.w / 2, b.y + b.h / 2);
         ctx.restore();
     }

@@ -170,4 +170,15 @@ describe("TradingView's tools Vela lacked", () => {
         expect(img.imageUrl()).toBe('https://example.com/a.png');
         expect(img.bounds(proj())).toEqual({ x: 20, y: 20, w: 40, h: 40 });
     });
+
+    it('double curve: an S through the middle of its two points, overshooting both ends like TradingView\'s', () => {
+        const d = createDrawing('doublecurve', { paneId: 'price', anchors: [P(40, 30), P(140, 60)] })! as SegmentDrawing;
+        const segs = d.geometry(proj())!.segments;
+        expect(segs[0]!.slice(0, 2)).toEqual([40, 70]);
+        expect(segs[segs.length - 1]!.slice(2)).toEqual([140, 40]);
+        const mid = segs[segs.length / 2 - 1]!;
+        expect(mid[2]).toBeCloseTo(90, 6); // passes the midpoint (90, 55)
+        expect(mid[3]).toBeCloseTo(55, 6);
+        expect(Math.min(...segs.map((s) => s[0]))).toBeLessThan(40); // swings back past the start
+    });
 });
