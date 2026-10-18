@@ -241,6 +241,8 @@ export interface ContributedRow {
     order?: number;
     /** The built-in block it joins (see `WidgetActionDescriptor.group`); omitted, it forms its own. */
     group?: string;
+    /** The built-in row id it stands in for; that row is dropped. */
+    replaces?: string;
 }
 
 /**
@@ -256,7 +258,12 @@ export function composeMenu(zone: Zone, builtin: readonly MenuItemDescriptor[], 
     const named: Readonly<Record<string, string>> = zone === 'body' ? BODY_GROUPS : {};
     const rows: Array<{ item: MenuItemDescriptor; rank: number; group: string }> = [];
     let run = 0;
+    const replaced = new Set(contributed.map((c) => c.replaces).filter((id): id is string => Boolean(id)));
     for (const item of builtin) {
+        if (replaced.has(item.id)) {
+            if (item.separatorBefore) run += 1;
+            continue;
+        }
         if (item.separatorBefore) run += 1;
         rows.push({ item, rank: ranks[item.id.startsWith('settings') ? 'settings' : item.id] ?? 0, group: named[item.id] ?? `#${run}` });
     }

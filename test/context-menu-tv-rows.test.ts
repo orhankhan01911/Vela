@@ -190,6 +190,38 @@ describe('chart right-click rows', () => {
     });
 });
 
+describe('a host row standing in for a built-in one', () => {
+    it("drops the built-in Paste, sits in its block, greys when it cannot run and then does nothing", () => {
+        let can = false;
+        let pasted = 0;
+        disposers.push(
+            registerWidgetAction({
+                id: 'test.paste',
+                target: 'context:body',
+                label: 'Paste',
+                hint: 'Ctrl+V',
+                group: 'clipboard',
+                order: -28,
+                replaces: 'paste',
+                enabled: () => can,
+                run: () => void (pasted += 1),
+            }),
+        );
+        const { open, select } = setup();
+        const items = open({ time: 1, price: 1, paneKind: 'price' });
+        expect(items.some((i) => i.id === 'paste')).toBe(false);
+        const row = items.find((i) => i.id === 'action:test.paste')!;
+        expect(row).toMatchObject({ disabled: true, separatorBefore: false });
+        expect(items[items.indexOf(row) - 1]!.id).toBe('copy-price');
+        select('action:test.paste');
+        expect(pasted).toBe(0);
+        can = true;
+        expect(open({ time: 1, price: 1, paneKind: 'price' }).find((i) => i.id === 'action:test.paste')!.disabled).toBeUndefined();
+        select('action:test.paste');
+        expect(pasted).toBe(1);
+    });
+});
+
 describe('remove prefs', () => {
     it('removes locked drawings unless switched off, and survives blocked storage', () => {
         expect(removeLockedDrawings()).toBe(true);

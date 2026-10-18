@@ -157,6 +157,12 @@ export interface WidgetActionDescriptor {
     submenu?: (ctx: WidgetContext) => ReadonlyArray<{ id: string; label: string; checked?: boolean; disabled?: boolean; separatorBefore?: boolean }>;
     /** Runs a picked {@link submenu} row (its `id`). */
     runItem?: (ctx: WidgetContext, id: string) => void;
+    /** Context menus only: the built-in row this action stands in for (`'paste'` for a host with its own
+     *  drawing clipboard); that row is left out while the action is shown. */
+    replaces?: string;
+    /** Context menus only: greys the row (shown, not runnable) when false — TradingView keeps Paste
+     *  visible with nothing to paste. */
+    enabled?: (ctx: WidgetContext) => boolean;
     run: (ctx: WidgetContext) => void;
 }
 

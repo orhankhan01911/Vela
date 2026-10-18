@@ -144,11 +144,12 @@ export class ChartContextMenu {
             const item: MenuItemDescriptor = {
                 id: `action:${a.id}`,
                 label,
+                ...(ctx && a.enabled && !a.enabled(ctx) ? { disabled: true } : {}),
                 ...(a.icon ? { icon: a.icon } : {}),
                 ...(a.hint ? { hint: a.hint } : {}),
                 ...(sub ? { submenu: sub.map((r) => ({ ...r, id: `sub:${a.id}${SUB}${r.id}` })), disabled: sub.length === 0 } : {}),
             };
-            return { item, order: a.order, ...(a.group ? { group: a.group } : {}) };
+            return { item, order: a.order, ...(a.group ? { group: a.group } : {}), ...(a.replaces ? { replaces: a.replaces } : {}) };
         });
     }
 
@@ -204,7 +205,8 @@ export class ChartContextMenu {
         }
         if (id.startsWith('action:')) {
             const ctx = this.context();
-            if (ctx) widgetActions(`context:${this.lastZone}`, ctx).find((a) => a.id === id.slice('action:'.length))?.run(ctx);
+            const a = ctx ? widgetActions(`context:${this.lastZone}`, ctx).find((x) => x.id === id.slice('action:'.length)) : undefined;
+            if (ctx && a && (!a.enabled || a.enabled(ctx))) a.run(ctx);
             return;
         }
         if (id.startsWith('toggle:')) {
