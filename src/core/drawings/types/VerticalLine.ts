@@ -1,7 +1,7 @@
 import { Drawing, type AnchorSlot } from '../Drawing';
 import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
-import { LINE_FIELDS, TEXT_FIELDS, VLINE_TEXT_ALIGN_FIELDS } from '../schema';
+import { LINE_FIELDS, TEXT_FIELDS, LINE_TEXT_ALIGN_FIELDS } from '../schema';
 import { handleAt } from '../hittest';
 
 /** A vertical line at a single time, spanning the full pane height. */
@@ -45,6 +45,6 @@ export class VerticalLine extends Drawing {
     }
 
     schema(): SettingsSchema {
-        return { fields: [...LINE_FIELDS, ...TEXT_FIELDS, ...VLINE_TEXT_ALIGN_FIELDS] };
+        return { fields: [...LINE_FIELDS, ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS] };
     }
 }

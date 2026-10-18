@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { labelLayout } from '../src/renderers/native/drawings/DrawingPainter';
-import { createDrawing, type Projector } from '../src/core/drawings';
+import { createDrawing, type DrawingTypeKey, type Projector } from '../src/core/drawings';
 import { ALONG_LINE_TEXT_TYPES } from '../src/core/drawings/schema';
 
 /** Linear projector: x = time, y = 100 − price, single pane 'price' (200 × 100 px). */
@@ -18,7 +18,7 @@ function proj(): Projector {
 
 type H = 'left' | 'center' | 'right';
 type V = 'top' | 'center' | 'bottom';
-const withText = (type: string, anchors: { time: number; price: number }[], hAlign: H, vAlign: V) =>
+const withText = (type: DrawingTypeKey, anchors: { time: number; price: number }[], hAlign: H, vAlign: V) =>
     createDrawing(type, { id: type, paneId: 'price', anchors, text: { value: 'label', size: 'normal', hAlign, vAlign } })!;
 
 describe('drawing text alignment (TradingView: left / center / right, top / middle / bottom)', () => {
@@ -60,7 +60,7 @@ describe('drawing text alignment (TradingView: left / center / right, top / midd
     });
 
     it('every line tool with text offers both alignment settings', () => {
-        for (const type of ['hline', 'hray', 'vline', 'trendline', 'ray', 'extendedline', 'infoline', 'trendangle', 'arrow']) {
+        for (const type of ['hline', 'hray', 'vline', 'trendline', 'ray', 'extendedline', 'infoline', 'trendangle', 'arrow'] as DrawingTypeKey[]) {
             const anchors = [{ time: 20, price: 50 }, { time: 120, price: 60 }];
             const d = createDrawing(type, { id: type, paneId: 'price', anchors })!;
             const paths = d.schema().fields.map((f) => f.path);
@@ -70,7 +70,7 @@ describe('drawing text alignment (TradingView: left / center / right, top / midd
     });
 
     it('text added to a sloped line starts in the middle (as before); a horizontal ray starts at the left', () => {
-        for (const type of ALONG_LINE_TEXT_TYPES) {
+        for (const type of ALONG_LINE_TEXT_TYPES as ReadonlySet<DrawingTypeKey>) {
             const d = createDrawing(type, { id: type, paneId: 'price', anchors: [{ time: 20, price: 50 }, { time: 120, price: 60 }] })!;
             d.applySettings({ 'text.value': 'x' });
             expect(d.text?.hAlign, type).toBe('center');
