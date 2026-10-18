@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDrawing, deserializeDrawing, type Projector, type SegmentDrawing } from '../src/core/drawings';
+import { createDrawing, deserializeDrawing, type Ellipse, type Projector, type SegmentDrawing } from '../src/core/drawings';
 
 /** Linear projector: x = time, y = 100 − price, single pane 'price'. */
 function fakeProjector(): Projector {
@@ -35,8 +35,11 @@ describe('drawings/Arrow', () => {
 
 describe('drawings/Ellipse', () => {
     const proj = fakeProjector();
-    // box corners (0,0)→(40,40) ⇒ center (20,80), radii (20,20) in px
-    const make = () => createDrawing('ellipse', { paneId: 'price', anchors: [{ time: 0, price: 0 }, { time: 40, price: 40 }] })!;
+    // An ellipse saved before the tilted kind: box corners (0,0)→(40,40) ⇒ center (20,80), radii (20,20) in px
+    const make = () => {
+        const d = createDrawing('ellipse', { paneId: 'price', anchors: [{ time: 0, price: 0 }, { time: 40, price: 40 }] })!.serialize();
+        return deserializeDrawing({ ...d, props: undefined })!;
+    };
 
     it('hit-tests its outline and filled interior, not the gap', () => {
         const d = make();
@@ -50,6 +53,19 @@ describe('drawings/Ellipse', () => {
         const d = make();
         expect(d.anchorSchema().min).toBe(2);
         expect(d.priceRange()).toEqual({ min: 0, max: 40 });
+    });
+
+    it("tilts along its first two points like TradingView's; the third sets the other radius", () => {
+        // Axis (0,100)→(40,60) in px: 45° up, rx = 28.28; the third point 10 px off the axis at its middle.
+        const d = createDrawing('ellipse', { paneId: 'price', anchors: [{ time: 0, price: 0 }, { time: 40, price: 40 }, { time: 27.071, price: 12.929 }] })! as Ellipse;
+        expect(d.anchorSchema().min).toBe(3);
+        const o = d.oval(proj)!;
+        expect(o.rot).toBeCloseTo(-Math.PI / 4, 6);
+        expect(o.rx).toBeCloseTo(28.284, 2);
+        expect(o.ry).toBeCloseTo(10, 1);
+        expect(d.hitTest(40, 60, proj, 2)).toBe(true); // the axis end is on the outline
+        expect(d.hitTest(40, 100, proj, 2)).toBe(false); // the box corner a level ellipse would reach
+        expect(deserializeDrawing(d.serialize())!.anchorSchema().min).toBe(3);
     });
 });
 

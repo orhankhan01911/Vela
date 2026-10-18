@@ -1,4 +1,4 @@
-import type { Drawing, Projector, DrawingStyle, Box, TrendLine, TextLabel } from '../../../core/drawings';
+import type { Drawing, Projector, DrawingStyle, Box, TrendLine, TextLabel, Ellipse } from '../../../core/drawings';
 import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
@@ -351,24 +351,19 @@ export class DrawingPainter {
                 break;
             }
             case 'ellipse': {
-                const pts = d.handlePoints(proj);
-                if (pts.length < 2) return;
-                const cx = (pts[0]![0] + pts[1]![0]) / 2;
-                const cy = (pts[0]![1] + pts[1]![1]) / 2;
-                const rx = Math.abs(pts[1]![0] - pts[0]![0]) / 2;
-                const ry = Math.abs(pts[1]![1] - pts[0]![1]) / 2;
+                const o = (d as Ellipse).oval(proj);
+                if (!o || o.rx < 0.5) return;
                 if (d.style.fillColor) {
                     ctx.save();
                     ctx.fillStyle = d.style.fillColor; // alpha lives in the fill color itself
-
                     ctx.beginPath();
-                    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+                    ctx.ellipse(o.cx, o.cy, o.rx, Math.max(0.5, o.ry), o.rot, 0, Math.PI * 2);
                     ctx.fill();
                     ctx.restore();
                 }
                 this.applyStroke(ctx, d.style);
                 ctx.beginPath();
-                ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+                ctx.ellipse(o.cx, o.cy, o.rx, Math.max(0.5, o.ry), o.rot, 0, Math.PI * 2);
                 ctx.stroke();
                 ctx.setLineDash([]);
                 break;
@@ -1900,10 +1895,22 @@ export class DrawingPainter {
         // validity tint / line-color wash. The user color carries its own alpha; the wash stays light.
         const fillColor = effectiveFillColor(d, theme) ?? d.style.lineColor;
         const fillAlpha = d.style.fillColor ? 1 : 0.1;
+        // Head & shoulders: the outer shoulders close on the neckline where the outer legs cross it.
+        const nlFill = d.necklineIndices();
+        const neck = (end: 'left' | 'right'): [number, number] | null => {
+            if (!nlFill) return null;
+            const a = pts[nlFill[0]];
+            const b = pts[nlFill[1]];
+            const n = pts.length;
+            if (!a || !b || n < 2) return null;
+            const [p, q] = end === 'left' ? [pts[0]!, pts[1]!] : [pts[n - 2]!, pts[n - 1]!];
+            return lineSegmentIntersection(a[0], a[1], b[0], b[1], p[0], p[1], q[0], q[1]);
+        };
+        const lastIdx = pts.length - 1;
         for (const [i, j, k] of d.fillTriangles()) {
-            const a = pts[i];
+            const a = i === 0 ? (neck('left') ?? pts[i]) : pts[i];
             const b = pts[j];
-            const c = pts[k];
+            const c = k === lastIdx && nlFill ? (neck('right') ?? pts[k]) : pts[k];
             if (!a || !b || !c) continue;
             ctx.save();
             ctx.globalAlpha = fillAlpha * ctx.globalAlpha;
@@ -1937,8 +1944,9 @@ export class DrawingPainter {
             }
         }
         const labels = d.vertexLabels();
+        const plates = d.labelPlates();
         ctx.fillStyle = theme.textColor;
-        ctx.font = `bold 12px ${theme.fontFamily}`;
+        ctx.font = plates ? `12px ${theme.fontFamily}` : `bold 12px ${theme.fontFamily}`;
         ctx.textAlign = 'center';
         pts.forEach((p, i) => {
             const lbl = labels[i];
@@ -1946,6 +1954,22 @@ export class DrawingPainter {
             const ny = ((pts[i - 1]?.[1] ?? p[1]) + (pts[i + 1]?.[1] ?? p[1])) / 2;
             const above = p[1] <= ny; // a local peak → label above, a trough → below
             ctx.textBaseline = above ? 'bottom' : 'top';
+            if (plates) {
+                // TradingView's head & shoulders labels: the name on a plate of the line color.
+                const w = ctx.measureText(lbl).width + 12;
+                const h = 20;
+                const y = above ? p[1] - 8 - h : p[1] + 8;
+                ctx.save();
+                ctx.setLineDash([]);
+                roundRect(ctx, p[0] - w / 2, y, w, h, 3);
+                ctx.fillStyle = d.style.lineColor || theme.textColor;
+                ctx.fill();
+                ctx.fillStyle = contrastColor(d.style.lineColor || theme.textColor);
+                ctx.textBaseline = 'middle';
+                ctx.fillText(lbl, p[0], y + h / 2 + 0.5);
+                ctx.restore();
+                return;
+            }
             ctx.fillText(lbl, p[0], above ? p[1] - 7 : p[1] + 7);
         });
         if (d.legRatios()) {

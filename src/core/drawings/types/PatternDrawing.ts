@@ -21,6 +21,10 @@ export abstract class PatternDrawing extends Drawing {
     fillTriangles(): ReadonlyArray<readonly [number, number, number]> {
         return [];
     }
+    /** Write the vertex labels on plates in the line color (head & shoulders), not as bare text. */
+    labelPlates(): boolean {
+        return false;
+    }
     /** Two vertex indices whose line is drawn as an extended neckline (head & shoulders), or null. */
     necklineIndices(): readonly [number, number] | null {
         return null;

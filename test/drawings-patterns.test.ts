@@ -55,6 +55,15 @@ describe('drawings/patterns', () => {
         expect(back.anchorSchema().min).toBe(6);
     });
 
+    it('Elliott wave degree sets the label style (Minor = 1–5 / A–C by default) and round-trips', () => {
+        const imp = createDrawing('elliottimpulse', { paneId: 'price', anchors: [at(0, 5), at(1, 10), at(2, 20), at(3, 15), at(4, 30), at(5, 25)], props: { degree: 'Intermediate' } })! as PatternDrawing;
+        expect(imp.vertexLabels()).toEqual(['', '(1)', '(2)', '(3)', '(4)', '(5)']);
+        expect(deserializeDrawing(imp.serialize())!.serialize().props).toMatchObject({ degree: 'Intermediate' });
+        const corr = createDrawing('elliottcorrection', { paneId: 'price', anchors: [at(0, 20), at(1, 30), at(2, 20), at(3, 26)], props: { degree: 'Primary' } })! as PatternDrawing;
+        expect(corr.vertexLabels()).toEqual(['', 'Ⓐ', 'Ⓑ', 'Ⓒ']);
+        expect(corr.schema().fields.map((f) => f.path)).toContain('degree');
+    });
+
     it('Elliott waves saved before the origin point keep their old 5 / 3 points and labels', () => {
         const oldImp = deserializeDrawing({ id: 'e1', type: 'elliottimpulse', paneId: 'price', anchors: [at(0, 10), at(1, 20), at(2, 15), at(3, 30), at(4, 25)], style: { lineColor: '#fff', lineWidth: 1, lineStyle: 'solid' } } as never)! as PatternDrawing;
         expect(oldImp.anchorSchema().min).toBe(5);
@@ -67,7 +76,9 @@ describe('drawings/patterns', () => {
     it('Head & shoulders has 7 vertices, peaks labelled, neckline through the troughs', () => {
         const d = createDrawing('headshoulders', { paneId: 'price', anchors: [at(0, 40), at(1, 60), at(2, 50), at(3, 70), at(4, 50), at(5, 60), at(6, 40)] })! as PatternDrawing;
         expect(d.anchorSchema().min).toBe(7);
-        expect(d.vertexLabels()).toEqual(['', 'LS', '', 'H', '', 'RS', '']);
+        expect(d.vertexLabels()).toEqual(['', 'Left Shoulder', '', 'Head', '', 'Right Shoulder', '']);
+        expect(d.labelPlates()).toBe(true);
+        expect(d.fillTriangles()).toEqual([[0, 1, 2], [2, 3, 4], [4, 5, 6]]);
         expect(d.necklineIndices()).toEqual([2, 4]);
     });
 

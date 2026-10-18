@@ -149,7 +149,7 @@ export function resetDrawingSettings(drawing: Drawing): void {
 /** Rehydrate a {@link Drawing} from a plain record, or null for an unknown type. */
 export function deserializeDrawing(doc: SerializedDrawing): Drawing | null {
     const meta = REGISTRY.get(doc.type);
-    return meta ? meta.create(legacyPitchfork(legacyComment(legacyElliott(doc)))) : null;
+    return meta ? meta.create(legacyEllipse(legacyPitchfork(legacyComment(legacyElliott(doc))))) : null;
 }
 
 /** Elliott waves gained TradingView's unlabelled origin point (impulse 5 → 6 points, correction 3 → 4). A record
@@ -175,6 +175,13 @@ function legacyPitchfork(doc: SerializedDrawing): SerializedDrawing {
     return { ...doc, props: { ...(doc.props ?? {}), levels: [{ ratio: 1, color: ink, enabled: true }], background: false, medianColor: '' } };
 }
 const PITCHFORK_TYPES: ReadonlySet<string> = new Set(['pitchfork', 'schiffpitchfork', 'modifiedschiffpitchfork', 'insidepitchfork']);
+
+/** Ellipses became TradingView's tilted three-point ellipse. A record saved before has two corners and no `axis`
+ *  flag: mark it so it keeps its level box shape. */
+function legacyEllipse(doc: SerializedDrawing): SerializedDrawing {
+    if (doc.type !== 'ellipse' || doc.props?.axis !== undefined || (doc.anchors?.length ?? 0) !== 2) return doc;
+    return { ...doc, props: { ...(doc.props ?? {}), axis: false } };
+}
 
 // ── built-in lean-core types ──
 // Trend line: the segment ends at two hollow anchor handles (TradingView-style toolbar glyph).
@@ -893,6 +900,7 @@ registerDrawingType({
     group: 'patterns',
     label: 'XABCD Pattern',
     icon: XABCD_ICON,
+    coversSeries: true, // labelled pattern over the candles like TradingView's: a candle never hides a wave or point name
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new XABCD(init),
 });
@@ -902,6 +910,7 @@ registerDrawingType({
     group: 'patterns',
     label: 'ABCD Pattern',
     icon: ABCD_ICON,
+    coversSeries: true, // labelled pattern over the candles like TradingView's: a candle never hides a wave or point name
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new ABCDPattern(init),
 });
@@ -911,6 +920,7 @@ registerDrawingType({
     group: 'patterns',
     label: 'Elliott Impulse Wave (1-5)',
     icon: ELLIOTT_IMPULSE_ICON,
+    coversSeries: true, // labelled pattern over the candles like TradingView's: a candle never hides a wave or point name
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new ElliottImpulse(init),
 });
@@ -920,6 +930,7 @@ registerDrawingType({
     group: 'patterns',
     label: 'Elliott Correction Wave (ABC)',
     icon: ELLIOTT_CORRECTION_ICON,
+    coversSeries: true, // labelled pattern over the candles like TradingView's: a candle never hides a wave or point name
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new ElliottCorrection(init),
 });
@@ -929,13 +940,15 @@ registerDrawingType({
     group: 'patterns',
     label: 'Head & Shoulders',
     icon: HEAD_SHOULDERS_ICON,
+    coversSeries: true, // labelled pattern over the candles like TradingView's: a candle never hides a wave or point name
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new HeadShoulders(init),
 });
 
 // Named harmonics (XABCD with validated Fibonacci bands) — share an XABCD-shaped icon; the label names them.
 const HARMONIC_ICON = svg24('<path d="M3 17 7 6 12 14 17 5 21 16"/><path d="M3 17 21 16" opacity="0.45"/>');
-const harmonic = { group: 'patterns' as const, icon: HARMONIC_ICON, defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' as const } };
+// Labelled points over the candles like TradingView's (coversSeries).
+const harmonic = { group: 'patterns' as const, icon: HARMONIC_ICON, coversSeries: true, defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' as const } };
 
 registerDrawingType({ type: 'gartley', label: 'Gartley', ...harmonic, create: (init) => new Gartley(init) });
 registerDrawingType({ type: 'bat', label: 'Bat', ...harmonic, create: (init) => new Bat(init) });

@@ -20,6 +20,7 @@ export { VerticalLine } from './types/VerticalLine';
 export { HorizontalRay } from './types/HorizontalRay';
 export { CrossLine } from './types/CrossLine';
 export { InfoLine } from './types/InfoLine';
+export { ELLIOTT_DEGREES, DEFAULT_DEGREE } from './types/elliottDegree';
 export { statsOf, anyStats, lineStatsRows, formatSpan, ALL_STATS, NO_STATS, LINE_STATS_FIELDS, type LineStats } from './types/lineStats';
 export { TrendAngle } from './types/TrendAngle';
 export { Box } from './types/Box';
