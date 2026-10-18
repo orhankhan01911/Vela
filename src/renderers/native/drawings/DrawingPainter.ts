@@ -1,5 +1,5 @@
 import type { Drawing, Projector, DrawingStyle, Box, TrendLine, TextLabel, Ellipse } from '../../../core/drawings';
-import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing } from '../../../core/drawings';
+import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP } from '../../../core/palette';
@@ -64,6 +64,9 @@ export class DrawingPainter {
      *  series' own so the inset reads as a finer copy of the chart. */
     /** The chart's bar duration (ms): drawings limited to other timeframes (Visibility tab) are skipped. 0 = show all. */
     barMs = 0;
+    /** Called when an image drawing's picture finishes loading, so the layer repaints with it. */
+    onAssetLoaded: (() => void) | null = null;
+    private readonly images = new Map<string, { img: HTMLImageElement; state: 'loading' | 'ok' | 'error' }>();
     /** The chart's timezone (axis time labels read like the crosshair's time chip). */
     timeZone = 'UTC';
     seriesLook: { style: string; upColor: string; downColor: string; lineColor: string } = {
@@ -205,6 +208,10 @@ export class DrawingPainter {
         if (d.type === 'highlighter' && d instanceof SegmentDrawing) {
             this.paintHighlighter(ctx, d, proj);
             this.paintLabel(ctx, d, proj, theme);
+            return;
+        }
+        if (d instanceof ImageDrawing) {
+            this.paintImage(ctx, d, proj, theme);
             return;
         }
         if (d instanceof TableDrawing) {
@@ -667,6 +674,50 @@ export class DrawingPainter {
             ctx.fillText(label, cx, proj.height + 11.5);
             ctx.restore();
         }
+    }
+
+    /** TradingView's image: the picture stretched over its box (loaded once per URL, CORS-clean so chart snapshots
+     *  still work); a dashed box with a short note while it loads or when it cannot be shown. */
+    private paintImage(ctx: CanvasRenderingContext2D, d: ImageDrawing, proj: Projector, theme: VelaTheme): void {
+        const b = d.bounds(proj);
+        if (!b) return;
+        const url = d.imageUrl();
+        let entry = url ? this.images.get(url) : undefined;
+        if (url && !entry && typeof Image !== 'undefined') {
+            const img = new Image();
+            img.crossOrigin = 'anonymous'; // a picture without CORS fails here instead of tainting the canvas
+            entry = { img, state: 'loading' };
+            this.images.set(url, entry);
+            const e = entry;
+            img.onload = () => {
+                e.state = 'ok';
+                this.onAssetLoaded?.();
+            };
+            img.onerror = () => {
+                e.state = 'error';
+                this.onAssetLoaded?.();
+            };
+            img.src = url;
+        }
+        if (entry?.state === 'ok' && b.w >= 1 && b.h >= 1) {
+            ctx.save();
+            ctx.globalAlpha *= d.opacity ?? 1;
+            ctx.drawImage(entry.img, b.x, b.y, b.w, b.h);
+            ctx.restore();
+            return;
+        }
+        ctx.save();
+        ctx.setLineDash([4, 3]);
+        ctx.strokeStyle = withAlpha(theme.textColor, 0.5);
+        ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w, b.h);
+        ctx.setLineDash([]);
+        ctx.fillStyle = withAlpha(theme.textColor, 0.7);
+        ctx.font = `12px ${theme.fontFamily}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const note = !url ? 'Add an image link in settings' : entry?.state === 'error' ? 'This image cannot be shown here' : 'Loading image…';
+        ctx.fillText(note, b.x + b.w / 2, b.y + b.h / 2);
+        ctx.restore();
     }
 
     /** TradingView's table: a grid of cells from the pinned corner, header row bold, each column as wide as its

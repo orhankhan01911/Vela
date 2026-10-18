@@ -40,6 +40,7 @@ export type DrawingTypeKey =
     | 'anchoredtext'
     | 'anchorednote'
     | 'table'
+    | 'image'
     | 'fixedrangetpo'
     | 'pricealert'
     | 'pitchfork'

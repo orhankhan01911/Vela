@@ -155,6 +155,11 @@ export class UserDrawingController implements IDrawingsRendererPort {
     ) {
         this.ctx = canvas.getContext('2d');
         this.popup = new DrawingSettingsPopup(overlayHost, deps.theme(), () => deps.chartBarMs());
+        // An image drawing's picture arrives later: repaint both layers (it may sit under the candles) once it has.
+        this.painter.onAssetLoaded = () => {
+            this.render();
+            this.deps.requestDataPaint();
+        };
         this.toolbar = new DrawingToolbar(
             toolbarHost,
             deps.theme(),

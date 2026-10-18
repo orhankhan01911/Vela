@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDrawing, deserializeDrawing, getDrawingType, type Projector, type SegmentDrawing, type PatternDrawing, type MeasureBox, type FixedRangeVolumeProfile, type Forecast, type BarsPattern, type GhostFeed, type TableDrawing } from '../src/core/drawings';
+import { createDrawing, deserializeDrawing, getDrawingType, type Projector, type SegmentDrawing, type PatternDrawing, type MeasureBox, type FixedRangeVolumeProfile, type Forecast, type BarsPattern, type GhostFeed, type TableDrawing, type ImageDrawing, safeImageUrl } from '../src/core/drawings';
 
 /** Linear projector: x = time, y = 100 − price, single pane 'price' (200 × 100 px). */
 function proj(): Projector {
@@ -157,5 +157,17 @@ describe("TradingView's tools Vela lacked", () => {
         expect(t.hitTest(30, 30, proj(), 0)).toBe(true); // inside the grid from its corner (20, 20)
         expect(t.timeExtent()).toBeNull();
         expect(createDrawing('table', { paneId: 'price', anchors: [P(0, 50)] })!.text?.value).toContain('|'); // starts with a sample grid
+    });
+
+    it('image: only https links or inline image data are kept; the box spans its two corners', () => {
+        expect(safeImageUrl('https://example.com/a.png')).toBe('https://example.com/a.png');
+        expect(safeImageUrl('data:image/png;base64,iVBORw0KGgo=')).toBe('data:image/png;base64,iVBORw0KGgo=');
+        for (const bad of ['javascript:alert(1)', 'http://example.com/a.png', 'data:text/html;base64,PHNjcmlwdD4=', 'data:image/svg+xml;base64,PHN2Zz4=', 'file:///etc/passwd', 42]) expect(safeImageUrl(bad)).toBeNull();
+        const img = createDrawing('image', { paneId: 'price', anchors: [P(20, 80), P(60, 40)], props: { url: 'javascript:alert(1)' } })! as ImageDrawing;
+        expect(img.imageUrl()).toBeNull();
+        expect(img.serialize().props).toMatchObject({ url: '' });
+        img.applySettings({ url: 'https://example.com/a.png' });
+        expect(img.imageUrl()).toBe('https://example.com/a.png');
+        expect(img.bounds(proj())).toEqual({ x: 20, y: 20, w: 40, h: 40 });
     });
 });
