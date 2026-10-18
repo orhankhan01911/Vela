@@ -6,7 +6,7 @@ import type { SeriesSpec, LineLikeSeries, CandleSeries, LineStyle, CandleBarColo
 import { isLineLikeSeries, seriesShownOn } from '../../../core/model/series';
 import type { CoordinateSystem } from '../core/CoordinateSystem';
 import type { SceneGraph, PaneNode } from '../core/SceneGraph';
-import { candleTier, wickWidth, candleGeometry, snapY, aggregateCandleColumns, BAR_TICK_MIN_SPACING } from './candle-lod';
+import { candleTier, wickWidth, candleGeometry, snapY, aggregateCandleColumns, BAR_TICK_MIN_SPACING, candleVariant } from './candle-lod';
 import { BASELINE_TOP_LINE, BASELINE_BOTTOM_LINE, BASELINE_FILL_ALPHA, BASELINE_FILL_ALPHA_FAR, withAlpha as cssWithAlpha, effectiveCandlePaint } from '../core/chartConfig';
 import type { IRenderBackend } from './IRenderBackend';
 import { Batch, type RGBA } from './gl/Batch';
@@ -869,6 +869,8 @@ export class WebGL2Backend implements IRenderBackend {
         const up = paint.up;
         const down = paint.down;
         const cs = paint.candle;
+        // Hollow / volume candles: per-bar direction, hollow body and body width.
+        const variant = candleVariant(scene.priceStyle, bars, i0, i1);
         if (tier === 'aggregate') {
             // The stick IS the candle, so a bar's paint resolves as in the stick-only tier
             // below: the wick color setting wins, then barcolor(), then the direction color.
@@ -887,8 +889,9 @@ export class WebGL2Backend implements IRenderBackend {
             if (!bar || bar.high <= bar.low) continue; // skip zero-range candles (e.g. the intro reveal's un-started state)
             // Wick + body snapped to the device grid as one unit, so the wick is always
             // dead-center in the body and the gap between candles stays uniform.
-            const g = candleGeometry(coords.logicalToX(i), spacing, coords.dpr, this.candleBodyScale);
-            const isUp = bar.close >= bar.open;
+            const g = candleGeometry(coords.logicalToX(i), spacing, coords.dpr, this.candleBodyScale * (variant ? variant.width(i) : 1));
+            const isUp = variant ? variant.up(i) : bar.close >= bar.open;
+            const hollow = variant?.hollow(i) ?? false;
             const dir = isUp ? up : down;
             const bc = barColors.get(bar.time);
             const bodyColorStr = bc ?? dir;
@@ -922,7 +925,11 @@ export class WebGL2Backend implements IRenderBackend {
                 }
             }
             if (drawBody) {
-                if (cs.bodyVisible) {
+                if (cs.bodyVisible && hollow) {
+                    // Hollow candle: the body is its outline in the bar's color.
+                    b.alpha = this.candleStructureAlpha;
+                    b.rectStroke(g.bodyX + 0.5, bodyTop + 0.5, Math.max(0, g.bodyW - 1), Math.max(0, bodyH - 1), 1, c);
+                } else if (cs.bodyVisible) {
                     b.alpha = this.candleBodyAlpha;
                     b.rect(g.bodyX, bodyTop, g.bodyW, bodyH, c);
                 }

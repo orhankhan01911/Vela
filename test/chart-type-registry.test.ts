@@ -57,7 +57,7 @@ describe('chart-type registry', () => {
 
     it('priceStyleIds() = built-ins + registered types; the settings/validation layers read it live', () => {
         const base = priceStyleIds();
-        expect(base).toEqual(['candles', 'bars', 'line', 'area', 'baseline', 'heikinashi']);
+        expect(base).toEqual(['candles', 'hollowcandles', 'volumecandles', 'bars', 'line', 'area', 'baseline', 'heikinashi']);
         registerChartType({ id: 'renko-like', barTransform: identity });
         expect(priceStyleIds()).toContain('renko-like');
         unregisterChartType('renko-like');

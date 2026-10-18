@@ -174,6 +174,8 @@ const CSS = `
 
 const BUILTIN_STYLE_LABELS: Record<string, string> = {
     candles: 'Candles',
+    hollowcandles: 'Hollow candles',
+    volumecandles: 'Volume candles',
     bars: 'Bars',
     line: 'Line',
     area: 'Area',

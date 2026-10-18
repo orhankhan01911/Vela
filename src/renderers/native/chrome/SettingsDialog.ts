@@ -477,7 +477,7 @@ export class SettingsDialog {
         body.append(sid(this.sectionTitle('Chart type'), 'symbol.type'));
         const groups: Partial<Record<string, HTMLElement>> = {};
         const showActive = (style: string): void => {
-            const active = style === 'heikinashi' ? 'candles' : style; // heikin-ashi is candle-drawn
+            const active = style === 'heikinashi' || style === 'hollowcandles' || style === 'volumecandles' ? 'candles' : style; // candle-drawn styles share the candle settings
             // Gate via the !important class, not inline display: the field-grid pass
             // rewrites every group's display to 'contents' AFTER this visibility pass.
             for (const key of priceStyleIds()) {

@@ -27,6 +27,52 @@ export const CANDLE_AGG_MAX_SPACING = 1;
 export const BAR_TICK_MIN_SPACING = 2;
 
 /**
+ * Per-bar paint rule of the candle-drawn styles that differ from plain candles (TradingView's):
+ * - `hollowcandles`: color from the close vs the PREVIOUS close; the body is an outline when the
+ *   close is above the open and filled when below.
+ * - `volumecandles`: body width follows the bar's volume relative to the largest on screen.
+ * `null` for every other style (plain candle painting).
+ */
+export interface CandleVariant {
+    /** Up (direction) color for bar `i`. */
+    up(i: number): boolean;
+    /** Outline-only body for bar `i`. */
+    hollow(i: number): boolean;
+    /** Body width factor for bar `i` (1 = a normal candle). */
+    width(i: number): number;
+}
+
+/** Thinnest volume candle as a share of a normal body (a near-zero volume bar stays visible). */
+export const VOLUME_CANDLE_MIN_WIDTH = 0.15;
+
+export function candleVariant(style: string, bars: ArrayLike<OHLCV | undefined>, i0: number, i1: number): CandleVariant | null {
+    if (style === 'hollowcandles') {
+        return {
+            up: (i) => {
+                const b = bars[i]!;
+                const prev = i > 0 ? bars[i - 1] : undefined;
+                return b.close >= (prev ? prev.close : b.open);
+            },
+            hollow: (i) => bars[i]!.close > bars[i]!.open,
+            width: () => 1,
+        };
+    }
+    if (style === 'volumecandles') {
+        let max = 0;
+        for (let i = i0; i <= i1; i += 1) {
+            const v = bars[i]?.volume ?? 0;
+            if (v > max) max = v;
+        }
+        return {
+            up: (i) => bars[i]!.close >= bars[i]!.open,
+            hollow: () => false,
+            width: (i) => (max > 0 ? Math.max(VOLUME_CANDLE_MIN_WIDTH, Math.min(1, (bars[i]?.volume ?? 0) / max)) : 1),
+        };
+    }
+    return null;
+}
+
+/**
  * Wick line width (CSS px) for a given bar spacing. The body is `~spacing·0.7` wide
  * (`half = floor(spacing·0.7)/2`), so a fixed wick reads as a solid body once bars get tight.
  * Cap the wick at the body's half-width and floor it at 1px: a crisp ~1.5px stick at wide zoom

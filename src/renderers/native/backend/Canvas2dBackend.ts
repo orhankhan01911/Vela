@@ -6,7 +6,7 @@ import type { SeriesSpec, LineLikeSeries, CandleSeries, LineStyle, CandleBarColo
 import { isLineLikeSeries, seriesShownOn } from '../../../core/model/series';
 import type { CoordinateSystem } from '../core/CoordinateSystem';
 import type { SceneGraph, PaneNode } from '../core/SceneGraph';
-import { candleTier, wickWidth, candleGeometry, snapY, aggregateCandleColumns, BAR_TICK_MIN_SPACING } from './candle-lod';
+import { candleTier, wickWidth, candleGeometry, snapY, aggregateCandleColumns, BAR_TICK_MIN_SPACING, candleVariant } from './candle-lod';
 import { BASELINE_TOP_LINE, BASELINE_BOTTOM_LINE, BASELINE_FILL_ALPHA, BASELINE_FILL_ALPHA_FAR, withAlpha, effectiveCandlePaint } from '../core/chartConfig';
 import type { IRenderBackend } from './IRenderBackend';
 
@@ -429,6 +429,8 @@ export class Canvas2dBackend implements IRenderBackend {
         // the shared candles block); built-ins pass through untouched.
         const paint = effectiveCandlePaint(scene.style.candle, scene.candleOverride, theme.upColor, theme.downColor);
         const cs = paint.candle;
+        // Hollow / volume candles: per-bar direction, hollow body and body width.
+        const variant = candleVariant(scene.priceStyle, bars, i0, i1);
         if (tier === 'aggregate') {
             // The stick IS the candle, so a bar's paint resolves as in the stick-only tier
             // below: the wick color setting wins, then barcolor(), then the direction color.
@@ -447,9 +449,10 @@ export class Canvas2dBackend implements IRenderBackend {
             if (!b || b.high <= b.low) continue; // skip zero-range candles (e.g. the intro reveal's un-started state)
             // Wick + body snapped to the device grid as one unit, so the wick is always
             // dead-center in the body and the gap between candles stays uniform.
-            const g = candleGeometry(coords.logicalToX(i), spacing, coords.dpr, this.candleBodyScale);
+            const g = candleGeometry(coords.logicalToX(i), spacing, coords.dpr, this.candleBodyScale * (variant ? variant.width(i) : 1));
             const x = g.center;
-            const up = b.close >= b.open;
+            const up = variant ? variant.up(i) : b.close >= b.open;
+            const hollow = variant?.hollow(i) ?? false;
             const dir = up ? paint.up : paint.down;
             const bc = barColors.get(b.time);
             const color = bc ?? dir;
@@ -489,7 +492,13 @@ export class Canvas2dBackend implements IRenderBackend {
                 ctx.stroke();
             }
             if (drawBody) {
-                if (cs.bodyVisible) {
+                if (cs.bodyVisible && hollow) {
+                    // Hollow candle: the body is its outline in the bar's color.
+                    ctx.globalAlpha = this.candleStructureAlpha;
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(g.bodyX + 0.5, top + 0.5, Math.max(0, g.bodyW - 1), Math.max(0, bodyH - 1));
+                } else if (cs.bodyVisible) {
                     ctx.globalAlpha = this.candleBodyAlpha;
                     ctx.fillStyle = color;
                     ctx.fillRect(g.bodyX, top, g.bodyW, bodyH);
