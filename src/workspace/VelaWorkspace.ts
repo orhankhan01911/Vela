@@ -570,6 +570,7 @@ export class VelaWorkspace {
                     { id: 'timeframe', label: 'Interval', checked: this.syncOpts.timeframe === true },
                     { id: 'crosshair', label: 'Crosshair', checked: this.syncOpts.crosshair === true },
                     { id: 'style', label: 'Style', checked: this.syncOpts.style === true },
+                    { id: 'viewport', label: 'Pan & zoom', checked: this.syncOpts.viewport === true },
                 ],
                 onToggleSync: (id) => {
                     const kind = id as SyncKind;
@@ -2320,6 +2321,7 @@ export class VelaWorkspace {
                     { id: 'timeframe', label: 'Interval', checked: this.syncOpts.timeframe === true },
                     { id: 'crosshair', label: 'Crosshair', checked: this.syncOpts.crosshair === true },
                     { id: 'style', label: 'Style', checked: this.syncOpts.style === true },
+                    { id: 'viewport', label: 'Pan & zoom', checked: this.syncOpts.viewport === true },
                 ],
                 onToggleSync: (id) => {
                     const kind = id as SyncKind;
