@@ -69,6 +69,9 @@ export interface UserDrawingDeps {
     setSnapMode(mode: SnapMode): void;
     /** Reserve `px` of left gutter for the docked toolbar (0 releases it) — the plot insets to its right. */
     setToolbarGutter(px: number): void;
+    /** The current-price label block on the price scale (`above`/`below` its price, px), or null when it is not
+     *  shown: drawing chips on the scale stack clear of it. */
+    priceBlock?(): { paneId: string; price: number; above: number; below: number } | null;
 }
 
 /** No interaction targets on the interleave layers — handles always paint in front. */
@@ -1082,6 +1085,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
         this.painter.seriesLook = this.deps.seriesLook();
         this.painter.barMs = this.deps.chartBarMs();
         const onTop = (d: Drawing) => !this.isInterleaved(d) || this.lifted.has(d.id);
+        this.painter.layoutAxisChips(this.drawings, proj, this.deps.priceBlock?.() ?? null);
         this.painter.paintAll(ctx, this.drawings.filter(onTop), proj, this.deps.theme(), targets);
         this.painter.paintHighlights(ctx, this.drawings.filter((d) => !onTop(d)), proj, handleIdsFor(targets));
         // Price labels on the scale for every horizontal line, including ones painted under the candles.

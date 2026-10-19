@@ -19,6 +19,7 @@ import type {
     DataWindowReadout,
 } from '../../core/ports/IChartRenderer';
 import type { VelaTheme } from '../../core/options';
+import { replacesSeries } from '../../chart-types/registry';
 import type { OHLCV } from '../../core/model/ohlcv';
 import type { Millis } from '../../core/model/time';
 import type { VolumeLayerData, VpvrLayerData } from '../../core/model/volume-layers';
@@ -1744,6 +1745,15 @@ export class NativeRenderer implements IChartRenderer {
             snap: (pt, paneId, mode, cursorPx) => this.snapToCandle(pt, paneId, mode, cursorPx),
             setSnapMode: (mode) => this.setSnapMode(mode),
             setToolbarGutter: (px) => this.setToolbarGutter(px),
+            // As ChromeRenderer paints it: the label row centred on the last close, the countdown row under it.
+            priceBlock: () => {
+                const n = this.scene.bars.length;
+                if (!n || this.scene.candlesHidden) return null;
+                const label = this.scene.showPriceLabel;
+                const countdown = this.scene.showCountdown && !replacesSeries(this.scene.priceStyle);
+                if (!label && !countdown) return null;
+                return { paneId: PRICE_PANE_ID, price: this.scene.bars[n - 1]!.close, above: 8, below: label && countdown ? 24 : 8 };
+            },
         });
         this.userDrawings.historyChords = this.historyChordsEnabled; // may be set before init()
         // Honor a layout mode pushed before mount (the shell may set it ahead of the chart build).

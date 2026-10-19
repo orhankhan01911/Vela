@@ -7,6 +7,7 @@ import { withAlpha } from '../../../core/color';
 import { barTransformFor } from '../../../core/price-styles/BarTransform';
 import type { OHLCV } from '../../../core/model/ohlcv';
 import { valueDecimals, formatTimeStamp } from '../chrome/ticks';
+import { layoutAxisChips } from './axis-chips';
 
 const HANDLE_RADIUS = 4.5; // px radius of the round drag handles
 /** Handle chrome is fixed (not the drawing's line color) so tools with atypical accents —
@@ -78,6 +79,34 @@ export class DrawingPainter {
         downColor: BEARISH,
         lineColor: BULLISH,
     };
+
+    /** Price-scale chip centre per drawing id, set by {@link layoutAxisChips} before the top-canvas paint. */
+    private axisChipY = new Map<string, number>();
+
+    /** Lay out the price-scale chips (alerts, horizontal-line prices) of every pane so none covers the
+     *  current-price label (`priceBlock`, on its pane) or another chip. */
+    layoutAxisChips(
+        drawings: readonly Drawing[],
+        proj: Projector,
+        priceBlock: { paneId: string; price: number; above: number; below: number } | null,
+    ): void {
+        const byPane = new Map<string, Array<{ id: string; y: number }>>();
+        for (const d of drawings) {
+            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs) || !(d instanceof PriceAlert || showsAxisPrice(d))) continue;
+            const a = d.anchors[0];
+            const y = a ? proj.yOf(a.price, d.paneId) : null;
+            if (y == null) continue;
+            const list = byPane.get(d.paneId);
+            if (list) list.push({ id: d.id, y });
+            else byPane.set(d.paneId, [{ id: d.id, y }]);
+        }
+        this.axisChipY = new Map();
+        for (const [paneId, chips] of byPane) {
+            const by = priceBlock && priceBlock.paneId === paneId ? proj.yOf(priceBlock.price, paneId) : null;
+            const block = priceBlock && by != null ? { top: by - priceBlock.above, bottom: by + priceBlock.below } : null;
+            for (const [id, y] of layoutAxisChips(chips, block)) this.axisChipY.set(id, y);
+        }
+    }
 
     /** Paint every visible drawing, then selection handles for the targeted ones.
      *  Each drawing is clipped to its own pane's rect (and skipped entirely while that pane
@@ -653,7 +682,7 @@ export class DrawingPainter {
             const y = a ? proj.yOf(a.price, d.paneId) : null;
             const rect = proj.paneRect?.(d.paneId);
             if (!a || y == null || (rect && (rect.height <= 0 || y < rect.top || y > rect.top + rect.height))) continue;
-            this.paintAxisPrice(ctx, d, y, proj, theme);
+            this.paintAxisPrice(ctx, d, this.axisChipY.get(d.id) ?? y, proj, theme);
         }
         // TradingView's time label for vertical lines / cross lines: the time in a chip of the line color on the time axis.
         for (const d of drawings) {
@@ -2034,11 +2063,12 @@ export class DrawingPainter {
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'left';
         const chipW = Math.max(54, ctx.measureText(priceStr).width + 14);
-        roundRect(ctx, W + 1, y - 9.5, chipW, 19, 4);
+        const cy = this.axisChipY.get(d.id) ?? y; // moved off the current-price label / another chip
+        roundRect(ctx, W + 1, cy - 9.5, chipW, 19, 4);
         ctx.fillStyle = ink;
         ctx.fill();
         ctx.fillStyle = contrastColor(ink);
-        ctx.fillText(priceStr, W + 8, y + 0.5);
+        ctx.fillText(priceStr, W + 8, cy + 0.5);
         // hover pill: [bell] label  price | [trash]
         if (engaged) {
             const label = d.alert.label;
