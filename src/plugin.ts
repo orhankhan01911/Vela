@@ -55,6 +55,7 @@ export {
     type NativeIndicatorOutput,
     type NativeIndicatorInfo,
 } from './core/native-indicators/NativeIndicator';
+export { classicPlots, type ClassicPlotValues } from './core/native-indicators/classics';
 export {
     registerRendererLayer,
     unregisterRendererLayer,
