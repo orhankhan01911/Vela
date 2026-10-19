@@ -38,6 +38,11 @@ import {
     LIVE_BAR_EASE_DEFAULT_MS,
     INTRO_DURATION_DEFAULT_MS,
 } from '../../core/options';
+
+/** `animNewBar: true`: a new bar's growth time-constant (ms); about 3x that to look settled, so it finishes before the
+ *  next bar even at a 10x replay (100 ms a bar). */
+const NEW_BAR_EASE_DEFAULT_MS = 70;
+const NEW_BAR_EASE_MAX_MS = 400;
 import type { Unsubscribe } from '../../core/util/types';
 import { SecondClock, type WallClock } from '../../core/util/wall-clock';
 import { isLineLikeSeries, seriesShownOn, type SeriesSurface } from '../../core/model/series';
@@ -312,6 +317,11 @@ export class NativeRenderer implements IChartRenderer {
     private liveEaseHigh = 0;
     private liveEaseLow = 0;
     private liveEaseClose = 0;
+    /** `animNewBar`: a NEW last bar grows from its open to its high/low/close with this time-constant (ms; 0 = it
+     *  appears at once). For a replay, whose steps reveal whole finished bars: drawing only, readers see the real bar. */
+    private animNewBarMs = 0;
+    /** The glide in flight is a new bar growing in (it uses `animNewBarMs`, not the live-bar glide's rate). */
+    private newBarEasing = false;
 
     // ── axis-drag / manual-scale (price-axis rescale + vertical price pan) ──
     private axisDragEnabled = true;
@@ -414,7 +424,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     readonly name = 'native';
-    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'invertScale', 'scalePriceOnly', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride', 'drawingsInteractive', 'priceAxisTicks', 'crosshairLockTime'];
+    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'animNewBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'invertScale', 'scalePriceOnly', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride', 'drawingsInteractive', 'priceAxisTicks', 'crosshairLockTime'];
 
     /** Apply a render feature live — mutate the field + invalidate, no engine re-run. */
     applyFeature(key: string, value: unknown): void {
@@ -470,6 +480,10 @@ export class NativeRenderer implements IChartRenderer {
             case 'animLiveBar':
                 this.animLiveBar.set(resolveLiveBarEaseMs(value));
                 return; // affects the next tick only; a glide in flight finishes at the new rate (or snaps at 0)
+            case 'animNewBar':
+                // true = the default growth; a number = its time-constant in ms (capped: past it the bar lags the replay).
+                this.animNewBarMs = value === true ? NEW_BAR_EASE_DEFAULT_MS : typeof value === 'number' && value > 0 ? Math.min(value, NEW_BAR_EASE_MAX_MS) : 0;
+                return;
             case 'intro': {
                 this.setIntro(resolveIntro(value));
                 if (this.intro.style) this.playIntro(); // setting it replays — used to compare styles from the console
@@ -653,6 +667,7 @@ export class NativeRenderer implements IChartRenderer {
             case 'animScroll': return this.animScroll.tau;
             case 'animAutoscale': return this.animAutoscale.tau;
             case 'animLiveBar': return this.animLiveBar.tau;
+            case 'animNewBar': return this.animNewBarMs;
             case 'intro': return this.intro.style;
             case 'zoomAnchor': return this.zoomAnchorMode;
             case 'axisDrag': return this.input ? this.input.axisDrag : this.axisDragEnabled;
@@ -2115,7 +2130,18 @@ export class NativeRenderer implements IChartRenderer {
             const vp = this.coords.getViewport();
             const holdView = n > 0 && vp.rightOffset < 0 && this.scrollTargetRO === null;
             this.bars.push(bar);
-            this.syncLiveEase(bar); // a fresh bar — snap (never ease across bars)
+            if (this.animNewBarMs > 0) {
+                // Grow it in from its open (a replay step reveals a whole finished bar; a live bar's first tick
+                // has open = close, so it looks the same). Drawing only: `this.bars` holds the real bar.
+                this.liveEaseTime = bar.time;
+                this.liveEaseHigh = bar.open;
+                this.liveEaseLow = bar.open;
+                this.liveEaseClose = bar.open;
+                this.newBarEasing = true;
+                this.animator.start();
+            } else {
+                this.syncLiveEase(bar); // a fresh bar — snap (never ease across bars)
+            }
             // Warm path: O(1) append (no full times remap / median re-sort). Cold start
             // (interval not yet established) takes the robust full-median setBars path.
             if (this.coords.barInterval > 0) this.coords.appendBar(bar.time);
@@ -2137,6 +2163,7 @@ export class NativeRenderer implements IChartRenderer {
 
     /** Snap the eased forming-bar state to `bar` — no glide (a fresh bar or the first tick of one). */
     private syncLiveEase(bar: OHLCV): void {
+        this.newBarEasing = false;
         this.liveEaseTime = bar.time;
         this.liveEaseHigh = bar.high;
         this.liveEaseLow = bar.low;
@@ -2148,7 +2175,8 @@ export class NativeRenderer implements IChartRenderer {
         const target = this.bars[this.bars.length - 1];
         if (!target || this.liveEaseTime !== target.time) return false;
         const eps = Math.max(1e-9, Math.abs(target.close) * 1e-6);
-        const tau = this.animLiveBar.tau; // 0 ⇒ easeToward returns the target (a mid-glide switch-off snaps)
+        // 0 ⇒ easeToward returns the target (a mid-glide switch-off snaps). A new bar growing in has its own rate.
+        const tau = this.newBarEasing ? this.animNewBarMs : this.animLiveBar.tau;
         const nh = easeToward(this.liveEaseHigh, target.high, dtMs, tau);
         const nl = easeToward(this.liveEaseLow, target.low, dtMs, tau);
         const nc = easeToward(this.liveEaseClose, target.close, dtMs, tau);
@@ -2156,6 +2184,7 @@ export class NativeRenderer implements IChartRenderer {
         this.liveEaseHigh = active ? nh : target.high;
         this.liveEaseLow = active ? nl : target.low;
         this.liveEaseClose = active ? nc : target.close;
+        if (!active) this.newBarEasing = false;
         return active;
     }
 

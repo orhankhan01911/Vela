@@ -127,3 +127,48 @@ describe('NativeRenderer forming-bar glide', () => {
         expect(r.readFeature('animLiveBar')).toBe(LIVE_BAR_EASE_MAX_MS);
     });
 });
+
+describe('NativeRenderer animNewBar (a replay step grows its whole bar in)', () => {
+    const full = (time: number): OHLCV => ({ time, open: 100, high: 130, low: 90, close: 120, volume: 1 });
+
+    it('off (default): a new bar appears at once', () => {
+        const { r, anyR, starts } = makeRenderer(0);
+        r.setBars([bar(1000, 100)]);
+        r.updateBar(full(2000));
+        expect(r.readFeature('animNewBar')).toBe(0);
+        expect(anyR.liveEaseHigh).toBe(130);
+        expect(anyR.liveEaseClose).toBe(120);
+        expect(starts()).toBe(0);
+    });
+
+    it('on: the new bar is drawn from its open and grows to its real high/low/close; the data is the real bar', () => {
+        const { r, anyR, starts } = makeRenderer(0);
+        r.applyFeature('animNewBar', true);
+        expect(r.readFeature('animNewBar')).toBeGreaterThan(0);
+        r.setBars([bar(1000, 100)]);
+        r.updateBar(full(2000));
+        expect(starts()).toBe(1);
+        expect(anyR.bars[1]).toEqual(full(2000)); // readers see the whole bar
+        expect([anyR.liveEaseHigh, anyR.liveEaseLow, anyR.liveEaseClose]).toEqual([100, 100, 100]);
+        expect(anyR.easeLiveBar(16)).toBe(true);
+        expect(anyR.liveEaseHigh).toBeGreaterThan(100);
+        expect(anyR.liveEaseHigh).toBeLessThan(130);
+        for (let i = 1; i < 15; i++) anyR.easeLiveBar(16); // 240 ms: looks whole (within 5 % of its range)
+        expect(130 - anyR.liveEaseHigh).toBeLessThan(0.05 * 40);
+        expect(anyR.liveEaseLow - 90).toBeLessThan(0.05 * 40);
+        let frames = 15;
+        while (anyR.easeLiveBar(16) && frames < 200) frames += 1;
+        expect(frames * 16).toBeLessThan(1000); // the invisible tail ends before a 1x replay's next bar
+        expect([anyR.liveEaseHigh, anyR.liveEaseLow, anyR.liveEaseClose]).toEqual([130, 90, 120]);
+    });
+
+    it('a number sets the growth time-constant, capped; false turns it off', () => {
+        const { r } = makeRenderer(0);
+        r.applyFeature('animNewBar', 150);
+        expect(r.readFeature('animNewBar')).toBe(150);
+        r.applyFeature('animNewBar', 10_000);
+        expect(r.readFeature('animNewBar')).toBeLessThanOrEqual(400);
+        r.applyFeature('animNewBar', false);
+        expect(r.readFeature('animNewBar')).toBe(0);
+    });
+});
