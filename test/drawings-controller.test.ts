@@ -576,10 +576,11 @@ describe('buildToolbar grouping', () => {
 
         const measureGroup = definition.groups.find((g) => g.id === 'measurements');
         expect(measureGroup?.label).toBe('Measurements');
-        expect(measureGroup?.tools.map((t) => t.type)).toEqual(expect.arrayContaining(['datepricerange', 'position']));
-        // Long/Short Position is the group's default (tools[0] arms when the button is clicked directly).
-        expect(measureGroup?.tools[0]?.type).toBe('position');
-        expect(measureGroup?.sections?.find((s) => s.label === 'Measurements')?.tools.map((t) => t.type)).toEqual(['position', 'forecast', 'projection', 'daterange', 'pricerange', 'datepricerange', 'magnifier']);
+        expect(measureGroup?.tools.map((t) => t.type)).toEqual(expect.arrayContaining(['datepricerange', 'long-position', 'short-position']));
+        // Long Position is the group's default (tools[0] arms when the button is clicked directly); the combined
+        // Long/Short type is registered but not in the menu (TradingView's two tools, 2026-10-19).
+        expect(measureGroup?.tools[0]?.type).toBe('long-position');
+        expect(measureGroup?.sections?.find((s) => s.label === 'Measurements')?.tools.map((t) => t.type)).toEqual(['long-position', 'short-position', 'forecast', 'projection', 'daterange', 'pricerange', 'datepricerange', 'magnifier']);
         expect(measureGroup?.sections?.find((s) => s.label === 'Cycles')?.tools.map((t) => t.type)).toEqual(['cycliclines', 'timecycles', 'sineline', 'barspattern', 'ghostfeed']);
         expect(patternsGroup?.sections?.find((s) => s.label === 'Elliott Waves')?.tools.map((t) => t.type)).toEqual([
             'elliottimpulse',
