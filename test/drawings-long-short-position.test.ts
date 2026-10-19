@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDrawing, deserializeDrawing, PositionTool, type Projector } from '../src/core/drawings';
+import { createDrawing, deserializeDrawing, PositionTool, type DrawingTypeKey, type Projector } from '../src/core/drawings';
 import { defaultToolbar } from '../src/core/drawings/toolbar';
 
 const HR = 3600000;
@@ -18,7 +18,7 @@ function fakeProjector(): Projector {
 }
 
 /** Place a tool with click 1 at (0 h, entry) and click 2 at (60 h, release), as the controller does. */
-function place(type: string, entry: number, release: number): PositionTool {
+function place(type: DrawingTypeKey, entry: number, release: number): PositionTool {
     const d = createDrawing(type, { paneId: 'price', anchors: [{ time: 0, price: entry }, { time: 60 * HR, price: release }] }) as PositionTool;
     d.onPlaced(fakeProjector());
     return d;

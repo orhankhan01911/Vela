@@ -319,6 +319,46 @@ describe('chart.replay', () => {
         expect(chart.replay.state.remaining).toBe(49 + 100);
     });
 
+    it('`context` deepens the history so that many bars show before the start bar', async () => {
+        const { chart, feed, renderer } = make({ bars: 100, total: 300 });
+        await chart.ready();
+        const start = renderer.bars[10]!; // close 210: only 10 bars before it are loaded
+        feed.rangeCalls = [];
+
+        await chart.replay.start({ from: start.time, context: 50 });
+
+        expect(feed.rangeCalls.length).toBeGreaterThan(0);
+        expect(renderer.bars[renderer.bars.length - 1]!.close).toBe(210);
+        expect(renderer.bars.length).toBeGreaterThanOrEqual(51);
+        expect(chart.replay.state.remaining).toBe(89);
+    });
+
+    it('`context` asks the source for older bars once, then not again once it reached the oldest one', async () => {
+        const { chart, feed, renderer } = make({ bars: 100, total: 80 }); // the source has 80 bars: all loaded
+        await chart.ready();
+        const full = [...renderer.bars];
+
+        await chart.replay.start({ from: full[5]!.time, context: 50 }); // finds out there is nothing older
+        expect(renderer.bars.length).toBe(6);
+        feed.rangeCalls = [];
+
+        await chart.replay.start({ from: full[3]!.time }); // a seek: the context would reach before genesis again
+
+        expect(feed.rangeCalls).toEqual([]);
+        expect(renderer.bars.length).toBe(4);
+    });
+
+    it('`context` is kept for later seeks in the same replay', async () => {
+        const { chart, renderer } = make({ bars: 100, total: 300 });
+        await chart.ready();
+        await chart.replay.start({ from: renderer.bars[90]!.time, context: 50 }); // enough loaded already
+        const cursor = chart.replay.state.cursorTime!;
+
+        await chart.replay.start({ from: cursor - 80 * HOUR }); // no context given: the last one holds
+
+        expect(renderer.bars.length).toBeGreaterThanOrEqual(51);
+    });
+
     it('bounds span the whole walkable history, hidden bars included', async () => {
         const { chart, renderer } = make();
         expect(chart.replay.bounds).toBeNull();

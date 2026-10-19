@@ -28,6 +28,13 @@ export interface ReplayStartOptions {
      * oldest bar the source serves).
      */
     from: number;
+    /**
+     * Bars of history to show BEFORE the start bar (default: the last value given, initially 0).
+     * When fewer are loaded, the history is deepened first, unless it already reaches the oldest
+     * bar the source has. Without it a start at (or before) the oldest loaded bar showed a single
+     * candle. Kept for the session, so a timeframe switch during the replay keeps it too.
+     */
+    context?: number;
 }
 
 /** Why a replay ended (`replay:end`). */

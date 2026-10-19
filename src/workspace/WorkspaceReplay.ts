@@ -28,6 +28,8 @@ export interface WorkspaceReplayStartOptions {
     from: number;
     /** The cell `from` is read on (default: the active cell). */
     cell?: string;
+    /** Bars of history to show before the start bar on every chart (`chart.replay.start`'s `context`). */
+    context?: number;
 }
 
 /** What the controller reads from its workspace. */
@@ -59,6 +61,8 @@ export class WorkspaceReplay {
     private session: { clock: number } | null = null;
     private playing = false;
     private intervalMs = 1_000;
+    /** `context` of the last start (bars shown before the start bar); undefined = each chart's own. */
+    private context: number | undefined;
     private timer: ReturnType<typeof setTimeout> | null = null;
     /** Cells whose replay a symbol switch ended — restarted at the shared time once their bars land. */
     private readonly rejoining = new Set<string>();
@@ -93,7 +97,8 @@ export class WorkspaceReplay {
         if (!ref) return;
         if (this.playing) this.pause();
         this.rejoining.clear();
-        await ref.chart.replay.start({ from: opts.from });
+        if (opts.context !== undefined) this.context = opts.context;
+        await ref.chart.replay.start({ from: opts.from, context: this.context });
         const cursor = ref.chart.replay.state.cursorTime;
         if (cursor == null) return; // nothing to replay there — the chart warned
         const session = { clock: barClose(cursor, ref.chart.market.timeframe) };
@@ -199,7 +204,7 @@ export class WorkspaceReplay {
         const from = lastOpenClosedBy(clock, cell.chart.market.timeframe);
         const bounds = replay.bounds;
         if (!bounds || bounds.last <= from) return; // no bar after the shared time (a market paused, or not loaded)
-        await replay.start({ from });
+        await replay.start({ from, context: this.context });
     }
 
     /** Move the clock to the next bar close on any chart; each chart reveals what closed by then. */

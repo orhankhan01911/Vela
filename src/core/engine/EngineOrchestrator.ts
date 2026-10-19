@@ -199,6 +199,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     private replayIntervalMs = 1_000;
     /** The depth (`market.bars`) before a replay deepened the history — restored when it ends. */
     private replayDepth: { bars: number | undefined } | null = null;
+    /** Bars of history wanted before a replay's start bar (`ReplayStartOptions.context`, last value given). */
+    private replayContext = 0;
     /** A start is loading older history before it can cut; `seek` = a replay was running
      *  (and left silently to deepen), so abandoning the load must announce its end. */
     private replayLoading: { seek: boolean } | null = null;
@@ -1199,16 +1201,22 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             return;
         }
         let gen = this.generation;
-        if (opts.from < this.rawBars[0]!.time) {
+        if (opts.context !== undefined) this.replayContext = Math.max(0, Math.floor(opts.context));
+        // The oldest bar wanted: `from` itself, or `context` bars before it (a screen of history
+        // before the start). The context alone never deepens a history that already reaches genesis.
+        const wantFrom = opts.from - this.replayContext * this.barIntervalMs();
+        const needsOlder = (oldestTime: number): boolean =>
+            opts.from < oldestTime || (wantFrom < oldestTime && this.genesisGen !== this.generation);
+        if (needsOlder(this.rawBars[0]!.time)) {
             await this.historyCompletePromise;
             if (this.generation !== gen || this.rawBars.length === 0) return; // a market switch superseded the request
         }
         const oldest = this.rawBars[0]!.time;
-        if (opts.from < oldest && this.canHeal() && typeof this.feed.loadRange === 'function') {
+        if (needsOlder(oldest) && this.canHeal() && typeof this.feed.loadRange === 'function') {
             // Deepen through the depth-only path. Bars per interval overestimates on
             // session-bound markets, which only over-fetches; genesis clamps the rest.
             const held = this.rawBars.length + (this.replayQueue?.length ?? 0);
-            const bars = held + Math.ceil((oldest - opts.from) / this.barIntervalMs()) + 1;
+            const bars = held + Math.ceil((oldest - Math.min(opts.from, wantFrom)) / this.barIntervalMs()) + 1;
             const seek = this.replayQueue !== null;
             if (seek) this.endReplay(null, { restore: true, resume: false }); // a seek, not an end
             this.replayDepth ??= { bars: this.config.market.bars };
