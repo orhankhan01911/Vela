@@ -125,6 +125,9 @@ export interface VelaWorkspaceOptions extends Omit<VelaOptions, 'height'>, VelaS
     maxWebglCells?: number;
     /** How many alerts the topbar bell keeps (the oldest drop beyond it). Default 50. */
     alertCap?: number;
+    /** Show a toast for every script `alert()` call. Default true; a host that turns script calls into alerts the
+     *  user sets (TradingView's model) turns it off. The bell list and the chart 'alert' event are unchanged. */
+    alertToasts?: boolean;
 }
 
 /** A cell's {@link ScriptRun}, tagged with the cell it ran in. */
@@ -381,6 +384,7 @@ export class VelaWorkspace {
     private alerts: Array<{ cellId: string; source: string; title: string; message: string; time: number }> = [];
     /** Bell retention — `alertCap` option, default {@link ALERT_CAP}. */
     private readonly alertCap: number;
+    private readonly alertToasts: boolean;
     private alertsMenu: Menu | null = null;
     // ── mobile chrome (same components as the widget shell; CSS keys off data-layout
     // on the root, the drawers build lazily on first open and act on the ACTIVE cell) ──
@@ -461,6 +465,7 @@ export class VelaWorkspace {
         const optLayout = opts.layout === false || opts.layout === undefined ? '4' : opts.layout;
         this.def = this.resolveLayout(this.monoLayout ? '1' : (boot?.layout && ensureLayout(boot.layout) ? boot.layout : optLayout));
         this.alertCap = Math.max(1, opts.alertCap ?? ALERT_CAP);
+        this.alertToasts = opts.alertToasts ?? true;
         // The topbar composition also gates the matching MOBILE entries (bar stop,
         // drawer rows) and keyboard chords below — one visibility truth for an entry.
         this.topbarComp = resolveTopbarComposition(opts.topbar);
@@ -1728,7 +1733,7 @@ export class VelaWorkspace {
                 .join(' ');
             this.alerts.unshift({ cellId: cell.id, source, title: alert.title ?? 'Alert', message: alert.message, time: alert.time });
             if (this.alerts.length > this.alertCap) this.alerts.pop();
-            this.toastHost.show(`${source} — ${alert.title ? alert.title + ' — ' : ''}${alert.message}`, 'info', 4000);
+            if (this.alertToasts) this.toastHost.show(`${source} — ${alert.title ? alert.title + ' — ' : ''}${alert.message}`, 'info', 4000);
             this.topbar.setAlertCount(this.alerts.length);
         });
         // Favorites are a WORKSPACE preference: one shared toolbar, one star set — a star
