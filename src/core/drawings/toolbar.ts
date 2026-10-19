@@ -71,7 +71,7 @@ const PATTERN_TYPES: DrawingTypeKey[] = ['xabcd', 'abcd', 'trianglepattern', 'he
 const ELLIOTT_TYPES: DrawingTypeKey[] = ['elliottimpulse', 'elliottcorrection', 'elliotttriangle', 'elliottdoublecombo', 'elliotttriplecombo'];
 const HARMONIC_TYPES: DrawingTypeKey[] = ['gartley', 'bat', 'butterfly', 'crab', 'shark', 'cypher'];
 
-const MEASUREMENT_TYPES: DrawingTypeKey[] = ['position', 'forecast', 'projection', 'daterange', 'pricerange', 'datepricerange', 'magnifier'];
+const MEASUREMENT_TYPES: DrawingTypeKey[] = ['long-position', 'short-position', 'forecast', 'projection', 'daterange', 'pricerange', 'datepricerange', 'magnifier'];
 const CYCLE_TYPES: DrawingTypeKey[] = ['cycliclines', 'timecycles', 'sineline', 'barspattern', 'ghostfeed'];
 const VOLUME_TYPES: DrawingTypeKey[] = ['anchoredvwap', 'fixedrangevp', 'anchoredvp'];
 const TIME_PRICE_TYPES: DrawingTypeKey[] = ['fixedrangetpo'];

@@ -25,7 +25,9 @@ export const DIRECTION_OPTIONS: ReadonlyArray<{ value: string; label: string }> 
  * price levels are all editable through settings.
  */
 export class PositionTool extends Drawing {
-    readonly type = 'position' as const;
+    readonly type: 'position' | 'long-position' | 'short-position' = 'position';
+    /** The side this tool always places (the Long / Short Position tools); null = from the drag (Long/Short). */
+    protected readonly placeSide: 'long' | 'short' | null = null;
 
     /** Default reward:risk used to derive the stop from the placed (or default) target. */
     protected static readonly DEFAULT_RR = 2;
@@ -190,6 +192,9 @@ export class PositionTool extends Drawing {
             targetPx = ey - PositionTool.DEFAULT_RISK_PX * PositionTool.DEFAULT_RR;
             endPx = ex + PositionTool.DEFAULT_WIDTH_PX;
         }
+        // The Long / Short Position tools keep their side: the drag only sets the size (y grows downward).
+        if (this.placeSide === 'long') targetPx = ey - Math.abs(targetPx - ey);
+        else if (this.placeSide === 'short') targetPx = ey + Math.abs(targetPx - ey);
         // stop on the opposite side of the entry at 1/R:R of the reward distance
         const stopPx = ey - (targetPx - ey) / PositionTool.DEFAULT_RR;
         const endTime = proj.pxToPoint(endPx, ey, this.paneId).time;
@@ -498,4 +503,16 @@ function formatGrouped(n: number, decimals?: number): string {
 /** Trim binary float noise from a converted value (points arithmetic). */
 function roundFloat(n: number): number {
     return Math.round(n * 1e8) / 1e8;
+}
+
+/** TradingView's Long Position tool: always a long (target above the entry); the drag only sets the size. */
+export class LongPositionTool extends PositionTool {
+    override readonly type = 'long-position' as const;
+    protected override readonly placeSide = 'long' as const;
+}
+
+/** TradingView's Short Position tool: always a short (target below the entry); the drag only sets the size. */
+export class ShortPositionTool extends PositionTool {
+    override readonly type = 'short-position' as const;
+    protected override readonly placeSide = 'short' as const;
 }

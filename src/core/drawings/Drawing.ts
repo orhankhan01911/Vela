@@ -96,6 +96,8 @@ export type DrawingTypeKey =
     | 'elliottdoublecombo'
     | 'elliotttriplecombo'
     | 'position'
+    | 'long-position'
+    | 'short-position'
     | 'magnifier'
     | 'xabcd'
     | 'abcd'

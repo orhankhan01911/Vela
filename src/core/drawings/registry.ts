@@ -89,7 +89,7 @@ import { Crab } from './types/Crab';
 import { Shark } from './types/Shark';
 import { Cypher } from './types/Cypher';
 import { DatePriceRange } from './types/DatePriceRange';
-import { PositionTool } from './types/PositionTool';
+import { LongPositionTool, PositionTool, ShortPositionTool } from './types/PositionTool';
 import { Magnifier } from './types/Magnifier';
 import { PriceAlert } from './types/PriceAlert';
 
@@ -992,13 +992,41 @@ const POSITION_ICON = svg24(
     '<circle cx="5" cy="6" r="2.2"/><path d="M7.2 6H21"/><circle cx="5" cy="18" r="2.2"/><path d="M7.2 18H21"/><path d="M11 9.5v5h4.5"/>'
 );
 
+// The same two levels with an "S" (short) between them.
+const SHORT_POSITION_ICON = svg24(
+    '<circle cx="5" cy="6" r="2.2"/><path d="M7.2 6H21"/><circle cx="5" cy="18" r="2.2"/><path d="M7.2 18H21"/><path d="M15 10.2c-.5-.5-1.3-.8-2.1-.8-1.2 0-2 .6-2 1.4 0 1.9 4.3 1.1 4.3 3.1 0 .8-.9 1.5-2.1 1.5-.9 0-1.8-.4-2.3-1"/>'
+);
+
+// The menu has TradingView's two tools, Long Position and Short Position (tester Ibad, 2026-10-19: one combined
+// "Long/Short Position" made the side a guess). The combined type stays registered, out of the menu: saved charts,
+// the Alt+X hotkey and the Ask assistant still create and load it.
+registerDrawingType({
+    type: 'long-position',
+    group: 'measure',
+    label: 'Long Position',
+    icon: POSITION_ICON,
+    // Starts over the candles like TradingView: its zones are translucent, and its stats labels
+    // must never be painted over by a candle (a misread target/stop is a trading loss).
+    coversSeries: true,
+    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    create: (init) => new LongPositionTool(init),
+});
+
+registerDrawingType({
+    type: 'short-position',
+    group: 'measure',
+    label: 'Short Position',
+    icon: SHORT_POSITION_ICON,
+    coversSeries: true,
+    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    create: (init) => new ShortPositionTool(init),
+});
+
 registerDrawingType({
     type: 'position',
     group: 'measure',
     label: 'Long/Short Position',
     icon: POSITION_ICON,
-    // Starts over the candles like TradingView: its zones are translucent, and its stats labels
-    // must never be painted over by a candle (a misread target/stop is a trading loss).
     coversSeries: true,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new PositionTool(init),
