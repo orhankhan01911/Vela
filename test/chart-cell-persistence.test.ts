@@ -481,7 +481,7 @@ describe('ChartCell undo: what TradingView undoes (its own command list, read 20
         const cell = makeCell({ indicators: { natives: ['aroon'], manifest: [] } } as Partial<CellBoot>);
         await settle();
         const aroon = aroonOf(cell)!;
-        const before = aroon.inputValues().length;
+        const before = aroon.inputValues().length as number;
         aroon.setInput('length', 30);
         aroon.setInput('length', 31); // the dialog commits every keystroke: one step
         cell.history.undo();
@@ -496,7 +496,7 @@ describe('ChartCell undo: what TradingView undoes (its own command list, read 20
         const cell = makeCell({ indicators: { natives: ['aroon'], manifest: [] } } as Partial<CellBoot>);
         await settle();
         const aroon = aroonOf(cell)!;
-        const before = aroon.inputValues().length;
+        const before = aroon.inputValues().length as number;
         aroon.setInput('length', 40);
         aroon.setInput('length', before);
         expect(cell.history.canUndo).toBe(false);
