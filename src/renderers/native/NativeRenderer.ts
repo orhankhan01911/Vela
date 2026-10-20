@@ -132,7 +132,8 @@ const SCROLL_BTN_RIGHT_INSET = 12; // px the button sits left of the price-axis 
 const SCROLL_BTN_RIGHT = RIGHT_AXIS_W + SCROLL_BTN_RIGHT_INSET; // initial offset (single-column scale); widened at runtime for merged scales
 const SCROLL_BTN_BOTTOM = TIME_AXIS_H + 14; // px from the plot's bottom edge — the corner slot also used by the opt-in `settings` gear (off by default)
 const SCROLL_BTN_PROXIMITY_PX = 120; // the button reveals only while the cursor is within this radius of its center
-const MIN_VISIBLE_BARS = 2; // never zoom/pan so far that fewer than this many candles stay on screen (the only pan limit)
+const MIN_VISIBLE_BARS = 2; // never zoom/pan so far that fewer than this many candles stay on screen
+const OLDER_HOLD_FRAC = 0.25; // while older bars still load, the oldest loaded bar pans no further right than this share of the width
 const ZOOM_OUT_MARGIN_BARS = 6; // breathing room at max zoom-out: all bars + this margin fill the width (no thin strip)
 // (The animation time-constants — zoom, fling, scroll, autoscale, live-bar glides — are
 // host-configurable through `VelaOptions.animations`; their defaults live in core/options.)
@@ -295,6 +296,7 @@ export class NativeRenderer implements IChartRenderer {
     private zoomAnchorX = 0; // pixel the anchor logical is pinned to
     private zoomAnchorMode: 'auto' | 'cursor' | 'right' = 'auto'; // wheel-zoom anchor: toward the cursor, latest bar glued while it is in view on the right side
     private panVelocity = 0; // inertial rightOffset velocity (logical units / ms)
+    private olderPending = false; // older bars still loading in (see setOlderHistoryPending)
 
     private bars: OHLCV[] = [];
     private didInitialFit = false;
@@ -751,6 +753,11 @@ export class NativeRenderer implements IChartRenderer {
      * so no stylesheet crosses the renderer boundary; pointer-transparent, and removed (not
      * hidden) on clear so a re-show picks up the current theme.
      */
+    /** See the port: hold panning at the oldest loaded bar while older ones still load. */
+    setOlderHistoryPending(pending: boolean): void {
+        this.olderPending = pending;
+    }
+
     setLoading(loading: boolean): void {
         // Tables need no special handling here: they paint through the interleave slices,
         // and the backend paints nothing on an emptied (bar-less) chart.
@@ -2732,7 +2739,9 @@ export class NativeRenderer implements IChartRenderer {
      *  - zoom OUT no further than "all bars + a small margin fill the width" (no thin strip
      *    of compressed candles floating in whitespace);
      *  - zoom IN no further than keeping ≥ {@link MIN_VISIBLE_BARS} candles on screen;
-     *  - pan no further than a bounded right whitespace / the same minimum visible.
+     *  - pan no further than a bounded right whitespace / the same minimum visible;
+     *  - while older bars still load, pan no further back than the oldest loaded bar at
+     *    {@link OLDER_HOLD_FRAC} of the width (the hold moves back as each page lands).
      * Applied at every viewport write (drag, wheel, fling, time-axis drag, keyboard).
      */
     private clampViewport(barSpacing: number, rightOffset: number): ViewportState {
@@ -2748,13 +2757,16 @@ export class NativeRenderer implements IChartRenderer {
         const maxBs = Math.min(MAX_BAR_SPACING, W / (minVisible * scale));
         const minBs = Math.max(MIN_BAR_SPACING, Math.min(maxBs, W / ((n + ZOOM_OUT_MARGIN_BARS) * scale)));
         const bs = Math.max(minBs, Math.min(maxBs, barSpacing));
-        // right offset: the ONLY pan limit is keeping ≥ minVisible candles on screen. Panning left
+        // right offset: the base pan limit is keeping ≥ minVisible candles on screen. Panning left
         // can push the data far left (lots of right whitespace) until just minVisible remain; panning
         // right can scroll into the oldest bars until just minVisible remain at the right edge.
         const visBars = W / (bs * scale);
         const maxRo = visBars - (minVisible - 1); // slide left until exactly minVisible candles remain
         const minRo = minVisible - n; // slide right until exactly minVisible candles remain at the right edge
-        const ro = Math.max(minRo, Math.min(maxRo, rightOffset));
+        // Older bars on their way: bar 0 sits at x = (visBars - (n - 1 + ro)) / visBars of the width; keep that at
+        // most OLDER_HOLD_FRAC, so a fast drag waits at the edge for the page instead of running into empty space.
+        const holdRo = this.olderPending ? Math.min(maxRo, visBars * (1 - OLDER_HOLD_FRAC) - (n - 1)) : minRo;
+        const ro = Math.max(minRo, holdRo, Math.min(maxRo, rightOffset));
         return { barSpacing: bs, rightOffset: ro };
     }
 

@@ -82,13 +82,23 @@ const SINGLE_LOAD_BARS = 5_000;
 const CHUNK_BARS = 10_000;
 /**
  * Scroll-back paging (TradingView's "more history as you scroll left or zoom out"): when the
- * view's left edge comes within this many bars of the oldest loaded bar (or half a screen,
- * whichever is more), the next older page loads behind the chart. A page is at least
- * {@link PAGE_MIN_BARS} bars or two screens, and paging stops at {@link MAX_PAGED_BARS}
- * (memory and indicator re-run cost) or at the source's first bar.
+ * view's left edge comes within this many bars of the oldest loaded bar (or
+ * {@link PAGE_AHEAD_SCREENS} screens, whichever is more), the next older page loads behind the
+ * chart, so the bars are there before the edge scrolls into view. A page is at least
+ * {@link PAGE_MIN_BARS} bars or {@link PAGE_SCREENS} screens; when one lands and the view is still that close
+ * (zoomed far out, a fast drag) the next one starts at once. Paging stops at
+ * {@link MAX_PAGED_BARS} (memory and indicator re-run cost) or at the source's first bar.
  */
 const PAGE_EDGE_BARS = 50;
-const PAGE_MIN_BARS = 1_000;
+/**
+ * Keep this many screens of older bars loaded left of the view. Half a screen let a normal drag reach the empty edge,
+ * and 1.5 screens still let a fast one (user, 2026-10-20). Pages chain until the buffer is full, so it also fills in
+ * the background right after the chart opens.
+ */
+const PAGE_AHEAD_SCREENS = 4;
+const PAGE_MIN_BARS = 2_000;
+/** A page is at least this many screens: two screens of bars per page could not keep up with fast drags. */
+const PAGE_SCREENS = 4;
 const MAX_PAGED_BARS = 40_000;
 /**
  * A progressive source's FIRST paint waits for at least this many bars (or the full ask,
@@ -190,6 +200,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     /** Scroll-back paging: `'auto'` loads older bars by itself; `'manual'` only reports the
      *  edge (`history:edge`) and waits for `loadOlderHistory()`; `'off'` does neither. */
     private historyPaging: 'auto' | 'manual' | 'off' = 'auto';
+    /** What the renderer was last told about older bars loading in (see {@link holdOlder}). */
+    private olderHeld = false;
     /** Last `history:edge` state sent (to emit on change only). */
     private edgeSent: { atEdge: boolean; stop: 'start' | 'floor' | 'cap' | 'retry' | null } | null = null;
     /** When a scroll-back page last failed (a failing source is not asked again for a while). */
@@ -447,18 +459,23 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      * (those ask for raw depth themselves, see `ensureRawDepth`); overlay types (footprint, TPO) page like candles.
      */
     private maybePageOlder(window: VisibleBarRange): void {
-        if (this.historyPaging === 'off') return;
+        if (this.historyPaging === 'off') return this.holdOlder(false);
         const manual = this.historyPaging === 'manual';
-        if (this.switchingMarket || this.historyState === 'backfill' || this.replayQueue !== null) return;
+        if (this.replayQueue !== null) return this.holdOlder(false);
+        // A page on its way keeps the hold; a switch decides on its first view.
+        if (this.switchingMarket || this.historyState === 'backfill') return;
         const bars = this.bars;
         const n = bars.length;
         // A series-replacing type (Renko, tick bars) owns its own depth; overlay types (footprint, TPO) page like candles.
         if (!this.feed.loadRange || this.config.market.data?.length || this.seriesStyle || n < 2) {
+            this.holdOlder(false);
             this.emitEdge(false, null);
             return;
         }
         const stop = this.pageStop();
         const canLoadMore = stop === null;
+        // Auto paging with more to come: panning waits at the oldest bar for the next page (see the renderer port).
+        this.holdOlder(!manual && canLoadMore);
         const firstAtOrAfter = (t: number): number => {
             let lo = 0;
             let hi = n;
@@ -474,8 +491,15 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         // The edge is the oldest bar ON SCREEN (a host marks it: a manual control, or where auto paging loads).
         this.emitEdge(left === 0, stop);
         if (manual || !canLoadMore) return;
-        if (left > Math.max(PAGE_EDGE_BARS, span / 2)) return;
-        this.pageOlder(Math.max(PAGE_MIN_BARS, span * 2));
+        if (left > Math.max(PAGE_EDGE_BARS, span * PAGE_AHEAD_SCREENS)) return;
+        this.pageOlder(Math.max(PAGE_MIN_BARS, span * PAGE_SCREENS));
+    }
+
+    /** Tell the renderer whether older bars are still loading in by themselves (its pan hold). */
+    private holdOlder(on: boolean): void {
+        if (this.olderHeld === on) return;
+        this.olderHeld = on;
+        this.renderer.setOlderHistoryPending?.(on);
     }
 
     /** Whether an older page can be asked for now (source, depth cap, genesis, floor, recent failure). */
@@ -1170,9 +1194,11 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         this.historyState = 'complete';
         if (reason === 'genesis') this.genesisGen = this.generation;
         if (reason === 'aborted') this.pageFailedAt = Date.now();
-        if (this.historyPaging === 'manual' && this.visibleRange) {
-            const w = this.visibleRange;
-            queueMicrotask(() => this.maybePageOlder(w));
+        // Report the edge (manual) or keep paging while the view is still near it (auto).
+        if (this.historyPaging !== 'off' && this.visibleRange) {
+            queueMicrotask(() => {
+                if (this.visibleRange) this.maybePageOlder(this.visibleRange);
+            });
         }
         this.notifySessionsBars('complete');
         this.events.emit('history:complete', { reason, oldestTime: this.rawBars[0]?.time ?? 0, barsLoaded: this.rawBars.length });

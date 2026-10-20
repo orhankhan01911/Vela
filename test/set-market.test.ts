@@ -1102,6 +1102,10 @@ describe('scroll-back paging — older bars as the view nears the oldest loaded 
                 this.viewportCb = null;
             };
         }
+        held: boolean[] = [];
+        setOlderHistoryPending(on: boolean): void {
+            this.held.push(on);
+        }
         /** Show the bars [from, to) by index of what is loaded now. */
         show(from: number, to: number): void {
             const b = this.bars;
@@ -1124,7 +1128,7 @@ describe('scroll-back paging — older bars as the view nears the oldest loaded 
         expect(renderer.bars).toHaveLength(300);
         const newest = renderer.bars[299]!.time;
 
-        renderer.show(200, 299); // well away from the oldest bar
+        renderer.show(240, 290); // more than the 4-screen look-ahead away from the oldest bar
         await settle();
         expect(renderer.bars).toHaveLength(300);
 
@@ -1209,6 +1213,78 @@ describe('scroll-back paging — older bars as the view nears the oldest loaded 
             unregisterChartType('overlay-probe');
             unregisterChartType('series-probe');
         }
+    });
+
+    it('loads ahead: a page starts while the oldest bar is still a screen off to the left', async () => {
+        const feed = new SwitchFeed();
+        feed.depth['AAA'] = 5_000;
+        const renderer = new PagingRenderer();
+        const chart = make({ symbol: 'AAA', timeframe: '60', bars: 300, volume: false }, { renderer, engines: [], dataFeed: feed });
+        await chart.ready();
+        await chart.historyComplete();
+        await flush();
+
+        renderer.show(140, 240); // the oldest bar is 1.4 screens to the left: not on screen yet
+        await settle();
+        await chart.historyComplete();
+        await flush();
+        expect(renderer.bars.length).toBeGreaterThanOrEqual(1_300);
+    });
+
+    it('a drag past the edge while a page loads: the next page starts as soon as it lands', async () => {
+        const feed = new SwitchFeed();
+        feed.depth['AAA'] = 20_000;
+        const renderer = new PagingRenderer();
+        const chart = make({ symbol: 'AAA', timeframe: '60', bars: 300, volume: false }, { renderer, engines: [], dataFeed: feed });
+        await chart.ready();
+        await chart.historyComplete();
+        await flush();
+
+        feed.gateRanges = true;
+        renderer.show(10, 110); // near the oldest bar: a page starts and is held
+        await settle();
+        const held = feed.rangeCalls.length;
+        expect(held).toBeGreaterThan(0);
+        // The user keeps dragging into the empty stretch, far past what this page brings.
+        const oldest = renderer.bars[0]!.time;
+        renderer.viewportCb?.({ from: oldest - 2_000 * 3_600_000, to: oldest - 1_900 * 3_600_000 });
+        await settle();
+        feed.gateRanges = false;
+        feed.release();
+        await flush();
+        await settle();
+        await chart.historyComplete();
+        await flush();
+        expect(feed.rangeCalls.length).toBeGreaterThan(held);
+        expect(renderer.bars.length).toBeGreaterThanOrEqual(2_300);
+    });
+
+    it('panning waits at the oldest bar while more can load; released at the source\'s first bar', async () => {
+        const feed = new SwitchFeed();
+        feed.depth['AAA'] = 400;
+        const renderer = new PagingRenderer();
+        const chart = make({ symbol: 'AAA', timeframe: '60', bars: 300, volume: false }, { renderer, engines: [], dataFeed: feed });
+        await chart.ready();
+        await chart.historyComplete();
+        await flush();
+
+        feed.gateRanges = true;
+        renderer.show(0, 100); // a page starts and is held
+        await settle();
+        expect(renderer.held.at(-1)).toBe(true); // more history may exist: hold
+
+        feed.gateRanges = false;
+        feed.release(); // the last 100 bars land, then nothing older is found
+        await flush();
+        await settle();
+        await chart.historyComplete();
+        await flush();
+        renderer.show(0, 100);
+        await settle();
+        await chart.historyComplete();
+        await flush();
+        expect(renderer.bars).toHaveLength(400);
+        expect(renderer.held.at(-1)).toBe(false); // the real start: the edge can be seen
     });
 
     it('stops at the source\'s first bar: no endless refetch of an empty page', async () => {

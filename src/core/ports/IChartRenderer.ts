@@ -312,6 +312,14 @@ export interface IChartRenderer {
      */
     setLoading?(loading: boolean): void;
 
+    /**
+     * Older bars are still loading in behind the oldest one by themselves (auto scroll-back paging, and the source
+     * has more). While true, panning holds the oldest loaded bar at a quarter of the plot's width instead of running
+     * into empty space, like TradingView; each page that lands moves the hold back. False at the real start of the
+     * data, at the depth cap, after a failed page, and in manual paging. Optional.
+     */
+    setOlderHistoryPending?(pending: boolean): void;
+
     ensurePane(pane: Pane): void;
     removePane(id: string): void;
 
