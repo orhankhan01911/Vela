@@ -1271,7 +1271,7 @@ describe('scroll-back paging — older bars as the view nears the oldest loaded 
         feed.gateRanges = true;
         renderer.show(0, 100); // a page starts and is held
         await settle();
-        expect(renderer.held.at(-1)).toBe(true); // more history may exist: hold
+        expect(renderer.held[renderer.held.length - 1]).toBe(true); // more history may exist: hold
 
         feed.gateRanges = false;
         feed.release(); // the last 100 bars land, then nothing older is found
@@ -1284,7 +1284,7 @@ describe('scroll-back paging — older bars as the view nears the oldest loaded 
         await chart.historyComplete();
         await flush();
         expect(renderer.bars).toHaveLength(400);
-        expect(renderer.held.at(-1)).toBe(false); // the real start: the edge can be seen
+        expect(renderer.held[renderer.held.length - 1]).toBe(false); // the real start: the edge can be seen
     });
 
     it('stops at the source\'s first bar: no endless refetch of an empty page', async () => {
