@@ -12,7 +12,9 @@ export const MENU_CSS = `
     box-shadow: var(--vela-shadow);
     padding: 6px;
     min-width: 180px;
-    max-height: 60vh;
+    /* Never past the room on the side it opened (the positioner's --available-height): a long checklist opened
+       from low in a dialog flips up and scrolls instead of running off the top of the window. */
+    max-height: min(60vh, var(--available-height, 60vh));
     overflow-y: auto;
     font-size: 13px;
     z-index: var(--vela-z-menu);
