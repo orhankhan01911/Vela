@@ -75,6 +75,48 @@ export interface InputSchema {
     tooltip?: string;
 }
 
+/** A row of an input's own menu (see {@link InputMenu}); the shape of the UI menu's items. */
+export interface InputMenuItem {
+    id: string;
+    label: string;
+    /** Icon id from the icon registry, before the label. */
+    icon?: string;
+    /** A switch row that keeps the menu open (a checklist). */
+    toggle?: boolean;
+    checked?: boolean;
+    separatorBefore?: boolean;
+}
+
+/**
+ * A host's own picker for one input: the indicator settings dialog shows a dropdown button reading
+ * `label(value)` that opens these rows instead of a free text field (e.g. an exchange checklist for a
+ * `source` string the legend's picker also edits). `pick` gives the value after a row is clicked.
+ */
+export interface InputMenu {
+    items(value: InputValue): InputMenuItem[];
+    pick(value: InputValue, id: string): InputValue;
+    label(value: InputValue): string;
+}
+
+/** Decides which inputs get a menu: the indicator's id and the input; null = the usual control. */
+export type InputMenuResolver = (indicatorId: string, input: InputSchema) => InputMenu | null;
+
+let inputMenuResolver: InputMenuResolver | null = null;
+
+/** Register (or clear, with null) the host's input-menu resolver for every chart's settings dialog. */
+export function registerInputMenu(resolver: InputMenuResolver | null): void {
+    inputMenuResolver = resolver;
+}
+
+/** The menu for one input, or null. A throwing resolver falls back to the usual control. */
+export function inputMenuFor(indicatorId: string, input: InputSchema): InputMenu | null {
+    try {
+        return inputMenuResolver?.(indicatorId, input) ?? null;
+    } catch {
+        return null;
+    }
+}
+
 /**
  * The DELTAS of a value bag against its schema's declaration defaults — what state
  * persistence stores (a default that later changes in the script must not stay frozen

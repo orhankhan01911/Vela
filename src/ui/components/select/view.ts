@@ -25,6 +25,8 @@ export interface SelectOptions extends SelectControllerOptions {
     theme?: VelaTheme;
     /** Placement for the open list (dialog-rect clamp, etc.). */
     list?: SelectListPopoverOpts;
+    /** Open the host's own menu on click instead of the option list (the trigger keeps the select's look). */
+    onTrigger?: (trigger: HTMLButtonElement) => void;
 }
 
 function ensureSelectStyles(doc: Document): void {
@@ -190,7 +192,8 @@ export class Select {
         });
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.toggle();
+            if (opts.onTrigger) opts.onTrigger(btn);
+            else this.toggle();
         });
 
         this.el = wrap;
@@ -205,6 +208,11 @@ export class Select {
     setValue(v: string): void {
         this.ctrl.setValue(v);
         this.labelEl.textContent = this.ctrl.labelOf(v);
+    }
+
+    /** Show `text` on the trigger without changing the value (a host menu's own label). */
+    setText(text: string): void {
+        this.labelEl.textContent = text;
     }
 
     toggle(): void {

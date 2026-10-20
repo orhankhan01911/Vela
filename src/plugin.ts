@@ -164,6 +164,8 @@ export { stableSeriesId } from './core/model';
 export { seriesShownOn, seriesInScale } from './core/model';
 // Evaluate an input's `when` gate the way the settings dialog does (host-built inputs UIs).
 export { inputVisible } from './core/model';
+// A host's own picker for an input in the indicator settings dialog (an exchange checklist for a `source` string).
+export { registerInputMenu, type InputMenu, type InputMenuItem, type InputMenuResolver } from './core/model';
 // Diff a value bag against its schema's declaration defaults — what state-persistence
 // handlers store (deltas only; defaults are never frozen into documents).
 export { inputDeltas } from './core/model';

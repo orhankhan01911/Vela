@@ -1,10 +1,11 @@
-import { inputVisible, type InputSchema, type InputValue, type SymbolPickerFn } from '../../core/model/inputs';
+import { inputMenuFor, inputVisible, type InputMenu, type InputSchema, type InputValue, type SymbolPickerFn } from '../../core/model/inputs';
 import type { VelaTheme } from '../../core/options';
 import { isDarkColor } from '../../core/color';
 import { iconAt } from '../../core/icons';
 import { applyChromeTokens } from './theme-tokens';
 import { attachChromeTooltip, chromeHint } from './chrome-tooltip';
-import { toggleSelectList, type SelectOption } from '../../ui/components/select';
+import { Select, toggleSelectList, type SelectOption } from '../../ui/components/select';
+import { Menu } from '../../ui/components/menu';
 import { Popover, closeOpenPopovers, eventDismissedPopover, isPopoverOpen, openPopoverTrigger } from '../../ui/components/popover';
 import { Dialog } from '../../ui/components/dialog';
 import { DatePicker, normalizeDateInput } from '../../ui/components/date-picker';
@@ -431,7 +432,8 @@ export class IndicatorInputsDialog {
             }));
         }
 
-        const fit = lead.type === 'color' || lead.type === 'session' || lead.type === 'time';
+        // A host menu's button hugs its label (see buildInputMenu), so its row does not box it at 100px.
+        const fit = lead.type === 'color' || lead.type === 'session' || lead.type === 'time' || inputMenuFor(row.id, lead) !== null;
         return append(fieldRow({
             label: nameOf(lead),
             id,
@@ -450,6 +452,9 @@ export class IndicatorInputsDialog {
         if (inp.type === 'bool') {
             return buildFieldControl({ kind: 'switch', id, checked: Boolean(current), onChange: (v) => emit(v) }).el;
         }
+        // A host's own picker for this input (an exchange checklist instead of typing EXCHANGE,EXCHANGE).
+        const menu = inp.bag ? null : inputMenuFor(row.id, inp);
+        if (menu) return this.buildInputMenu(id, menu, current, emit);
         if (inp.options && inp.options.length > 0) return this.select(id, inp.options.map(String), String(current), emit);
         if (inp.type === 'source') return this.select(id, SOURCES, String(current), emit);
         if (inp.type === 'color') {
@@ -490,6 +495,50 @@ export class IndicatorInputsDialog {
             }).el;
         }
         return this.buildTextField(id, String(current), emit);
+    }
+
+    /**
+     * A host's input menu (see `registerInputMenu`): a dropdown-looking button reading the menu's label for the
+     * value; a click opens the host's rows, and each pick commits at once (a checklist stays open for more picks).
+     */
+    private buildInputMenu(id: string, menu: InputMenu, current: InputValue, emit: (v: InputValue) => void): HTMLElement {
+        let value = current;
+        let open: Menu | null = null;
+        const close = (): void => {
+            const m = open;
+            open = null;
+            m?.destroy();
+        };
+        const sel = new Select({
+            id,
+            options: [{ value: '_', label: menu.label(value) }],
+            value: '_',
+            size: 'md',
+            theme: this.host.theme(),
+            onTrigger: (trigger) => {
+                if (open) return close();
+                const m = new Menu({
+                    trigger,
+                    items: menu.items(value),
+                    onOpenChange: (isOpen) => {
+                        if (!isOpen && open === m) close();
+                    },
+                    onSelect: (rowId) => {
+                        value = menu.pick(value, rowId);
+                        emit(value);
+                        sel.setText(menu.label(value));
+                        m.setItems(menu.items(value));
+                    },
+                });
+                open = m;
+                m.open();
+            },
+        });
+        this.dialogTips.push(close); // an open menu dies with its dialog
+        // The label names the pick ("Follow chart", "2 exchanges"): it hugs its text like the toolbar selects (at
+        // least the 100px kit column, at most 200px) instead of being cut to "Follow c...".
+        sel.el.style.cssText += 'width:auto;min-width:100px;max-width:200px;';
+        return sel.el;
     }
 
     /** A plain text field that commits on blur / Enter (shared by string inputs and the pickerless symbol field). */
