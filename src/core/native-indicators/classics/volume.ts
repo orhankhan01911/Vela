@@ -3,7 +3,7 @@ import type { InputSchema } from '../../model/inputs';
 import { INFO, BULLISH, BEARISH, NEUTRAL, WARNING } from '../../palette';
 import type { ClassicBand, ClassicIndicatorSpec, ClassicPlot } from './define';
 import { bool, num, str } from './define';
-import { SETTINGS, STYLE, anchorPlot, baselineGradient, boolInput, boundedOscillator, centeredOscillator, colorInput, floatInput, intInput, lengthInput, optionInput, sourceInput, transp } from './shared';
+import { SETTINGS, STYLE, smoothingInputs, smoothingPlots, anchorPlot, baselineGradient, boolInput, boundedOscillator, centeredOscillator, colorInput, floatInput, intInput, lengthInput, optionInput, sourceInput, transp } from './shared';
 import { volumes, closes, highs, lows, sourceValues, ema, sma, wma, rma, stdev, sum, change, cumSum, zip, map, sub, shift } from './math';
 
 /**
@@ -101,24 +101,17 @@ const obv: ClassicIndicatorSpec = {
     title: 'On Balance Volume',
     shortTitle: 'OBV',
     overlay: false,
-    inputs: [
-        boolInput('smoothing', 'Smoothing MA', false, SETTINGS, 'Display a moving average of OBV to act as a smoothing/signal line.'),
-        optionInput('maType', 'MA Type', 'SMA', ['SMA', 'EMA', 'WMA', 'RMA (SMMA)'], 'Moving average type used for the smoothing MA.'),
-        lengthInput(20, 'maLength', 'MA Length', 5000, 'Number of bars used for the smoothing MA.'),
-        colorInput(INFO, 'OBV', 'color', 'Color of the OBV line.'),
-        colorInput(WARNING, 'Smoothing MA', 'maColor', 'Color of the smoothing MA line.'),
-    ],
+    // TradingView's OBV Smoothing block (Type, Length, BB StdDev). Settings saved before it (a Smoothing MA switch with
+    // its own MA type and length) still draw their MA.
+    inputs: [colorInput(INFO, 'OBV', 'color', 'Color of the OBV line.'), ...smoothingInputs('OBV')],
     compute: (bars, inputs) => {
         const vol = volumes(bars);
         const d = change(closes(bars));
         const values = cumSum(zip(vol, d, (v, x) => (x > 0 ? v : x < 0 ? -v : 0)));
-        const plots: ClassicPlot[] = [{ key: 'obv', title: 'OBV', values, color: str(inputs, 'color', INFO) }];
-        if (bool(inputs, 'smoothing', false)) {
-            const len = num(inputs, 'maLength', 20);
-            const kind = str(inputs, 'maType', 'SMA');
-            const ma = kind === 'EMA' ? ema(values, len) : kind === 'WMA' ? wma(values, len) : kind === 'RMA (SMMA)' ? rma(values, len) : sma(values, len);
-            plots.push({ key: 'ma', title: 'Smoothing MA', values: ma, color: str(inputs, 'maColor', WARNING) });
-        }
+        const legacy = bool(inputs, 'smoothing', false) && str(inputs, 'smoothingType', 'None') === 'None';
+        const type = legacy ? str(inputs, 'maType', 'SMA') : str(inputs, 'smoothingType', 'None');
+        const len = legacy ? num(inputs, 'maLength', 20) : num(inputs, 'smoothingLength', 14);
+        const plots: ClassicPlot[] = [{ key: 'obv', title: 'OBV', values, color: str(inputs, 'color', INFO) }, ...smoothingPlots(values, bars, inputs, 'OBV', type, len)];
         return { plots };
     },
 };

@@ -3,7 +3,7 @@ import type { InputSchema, InputValue } from '../../model/inputs';
 import { INFO, WARNING, BULLISH, BEARISH, NEUTRAL } from '../../palette';
 import type { ClassicIndicatorSpec, ClassicPlot } from './define';
 import { bool, num, str } from './define';
-import { SETTINGS, STYLE, boolInput, channelStyleInputs, colorInput, directionalChannel, floatInput, gradient, intInput, lengthInput, optionInput, sourceInput, transp, widthInput } from './shared';
+import { SETTINGS, STYLE, boolInput, channelStyleInputs, smoothingInputs, smoothingPlots, colorInput, directionalChannel, floatInput, gradient, intInput, lengthInput, optionInput, sourceInput, transp, widthInput } from './shared';
 import {
     sourceValues,
     volumes,
@@ -105,13 +105,14 @@ function fixedAverage(type: string, title: string, shortTitle: 'SMA' | 'EMA', sm
         title,
         shortTitle,
         overlay: true,
-        inputs: [lengthInput(20, 'length', 'Length', 5000, `Number of bars used in the ${shortTitle} calculation.`), sourceInput('Close', 'source', 'Source', `Price series the ${shortTitle} is calculated on.`), offsetInput, colorInput()],
+        inputs: [lengthInput(20, 'length', 'Length', 5000, `Number of bars used in the ${shortTitle} calculation.`), sourceInput('Close', 'source', 'Source', `Price series the ${shortTitle} is calculated on.`), offsetInput, colorInput(), ...smoothingInputs(`the ${shortTitle}`)],
         compute: (bars, inputs) => {
             const len = num(inputs, 'length', 20);
             let values = smooth(sourceValues(bars, str(inputs, 'source', 'Close')), len);
             const offset = Math.trunc(num(inputs, 'offset', 0));
             if (offset !== 0) values = shift(values, offset);
-            return { plots: [{ key: shortTitle.toLowerCase(), title: shortTitle, values, color: str(inputs, 'color', INFO), width: 2 }] };
+            // TradingView's SMA and EMA carry its Smoothing block (an average of the line, optionally with Bollinger Bands)
+            return { plots: [{ key: shortTitle.toLowerCase(), title: shortTitle, values, color: str(inputs, 'color', INFO), width: 2 }, ...smoothingPlots(values, bars, inputs, shortTitle)] };
         },
     };
 }

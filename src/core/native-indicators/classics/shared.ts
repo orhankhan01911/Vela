@@ -1,10 +1,11 @@
-import type { InputSchema } from '../../model/inputs';
+import type { InputSchema, InputValue } from '../../model/inputs';
 import type { OHLCV } from '../../model/ohlcv';
 import type { FillGradientStop } from '../../model/scene';
 import type { LineStyle } from '../../model/series';
-import { BULLISH, BEARISH, INFO, NEUTRAL } from '../../palette';
+import { BULLISH, BEARISH, INFO, NEUTRAL, WARNING } from '../../palette';
 import type { ClassicBand, ClassicLevel, ClassicPlot } from './define';
-import { SOURCES } from './math';
+import { SOURCES, ema, rma, sma, stdev, volumes, vwma, wma } from './math';
+import { num, str } from './define';
 
 /** Input-schema builders and small color utilities shared by the catalog families. */
 
@@ -306,4 +307,41 @@ export function gradient(value: number, low: number, high: number, from: string,
             .toString(16)
             .padStart(2, '0');
     return `#${mix(0)}${mix(1)}${mix(2)}`;
+}
+
+/**
+ * TradingView's "Smoothing" block on its SMA, EMA and OBV (read in TradingView Desktop 2026-10-20): Type None / SMA /
+ * SMA + Bollinger Bands / EMA / SMMA (RMA) / WMA / VWMA, Length 14, BB StdDev 2. It adds a moving average of the line
+ * ("SMA-based MA" there) and, for SMA + Bollinger Bands, the bands around that SMA. Off ("None") by default.
+ */
+export const SMOOTHING_TYPES = ['None', 'SMA', 'SMA + Bollinger Bands', 'EMA', 'SMMA (RMA)', 'WMA', 'VWMA'] as const;
+
+export function smoothingInputs(of: string): InputSchema[] {
+    return [
+        optionInput('smoothingType', 'Smoothing Type', 'None', SMOOTHING_TYPES, `A moving average of ${of} as a signal line; SMA + Bollinger Bands also draws the bands around it.`),
+        lengthInput(14, 'smoothingLength', 'Smoothing Length', 5000, 'Number of bars used for the smoothing average.'),
+        floatInput('bbMult', 'BB StdDev', 2, 0.001, 50, 0.5, 'Standard deviations from the smoothing SMA to the Bollinger Bands.'),
+        colorInput(WARNING, 'Smoothing MA', 'smoothingColor', 'Color of the smoothing average.'),
+        colorInput(NEUTRAL, 'Bollinger Bands', 'bbColor', 'Color of the Bollinger Bands.'),
+    ];
+}
+
+/** The smoothing lines of `values` (none for "None"), named as TradingView names them ("SMA-based MA" for `of` "SMA");
+ *  `type` and `len` may come from older settings (OBV's own MA switch). */
+export function smoothingPlots(values: readonly number[], bars: readonly OHLCV[], inputs: Record<string, InputValue>, of: string, type = str(inputs, 'smoothingType', 'None'), len = num(inputs, 'smoothingLength', 14)): ClassicPlot[] {
+    if (type === 'None') return [];
+    const n = Math.max(1, Math.trunc(len));
+    const ma =
+        type === 'EMA' ? ema(values, n) : type === 'SMMA (RMA)' || type === 'RMA (SMMA)' ? rma(values, n) : type === 'WMA' ? wma(values, n) : type === 'VWMA' ? vwma([...values], volumes(bars), n) : sma(values, n);
+    const plots: ClassicPlot[] = [{ key: 'smoothing', title: `${of}-based MA`, values: ma, color: str(inputs, 'smoothingColor', WARNING) }];
+    if (type === 'SMA + Bollinger Bands') {
+        const dev = stdev(values, n);
+        const k = num(inputs, 'bbMult', 2);
+        const color = str(inputs, 'bbColor', NEUTRAL);
+        plots.push(
+            { key: 'bbUpper', title: 'Upper Bollinger Band', values: ma.map((m, i) => m + k * dev[i]!), color },
+            { key: 'bbLower', title: 'Lower Bollinger Band', values: ma.map((m, i) => m - k * dev[i]!), color },
+        );
+    }
+    return plots;
 }

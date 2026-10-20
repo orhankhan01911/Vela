@@ -209,6 +209,31 @@ describe('classic catalog registration', () => {
         }
     });
 
+    it("TradingView's Smoothing on SMA, EMA and OBV: off by default, an average of the line, SMA + Bollinger Bands adds the bands", () => {
+        const bars = Array.from({ length: 80 }, (_, i) => bar(100 + Math.sin(i / 3) * 5 + i * 0.2, i, 10 + (i % 7)));
+        const byType = new Map(classicSpecs.map((s) => [s.type, s] as const));
+        for (const [type, of] of [['sma', 'SMA'], ['ema', 'EMA'], ['on-balance-volume', 'OBV']] as const) {
+            const spec = byType.get(type)!;
+            const defaults = classicDescriptor(spec).defaultInputs();
+            expect(spec.compute(bars, defaults).plots.map((p) => p.title), type).toEqual([of === 'OBV' ? 'OBV' : of]);
+            const bb = spec.compute(bars, { ...defaults, smoothingType: 'SMA + Bollinger Bands', smoothingLength: 14, bbMult: 2 }).plots;
+            expect(bb.map((p) => p.title), type).toEqual([of === 'OBV' ? 'OBV' : of, `${of}-based MA`, 'Upper Bollinger Band', 'Lower Bollinger Band']);
+            const line = bb[0]!.values;
+            const ma = sma(line, 14);
+            const i = 70;
+            expect(bb[1]!.values[i]).toBeCloseTo(ma[i]!, 9);
+            const w = line.slice(i - 13, i + 1);
+            const sd = Math.sqrt(w.reduce((a, x) => a + (x - ma[i]!) ** 2, 0) / 14);
+            expect(bb[2]!.values[i]).toBeCloseTo(ma[i]! + 2 * sd, 9);
+            expect(bb[3]!.values[i]).toBeCloseTo(ma[i]! - 2 * sd, 9);
+            const e = spec.compute(bars, { ...defaults, smoothingType: 'EMA', smoothingLength: 14 }).plots;
+            expect(e.map((p) => p.title)).toEqual([of === 'OBV' ? 'OBV' : of, `${of}-based MA`]);
+        }
+        // an OBV saved before (its own Smoothing MA switch) keeps its MA
+        const obv = byType.get('on-balance-volume')!;
+        expect(obv.compute(bars, { ...classicDescriptor(obv).defaultInputs(), smoothing: true, maType: 'SMA', maLength: 20 }).plots.map((p) => p.title)).toEqual(['OBV', 'OBV-based MA']);
+    });
+
     it('ships dedicated Simple and Exponential Moving Average studies', () => {
         const bars = Array.from({ length: 60 }, (_, i) => bar(100 + i, i));
         const byType = new Map(classicSpecs.map((s) => [s.type, s] as const));
@@ -216,8 +241,8 @@ describe('classic catalog registration', () => {
         const emaSpec = byType.get('ema')!;
         expect(smaSpec.title).toBe('Simple Moving Average');
         expect(emaSpec.title).toBe('Exponential Moving Average');
-        expect(smaSpec.inputs.map((i) => i.key)).toEqual(['length', 'source', 'offset', 'color']);
-        expect(emaSpec.inputs.map((i) => i.key)).toEqual(['length', 'source', 'offset', 'color']);
+        expect(smaSpec.inputs.map((i) => i.key)).toEqual(['length', 'source', 'offset', 'color', 'smoothingType', 'smoothingLength', 'bbMult', 'smoothingColor', 'bbColor']);
+        expect(emaSpec.inputs.map((i) => i.key)).toEqual(['length', 'source', 'offset', 'color', 'smoothingType', 'smoothingLength', 'bbMult', 'smoothingColor', 'bbColor']);
         const closes = bars.map((b) => b.close);
         const smaOut = smaSpec.compute(bars, classicDescriptor(smaSpec).defaultInputs()).plots[0]!;
         const emaOut = emaSpec.compute(bars, classicDescriptor(emaSpec).defaultInputs()).plots[0]!;
