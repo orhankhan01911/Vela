@@ -92,8 +92,8 @@ const CHUNK_BARS = 10_000;
 const PAGE_EDGE_BARS = 50;
 /**
  * Keep this many screens of older bars loaded left of the view. Half a screen let a normal drag reach the empty edge,
- * and 1.5 screens still let a fast one (user, 2026-10-20). Pages chain until the buffer is full, so it also fills in
- * the background right after the chart opens.
+ * and 1.5 screens still let a fast one (user, 2026-10-20). Pages chain until the buffer is full. It starts with the
+ * first scroll or zoom, not on open: a layout of several charts would otherwise fetch pages nobody looks at.
  */
 const PAGE_AHEAD_SCREENS = 4;
 const PAGE_MIN_BARS = 2_000;
