@@ -2,7 +2,21 @@ import type { OHLCV } from '../../model/ohlcv';
 import type { InputSchema, InputValue } from '../../model/inputs';
 import type { LineLikeKind, LineStyle, MarkerPoint, SeriesDisplay, SeriesPoint, SeriesSpec } from '../../model/series';
 import type { Fill, FillGradientStop, PriceLine } from '../../model/scene';
-import type { DrawingPolyline } from '../../model/drawings';
+import type { DrawingLabel, DrawingPolyline, LabelStyle } from '../../model/drawings';
+
+/** Marker shape tokens to Pine label styles (the shapes plotshape draws). */
+const MARKER_STYLE: Record<string, LabelStyle> = {
+    triangleup: 'triangleup',
+    triangledown: 'triangledown',
+    arrowUp: 'arrowup',
+    arrowDown: 'arrowdown',
+    circle: 'circle',
+    square: 'square',
+    diamond: 'diamond',
+    cross: 'cross',
+    xcross: 'xcross',
+    flag: 'flag',
+};
 import { stableSeriesId } from '../../model/identity';
 import type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor } from '../NativeIndicator';
 
@@ -214,7 +228,23 @@ class ClassicIndicator implements NativeIndicator {
                 ...rest,
             };
         });
-        this.ctx.emit({ series, fills, priceLines, polylines });
+        // Markers (Williams Fractal's triangles) are drawn as Pine plotshape-style labels: no renderer paints a
+        // `markers` series, so before this the fractals never showed while their alerts fired (2026-10-20).
+        const labels: DrawingLabel[] = (out.markers ?? []).map((m, ordinal) => ({
+            id: stableSeriesId({ instanceId, kind: 'label', title: 'marker', ordinal }),
+            paneId: '',
+            xloc: 'bar_time',
+            x: m.time,
+            y: Number.NaN,
+            yloc: m.position === 'aboveBar' ? 'abovebar' : m.position === 'belowBar' ? 'belowbar' : 'price',
+            style: MARKER_STYLE[m.shape] ?? 'circle',
+            color: m.color,
+            size: m.size ?? 'tiny',
+            textAlign: 'center',
+            fontFamily: 'default',
+            ...(m.text ? { text: m.text, textColor: m.color } : {}),
+        }));
+        this.ctx.emit({ series, fills, priceLines, polylines, ...(labels.length ? { labels } : {}) });
         this.ctx.setStatus('idle');
     }
 }

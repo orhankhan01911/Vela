@@ -234,6 +234,22 @@ describe('classic catalog registration', () => {
         expect(obv.compute(bars, { ...classicDescriptor(obv).defaultInputs(), smoothing: true, maType: 'SMA', maLength: 20 }).plots.map((p) => p.title)).toEqual(['OBV', 'OBV-based MA']);
     });
 
+    it('draws markers (Williams Fractal) as plotshape-style labels above and below the bars', () => {
+        // swing highs and lows every 6 bars
+        const bars = Array.from({ length: 60 }, (_, i) => bar(100 + [0, 2, 5, 2, 0, -3][i % 6]!, i, 10));
+        const spec = classicSpecs.find((s) => s.type === 'williams-fractal')!;
+        const desc = classicDescriptor(spec);
+        let emitted: { labels?: Array<{ yloc: string; style: string; xloc: string; x: number }> } = {};
+        const ctx = { id: 'wf', symbol: 'X', timeframe: '1', bars: () => bars, emit: (o: typeof emitted) => (emitted = o), setStatus: () => {} };
+        desc.create().start(ctx as never, desc.defaultInputs());
+        const labels = emitted.labels ?? [];
+        const marks = spec.compute(bars, desc.defaultInputs()).markers ?? [];
+        expect(marks.length).toBeGreaterThan(0);
+        expect(labels).toHaveLength(marks.length);
+        expect(new Set(labels.map((l) => `${l.yloc}:${l.style}`))).toEqual(new Set(['abovebar:triangleup', 'belowbar:triangledown']));
+        expect(labels.every((l) => l.xloc === 'bar_time' && bars.some((b) => b.time === l.x))).toBe(true);
+    });
+
     it('ships dedicated Simple and Exponential Moving Average studies', () => {
         const bars = Array.from({ length: 60 }, (_, i) => bar(100 + i, i));
         const byType = new Map(classicSpecs.map((s) => [s.type, s] as const));
