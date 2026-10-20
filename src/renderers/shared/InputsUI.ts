@@ -827,10 +827,9 @@ export class InputsUI {
         const statusEl = document.createElement('span');
         statusEl.style.cssText = 'display:none;box-sizing:border-box;flex:none;';
         statusEl.dataset.legendStatus = 'idle';
-        this.tip(this.rowTips, id, statusEl, () => {
-            const st = this.rows.get(id)?.status ?? 'idle';
-            return st === 'idle' ? '' : LEGEND_STATUS_TIPS[st];
-        });
+        // No hover bubble: a second line under a 6px mark read as clutter (user, 2026-10-21). The mark says it
+        // by itself (spinner = loading, still dot = live); screen readers get the words.
+        statusEl.setAttribute('role', 'status');
         // Title (+ optional "beta" exponent) wrapped so the superscript stays glued to the label and
         // survives title-text updates (which only touch the inner span). It shrinks — ellipsized —
         // only once the values readout has given up all its room (see valuesEl).
@@ -947,10 +946,10 @@ export class InputsUI {
     }
 
     /**
-     * Reflect an indicator's live status in its legend row: `'loading'` shows three softly
-     * fading dots (a fetch is in flight — the same load affordance as the chart's own bar-load
-     * dots, at legend scale), `'live'` a small STATIC dot, `'idle'` nothing. Rendered just right
-     * of the title; hovering it says what it means ({@link LEGEND_STATUS_TIPS}).
+     * Reflect an indicator's live status in its legend row: `'loading'` shows a small spinning
+     * ring (a fetch is in flight), `'live'` a small STATIC dot, `'idle'` nothing. Rendered just
+     * right of the title, on the title's line; its words ({@link LEGEND_STATUS_TIPS}) are the
+     * aria-label only, with no hover bubble.
      *
      * The live dot used to pulse forever; with a dozen live indicators the legend blinked
      * constantly and read as an alert. It now pulses ONCE, briefly, when a row turns live
@@ -983,26 +982,21 @@ export class InputsUI {
         row.status = status;
         const el = row.statusEl;
         el.dataset.legendStatus = status;
-        el.replaceChildren(); // the load dots (and their Web Animations) die with the children
+        el.replaceChildren();
         el.getAnimations?.().forEach((a) => a.cancel());
         if (status === 'idle') {
             el.style.cssText = 'display:none;box-sizing:border-box;flex:none;';
+            el.removeAttribute('aria-label');
             return;
         }
+        el.setAttribute('aria-label', LEGEND_STATUS_TIPS[status]);
         if (status === 'loading') {
-            // line-height:0 kills the font strut so the 4px dots are the box; translateY is
-            // optical — the dots already share the title's geometric midline, but 4px discs
-            // next to 12px type read a hair high without the nudge.
+            // A 9px ring with one bright quarter, spinning: a compact loader on the title's own line.
             el.style.cssText =
-                `display:inline-flex;align-items:center;gap:3px;box-sizing:border-box;flex:none;` +
-                `margin-left:${LEGEND_TITLE_STATUS_GAP_PX}px;line-height:0;transform:translateY(1px);`;
-            for (let i = 0; i < 3; i += 1) {
-                const dot = document.createElement('span');
-                dot.style.cssText = 'width:4px;height:4px;border-radius:50%;background:currentColor;opacity:0.15;flex:none;';
-                // Staggered phases via negative delays — every dot animates from the first frame.
-                dot.animate?.([{ opacity: 0.12 }, { opacity: 0.55 }], { duration: 800, iterations: Infinity, direction: 'alternate', easing: 'ease-in-out', delay: -i * 260 });
-                el.appendChild(dot);
-            }
+                `display:inline-block;box-sizing:border-box;flex:none;width:9px;height:9px;border-radius:50%;` +
+                `margin-left:${LEGEND_TITLE_STATUS_GAP_PX}px;border:1.5px solid color-mix(in srgb, currentColor 22%, transparent);` +
+                `border-top-color:currentColor;opacity:0.75;`;
+            el.animate?.([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], { duration: 750, iterations: Infinity, easing: 'linear' });
             return;
         }
         // live — a small, still dot; one short pulse as it appears.

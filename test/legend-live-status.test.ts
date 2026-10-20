@@ -59,7 +59,8 @@ describe('legend live status', () => {
         ui!.setStatus('ind-1', 'loading');
         vi.advanceTimersByTime(LIVE_RELOAD_GRACE_MS + 10);
         expect(status.dataset.legendStatus).toBe('loading');
-        expect(status.children).toHaveLength(3);
+        expect(status.style.borderTopColor).toBe('currentcolor'); // the spinning ring
+        expect(status.getAttribute('aria-label')).toBe('Loading data for this indicator');
         ui!.setStatus('ind-1', 'live');
         expect(status.dataset.legendStatus).toBe('live');
         expect(status.children).toHaveLength(0);
@@ -69,7 +70,8 @@ describe('legend live status', () => {
         const { status } = setup();
         ui!.setStatus('ind-1', 'loading');
         expect(status.dataset.legendStatus).toBe('loading');
-        expect(status.children).toHaveLength(3);
+        expect(status.style.borderTopColor).toBe('currentcolor'); // the spinning ring
+        expect(status.getAttribute('aria-label')).toBe('Loading data for this indicator');
     });
 
     it('explains itself on hover', () => {
