@@ -49,7 +49,12 @@ export function classicPlots(
     type: string,
     bars: readonly OHLCV[],
     inputs: Record<string, InputValue>,
-): { plots: ClassicPlotValues[]; levels: Array<{ key: string; title: string; price: number }> } | null {
+): {
+    plots: ClassicPlotValues[];
+    levels: Array<{ key: string; title: string; price: number }>;
+    /** Shapes it marks on bars (Williams Fractal's up / down fractals), by bar time. */
+    markers: Array<{ time: number; position: 'aboveBar' | 'belowBar' | 'inBar'; shape: string }>;
+} | null {
     const spec = classicSpecs.find((s) => s.type === type);
     if (!spec) return null;
     const out = spec.compute(bars, inputs);
@@ -58,7 +63,20 @@ export function classicPlots(
     return {
         plots: out.plots.filter((p) => seen(p.display)).map((p) => ({ key: p.key, title: p.title, values: p.values })),
         levels: (out.levels ?? []).map((l) => ({ key: l.key, title: l.title ?? '', price: l.price })),
+        markers: (out.markers ?? []).map((m) => ({ time: m.time, position: m.position, shape: m.shape })),
     };
+}
+
+/** Every classic indicator: its type, titles, where it draws and its default settings (alert coverage tests list
+ *  the whole catalog from this, so a new indicator is checked without anyone adding it by hand). */
+export function classicCatalog(): Array<{ type: string; title: string; shortTitle: string; overlay: boolean; defaults: Record<string, InputValue> }> {
+    return classicSpecs.map((s) => ({
+        type: s.type,
+        title: s.title,
+        shortTitle: s.shortTitle ?? s.title,
+        overlay: s.overlay,
+        defaults: Object.fromEntries(s.inputs.map((i) => [i.key, i.defval])) as Record<string, InputValue>,
+    }));
 }
 
 export { classicDescriptor } from './define';
