@@ -14,7 +14,7 @@ import type { VisibleRange } from '../core/ports/IChartRenderer';
 import type { DrawingsOption } from '../core/drawings';
 import type { MarketDataFeed } from '../core/ports/MarketDataFeed';
 import type { ScriptingEngine } from '../core/ports/ScriptingEngine';
-import type { IndicatorHandle } from '../core/IndicatorHandle';
+import type { IndicatorHandle, IndicatorSettings } from '../core/IndicatorHandle';
 import { Statusline, statuslineInkOf, type StatuslinePart } from '../widget/statusline';
 import { MarketStatusTracker } from '../widget/market-status';
 import { SessionShadingTracker, parseSessionSpec } from '../widget/session-shading';
@@ -25,7 +25,7 @@ import { currentIntervalLabel } from '../widget/interval-menu';
 import { activeIntervalSection, onIntervalSectionsChanged } from '../widget/interval-sections';
 import { CellControls } from '../widget/cell-controls';
 import { ChartContextMenu } from '../widget/context-menu';
-import { WidgetHistory } from '../widget/history';
+import { WidgetHistory, type HistoryAction } from '../widget/history';
 import type { RangePreset } from '../widget/bottombar';
 import { indicatorLedger, ledgerEntryName, ledgerNativeType, type LedgerManifestEntry, type LedgerNativeEntry, type ResolvedIndicator } from '../widget/indicators';
 import { inputDeltas, type InputValue } from '../core/model/inputs';
@@ -48,6 +48,9 @@ import { applyPlotOverlayTokens } from '../ui';
  *  The SAME vocabulary as the widget's chart options: the workspace's top-level chart
  *  options provide every cell's default ({@link seedDefaults}), `cells` overrides per
  *  cell. `data`/`visibleRange` are boot-only (they seed the first load, never persist). */
+/** Settings edits of one indicator closer together than this are one undo step (one dialog session). */
+const SETTINGS_MERGE_MS = 4_000;
+
 export interface CellSeed {
     /** Bare ticker (provider resolved by declaration order) or `EXCHANGE:`-prefixed. */
     symbol?: string;
@@ -232,6 +235,11 @@ export class ChartCell {
     readonly host: HTMLElement;
     /** This cell's unified app+drawings undo timeline (the shared Ctrl+Z routes here). */
     readonly history = new WidgetHistory(() => this.inner);
+    /** Each indicator's settings as last seen, so an edit's undo step knows what it changed from. */
+    private readonly settingsSeen = new Map<string, IndicatorSettings>();
+    /** The settings edit still being merged into one undo step (the dialog commits every keystroke and swatch drag
+     *  live; TradingView undoes a dialog's changes as one step, not one per keystroke). */
+    private settingsEdit: { id: string; at: number; before: IndicatorSettings; after: IndicatorSettings; action: HistoryAction } | null = null;
     /** Live manifest-indicator instances on this cell (the SAME entry may repeat).
      *  `external` marks instances added through the public seam (`ctx.addIndicator`)
      *  rather than the shell manifest — they share the undo/redo and picker plumbing
@@ -529,14 +537,23 @@ export class ChartCell {
             this.lastCrossTime = e.time;
             this.lastCrossPrice = e.price;
         });
-        this.inner.on('indicator:added', () => {
+        this.inner.on('indicator:added', ({ id }) => {
             this.syncPresentNatives();
             this.refreshNativeCatalog();
+            const h = this.indicatorById(id);
+            if (h) this.settingsSeen.set(id, h.settings());
         });
-        this.inner.on('indicator:inputs', () => this.deps.onStateDirty());
+        this.inner.on('indicator:inputs', ({ id }) => {
+            this.deps.onStateDirty();
+            this.recordSettingsEdit(id);
+        });
         // A legend-eye toggle is a persistable choice like an input edit — without this
         // a hidden indicator came back visible on reload (nothing marked the doc dirty).
-        this.inner.on('indicator:visibility', () => this.deps.onStateDirty());
+        this.inner.on('indicator:visibility', ({ id, visible }) => {
+            this.deps.onStateDirty();
+            // TradingView's "hide {title}" / "show {title}": the eye is an undo step.
+            this.history.push({ undo: () => this.indicatorById(id)?.setVisible(!visible), redo: () => this.indicatorById(id)?.setVisible(visible) });
+        });
         this.inner.on('indicator:removed', ({ id }) => {
             if (this.destroyed) return;
             // Out-of-band removals (legend ✕, object tree, middle-click, handle.remove())
@@ -1070,6 +1087,9 @@ export class ChartCell {
      *  the setMarket call so the statusline reads the already-blanked chart. */
     setSymbol(symbol: string): void {
         if (!this.inner || symbol === this.symbol) return;
+        // TradingView's "change symbol" is an undo step.
+        const before = this.symbol;
+        this.history.push({ undo: () => this.setSymbol(before), redo: () => this.setSymbol(symbol) });
         this.unresolvedToasted = null; // a re-picked symbol gets a fresh verdict
         // A jump's borrowed depth stays with the market it was for: the new symbol loads the cell's own depth.
         // A span (days / start date) is re-measured from now on every load.
@@ -1083,6 +1103,9 @@ export class ChartCell {
 
     setTimeframe(timeframe: string): void {
         if (!this.inner || timeframe === this.timeframe) return;
+        // TradingView's "change resolution" is an undo step.
+        const before = this.timeframe;
+        this.history.push({ undo: () => this.setTimeframe(before), redo: () => this.setTimeframe(timeframe) });
         // Leaving range mode: drop the chip AND its fetch budget (back to the cell's own bars).
         this.activeRangeId = null;
         this.rangeBars = 0;
@@ -1095,6 +1118,9 @@ export class ChartCell {
 
     /** Applied live (renderer feature) — no reload. */
     setPriceStyle(style: string): void {
+        // TradingView's "change series style" is an undo step.
+        const before = this.priceStyle;
+        if (before !== style) this.history.push({ undo: () => this.setPriceStyle(before), redo: () => this.setPriceStyle(style) });
         this.state.priceStyle = style;
         this.inner?.renderer.set('priceStyle', style);
         this.syncStatuslineColors(); // the OHLC ink follows the newly active style's colors
@@ -1405,7 +1431,7 @@ export class ChartCell {
         // A restored `hidden` applies right after the add — the handle is usable
         // synchronously, and hiding suspends the engine session before it spends
         // anything on an indicator the user had tucked away.
-        if (opts.hidden) it.handle?.setVisible(false);
+        if (opts.hidden) this.history.silently(() => it.handle?.setVisible(false)); // a restore, not an edit
         this.instances.push(it);
         this.deps.onIndicatorsChanged(this.id);
         if (opts.record === false) return;
@@ -1463,6 +1489,11 @@ export class ChartCell {
      * re-runs the indicator, and a no-op restore must not flicker every native.
      */
     private applyNativeLedgerEntry(handle: IndicatorHandle, entry: LedgerNativeEntry): void {
+        // A restore converges to the document: not an edit, so nothing enters the undo timeline.
+        this.history.silently(() => this.convergeNative(handle, entry));
+    }
+
+    private convergeNative(handle: IndicatorHandle, entry: LedgerNativeEntry): void {
         const wanted = typeof entry === 'string' ? undefined : entry.inputs;
         if (handle.inputs.length > 0) {
             const current = handle.inputValues();
@@ -1478,6 +1509,45 @@ export class ChartCell {
         }
         const visible = !(typeof entry === 'object' && entry.hidden);
         if (handle.visible !== visible) handle.setVisible(visible);
+    }
+
+    private indicatorById(id: string): IndicatorHandle | undefined {
+        return this.inner?.indicators().find((h) => h.id === id);
+    }
+
+    /**
+     * A settings edit (inputs, props or style) as an undo step. Edits of the same indicator less than
+     * {@link SETTINGS_MERGE_MS} apart are one step, and a step whose edits end where they started (the dialog's
+     * Cancel) is dropped. Undo puts the settings back exactly (`restoreSettings`), so an override added by the edit
+     * goes too.
+     */
+    private recordSettingsEdit(id: string): void {
+        const h = this.indicatorById(id);
+        if (!h) return;
+        const now = h.settings();
+        const before = this.settingsSeen.get(id);
+        this.settingsSeen.set(id, now);
+        if (!before || !this.history.recording) return;
+        const same = (a: IndicatorSettings, b: IndicatorSettings): boolean => JSON.stringify(a) === JSON.stringify(b);
+        if (same(before, now)) return;
+        const t = Date.now();
+        const e = this.settingsEdit;
+        if (e && e.id === id && t - e.at < SETTINGS_MERGE_MS && this.history.isLatest(e.action)) {
+            e.after = now;
+            e.at = t;
+            if (same(e.before, e.after)) {
+                this.history.dropLatest(e.action);
+                this.settingsEdit = null;
+            }
+            return;
+        }
+        const edit = { id, at: t, before, after: now, action: { undo: () => {}, redo: () => {} } as HistoryAction };
+        edit.action = {
+            undo: () => this.indicatorById(id)?.restoreSettings(edit.before),
+            redo: () => this.indicatorById(id)?.restoreSettings(edit.after),
+        };
+        this.settingsEdit = edit;
+        this.history.push(edit.action);
     }
 
     addNative(type: string): void {

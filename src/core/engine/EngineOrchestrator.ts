@@ -2262,6 +2262,25 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         this.events.emit('indicator:inputs', { id });
     }
 
+    /**
+     * IndicatorController: put an indicator's settings back exactly (Ctrl+Z on a settings edit). The prop and style
+     * overrides are cleared first, then the snapshot goes through the usual setters, so overrides added since the
+     * snapshot are dropped instead of merged, and the re-run / restyle lifecycle stays the setters' own.
+     */
+    restoreSettings(id: string, settings: { inputs: Record<string, InputValue>; props: Record<string, InputValue>; style: Record<string, InputValue> }): void {
+        const record = this.registry.get(id);
+        if (!record) return;
+        if (record.session) {
+            record.propValues = {};
+            this.applyProps(id, settings.props);
+        }
+        if (!record.native) {
+            record.styleValues = {};
+            this.applyStyle(id, settings.style);
+        }
+        this.applyInputs(id, settings.inputs);
+    }
+
     /** IndicatorController: the CURRENT style overrides (the settings dialog's "Style" tab). */
     styleValuesOf(id: string): Record<string, InputValue> {
         return { ...this.registry.get(id)?.styleValues };

@@ -455,3 +455,63 @@ describe('ChartCell indicator picker library', () => {
         cell.destroy();
     });
 });
+
+describe('ChartCell undo: what TradingView undoes (its own command list, read 2026-10-21)', () => {
+    it('symbol, interval and chart type changes are undo steps, redone in order', async () => {
+        const cell = makeCell({ indicators: { natives: [], manifest: [] } } as Partial<CellBoot>);
+        await settle();
+        cell.setSymbol('BINANCE:ETHUSDT');
+        cell.setTimeframe('15');
+        cell.setPriceStyle('line');
+        cell.history.undo();
+        expect(cell.priceStyle).toBe('candles');
+        cell.history.undo();
+        expect(cell.timeframe).toBe('60');
+        cell.history.undo();
+        expect(cell.symbol).toBe('BINANCE:BTCUSDT');
+        expect(cell.history.canUndo).toBe(false);
+        cell.history.redo();
+        cell.history.redo();
+        expect(cell.symbol).toBe('BINANCE:ETHUSDT');
+        expect(cell.timeframe).toBe('15');
+        cell.destroy();
+    });
+
+    it('a settings edit is one step; undo puts the settings back exactly', async () => {
+        const cell = makeCell({ indicators: { natives: ['aroon'], manifest: [] } } as Partial<CellBoot>);
+        await settle();
+        const aroon = aroonOf(cell)!;
+        const before = aroon.inputValues().length;
+        aroon.setInput('length', 30);
+        aroon.setInput('length', 31); // the dialog commits every keystroke: one step
+        cell.history.undo();
+        expect(aroonOf(cell)!.inputValues().length).toBe(before);
+        expect(cell.history.canUndo).toBe(false);
+        cell.history.redo();
+        expect(aroonOf(cell)!.inputValues().length).toBe(31);
+        cell.destroy();
+    });
+
+    it('edits that end where they started (the dialog Cancel) leave no step', async () => {
+        const cell = makeCell({ indicators: { natives: ['aroon'], manifest: [] } } as Partial<CellBoot>);
+        await settle();
+        const aroon = aroonOf(cell)!;
+        const before = aroon.inputValues().length;
+        aroon.setInput('length', 40);
+        aroon.setInput('length', before);
+        expect(cell.history.canUndo).toBe(false);
+        cell.destroy();
+    });
+
+    it('hiding an indicator is a step; a restored hidden flag is not', async () => {
+        const cell = makeCell({ indicators: { natives: [{ type: 'volume', hidden: true }, 'aroon'], manifest: [] } } as Partial<CellBoot>);
+        await settle();
+        expect(cell.history.canUndo).toBe(false); // the restore recorded nothing
+        aroonOf(cell)!.setVisible(false);
+        cell.history.undo();
+        expect(aroonOf(cell)!.visible).toBe(true);
+        cell.history.redo();
+        expect(aroonOf(cell)!.visible).toBe(false);
+        cell.destroy();
+    });
+});

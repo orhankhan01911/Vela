@@ -21,6 +21,13 @@ export interface CodeUpdateResult {
  * What `chart.addIndicator(...)` returns to the developer. The handle is usable
  * synchronously; data renders when execution resolves (see `on('ready')`).
  */
+/** An indicator's settings at one moment (see {@link IndicatorHandle.settings}). */
+export interface IndicatorSettings {
+    inputs: Record<string, InputValue>;
+    props: Record<string, InputValue>;
+    style: Record<string, InputValue>;
+}
+
 export interface IndicatorHandle {
     readonly id: string;
     readonly title: string;
@@ -51,6 +58,11 @@ export interface IndicatorHandle {
     styleValues(): Record<string, InputValue>;
     /** Override plot / level / fill styles without re-running the script. */
     setStyle(values: Record<string, InputValue>): void;
+    /** Every settings bag as it is now (inputs, prop overrides, style overrides): an undo point. */
+    settings(): IndicatorSettings;
+    /** Put the settings back EXACTLY as `settings` holds them (overrides added since are dropped, not merged):
+     *  what Ctrl+Z on a settings edit runs. One re-run. */
+    restoreSettings(settings: IndicatorSettings): void;
     setInput(key: string, value: InputValue): void;
     setInputs(values: Record<string, InputValue>): void;
     /** Override one declaration prop and re-run (a prop change replays the whole script). */

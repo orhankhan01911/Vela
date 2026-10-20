@@ -1,4 +1,4 @@
-import type { CodeUpdateResult, IndicatorHandle, IndicatorEventMap } from '../IndicatorHandle';
+import type { CodeUpdateResult, IndicatorHandle, IndicatorEventMap, IndicatorSettings } from '../IndicatorHandle';
 import type { InputSchema, InputValue } from '../model/inputs';
 import type { ContextSelect, EngineContextSnapshot } from '../ports/ScriptingEngine';
 import type { MoveTarget } from '../options';
@@ -13,6 +13,7 @@ export interface IndicatorController {
     applyProps(id: string, values: Record<string, InputValue>): void;
     styleValuesOf?(id: string): Record<string, InputValue>;
     applyStyle?(id: string, values: Record<string, InputValue>): void;
+    restoreSettings?(id: string, settings: IndicatorSettings): void;
     updateCode(id: string, source: string): Promise<CodeUpdateResult>;
     removeIndicator(id: string): void;
     setVisible(id: string, visible: boolean): void;
@@ -68,6 +69,14 @@ export class IndicatorHandleImpl implements IndicatorHandle {
 
     styleValues(): Record<string, InputValue> {
         return this.controller.styleValuesOf?.(this.id) ?? {};
+    }
+
+    settings(): IndicatorSettings {
+        return { inputs: this.inputValues(), props: this.propValues(), style: this.styleValues() };
+    }
+
+    restoreSettings(settings: IndicatorSettings): void {
+        this.controller.restoreSettings?.(this.id, settings);
     }
 
     setStyle(values: Record<string, InputValue>): void {

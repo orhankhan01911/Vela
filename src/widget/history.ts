@@ -50,6 +50,23 @@ export class WidgetHistory {
         this.mutedRun(fn);
     }
 
+    /** False while an undo / redo replays (its own events must not record). */
+    get recording(): boolean {
+        return !this.muted;
+    }
+
+    /** Whether `action` is the newest undo step (an edit still being merged into it). */
+    isLatest(action: HistoryAction): boolean {
+        return this.undoStack[this.undoStack.length - 1] === action;
+    }
+
+    /** Drop the newest undo step when it is `action` (an edit that ended where it started). */
+    dropLatest(action: HistoryAction): void {
+        if (!this.isLatest(action)) return;
+        this.undoStack.pop();
+        this.notify();
+    }
+
     get canUndo(): boolean {
         return this.undoStack.length > 0;
     }
