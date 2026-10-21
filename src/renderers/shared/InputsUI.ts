@@ -159,6 +159,20 @@ export function legendCalloutsDisplay(open: boolean, hasCallouts: boolean): 'inl
     return !open && hasCallouts ? 'inline-flex' : 'none';
 }
 
+/** How long after a finger/pen press the browser's compatibility mouseenter is still that press's. */
+export const TOUCH_HOVER_MS = 800;
+
+/**
+ * Whether a row's mouseenter opens it (hover). A finger tap fires a compatibility mouseenter
+ * just before its click: opening the row there swaps the callout bubbles for the eye/gear/✕
+ * cluster under the finger, and the click then lands on the gear (a tap on the heatmap's
+ * Colours bubble opened the settings dialog, 2026-10-21). After a touch the tap's own click
+ * decides instead: on a bubble it opens the bubble, on the title it selects (opens) the row.
+ */
+export function hoverOpensRow(lastTouchAt: number, now: number): boolean {
+    return !(now - lastTouchAt < TOUCH_HOVER_MS);
+}
+
 /**
  * Per-indicator legend chrome (title + gear + remove) as a DOM overlay on the
  * chart container. The settings dialog lives in {@link IndicatorInputsDialog}.
@@ -175,6 +189,8 @@ export class InputsUI {
     private readonly inputsDialog: IndicatorInputsDialog;
     /** The legend row the user has clicked to select (gets a neutral outline); null when none. */
     private selectedId: string | null = null;
+    /** When the last finger/pen press on a legend row began (performance.now), for hoverOpensRow. */
+    private touchAt = -Infinity;
     private onChange: ((c: InputsUIChange) => void) | null = null;
     private onRemove: ((id: string) => void) | null = null;
     private onToggleVisible: ((id: string, visible: boolean) => void) | null = null;
@@ -788,7 +804,8 @@ export class InputsUI {
         // Hovering anywhere on the row (title or values) reveals its eye/gear/✕, like
         // TradingView: a tester hovered the values, saw nothing and found no way to remove
         // an indicator (2026-10-17). Leave closes on the whole row.
-        el.addEventListener('mouseenter', () => this.setRowHighlighted(id, true));
+        el.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') this.touchAt = performance.now(); }, true);
+        el.addEventListener('mouseenter', () => { if (hoverOpensRow(this.touchAt, performance.now())) this.setRowHighlighted(id, true); });
         el.addEventListener('mouseleave', () => { if (this.selectedId !== id) this.setRowHighlighted(id, false); });
         // Left-click the row (but not one of its control buttons) selects the indicator,
         // outlining it with the same neutral border as the settings inputs; a double-click

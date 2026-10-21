@@ -13,7 +13,7 @@ import {
     type LegendIndicatorInfo,
 } from '../src/widget/contributions';
 import { calloutPanelRows, closesPanel, type CalloutPanelItem } from '../src/ui/components/callout-bubble';
-import { legendCalloutsDisplay } from '../src/renderers/shared/InputsUI';
+import { hoverOpensRow, legendCalloutsDisplay, TOUCH_HOVER_MS } from '../src/renderers/shared/InputsUI';
 
 describe('legend callout contributions', () => {
     it('registers, order-sorts, replaces by id, and unregisters', () => {
@@ -128,5 +128,14 @@ describe('callout panel projection (pure controller rules)', () => {
         expect(closesPanel({ type: 'button', label: 'A', run })).toBe(true);
         expect(closesPanel({ type: 'button', label: 'A', close: false, run })).toBe(false);
         expect(closesPanel({ type: 'button', label: 'A', close: true, run })).toBe(true);
+    });
+});
+
+describe('legend row hover after a touch', () => {
+    it("a finger tap's compatibility mouseenter does not open the row (the tap's click decides); a mouse hover does", () => {
+        expect(hoverOpensRow(-Infinity, 1000)).toBe(true); // never touched: mouse hover opens
+        expect(hoverOpensRow(1000, 1010)).toBe(false); // the tap's own mouseenter
+        expect(hoverOpensRow(1000, 1000 + TOUCH_HOVER_MS - 1)).toBe(false);
+        expect(hoverOpensRow(1000, 1000 + TOUCH_HOVER_MS)).toBe(true); // a later mouse hover on a hybrid device
     });
 });
