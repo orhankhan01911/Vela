@@ -81,7 +81,22 @@ export function paintMarkLane(ctx: CanvasRenderingContext2D, layout: MarkLaneLay
         ctx.stroke();
         const ink = active ? ACTIVE_INK : color;
         const symbolPx = Math.round(size * 0.62);
-        if (mark.glyph.icon) {
+        if (mark.glyph.icon && mark.glyph.iconFill) {
+            // A full-colour picture over the whole token, clipped to it; the outline goes back on top.
+            const px = Math.round(size);
+            const img = deps.icons.get(mark.glyph.icon, ink, px, deps.dpr);
+            if (img) {
+                ctx.save();
+                traceShape(ctx, shape, g.x, g.y, size);
+                ctx.clip();
+                ctx.drawImage(img, center.x - px / 2, center.y - px / 2, px, px);
+                ctx.restore();
+                traceShape(ctx, shape, g.x, g.y, size);
+                ctx.lineWidth = active ? 2.5 : 1.75;
+                ctx.strokeStyle = color;
+                ctx.stroke();
+            }
+        } else if (mark.glyph.icon) {
             const img = deps.icons.get(mark.glyph.icon, ink, symbolPx, deps.dpr);
             if (img) ctx.drawImage(img, center.x - symbolPx / 2, center.y - symbolPx / 2, symbolPx, symbolPx);
         } else if (mark.glyph.letter) {

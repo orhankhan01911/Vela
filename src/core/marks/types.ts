@@ -23,6 +23,12 @@ export interface MarkGlyph {
     /** Icon id from the icon registry, drawn inside the token. */
     icon?: string;
     /**
+     * Draw the icon over the WHOLE token, clipped to its outline, with the outline in `color`
+     * on top: a full-colour picture (a country flag, a logo) rather than a one-ink symbol.
+     * The icon keeps its own colours. Default false.
+     */
+    iconFill?: boolean;
+    /**
      * A small dot on the token's top-right shoulder, any CSS color: a status the glyph itself does not
      * carry (an economic event's impact, an unread item). Omitted = no dot.
      */
