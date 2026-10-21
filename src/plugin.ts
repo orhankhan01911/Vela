@@ -44,6 +44,7 @@ export {
 } from './chart-types/registry';
 export type { BarTransform } from './core/price-styles/BarTransform';
 export { registerRendererDefaults, unregisterRendererDefaults, rendererDefaults } from './core/renderer-defaults';
+export { registerPlotRightInset, plotRightInset, type PlotRightInsetFn } from './core/plot-right-inset';
 export {
     registerNativeIndicator,
     unregisterNativeIndicator,

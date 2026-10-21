@@ -4,6 +4,7 @@ import type { VelaTheme } from '../../../core/options';
 import type { CoordinateSystem, PriceScale, PaneBounds } from '../core/CoordinateSystem';
 import { buildVpvrProfile, type VpvrProfile } from './profile';
 import { paintVpvr } from './paintVpvr';
+import { plotRightInset } from '../../../core/plot-right-inset';
 
 interface VpvrRenderArgs {
     bars: readonly OHLCV[];
@@ -83,9 +84,12 @@ export class VpvrRenderer {
         ctx.beginPath();
         ctx.rect(0, bounds.top, coords.width, bounds.height); // clip to the price pane's data area
         ctx.clip();
+        // A host overlay that owns the right edge (registerPlotRightInset): the profile sits left of it.
+        const inset = Math.min(coords.width * 0.8, plotRightInset(ctx.canvas));
+        const rightX = coords.width - inset;
         paintVpvr(ctx, profile, {
-            rightX: coords.width,
-            maxW: coords.width * data.widthFrac,
+            rightX,
+            maxW: Math.min(coords.width * data.widthFrac, rightX * 0.9),
             yOf: (p) => coords.priceToY(p, scale, bounds),
         }, { upColor: data.upColor, downColor: data.downColor, showPoc: data.showPoc, pocColor: theme.textColor });
         ctx.restore();
