@@ -433,7 +433,7 @@ export class IndicatorInputsDialog {
         }
 
         // A host menu's button hugs its label (see buildInputMenu), so its row does not box it at 100px.
-        const fit = lead.type === 'color' || lead.type === 'session' || lead.type === 'time' || inputMenuFor(row.id, lead) !== null;
+        const fit = lead.type === 'color' || lead.type === 'session' || lead.type === 'time' || inputMenuFor(row.id, lead, this.host.container) !== null;
         return append(fieldRow({
             label: nameOf(lead),
             id,
@@ -453,7 +453,7 @@ export class IndicatorInputsDialog {
             return buildFieldControl({ kind: 'switch', id, checked: Boolean(current), onChange: (v) => emit(v) }).el;
         }
         // A host's own picker for this input (an exchange checklist instead of typing EXCHANGE,EXCHANGE).
-        const menu = inp.bag ? null : inputMenuFor(row.id, inp);
+        const menu = inp.bag ? null : inputMenuFor(row.id, inp, this.host.container);
         if (menu) return this.buildInputMenu(id, menu, current, emit);
         if (inp.options && inp.options.length > 0) return this.select(id, inp.options.map(String), String(current), emit);
         if (inp.type === 'source') return this.select(id, SOURCES, String(current), emit);

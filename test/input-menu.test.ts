@@ -85,6 +85,19 @@ describe('input menus in the indicator settings dialog', () => {
         expect(rows[2]!.querySelector('.vela-menu-switch')?.className).not.toContain('on');
     });
 
+    it("the resolver is told the dialog's chart: ids repeat across a multi-chart layout's charts", () => {
+        dialog.close();
+        document.body.replaceChildren();
+        const seen: (HTMLElement | undefined)[] = [];
+        registerInputMenu((_id, _input, chartEl) => {
+            seen.push(chartEl);
+            return null;
+        });
+        dialog = open(changes);
+        expect(seen.length).toBeGreaterThan(0);
+        expect(seen.every((el) => el instanceof HTMLElement && el.parentElement === document.body)).toBe(true); // the dialog's container
+    });
+
     it('a resolver that throws falls back to the usual text field', () => {
         dialog.close();
         document.body.replaceChildren();

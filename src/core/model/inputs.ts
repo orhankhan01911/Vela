@@ -98,8 +98,12 @@ export interface InputMenu {
     label(value: InputValue): string;
 }
 
-/** Decides which inputs get a menu: the indicator's id and the input; null = the usual control. */
-export type InputMenuResolver = (indicatorId: string, input: InputSchema) => InputMenu | null;
+/**
+ * Decides which inputs get a menu: the indicator's id, the input, and the element of the chart the
+ * dialog belongs to (indicator ids are unique per chart only: in a multi-chart layout every chart's
+ * first indicator is `native-1`); null = the usual control.
+ */
+export type InputMenuResolver = (indicatorId: string, input: InputSchema, chartEl?: HTMLElement) => InputMenu | null;
 
 let inputMenuResolver: InputMenuResolver | null = null;
 
@@ -109,9 +113,9 @@ export function registerInputMenu(resolver: InputMenuResolver | null): void {
 }
 
 /** The menu for one input, or null. A throwing resolver falls back to the usual control. */
-export function inputMenuFor(indicatorId: string, input: InputSchema): InputMenu | null {
+export function inputMenuFor(indicatorId: string, input: InputSchema, chartEl?: HTMLElement): InputMenu | null {
     try {
-        return inputMenuResolver?.(indicatorId, input) ?? null;
+        return inputMenuResolver?.(indicatorId, input, chartEl) ?? null;
     } catch {
         return null;
     }

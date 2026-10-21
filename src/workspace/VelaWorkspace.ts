@@ -270,6 +270,17 @@ export function resolveTyping(key: string, open: TypingState): { target: 'symbol
     return null;
 }
 
+/**
+ * Whether a cell's folded-legend chip opens the object tree instead of unfolding the
+ * rows in place: on mobile, in a grid of several charts (a grid cell has no room for the
+ * rows). A MAXIMIZED chart has the whole screen, so its chip unfolds the rows like a
+ * single chart's: their gear and source buttons are the way to an indicator's settings
+ * (user, 2026-10-21: "when i full screen the second layout the indicator setup cannot be done").
+ */
+export function legendRoutesToObjectTree(multi: boolean, mobile: boolean, maximized: boolean): boolean {
+    return multi && mobile && !maximized;
+}
+
 export class VelaWorkspace {
     readonly root: HTMLElement;
     /** The shortcut system — one manager for the whole workspace, routed to the active cell. */
@@ -1270,6 +1281,7 @@ export class VelaWorkspace {
         if (id) this.setActiveCell(id);
         this.applyGrid(); // re-derives the slot geometry, then overlays the maximize presentation
         this.refreshCellControls();
+        this.syncCellPresentation(); // a maximized chart's legend unfolds in place again
         this.syncMobileMaximize();
         this.events.emit('cell:maximized', { id });
     }
@@ -2240,10 +2252,11 @@ export class VelaWorkspace {
      *  per-indicator controls live there (the legend rows have no room in a grid cell). */
     private syncCellPresentation(): void {
         const multi = this.def.cells.length > 1;
-        const overview = multi && this.layoutCtl.current === 'mobile' ? (): void => this.dock.toggle('objects', true) : null;
+        const mobile = this.layoutCtl.current === 'mobile';
+        const overview = (): void => this.dock.toggle('objects', true);
         for (const cell of this.cellsById.values()) {
             cell.setStatuslineFit(multi);
-            cell.chart.renderer.setLegendOverviewAction(overview);
+            cell.chart.renderer.setLegendOverviewAction(legendRoutesToObjectTree(multi, mobile, cell.id === this.maximizedId) ? overview : null);
         }
     }
 
