@@ -1,7 +1,7 @@
 // The timeline-mark lane's hover pulse (src/renderers/native/chrome/marks/paint): the
 // size multiplier the painter applies to the token the pointer landed on — pure, node env.
 import { describe, it, expect } from 'vitest';
-import { fitLetterPx, letterFontPx, pulseScale, symbolInnerWidth, MARK_PULSE_AMPLITUDE, MARK_PULSE_MS } from '../src/renderers/native/chrome/marks/paint';
+import { clusterBadge, fitLetterPx, letterFontPx, pulseScale, symbolInnerWidth, MARK_PULSE_AMPLITUDE, MARK_PULSE_MS } from '../src/renderers/native/chrome/marks/paint';
 
 describe('marks · letterFontPx', () => {
     it('a single letter fills the token; a pair shares its width and shrinks to stay inside the outline', () => {
@@ -56,5 +56,15 @@ describe('marks · pulseScale', () => {
         }
         expect(MARK_PULSE_AMPLITUDE).toBeLessThanOrEqual(0.12);
         expect(MARK_PULSE_MS).toBeLessThanOrEqual(500);
+    });
+});
+
+describe('marks · clusterBadge', () => {
+    it('a cluster shows the badge of its highest-ranked mark; no badge anywhere = none', () => {
+        const m = (badge?: string, badgeRank?: number) => ({ glyph: { badge, badgeRank } });
+        expect(clusterBadge([m('orange', 2), m('red', 3), m(undefined, 9)])).toBe('red');
+        expect(clusterBadge([m('a'), m('b')])).toBe('a'); // ties keep cluster order
+        expect(clusterBadge([m(), m()])).toBeNull();
+        expect(clusterBadge([])).toBeNull();
     });
 });

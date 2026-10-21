@@ -97,8 +97,38 @@ export function paintMarkLane(ctx: CanvasRenderingContext2D, layout: MarkLaneLay
             }
             ctx.fillText(letter, center.x, center.y + 0.5);
         }
+        const badge = clusterBadge(g.cluster.marks);
+        if (badge) {
+            // On the token's top-right shoulder, ringed in the background so it reads on the outline.
+            const r = Math.max(2.5, size * 0.17);
+            const bx = center.x + size * 0.36;
+            const by = center.y - size * 0.36;
+            ctx.beginPath();
+            ctx.arc(bx, by, r, 0, Math.PI * 2);
+            ctx.fillStyle = badge;
+            ctx.fill();
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = deps.background;
+            ctx.stroke();
+        }
     }
     ctx.restore();
+}
+
+/** The badge color a glyph shows: the highest-`badgeRank` mark that has one (ties keep cluster order), else null. */
+export function clusterBadge(marks: readonly { glyph: { badge?: string; badgeRank?: number } }[]): string | null {
+    let best: string | null = null;
+    let rank = -Infinity;
+    for (const m of marks) {
+        const b = m.glyph.badge;
+        if (!b) continue;
+        const r = m.glyph.badgeRank ?? 0;
+        if (r > rank) {
+            best = b;
+            rank = r;
+        }
+    }
+    return best;
 }
 
 /**

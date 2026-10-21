@@ -22,6 +22,16 @@ export interface MarkGlyph {
     letter?: string;
     /** Icon id from the icon registry, drawn inside the token. */
     icon?: string;
+    /**
+     * A small dot on the token's top-right shoulder, any CSS color: a status the glyph itself does not
+     * carry (an economic event's impact, an unread item). Omitted = no dot.
+     */
+    badge?: string;
+    /**
+     * Which mark's badge a cluster shows: the highest `badgeRank` among its marks that have a badge
+     * (default 0; ties keep cluster order). Lets a cluster of mixed events show its most important one.
+     */
+    badgeRank?: number;
 }
 
 /** One row of a structured panel — the callout vocabulary plus a label/value field. */
