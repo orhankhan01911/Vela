@@ -97,6 +97,9 @@ interface SeriesBase {
     /** A short name shown before this plot's value in the legend ("7d 31.95"), for panes of several
      *  same-kind lines (one per tenor) where colour alone does not say which is which. */
     legendLabel?: string;
+    /** Also tag this plot's latest value on its pane's price scale, in its colour, named by `legendLabel`
+     *  ("7d -3.1"), so lines of one colour family can be told apart where they end. Line-like series only. */
+    axisTag?: boolean;
 }
 
 export interface LineLikeSeries extends SeriesBase {

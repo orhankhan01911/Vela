@@ -2,6 +2,7 @@ import type { VelaTheme } from '../../../core/options';
 import type { IndicatorModel } from '../../../core/model/indicator';
 import type { OHLCV } from '../../../core/model/ohlcv';
 import type { LineStyle } from '../../../core/model/series';
+import { isLineLikeSeries } from '../../../core/model/series';
 import type { CoordinateSystem } from '../core/CoordinateSystem';
 import type { SceneGraph, PaneNode } from '../core/SceneGraph';
 import { percentScaleFor } from '../core/SceneGraph';
@@ -223,8 +224,50 @@ export class ChromeRenderer {
         this.drawMergedScaleColumns(ctx, scene, coords, dataW);
         this.drawPaneSeparators(ctx, scene, theme, fullW, panes);
         this.drawPriceLineAndCountdown(ctx, scene, coords, theme, dataW, pricePane);
+        this.drawSeriesAxisTags(ctx, scene, coords, theme, dataW, panes);
         this.drawTimeAxis(ctx, scene, coords, theme, dataW, dataH, fullH);
         this.drawMarkLane(ctx, scene, coords, theme, dataW, dataH);
+    }
+
+    /** Tags on a pane's price scale for series that ask for one (`axisTag`): each line's latest value, in its colour,
+     *  named by its `legendLabel`. Tags that would overlap are pushed apart (in value order) and kept inside the pane. */
+    private drawSeriesAxisTags(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, panes: PaneNode[]): void {
+        const H = 15;
+        for (const pane of panes) {
+            if (pane.collapsed) continue;
+            const tags: { y: number; text: string; color: string }[] = [];
+            for (const m of scene.indicators.values()) {
+                if ((m.paneId || '') !== pane.id) continue;
+                for (const s of m.series) {
+                    if (!isLineLikeSeries(s) || !s.axisTag || s.visible === false) continue;
+                    let v: number | null | undefined = null;
+                    for (let i = s.points.length - 1; i >= 0 && (v == null || !Number.isFinite(v)); i--) v = s.points[i]?.value;
+                    if (v == null || !Number.isFinite(v)) continue;
+                    const y = coords.priceToY(v, pane.scale, pane.bounds);
+                    if (y < pane.bounds.top || y > pane.bounds.top + pane.bounds.height) continue;
+                    const val = formatAxisValue(pane.scale, pane.bounds.height, v, undefined, scene.priceMintick);
+                    tags.push({ y, text: s.legendLabel ? `${s.legendLabel} ${val}` : val, color: s.style.color });
+                }
+            }
+            if (!tags.length) continue;
+            tags.sort((a, b) => a.y - b.y);
+            const top = pane.bounds.top + H / 2;
+            const bot = pane.bounds.top + pane.bounds.height - H / 2;
+            for (let i = 0; i < tags.length; i++) tags[i]!.y = Math.max(tags[i]!.y, i ? tags[i - 1]!.y + H + 1 : top);
+            // pushed past the bottom: pull the stack back up from there
+            for (let i = tags.length - 1; i >= 0; i--) tags[i]!.y = Math.min(tags[i]!.y, i < tags.length - 1 ? tags[i + 1]!.y - H - 1 : bot);
+            ctx.font = `600 ${scene.style.fontSize}px ${theme.fontFamily}`;
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'left';
+            for (const t of tags) {
+                const w = this.measureCached(ctx, t.text) + 8;
+                ctx.fillStyle = t.color;
+                ctx.fillRect(dataW + 1, Math.round(t.y - H / 2), w, H);
+                ctx.fillStyle = tagTextColor(t.color, theme.background);
+                ctx.fillText(t.text, dataW + 5, t.y);
+            }
+            ctx.textAlign = 'start';
+        }
     }
 
     /** The timeline-mark lane — after the axis, so the tokens read over the plot's bottom edge,
