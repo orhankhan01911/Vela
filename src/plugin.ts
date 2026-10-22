@@ -115,6 +115,8 @@ export {
     type SidePanelHandle,
     type SidePanelHeader,
     type SidePanelButton,
+    registerSettingsSection,
+    type HostSettingsSectionDescriptor,
 } from './widget/contributions';
 export type { SettingsMenuRowView } from './core/ports/IChartRenderer';
 // Where the built-in right-click rows sit in the sort `context:*` actions share with them.

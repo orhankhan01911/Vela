@@ -83,7 +83,7 @@ export interface HostSettingsSection {
     rows: readonly HostSettingsRow[];
     /** Tab position: own tab after Symbol (default), end of the rail, or rows INSIDE
      *  the Symbol tab itself (`'symbol'` — e.g. the widget's watermark toggle). */
-    placement?: 'after-symbol' | 'end' | 'symbol';
+    placement?: 'after-symbol' | 'end' | 'symbol' | 'canvas';
     /** Stable visibility id (defaults to the title's slug). Row ids scope under it. */
     id?: string;
 }
@@ -618,7 +618,7 @@ export class SettingsDialog {
         body.append(sid(this.selectRowLabeled('Time zone', normalizeTimezone(config.timeScale.timezone), timezoneOptions(config.timeScale.timezone), (v) => this.emit({ timeScale: { timezone: v } })), 'symbol.timezone'));
 
         // ══ HOST SECTIONS — tabs contributed by the embedding app (widget Status line…) ══
-        const renderHostSections = (placement: 'after-symbol' | 'end' | 'symbol'): void => {
+        const renderHostSections = (placement: 'after-symbol' | 'end' | 'symbol' | 'canvas'): void => {
             for (const hs of this.hostSections) {
                 if ((hs.placement ?? 'after-symbol') !== placement) continue;
                 // The visibility policy filters at the DESCRIPTOR level: a hidden
@@ -628,8 +628,8 @@ export class SettingsDialog {
                 if (settingsIdHidden(scope, this.hiddenSettings)) continue;
                 const rows = filterHiddenHostRows(hs.rows, scope, this.hiddenSettings);
                 if (rows.length === 0) continue;
-                // 'symbol' inlines rows into the CURRENT pane (a section title, no tab).
-                body.append(placement === 'symbol' ? this.sectionTitle(hs.title) : this.section(hs.title));
+                // 'symbol' and 'canvas' inline rows into the CURRENT pane (a section title, no tab).
+                body.append(placement === 'symbol' || placement === 'canvas' ? this.sectionTitle(hs.title) : this.section(hs.title));
                 // Rows with `visible` are re-checked after any change in this section.
                 const gated: Array<[HTMLElement, () => boolean]> = [];
                 const regate = (): void => {
@@ -722,6 +722,7 @@ export class SettingsDialog {
             body.append(sid(this.sectionTitle('Theme'), 'canvas.theme'));
             body.append(sid(this.selectRow('Color theme', tc.current === 'dark' ? 'Dark' : 'Light', ['Dark', 'Light'], (v) => tc.onSelect(v === 'Dark' ? 'dark' : 'light')), 'canvas.theme'));
         }
+        renderHostSections('canvas');
 
         // ══ EVENTS — timeline-mark group visibility, a tab of its own (present only while marks name groups) ══
         if (this.markGroups.length > 0) {

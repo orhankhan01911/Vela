@@ -8,6 +8,7 @@ import type { ScriptingEngine } from '../core/ports/ScriptingEngine';
 import type { SymbolDescriptor } from '../core/ports/DataProvider';
 import type { InputValue } from '../core/model/inputs';
 import type { IndicatorHandle } from '../core/IndicatorHandle';
+import type { HostSettingsSection } from '../renderers/native/chrome/SettingsDialog';
 import { TOPBAR_BUILTIN_IDS } from './topbar-composition';
 
 /** The runtime surface an action's `when`/`run` receives. */
@@ -685,6 +686,31 @@ export function unregisterDefaultEngine(language: string): void {
  *  language. The shell layers (widget, workspace cell) register exactly this result. */
 export function resolveEngines(overrides?: Record<string, EngineFactory>): Record<string, EngineFactory> {
     return { ...Object.fromEntries(defaultEngines), ...overrides };
+}
+
+// ── Host settings sections ─────────────────────────────────────────────────────────
+
+/**
+ * App-wide rows in the chart settings dialog: a tab of their own (`placement` 'after-symbol' or
+ * 'end'), or a titled group inside the Symbol or Canvas tab ('symbol' / 'canvas'). The rows are
+ * callback-based, so the host owns the state. Every chart built AFTER the registration shows them.
+ */
+export type HostSettingsSectionDescriptor = HostSettingsSection;
+
+const hostSettingsSections: HostSettingsSectionDescriptor[] = [];
+
+/** Register a settings section for every chart built from now on. Returns a disposer. */
+export function registerSettingsSection(desc: HostSettingsSectionDescriptor): () => void {
+    hostSettingsSections.push(desc);
+    return () => {
+        const i = hostSettingsSections.indexOf(desc);
+        if (i >= 0) hostSettingsSections.splice(i, 1);
+    };
+}
+
+/** The registered sections, in registration order (read by each chart cell). */
+export function registeredSettingsSections(): readonly HostSettingsSectionDescriptor[] {
+    return hostSettingsSections;
 }
 
 // ── Settings-dialog template menu ───────────────────────────────────────────────────

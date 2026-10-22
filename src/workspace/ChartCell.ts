@@ -32,6 +32,7 @@ import { inputDeltas, type InputValue } from '../core/model/inputs';
 import {
     legendActionsProviderFor,
     settingsTemplateMenuProviderFor,
+    registeredSettingsSections,
     legendCalloutsProviderFor,
     resolveEngines,
     statePersistenceHandlers,
@@ -930,7 +931,7 @@ export class ChartCell {
                 },
             ],
         };
-        const sections: Array<{ title: string; rows: readonly unknown[]; placement?: 'after-symbol' | 'end' | 'symbol'; id?: string }> = [];
+        const sections: Array<{ title: string; rows: readonly unknown[]; placement?: 'after-symbol' | 'end' | 'symbol' | 'canvas'; id?: string }> = [];
         if (this.statusline) {
             const sl = this.statusline;
             sections.push({
@@ -987,6 +988,7 @@ export class ChartCell {
         sections.push(advanced, timezoneSection);
         if (this.sessionAvailableFlag) sections.push(sessionSection);
         sections.push(watermarkSection);
+        sections.push(...registeredSettingsSections());
         chart.renderer.setSettingsSections(sections);
     }
 
