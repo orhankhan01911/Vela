@@ -224,14 +224,14 @@ export class ChromeRenderer {
         this.drawMergedScaleColumns(ctx, scene, coords, dataW);
         this.drawPaneSeparators(ctx, scene, theme, fullW, panes);
         this.drawPriceLineAndCountdown(ctx, scene, coords, theme, dataW, pricePane);
-        this.drawSeriesAxisTags(ctx, scene, coords, theme, dataW, panes);
+        this.drawSeriesAxisTags(ctx, scene, coords, theme, dataW, fullW, panes);
         this.drawTimeAxis(ctx, scene, coords, theme, dataW, dataH, fullH);
         this.drawMarkLane(ctx, scene, coords, theme, dataW, dataH);
     }
 
     /** Tags on a pane's price scale for series that ask for one (`axisTag`): each line's latest value, in its colour,
      *  named by its `legendLabel`. Tags that would overlap are pushed apart (in value order) and kept inside the pane. */
-    private drawSeriesAxisTags(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, panes: PaneNode[]): void {
+    private drawSeriesAxisTags(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, fullW: number, panes: PaneNode[]): void {
         const H = 15;
         for (const pane of panes) {
             if (pane.collapsed) continue;
@@ -245,7 +245,8 @@ export class ChromeRenderer {
                     if (v == null || !Number.isFinite(v)) continue;
                     const y = coords.priceToY(v, pane.scale, pane.bounds);
                     if (y < pane.bounds.top || y > pane.bounds.top + pane.bounds.height) continue;
-                    const val = formatAxisValue(pane.scale, pane.bounds.height, v, undefined, scene.priceMintick);
+                    // a compact pane (money or size) reads 327.5M on its tags too, like its axis
+                    const val = formatAxisValue(pane.scale, pane.bounds.height, v, undefined, scene.priceMintick, pane.axisFormat === 'volume' ? 'volume' : undefined);
                     tags.push({ y, text: s.legendLabel ? `${s.legendLabel} ${val}` : val, color: s.style.color });
                 }
             }
@@ -261,10 +262,12 @@ export class ChromeRenderer {
             ctx.textAlign = 'left';
             for (const t of tags) {
                 const w = this.measureCached(ctx, t.text) + 8;
+                // a tag wider than the scale reaches left over the plot instead of being cut at the canvas edge
+                const x = Math.min(dataW + 1, fullW - w);
                 ctx.fillStyle = t.color;
-                ctx.fillRect(dataW + 1, Math.round(t.y - H / 2), w, H);
+                ctx.fillRect(x, Math.round(t.y - H / 2), w, H);
                 ctx.fillStyle = tagTextColor(t.color, theme.background);
-                ctx.fillText(t.text, dataW + 5, t.y);
+                ctx.fillText(t.text, x + 4, t.y);
             }
             ctx.textAlign = 'start';
         }
