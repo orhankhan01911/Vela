@@ -1618,8 +1618,9 @@ export class NativeRenderer implements IChartRenderer {
         // 'below-data' behind the candles, 'above-data' over them (under the chrome/axes).
         this.extLayers = rendererLayers().map((def) => ({ def, instance: def.create(), canvas: this.createLayerCanvas(), channel: def.id, owner: null }));
         const below = this.extLayers.filter((l) => l.def.placement === 'below-data').map((l) => l.canvas);
-        const above = this.extLayers.filter((l) => l.def.placement !== 'below-data').map((l) => l.canvas);
-        this.plot.append(this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, ...above, this.chromeCanvas, this.drawingsCanvas, this.shadeRightEl, this.cursorCanvas, this.overlayRoot);
+        const above = this.extLayers.filter((l) => l.def.placement !== 'below-data' && l.def.placement !== 'above-chrome').map((l) => l.canvas);
+        const top = this.extLayers.filter((l) => l.def.placement === 'above-chrome').map((l) => l.canvas);
+        this.plot.append(this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, ...above, this.chromeCanvas, ...top, this.drawingsCanvas, this.shadeRightEl, this.cursorCanvas, this.overlayRoot);
         this.layerOrderSig = ''; // recomputed on the first data frame (owned layers follow their indicator's z)
         this.wrapper.appendChild(this.plot);
         this.factoryConfig = this.getConfig();
@@ -4062,11 +4063,13 @@ export class NativeRenderer implements IChartRenderer {
     /** The SDK layer canvases split around the data canvas, each side back-to-front:
      *  owned layers by their owner's z key against the candles' (an indicator restacked
      *  below the candles takes its layer canvas along), unowned by declared placement. */
-    private orderedLayerCanvases(): { below: HTMLCanvasElement[]; above: HTMLCanvasElement[] } {
+    private orderedLayerCanvases(): { below: HTMLCanvasElement[]; above: HTMLCanvasElement[]; top: HTMLCanvasElement[] } {
         // Keyed by channel — unique per entry (a dedicated entry's channel names its instance).
         const byId = new Map(this.extLayers.map((l) => [l.channel, l.canvas]));
+        // 'above-chrome' layers sit over the axes whatever their owner's z (see the placement doc).
+        const top = this.extLayers.filter((l) => l.def.placement === 'above-chrome').map((l) => l.canvas);
         const { below, above } = stackLayers(
-            this.extLayers.map((l) => {
+            this.extLayers.filter((l) => l.def.placement !== 'above-chrome').map((l) => {
                 const owner = this.layerOwner(l);
                 return {
                     id: l.channel,
@@ -4076,14 +4079,14 @@ export class NativeRenderer implements IChartRenderer {
             }),
             this.scene.candleZ,
         );
-        return { below: below.map((id) => byId.get(id)!), above: above.map((id) => byId.get(id)!) };
+        return { below: below.map((id) => byId.get(id)!), above: above.map((id) => byId.get(id)!), top };
     }
 
     /** The full canvas pile in paint order (backdrop + layers + data/volume/vpvr) — what
      *  the DOM stacking and the screenshot compositor must both follow. */
     private canvasPile(): HTMLCanvasElement[] {
-        const { below, above } = this.orderedLayerCanvases();
-        return [this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, ...above];
+        const { below, above, top } = this.orderedLayerCanvases();
+        return [this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, ...above, ...top];
     }
 
     /** Re-slot the SDK layer canvases in the plot when the computed order changed (a z
@@ -4092,12 +4095,14 @@ export class NativeRenderer implements IChartRenderer {
      *  absolutely-positioned, pointer-transparent canvas repaints nothing by itself. */
     private syncLayerCanvasOrder(): void {
         if (this.extLayers.length === 0 || !this.plot) return;
-        const { below, above } = this.orderedLayerCanvases();
-        const sig = [...below.map((c) => this.extLayers.find((l) => l.canvas === c)!.channel), '|', ...above.map((c) => this.extLayers.find((l) => l.canvas === c)!.channel)].join(',');
+        const { below, above, top } = this.orderedLayerCanvases();
+        const name = (c: HTMLCanvasElement) => this.extLayers.find((l) => l.canvas === c)!.channel;
+        const sig = [...below.map(name), '|', ...above.map(name), '|', ...top.map(name)].join(',');
         if (sig === this.layerOrderSig) return;
         this.layerOrderSig = sig;
         for (const c of below) this.plot.insertBefore(c, this.dataCanvas);
         for (const c of above) this.plot.insertBefore(c, this.chromeCanvas);
+        for (const c of top) this.plot.insertBefore(c, this.drawingsCanvas);
     }
 
     /** True when an active volume layer is this study pane's ONLY content — so its scale should

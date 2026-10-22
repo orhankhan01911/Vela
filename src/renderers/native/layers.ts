@@ -101,8 +101,11 @@ export interface RendererLayerDefinition {
      *  native indicator (its type equals the layer id) follows that indicator's z key in
      *  the pane stacking instead (`seriesOrder` / the object tree), mounting in front.
      *  Either way the gridlines stay BELOW every layer (they live on the backdrop canvas
-     *  at the bottom of the pile) — no stacking puts a layer behind the grid. */
-    placement?: 'below-data' | 'above-data';
+     *  at the bottom of the pile) — no stacking puts a layer behind the grid.
+     *  `'above-chrome'` stacks the canvas over the chrome too (axes, price scale, price label;
+     *  still under drawings and the crosshair) and ignores z: for marks that belong ON the
+     *  price scale, such as a level's price tag. Its canvas covers the price scale gutter. */
+    placement?: 'below-data' | 'above-data' | 'above-chrome';
     /** Repaint this layer when the pointer moves (hover hit-testing UIs). Off by default:
      *  pointer moves normally repaint only the crosshair overlay, not the layers. */
     repaintOnCursor?: boolean;
