@@ -94,6 +94,9 @@ interface SeriesBase {
     display?: SeriesDisplay;
     /** `force_overlay` → render on the price pane regardless of the indicator's pane. */
     overlay?: boolean;
+    /** A short name shown before this plot's value in the legend ("7d 31.95"), for panes of several
+     *  same-kind lines (one per tenor) where colour alone does not say which is which. */
+    legendLabel?: string;
 }
 
 export interface LineLikeSeries extends SeriesBase {

@@ -3427,7 +3427,8 @@ export class NativeRenderer implements IChartRenderer {
                 continue; // markers carry no scalar readout
             }
             if (value == null || !Number.isFinite(value)) continue;
-            rows.push({ label: s.title || model.title, value: this.dataWindowFmt(value, pane), color });
+            const shown = this.dataWindowFmt(value, pane);
+            rows.push({ label: s.title || model.title, value: surface === 'legend' && s.legendLabel ? `${s.legendLabel} ${shown}` : shown, color });
         }
         return rows;
     }
