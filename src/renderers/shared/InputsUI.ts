@@ -1,4 +1,5 @@
 import type { InputSchema, InputValue, SymbolPickerFn } from '../../core/model/inputs';
+import { LegendDragMerge } from './legend-drag-merge';
 import type { LegendActionView, LegendCalloutView } from '../../core/ports/IChartRenderer';
 import type { VelaTheme, MoveTarget } from '../../core/options';
 import { withAlpha } from '../../core/color';
@@ -200,6 +201,8 @@ export class InputsUI {
     private mobileLayout = false;
     /** Pane move/merge hook — when set, rows get a "Move to" menu + become drag-to-pane sources. */
     private moveApi: LegendMoveApi | null = null;
+    /** Drag a row onto another pane to merge it there (made on first use). */
+    private dragMerge: LegendDragMerge | null = null;
     /** Host-contributed legend actions, resolved PER ROW at render time (see setLegendActions). */
     private legendActions: ((indicatorId: string) => LegendActionView[]) | null = null;
     /** Host-contributed callout bubbles, resolved PER ROW at render time (see setLegendCallouts). */
@@ -819,8 +822,9 @@ export class InputsUI {
             if ((e.target as HTMLElement).closest('button')) return;
             this.openDialog(id);
         });
-        // Moving an indicator to another pane is done through the row's "Move to" menu (below);
-        // there is intentionally no drag-from-legend gesture (the object tree owns drag-and-drop).
+        // Drag the row onto another pane to merge it there, or between panes for a pane of its own
+        // (TradingView's drag-to-merge); the "Move to" menu below does the same from a click.
+        this.legendDrag().attach(el, id);
         // Middle-click (mouse button 3) anywhere on the row removes the indicator — a fast
         // alternative to the ✕. Suppress the default middle-button autoscroll on press.
         el.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });
@@ -1124,7 +1128,25 @@ export class InputsUI {
         }
     }
 
+    /** The legend's drag-to-merge, made once; it acts only while the host wired a move API. */
+    private legendDrag(): LegendDragMerge {
+        this.dragMerge ??= new LegendDragMerge({
+            container: this.container,
+            panes: () => this.moveApi?.panes() ?? [],
+            rightAxis: () => this.paneBoundsOf?.('price')?.rightAxis ?? 64,
+            paneOf: (id) => this.rows.get(id)?.paneId ?? 'price',
+            soleInPane: (id) => {
+                const pane = this.rows.get(id)?.paneId ?? 'price';
+                return pane !== 'price' && [...this.rows.values()].filter((r) => r.paneId === pane).length <= 1;
+            },
+            title: (id) => this.rows.get(id)?.title ?? '',
+            move: (id, target) => this.moveApi?.move(id, target),
+        });
+        return this.dragMerge;
+    }
+
     destroy(): void {
+        this.dragMerge?.destroy();
         this.inputsDialog.close();
         this.moveMenu?.destroy();
         this.moveMenu = null;

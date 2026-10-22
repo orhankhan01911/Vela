@@ -26,6 +26,7 @@ import type { ScenePatch } from '../src/core/model/patch';
 import type { InputValue } from '../src/core/model/inputs';
 import type { VelaTheme, MoveTarget } from '../src/core/options';
 import type { Unsubscribe } from '../src/core/util/types';
+import { applyPaneLayout, paneLayoutOf } from '../src/workspace/pane-layout';
 
 const flush = async (): Promise<void> => {
     for (let i = 0; i < 5; i += 1) await new Promise((r) => setTimeout(r, 0));
@@ -223,6 +224,70 @@ describe('pane management — move / merge', () => {
         expect(own).toBeDefined();
         expect(own.indicators.find((i) => i.id === overlay.id)!.ownScale).toBe(false); // owns the pane ⇒ shares its scale
         expect(renderer.setPaneCalls.some((c) => c.id === overlay.id && c.ownScale === false)).toBe(true);
+    });
+});
+
+describe('pane management — undo a move (indicator:moved from + panes.place)', () => {
+    it('a merge reports where it came from, and placing it back re-opens its pane in the same spot', async () => {
+        const { chart } = await makeChart();
+        const a = chart.addIndicator('//@version=5\nindicator("A")\nplot(close)');
+        const b = chart.addIndicator('//@version=5\nindicator("B")\nplot(close)');
+        const c = chart.addIndicator('//@version=5\nindicator("C")\nplot(close)');
+        await flush();
+        const order0 = chart.panes.list().map((p) => p.id);
+        const paneOf = (id: string): string => chart.panes.list().find((p) => p.indicators.some((i) => i.id === id))!.id;
+        const paneB = paneOf(b.id);
+        const events: Array<{ id: string; paneId: string; ownScale?: boolean; from?: { paneId: string; ownScale: boolean; before?: string } }> = [];
+        chart.on('indicator:moved', (e) => events.push(e));
+
+        b.moveTo({ pane: paneOf(a.id) }); // merge B up into A
+        await flush();
+        expect(events).toHaveLength(1);
+        expect(events[0]!.ownScale).toBe(true);
+        expect(events[0]!.from).toEqual({ paneId: paneB, ownScale: false, before: paneOf(c.id) });
+        expect(chart.panes.list().filter((p) => p.kind === 'study')).toHaveLength(2);
+
+        chart.panes.place(b.id, events[0]!.from!); // undo
+        await flush();
+        expect(chart.panes.list().map((p) => p.id)).toEqual(order0); // same panes, same order
+        const back = chart.panes.list().find((p) => p.id === paneB)!;
+        expect(back.indicators.map((i) => i.id)).toEqual([b.id]);
+        expect(back.indicators[0]!.ownScale).toBe(false);
+    });
+
+    it('placing into an existing pane keeps the exact scale flag', async () => {
+        const { chart } = await makeChart();
+        const a = chart.addIndicator('//@version=5\nindicator("A")\nplot(close)');
+        await flush();
+        chart.panes.place(a.id, { paneId: 'price', ownScale: true });
+        await flush();
+        const price = chart.panes.list().find((p) => p.kind === 'price')!;
+        expect(price.indicators.find((i) => i.id === a.id)!.ownScale).toBe(true);
+    });
+});
+
+describe('pane layout save / restore (CellState.panes)', () => {
+    it('a merged layout saved by ledger position comes back on a fresh chart', async () => {
+        const src = '//@version=5\nindicator("X")\nplot(close)';
+        const one = await makeChart();
+        const [a, b, c] = [one.chart.addIndicator(src), one.chart.addIndicator(src), one.chart.addIndicator(src)];
+        await flush();
+        const paneOf = (chart: Vela, id: string): string => chart.panes.list().find((p) => p.indicators.some((i) => i.id === id))!.id;
+        c.moveTo({ pane: paneOf(one.chart, a.id) }); // C merged into A; B keeps its own pane
+        a.moveTo('price'); // and A onto the main chart, on its own scale
+        await flush();
+        const refs = new Map([[a.id, 'n0'], [b.id, 'n1'], [c.id, 'n2']]);
+        const layout = paneLayoutOf(one.chart.panes.list(), (id) => refs.get(id));
+        expect(layout.slots[0]).toEqual([{ ref: 'n0', ownScale: true }]);
+
+        const two = await makeChart();
+        const [a2, b2, c2] = [two.chart.addIndicator(src), two.chart.addIndicator(src), two.chart.addIndicator(src)];
+        await flush();
+        const ids = new Map([['n0', a2.id], ['n1', b2.id], ['n2', c2.id]]);
+        applyPaneLayout(layout, (r) => ids.get(r), two.chart.panes);
+        await flush();
+        const back = new Map([[a2.id, 'n0'], [b2.id, 'n1'], [c2.id, 'n2']]);
+        expect(paneLayoutOf(two.chart.panes.list(), (id) => back.get(id))).toEqual(layout);
     });
 });
 

@@ -98,6 +98,16 @@ export interface CellState {
      *  whose handler is absent this session still round-trips — and each handler
      *  validates its own payload at restore. JSON-serializable values only. */
     ext?: Record<string, unknown>;
+    /** Where the indicators sit once the user moved or merged any (absent: each in its default pane). */
+    panes?: PaneLayoutState;
+}
+
+/**
+ * The pane layout: pane slots top to bottom (slot 0 = the main chart), each listing its indicators by their position
+ * in `indicators` (`n2` = natives[2], `m0` = manifest[0]) and whether one reads on its own scale (a merge).
+ */
+export interface PaneLayoutState {
+    slots: Array<Array<{ ref: string; ownScale?: boolean }>>;
 }
 
 /** One persisted manifest-instance entry (see `CellState.indicators`). */
@@ -230,6 +240,19 @@ function sanitizeExt(raw: unknown): Record<string, unknown> | null {
     return Object.keys(out).length > 0 ? out : null;
 }
 
+function sanitizePaneLayout(raw: unknown): PaneLayoutState | null {
+    const slots = (raw as { slots?: unknown } | null)?.slots;
+    if (!Array.isArray(slots) || slots.length === 0 || slots.length > 64) return null;
+    const out = slots.map((slot) =>
+        (Array.isArray(slot) ? slot : []).flatMap((m): Array<{ ref: string; ownScale?: boolean }> => {
+            const ref = (m as { ref?: unknown } | null)?.ref;
+            if (typeof ref !== 'string' || !/^[nm]\d{1,4}$/.test(ref)) return [];
+            return [(m as { ownScale?: unknown }).ownScale === true ? { ref, ownScale: true } : { ref }];
+        }),
+    );
+    return { slots: out };
+}
+
 function sanitizeCell(raw: unknown): CellState | null {
     if (raw == null || typeof raw !== 'object') return null;
     const c = raw as Record<string, unknown>;
@@ -249,6 +272,8 @@ function sanitizeCell(raw: unknown): CellState | null {
     if (typeof c.indicatorValues === 'boolean') out.indicatorValues = c.indicatorValues;
     if (c.rendererConfig != null && typeof c.rendererConfig === 'object') out.rendererConfig = c.rendererConfig;
     if (c.drawings != null && typeof c.drawings === 'object') out.drawings = c.drawings;
+    const panes = sanitizePaneLayout(c.panes);
+    if (panes) out.panes = panes;
     const ind = c.indicators as Record<string, unknown> | undefined;
     if (ind != null && typeof ind === 'object') {
         // Bare names pass as-is; object entries keep only a string name and plain-object

@@ -189,6 +189,9 @@ registerIcon('info', S('<path d="M8 7.4v4.4"/><circle cx="8" cy="4.6" r="0.9" fi
 registerIcon('reset', S('<path d="M2 8a6 6 0 1 0 6-6 6.5 6.5 0 0 0-4.5 1.83L2 5.33"/><path d="M2 2v3.33h3.33"/>'));
 
 // ── pane chrome (stack order, collapse, maximize) ──
+// merge a pane into the one above / below: an arrow into a bar
+registerIcon('pane-merge-up', S('<path d="M3 2.8h10"/><path d="M8 13.5V6"/><path d="M5 8.8 8 5.8l3 3"/>'));
+registerIcon('pane-merge-down', S('<path d="M3 13.2h10"/><path d="M8 2.5V10"/><path d="M5 7.2l3 3 3-3"/>'));
 registerIcon('pane-collapse', S('<path d="M2.6 9.4h4v4M13.4 6.6h-4v-4"/><path d="m9.4 6.6 4.2-4.2M2.4 13.6l4.2-4.2"/>'));
 registerIcon('pane-expand', S('<path d="M9.8 2.4h3.8v3.8M6.2 13.6H2.4V9.8"/><path d="m13.6 2.4-4.4 4.4M2.4 13.6l4.4-4.4"/>'));
 

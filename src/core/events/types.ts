@@ -2,7 +2,7 @@ import type { EngineAlert, EngineWarning } from "../ports/ScriptingEngine";
 import type { ScriptRun } from "../script-run";
 import type { OHLCV } from "../model/ohlcv";
 import type { DrawingTypeKey, SerializedDrawing } from "../drawings/Drawing";
-import type { VelaTheme } from "../options";
+import type { IndicatorPlacement, VelaTheme } from "../options";
 import type { SnapMode } from "../drawings/geometry";
 import type { DrawingMode } from "../drawings/port";
 import type { MarkClickEvent } from "../marks/types";
@@ -48,7 +48,7 @@ export interface VelaEventMap extends Record<string, unknown> {
    *  it resumes by itself if a capable provider registers later. */
   "data:unresolved": { symbol: string; providers: string[] };
   /** An indicator was moved/merged to another pane (`chart.panes` / legend / object tree). */
-  "indicator:moved": { id: string; paneId: string };
+  "indicator:moved": { id: string; paneId: string; ownScale?: boolean; from?: IndicatorPlacement };
   /** An indicator was shown/hidden (legend eye, `handle.setVisible`, or object tree). */
   "indicator:visibility": { id: string; visible: boolean };
   /** A pane's layout changed: order, collapse/maximize, creation or removal. */

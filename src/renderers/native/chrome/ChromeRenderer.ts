@@ -13,7 +13,7 @@ import { renderTradeMarkers } from '../../shared/trade-markers';
 import type { TradeExecution } from '../../../core/model/trades';
 import { paneAxisTicks, formatAxisValue, timeTicks } from './ticks';
 import { PriceAxisTickSource } from './priceAxisTicks';
-import { AXIS_MASTER_W, axisColumnX, PANE_SEPARATOR_PX } from './axisLayout';
+import { AXIS_MASTER_W, PANE_SEPARATOR_PX } from './axisLayout';
 import { DARK_THEME } from '../../../core/theme';
 import { tzOffsetMs } from './tz';
 import { countdownText } from './countdown';
@@ -221,7 +221,7 @@ export class ChromeRenderer {
 
         // ── axes + current-price line + countdown ──
         this.drawPriceAxes(ctx, scene, coords, theme, dataW, panes);
-        this.drawMergedScaleColumns(ctx, scene, coords, dataW);
+        // merged (own-scale) indicators read on the left scale (LeftScaleColumn), not here
         this.drawPaneSeparators(ctx, scene, theme, fullW, panes);
         this.drawPriceLineAndCountdown(ctx, scene, coords, theme, dataW, pricePane);
         this.drawSeriesAxisTags(ctx, scene, coords, theme, dataW, fullW, panes);
@@ -237,16 +237,18 @@ export class ChromeRenderer {
             if (pane.collapsed) continue;
             const tags: { y: number; text: string; color: string }[] = [];
             for (const m of scene.indicators.values()) {
-                if ((m.paneId || '') !== pane.id) continue;
+                if ((m.paneId || '') !== pane.id || m.ownScale === true) continue; // a merged one tags its left scale
                 for (const s of m.series) {
                     if (!isLineLikeSeries(s) || !s.axisTag || s.visible === false) continue;
                     let v: number | null | undefined = null;
                     for (let i = s.points.length - 1; i >= 0 && (v == null || !Number.isFinite(v)); i--) v = s.points[i]?.value;
                     if (v == null || !Number.isFinite(v)) continue;
-                    const y = coords.priceToY(v, pane.scale, pane.bounds);
+                    // a merged indicator's line sits on its own (left) scale
+                    const sc = scene.scaleFor(m, pane);
+                    const y = coords.priceToY(v, sc, pane.bounds);
                     if (y < pane.bounds.top || y > pane.bounds.top + pane.bounds.height) continue;
                     // a compact pane (money or size) reads 327.5M on its tags too, like its axis
-                    const val = formatAxisValue(pane.scale, pane.bounds.height, v, undefined, scene.priceMintick, pane.axisFormat === 'volume' ? 'volume' : undefined);
+                    const val = formatAxisValue(sc, pane.bounds.height, v, undefined, scene.priceMintick, pane.axisFormat === 'volume' || m.paneAxis === 'compact' ? 'volume' : undefined);
                     tags.push({ y, text: s.legendLabel ? `${s.legendLabel} ${val}` : val, color: s.style.color });
                 }
             }
@@ -428,35 +430,6 @@ export class ChromeRenderer {
             if (pane.order <= 0) continue; // no separator above the topmost (price) pane
             ctx.fillRect(0, Math.round(pane.bounds.top) - 1, fullW, PANE_SEPARATOR_PX);
         }
-    }
-
-    /**
-     * Draw an axis column per merged (own-scale) indicator, to the right of each pane's
-     * master scale — tick labels in the chart's axis text color. Columns are told apart by
-     * spacing alone (no divider line), and a collapsed pane's columns are skipped entirely.
-     * This is what makes a merged indicator readable on its own values while sharing the pane.
-     */
-    private drawMergedScaleColumns(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, dataW: number): void {
-        if (!scene.showAxisLabels) return;
-        ctx.textAlign = 'left';
-        // A merged column reads with the same axis text color as the master scale (from the
-        // chart's settings) — no per-indicator tint, so the gutter stays uniform.
-        ctx.fillStyle = this.axisTextColor;
-        for (const pane of scene.orderedPanes()) {
-            if (pane.collapsed) continue; // collapsed strip: legend only, no scale numbers
-            const merged = scene.ownScaleIndicatorsForPane(pane.id);
-            merged.forEach((model, k) => {
-                const sc = scene.indicatorScales.get(model.id)?.scale;
-                if (!sc) return;
-                const x = axisColumnX(dataW, k + 1, this.masterW); // column 0 is the master scale
-                for (const t of paneAxisTicks(sc, pane.bounds.height, undefined, scene.priceMintick)) {
-                    const y = coords.priceToY(t.price, sc, pane.bounds);
-                    if (y < pane.bounds.top + 6 || y > pane.bounds.top + pane.bounds.height - 4) continue;
-                    ctx.fillText(t.label, x + 5, y);
-                }
-            });
-        }
-        ctx.textAlign = 'start';
     }
 
     /**

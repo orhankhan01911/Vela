@@ -6,6 +6,8 @@
  */
 export const AXIS_MASTER_W = 64; // px — the pane master-scale column (nearest the data): its MINIMUM width
 export const AXIS_MERGED_W = 56; // px — each additional merged-indicator scale column
+/** px — each left-scale column (a merged indicator's own scale): fits a tag like "-322.83M" at the default font */
+export const LEFT_SCALE_COL_W = 72;
 
 /** Thickness of the horizontal separator drawn at each stacked pane's top edge (data + gutter). */
 export const PANE_SEPARATOR_PX = 3;

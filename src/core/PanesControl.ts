@@ -1,4 +1,4 @@
-import type { MoveTarget, PaneInfo } from './options';
+import type { IndicatorPlacement, MoveTarget, PaneInfo } from './options';
 
 /** Callback surface `PanesControl` uses to drive the orchestrator. */
 export interface PaneController {
@@ -10,6 +10,8 @@ export interface PaneController {
     collapsePane(paneId: string, collapsed: boolean): void;
     maximizePane(paneId: string | null): void;
     moveIndicator(id: string, target: MoveTarget): void;
+    placeIndicator(id: string, placement: IndicatorPlacement): void;
+    orderPanes(ids: string[]): void;
 }
 
 /**
@@ -57,6 +59,18 @@ export class PanesControl {
     /** Move/merge an indicator to a pane — sugar for `handle.moveTo(...)` by id. */
     moveIndicator(id: string, target: MoveTarget): this {
         if (this.guard()) this.controller.moveIndicator(id, target);
+        return this;
+    }
+
+    /** Put an indicator at an exact placement (the `from` of an `indicator:moved`): undoes a move or a merge. */
+    place(id: string, placement: IndicatorPlacement): this {
+        if (this.guard()) this.controller.placeIndicator(id, placement);
+        return this;
+    }
+
+    /** Put the study panes in this order, top to bottom (the main chart stays on top; panes not listed follow). */
+    order(ids: string[]): this {
+        if (this.guard()) this.controller.orderPanes(ids);
         return this;
     }
 

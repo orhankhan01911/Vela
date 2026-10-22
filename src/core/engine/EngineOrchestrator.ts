@@ -7,7 +7,7 @@ import type { IndicatorModel } from '../model/indicator';
 import type { ValuePatch, SeriesValueDelta } from '../model/patch';
 import { isLineLikeSeries } from '../model/series';
 import type { InputSchema, InputValue } from '../model/inputs';
-import type { VelaTheme, MarketConfig, MarketSwitch, MarketSnapshot, AddIndicatorOptions, PriceStyle, MoveTarget, PaneInfo } from '../options';
+import type { VelaTheme, MarketConfig, MarketSwitch, MarketSnapshot, AddIndicatorOptions, PriceStyle, MoveTarget, PaneInfo, IndicatorPlacement } from '../options';
 import type { PaneController } from '../PanesControl';
 import type { PaneAction } from '../ports/IChartRenderer';
 import type { CodeUpdateResult, IndicatorHandle } from '../IndicatorHandle';
@@ -3055,12 +3055,40 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         }
         const record = this.registry.get(id);
         if (!record?.renderHandle || !record.model) return;
-        const model = record.model;
-        const oldPaneId = model.paneId ?? 'price';
-        const resolved = this.resolveMoveTarget(id, model, target);
+        const resolved = this.resolveMoveTarget(id, record.model, target);
         if (!resolved) return;
         const { paneId, ownScale, insert } = resolved;
+        this.relocateIndicator(id, paneId, ownScale, insert);
+    }
+
+    /** PaneController: study panes in this order (price first; the rest keep their order after the listed ones). */
+    orderPanes(ids: string[]): void {
+        const existing = this.existingPaneIds();
+        const listed = ids.filter((p, i) => p !== 'price' && existing.includes(p) && ids.indexOf(p) === i);
+        const next = ['price', ...listed, ...existing.filter((p) => p !== 'price' && !listed.includes(p))];
+        if (next.join('|') === existing.join('|')) return;
+        this.reorderPanes(next);
+    }
+
+    /** IndicatorController/PaneController: put an indicator at an exact placement (undo of a move). */
+    placeIndicator(id: string, placement: IndicatorPlacement): void {
+        if (!this.paneManagementSupported() || !this.renderer.setIndicatorPane) return;
+        const { paneId, ownScale, before } = placement;
+        const exists = paneId === 'price' || this.existingPaneIds().includes(paneId);
+        this.relocateIndicator(id, paneId, ownScale, exists ? undefined : before ? { before } : {});
+    }
+
+    /** Move a mounted indicator to `paneId` (made at `insert` when new), reporting where it came from. */
+    private relocateIndicator(id: string, paneId: string, ownScale: boolean, insert?: { before?: string; after?: string }): void {
+        const record = this.registry.get(id);
+        if (!record?.renderHandle || !record.model || !this.renderer.setIndicatorPane) return;
+        const model = record.model;
+        const oldPaneId = model.paneId ?? 'price';
         if (paneId === oldPaneId && (model.ownScale === true) === ownScale) return; // no-op
+        // where it was: enough to put it back (its pane, its scale, and the pane below it in case its own goes away)
+        const order = this.existingPaneIds();
+        const below = oldPaneId === 'price' ? undefined : order[order.indexOf(oldPaneId) + 1];
+        const from: IndicatorPlacement = { paneId: oldPaneId, ownScale: model.ownScale === true, ...(below ? { before: below } : {}) };
 
         if (insert) this.insertPaneOrder(paneId, insert);
         else if (!this.paneOrder.includes(paneId)) this.paneOrder.push(paneId);
@@ -3076,8 +3104,22 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             this.forgetPane(oldPaneId);
         }
         this.reorderPanes(this.existingPaneIds());
-        this.events.emit('indicator:moved', { id, paneId });
+        this.events.emit('indicator:moved', { id, paneId, ownScale, from });
+        if (oldPaneId !== 'price' && oldPaneId !== paneId) this.promotePaneMaster(oldPaneId);
         this.events.emit('pane:changed', undefined);
+    }
+
+    /** A study pane whose own indicator left, holding only merged ones: the first takes over the pane's scale (else the
+     *  right scale would sit empty while its values read on the left). Reported as a move, so an undo restores it. */
+    private promotePaneMaster(paneId: string): void {
+        const left = this.registry.all().filter((r) => r.model?.paneId === paneId && r.renderHandle);
+        if (left.length === 0 || left.some((r) => r.model!.ownScale !== true)) return;
+        const r = left[0]!;
+        r.model!.ownScale = false;
+        this.renderer.setIndicatorPane!(r.renderHandle!, paneId, { ownScale: false });
+        const order = this.existingPaneIds();
+        const below = order[order.indexOf(paneId) + 1];
+        this.events.emit('indicator:moved', { id: r.id, paneId, ownScale: false, from: { paneId, ownScale: true, ...(below ? { before: below } : {}) } });
     }
 
     /** Resolve a move target to a concrete pane id + own-scale flag + optional insertion. */

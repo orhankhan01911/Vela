@@ -7,7 +7,7 @@
 // layout change — its state then round-trips through the workspace pool, so shrinking
 // 4 → 2 → 4 restores the third and fourth exactly, indicators and drawings included).
 import { Vela } from '../Vela';
-import { normalizeSession, type MarketSession, type NativeBackend, type VelaOptions, type VelaTheme } from '../core/options';
+import { normalizeSession, type IndicatorPlacement, type MarketSession, type NativeBackend, type VelaOptions, type VelaTheme } from '../core/options';
 import type { OHLCV } from '../core/model/ohlcv';
 import type { VisibleRangePreset } from '../core/visible-range';
 import type { VisibleRange } from '../core/ports/IChartRenderer';
@@ -27,6 +27,8 @@ import { CellControls } from '../widget/cell-controls';
 import { ChartContextMenu } from '../widget/context-menu';
 import { WidgetHistory, type HistoryAction } from '../widget/history';
 import type { RangePreset } from '../widget/bottombar';
+import { applyPaneLayout, paneLayoutOf } from './pane-layout';
+import type { PaneLayoutState } from '../state/document';
 import { indicatorLedger, ledgerEntryName, ledgerNativeType, type LedgerManifestEntry, type LedgerNativeEntry, type ResolvedIndicator } from '../widget/indicators';
 import { inputDeltas, type InputValue } from '../core/model/inputs';
 import {
@@ -236,6 +238,12 @@ export class ChartCell {
     readonly host: HTMLElement;
     /** This cell's unified app+drawings undo timeline (the shared Ctrl+Z routes here). */
     readonly history = new WidgetHistory(() => this.inner);
+    /** Moves of the current gesture, gathered into one undo step (see `indicator:moved`). */
+    private pendingMoves: Array<{ id: string; from: IndicatorPlacement; to: IndicatorPlacement }> | null = null;
+    /** An indicator was moved or merged (by the user or a restore): from then on the pane layout is saved. */
+    private layoutMoved = false;
+    /** A saved pane layout waiting for its indicators to mount (natives by ledger position; manifest via instances). */
+    private pendingLayout: { layout: PaneLayoutState; natives: Array<IndicatorHandle | null>; until: number } | null = null;
     /** Each indicator's settings as last seen, so an edit's undo step knows what it changed from. */
     private readonly settingsSeen = new Map<string, IndicatorSettings>();
     /** The settings edit still being merged into one undo step (the dialog commits every keystroke and swatch drag
@@ -438,11 +446,14 @@ export class ChartCell {
         // resolving) and stay reported by `dehydrate` until then, so an early snapshot
         // (persist flush racing the resolution) never wipes them.
         if (seed.indicators) {
+            const natives: Array<IndicatorHandle | null> = [];
             for (const entry of seed.indicators.natives as LedgerNativeEntry[]) {
                 const handle = this.inner.addNativeIndicator(ledgerNativeType(entry));
                 this.applyNativeLedgerEntry(handle, entry);
+                natives.push(handle);
             }
             this.pendingManifestNames = [...seed.indicators.manifest] as LedgerManifestEntry[];
+            if (seed.panes) this.awaitPaneLayout(seed.panes, natives);
         }
         this.volumeIntent = seed.indicators ? seed.indicators.natives.some((e) => ledgerNativeType(e as LedgerNativeEntry) === 'volume') : deps.volume;
         // Third-party state rides in verbatim; the workspace triggers the handlers'
@@ -554,6 +565,27 @@ export class ChartCell {
             this.deps.onStateDirty();
             // TradingView's "hide {title}" / "show {title}": the eye is an undo step.
             this.history.push({ undo: () => this.indicatorById(id)?.setVisible(!visible), redo: () => this.indicatorById(id)?.setVisible(visible) });
+        });
+        // A move or merge (legend drag, "Move to", object tree, a pane's merge button) is one undo step; the
+        // moves of one gesture (a whole pane merged up) land in the same step and undo together, newest first.
+        this.inner.on('indicator:moved', ({ id, paneId, ownScale, from }) => {
+            this.deps.onStateDirty();
+            this.layoutMoved = true;
+            if (!from || !this.history.recording) return;
+            const order = this.inner?.panes.list().map((p) => p.id) ?? [];
+            const below = paneId === 'price' ? undefined : order[order.indexOf(paneId) + 1];
+            const to: IndicatorPlacement = { paneId, ownScale: ownScale === true, ...(below ? { before: below } : {}) };
+            const moves = this.pendingMoves ?? [];
+            moves.push({ id, from, to });
+            if (this.pendingMoves) return;
+            this.pendingMoves = moves;
+            queueMicrotask(() => {
+                this.pendingMoves = null;
+                this.history.push({
+                    undo: () => { for (const m of [...moves].reverse()) this.inner?.panes.place(m.id, m.from); },
+                    redo: () => { for (const m of moves) this.inner?.panes.place(m.id, m.to); },
+                });
+            });
         });
         this.inner.on('indicator:removed', ({ id }) => {
             if (this.destroyed) return;
@@ -1306,31 +1338,36 @@ export class ChartCell {
      * resolves. Convergence is state application, not user edits — nothing enters the
      * undo timeline.
      */
-    private applyIndicatorLedger(led: { manifest: LedgerManifestEntry[]; natives: LedgerNativeEntry[] }): void {
+    private applyIndicatorLedger(led: { manifest: LedgerManifestEntry[]; natives: LedgerNativeEntry[] }): Array<IndicatorHandle | null> {
         const chart = this.inner;
-        if (!chart) return;
+        const byIndex: Array<IndicatorHandle | null> = led.natives.map(() => null);
+        if (!chart) return byIndex;
         this.volumeIntent = led.natives.some((e) => ledgerNativeType(e) === 'volume');
         this.history.silently(() => {
             // Converge as a MULTISET: a multi-instance type is listed once per instance.
             // Existing instances are kept while the ledger still owes their type — each
             // consumes one owed ENTRY and converges to its values/visibility — the
             // surplus goes, the shortfall is added with the entry's values.
-            const owed = new Map<string, LedgerNativeEntry[]>();
-            for (const e of led.natives) {
+            // (each entry keeps its ledger position, so a saved pane layout can name the handle that took it)
+            const owed = new Map<string, Array<{ e: LedgerNativeEntry; i: number }>>();
+            led.natives.forEach((e, i) => {
                 const type = ledgerNativeType(e);
                 const queue = owed.get(type);
-                if (queue) queue.push(e);
-                else owed.set(type, [e]);
-            }
+                if (queue) queue.push({ e, i });
+                else owed.set(type, [{ e, i }]);
+            });
             for (const h of this.nativeHandles()) {
-                const entry = owed.get(h.nativeType!)?.shift();
-                if (entry !== undefined) this.applyNativeLedgerEntry(h, entry);
-                else h.remove();
+                const item = owed.get(h.nativeType!)?.shift();
+                if (item !== undefined) {
+                    this.applyNativeLedgerEntry(h, item.e);
+                    byIndex[item.i] = h;
+                } else h.remove();
             }
             for (const queue of owed.values()) {
-                for (const e of queue) {
+                for (const { e, i } of queue) {
                     const h = chart.addNativeIndicator(ledgerNativeType(e));
                     this.applyNativeLedgerEntry(h, e);
+                    byIndex[i] = h;
                 }
             }
             for (const it of [...this.instances]) this.dropInstance(it);
@@ -1352,6 +1389,7 @@ export class ChartCell {
         });
         this.syncPresentNatives();
         this.refreshNativeCatalog();
+        return byIndex;
     }
 
     /** The supported natives in picker order: A→Z by title — registration order follows
@@ -1691,7 +1729,10 @@ export class ChartCell {
         // Cosmetics + drawings round-trip (both validate untrusted input).
         if (cs.rendererConfig != null) this.inner.renderer.applyConfig(cs.rendererConfig);
         if (cs.drawings != null) this.inner.drawings.fromJSON(cs.drawings);
-        if (cs.indicators) this.applyIndicatorLedger(cs.indicators as { manifest: LedgerManifestEntry[]; natives: LedgerNativeEntry[] });
+        if (cs.indicators) {
+            const natives = this.applyIndicatorLedger(cs.indicators as { manifest: LedgerManifestEntry[]; natives: LedgerNativeEntry[] });
+            if (cs.panes) this.awaitPaneLayout(cs.panes, natives);
+        }
         // Third-party state converges to the document too: the restored bag REPLACES
         // the baseline (absent in the document = the document carries none), then the
         // registered handlers re-apply. After the ledger — a handler re-adding external
@@ -1770,10 +1811,60 @@ export class ChartCell {
                 volumePending: this.volumeMayBePending && this.volumeIntent,
             }),
             ...(ext ? { ext } : {}),
+            ...(this.savedPaneLayout() ?? {}),
         };
     }
 
+    /** The pane layout to save: the live one once anything was moved, else a restored one still waiting to apply. */
+    private savedPaneLayout(): { panes: PaneLayoutState } | null {
+        if (this.pendingLayout) return { panes: this.pendingLayout.layout };
+        if (!this.inner || !this.layoutMoved) return null;
+        const refs = new Map<string, string>();
+        this.nativeHandles().forEach((h, i) => refs.set(h.id, `n${i}`));
+        this.instances.filter((it) => !it.external).forEach((it, i) => it.handle && refs.set(it.handle.id, `m${i}`));
+        return { panes: paneLayoutOf(this.inner.panes.list(), (id) => refs.get(id)) };
+    }
+
+    /** Hold a saved pane layout until its indicators are on the chart (they mount after their first compute), then
+     *  apply it once, outside the undo history. Gives up waiting after 20 s and places whatever arrived. */
+    private awaitPaneLayout(layout: PaneLayoutState, natives: Array<IndicatorHandle | null>): void {
+        this.pendingLayout = { layout, natives, until: Date.now() + 20_000 };
+        const off = this.inner?.on('indicator:added', () => this.tryPaneLayout());
+        const timer = setTimeout(() => this.tryPaneLayout(true), 20_500);
+        const done = (): void => {
+            off?.();
+            clearTimeout(timer);
+        };
+        this.paneLayoutDone = done;
+        queueMicrotask(() => this.tryPaneLayout());
+    }
+
+    private paneLayoutDone: (() => void) | null = null;
+
+    private tryPaneLayout(force = false): void {
+        const p = this.pendingLayout;
+        const chart = this.inner;
+        if (!p || !chart || this.destroyed) return;
+        const manifest = this.instances.filter((it) => !it.external);
+        const resolve = (ref: string): string | undefined => {
+            const i = Number(ref.slice(1));
+            return (ref[0] === 'n' ? p.natives[i] : manifest[i]?.handle)?.id;
+        };
+        const mounted = new Set(chart.panes.list().flatMap((pane) => pane.indicators.map((i) => i.id)));
+        const refs = p.layout.slots.flat().map((m) => m.ref);
+        const ready = refs.every((r) => {
+            const id = resolve(r);
+            return id !== undefined && mounted.has(id);
+        });
+        if (!ready && !force && Date.now() < p.until) return;
+        this.pendingLayout = null;
+        this.paneLayoutDone?.();
+        this.paneLayoutDone = null;
+        this.history.silently(() => applyPaneLayout(p.layout, resolve, chart.panes));
+    }
+
     destroy(): void {
+        this.paneLayoutDone?.();
         this.destroyed = true;
         this.offIntervals();
         this.offMarket();

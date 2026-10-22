@@ -64,7 +64,8 @@ import type { IRenderBackend } from './backend/IRenderBackend';
 import { ChromeRenderer } from './chrome/ChromeRenderer';
 import { PriceAxisTickSource } from './chrome/priceAxisTicks';
 import { LabelTooltip } from './chrome/LabelTooltip';
-import { AXIS_MASTER_W, AXIS_MERGED_W, nextMasterWidth } from './chrome/axisLayout';
+import { AXIS_MASTER_W, AXIS_MERGED_W, LEFT_SCALE_COL_W, nextMasterWidth } from './chrome/axisLayout';
+import { LeftScaleColumn, valueFormat } from './chrome/LeftScaleColumn';
 import { CrosshairRenderer } from './chrome/CrosshairRenderer';
 import { SettingsDialog } from './chrome/SettingsDialog';
 import { UserDrawingController } from './drawings/UserDrawingController';
@@ -346,7 +347,12 @@ export class NativeRenderer implements IChartRenderer {
 
     // ── pane management (merge / reorder / collapse / maximize) ──
     private maximizedPaneId: string | null = null; // pane filling the plot (others hidden), or null
-    private rightAxisW = RIGHT_AXIS_W; // total right-gutter width (master column + merged-scale columns)
+    private rightAxisW = RIGHT_AXIS_W; // right-gutter width (the master price column)
+    /** Left-gutter width: one column per merged (own-scale) indicator, TradingView's "new left scale". 0 = none. */
+    private leftAxisW = 0;
+    private leftScaleCol: LeftScaleColumn | null = null; // made with the plot (needs a document)
+    /** A vertical drag on the left scale rescales that merged indicator's own window. */
+    private leftScaleDrag: { pointerId: number; startY: number } | null = null;
     /** Width of the master price column: RIGHT_AXIS_W at least, wider when the price labels need it. */
     private masterAxisW = RIGHT_AXIS_W;
     private fitAxisRaf = 0;
@@ -1623,6 +1629,9 @@ export class NativeRenderer implements IChartRenderer {
         this.plot.append(this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, ...above, this.chromeCanvas, ...top, this.drawingsCanvas, this.shadeRightEl, this.cursorCanvas, this.overlayRoot);
         this.layerOrderSig = ''; // recomputed on the first data frame (owned layers follow their indicator's z)
         this.wrapper.appendChild(this.plot);
+        this.leftScaleCol = new LeftScaleColumn();
+        this.wrapper.appendChild(this.leftScaleCol.el);
+        this.wireLeftScale();
         this.factoryConfig = this.getConfig();
         this.attributionEl = this.buildAttributionEl();
         if (!this.attributionEnabled) this.attributionEl.style.display = 'none';
@@ -1824,6 +1833,7 @@ export class NativeRenderer implements IChartRenderer {
             panes: () => this.paneControlViews(),
             rightAxis: () => this.rightAxisW,
             onMove: (paneId, dir) => this.movePaneLocal(paneId, dir),
+            onMerge: (paneId, dir) => this.mergePaneLocal(paneId, dir),
             onToggleCollapse: (paneId) => {
                 const pane = this.scene.panes.get(paneId);
                 if (!pane) return;
@@ -2318,14 +2328,69 @@ export class NativeRenderer implements IChartRenderer {
         });
     }
 
-    /** Recompute the right-gutter width (master column + one per merged scale). Re-sizes on change. */
+    /** Recompute the gutters: the master column on the right, one left column per merged scale. Re-sizes on change. */
     private refreshAxisWidth(): boolean {
-        const w = this.masterAxisW + AXIS_COL_W * this.maxOwnScaleColumns();
-        if (w === this.rightAxisW) return false;
+        const w = this.masterAxisW;
+        const left = LEFT_SCALE_COL_W * this.maxOwnScaleColumns();
+        if (w === this.rightAxisW && left === this.leftAxisW) return false;
         this.rightAxisW = w;
+        this.leftAxisW = left;
         this.publishGutters();
+        this.positionAttribution();
         if (this.coords.width > 0) this.syncSize();
         return true;
+    }
+
+    /** The plot's left edge in the wrapper: right of the drawings toolbar and the left scale. */
+    private plotLeft(): number {
+        return this.toolbarGutter + this.leftAxisW;
+    }
+
+    /** Drag the left scale up/down to stretch a merged indicator's own window (like the right scale); double-click
+     *  gives it back to autoscale. */
+    private wireLeftScale(): void {
+        const col = this.leftScaleCol;
+        if (!col) return;
+        const el = col.el;
+        const local = (e: PointerEvent | MouseEvent): { x: number; y: number } => {
+            const r = el.getBoundingClientRect();
+            return { x: e.clientX - r.left, y: e.clientY - r.top };
+        };
+        el.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+            const p = local(e);
+            const hit = col.hit(this.scene, p.x, p.y);
+            if (!hit) return;
+            e.preventDefault();
+            const holder = this.scene.ensureIndicatorScale(hit.model.id, hit.pane.scaleTarget);
+            this.scaleDragHolder = holder;
+            this.scaleDragHeight = hit.pane.bounds.height;
+            this.scaleDragStart = { ...holder.scale };
+            holder.manualScale = { ...holder.scale };
+            this.leftScaleDrag = { pointerId: e.pointerId, startY: e.clientY };
+            el.setPointerCapture?.(e.pointerId);
+        });
+        el.addEventListener('pointermove', (e) => {
+            const d = this.leftScaleDrag;
+            if (!d || d.pointerId !== e.pointerId) return;
+            this.priceScaleBy(e.clientY - d.startY);
+        });
+        const end = (e: PointerEvent): void => {
+            if (this.leftScaleDrag?.pointerId !== e.pointerId) return;
+            this.leftScaleDrag = null;
+            this.scaleDragHolder = null;
+            this.scaleDragStart = null;
+        };
+        el.addEventListener('pointerup', end);
+        el.addEventListener('pointercancel', end);
+        el.addEventListener('dblclick', (e) => {
+            const p = local(e);
+            const hit = col.hit(this.scene, p.x, p.y);
+            if (!hit) return;
+            const sl = this.scene.indicatorScales.get(hit.model.id);
+            if (sl) sl.manualScale = null;
+            this.scheduler.invalidate(InvalidateLevel.Full);
+        });
     }
 
     // ── indicators ──
@@ -3194,6 +3259,17 @@ export class NativeRenderer implements IChartRenderer {
         this.emitPaneAction({ type: 'move', paneId, dir });
     }
 
+    /** Merge a study pane into its neighbour (TradingView's "Merge pane up / down"): every indicator moves there, each
+     *  on its own scale; the emptied pane closes. One gesture, so the host undoes it as one step. */
+    private mergePaneLocal(paneId: string, dir: 'up' | 'down'): void {
+        const ordered = this.scene.orderedPanes();
+        const i = ordered.findIndex((p) => p.id === paneId);
+        const target = ordered[dir === 'up' ? i - 1 : i + 1];
+        if (i < 1 || !target) return;
+        const to: MoveTarget = target.kind === 'price' ? 'price' : { pane: target.id };
+        for (const m of [...this.scene.orderedIndicatorsForPane(paneId)]) for (const cb of this.moveIndicatorCbs) cb(m.id, to);
+    }
+
     // ── pane resize (drag the separator between stacked panes) ──
     /** True when `y` is within the hit zone of a draggable sub-pane separator. */
     private paneSeparatorAt(y: number): boolean {
@@ -3427,7 +3503,11 @@ export class NativeRenderer implements IChartRenderer {
                 continue; // markers carry no scalar readout
             }
             if (value == null || !Number.isFinite(value)) continue;
-            const shown = this.dataWindowFmt(value, pane);
+            // a merged indicator reads on its own (left) scale: 327.5M for a CVD merged into RSI, not 327470000.00
+            const own = model.ownScale === true && pane ? this.scene.scaleFor(model, pane) : null;
+            const shown = own && pane
+                ? valueFormat(model, own) === 'volume' ? formatCompactValue(value) : formatPriceLabel(own, pane.bounds.height, value, this.scene.priceMintick)
+                : this.dataWindowFmt(value, pane);
             rows.push({ label: s.title || model.title, value: surface === 'legend' && s.legendLabel ? `${s.legendLabel} ${shown}` : shown, color });
         }
         return rows;
@@ -3499,6 +3579,8 @@ export class NativeRenderer implements IChartRenderer {
     /** Repaint the L2 crosshair canvas and keep the `.vela-shade-right` element on the veil it painted. */
     private renderCrosshairLayer(): void {
         this.crosshairLayer.render(this.scene, this.coords, this.theme, this.hoverSeparatorY, this.externalCrossPx());
+        // the left scale carries the crosshair value too, so it repaints with the cursor (a few labels)
+        if (this.leftScaleCol?.visible) this.leftScaleCol.paint(this.scene, this.coords, this.theme, this.axisSurface());
         this.syncShadeRight();
     }
 
@@ -3987,7 +4069,7 @@ export class NativeRenderer implements IChartRenderer {
     private paneMasterTitle(paneId: string): string | null {
         const models = this.scene.orderedIndicatorsForPane(paneId);
         const master = models.find((m) => m.ownScale !== true) ?? models[0];
-        return master?.title || null;
+        return master?.shorttitle || master?.title || null; // "Merge into RSI", like TradingView
     }
 
     /** The pane a bespoke-layer native indicator (volume/vpvr) currently lives in (null = not mounted). */
@@ -4384,7 +4466,9 @@ export class NativeRenderer implements IChartRenderer {
      *  status line, a watermark, a custom legend) can anchor to the plot's edges
      *  without reaching into the renderer's DOM. */
     private publishGutters(): void {
-        this.mountContainer?.style.setProperty('--vela-toolbar-gutter', `${this.toolbarGutter}px`);
+        // the plot's left edge (toolbar + left scale), which is what overlays anchor to
+        this.mountContainer?.style.setProperty('--vela-toolbar-gutter', `${this.plotLeft()}px`);
+        this.mountContainer?.style.setProperty('--vela-left-scale-gutter', `${this.leftAxisW}px`);
         this.mountContainer?.style.setProperty('--vela-scale-gutter', `${this.rightAxisW}px`);
     }
 
@@ -4435,7 +4519,7 @@ export class NativeRenderer implements IChartRenderer {
             ? Math.max(...visible.map((p) => p.bounds.top + p.bounds.height))
             : dataHeight;
         Object.assign(this.attributionEl.style, {
-            left: `${(this.toolbarGutter || 0) + 12}px`,
+            left: `${this.plotLeft() + 12}px`,
             bottom: `${TIME_AXIS_H + 10 + Math.max(0, dataHeight - paneBottom)}px`,
         });
     }
@@ -4466,7 +4550,7 @@ export class NativeRenderer implements IChartRenderer {
         const dpr = coarse ? Math.min(window.devicePixelRatio || 1, 2) : window.devicePixelRatio || 1;
         // The plot area is inset to the right of the toolbar gutter; the canvases fill the plot
         // sub-container (0-based), so the coordinate system / pointer coords stay unchanged.
-        this.plot.style.left = `${this.toolbarGutter}px`;
+        this.plot.style.left = `${this.plotLeft()}px`;
         // Size the pile from the plot's REAL box, not client sizes: clientWidth/Height are
         // integer-rounded, and on fractional-dpr displays (Windows 125%/150%) a backing store
         // rounded from them covers a different number of device pixels than the box it is
@@ -4509,6 +4593,7 @@ export class NativeRenderer implements IChartRenderer {
         // Reserve strips for the price axis (right) + time axis (bottom); the
         // data area drives the coordinate transform so series sit clear of them.
         this.coords.setSize(Math.max(1, pw - this.rightAxisW), Math.max(1, ph - TIME_AXIS_H), dpr);
+        this.leftScaleCol?.setBox(this.toolbarGutter, this.leftAxisW, ph, dpr);
         // Geometry changed — the retained crosshair {x,y} now points at the wrong
         // bar/price, so drop it (LWC hides the crosshair until the next move).
         this.scene.crosshair = null;

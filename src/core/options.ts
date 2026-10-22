@@ -392,6 +392,17 @@ export type MoveTarget =
     | { pane: string }
     | { newPane: { before?: string; after?: string } | true };
 
+/**
+ * Exactly where an indicator sits: its pane, whether it reads on its own (left) scale there, and, for a study pane
+ * that is not there any more, the pane it is re-opened above. `indicator:moved` reports the placement a move left
+ * (`from`), and `chart.panes.place(id, from)` puts the indicator back there: that is how a move is undone.
+ */
+export interface IndicatorPlacement {
+    paneId: string;
+    ownScale: boolean;
+    before?: string;
+}
+
 /** A pane and the indicators it holds — a `chart.panes.list()` entry. */
 export interface PaneInfo {
     id: string;

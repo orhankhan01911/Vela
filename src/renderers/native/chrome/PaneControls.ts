@@ -19,6 +19,8 @@ export interface PaneControlsDeps {
     /** Right-gutter width in px — the cluster pins just left of the axis columns. */
     rightAxis(): number;
     onMove(paneId: string, dir: 'up' | 'down'): void;
+    /** Merge every indicator of the pane into the pane above / below (absent: no merge buttons). */
+    onMerge?(paneId: string, dir: 'up' | 'down'): void;
     onToggleCollapse(paneId: string): void;
     onToggleMaximize(paneId: string): void;
 }
@@ -26,6 +28,8 @@ export interface PaneControlsDeps {
 const ICONS = {
     up: icon('chevron-up'),
     down: icon('chevron-down'),
+    mergeUp: icon('pane-merge-up'),
+    mergeDown: icon('pane-merge-down'),
     collapse: icon('pane-collapse'),
     expand: icon('pane-expand'),
     maximize: icon('maximize'),
@@ -137,6 +141,11 @@ export class PaneControls {
         if (p.kind === 'study') {
             cluster.appendChild(this.button(ICONS.up, 'Move pane up', p.index <= 1, () => this.deps.onMove(p.id, 'up'), { role: 'up' }));
             cluster.appendChild(this.button(ICONS.down, 'Move pane down', p.index >= p.count - 1, () => this.deps.onMove(p.id, 'down'), { role: 'down' }));
+            const merge = this.deps.onMerge;
+            if (merge) {
+                cluster.appendChild(this.button(ICONS.mergeUp, p.index === 1 ? 'Merge into main chart' : 'Merge pane up', p.index < 1, () => merge(p.id, 'up'), { role: 'merge-up' }));
+                if (p.index < p.count - 1) cluster.appendChild(this.button(ICONS.mergeDown, 'Merge pane down', false, () => merge(p.id, 'down'), { role: 'merge-down' }));
+            }
             cluster.appendChild(
                 this.button(p.collapsed ? ICONS.expand : ICONS.collapse, p.collapsed ? 'Expand pane' : 'Collapse pane', false, () => this.deps.onToggleCollapse(p.id), {
                     role: 'collapse',
@@ -165,7 +174,7 @@ export class PaneControls {
         title: string,
         disabled: boolean,
         onClick: () => void,
-        opts: { role: 'up' | 'down' | 'collapse' | 'maximize'; selected?: boolean },
+        opts: { role: 'up' | 'down' | 'merge-up' | 'merge-down' | 'collapse' | 'maximize'; selected?: boolean },
     ): HTMLButtonElement {
         const b = document.createElement('button');
         b.type = 'button';
