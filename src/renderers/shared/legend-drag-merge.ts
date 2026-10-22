@@ -116,6 +116,7 @@ export class LegendDragMerge {
         doc.addEventListener('pointerup', this.onUp, true);
         doc.addEventListener('pointercancel', this.onCancel, true);
         doc.addEventListener('keydown', this.onKey, true);
+        doc.addEventListener('contextmenu', this.onContextMenu, true);
         // a page scroll must not steal a finger that is dragging a row
         doc.addEventListener('touchmove', this.onTouchMove, { capture: true, passive: false });
     }
@@ -137,6 +138,16 @@ export class LegendDragMerge {
         this.track(e.clientX, e.clientY);
     };
 
+    /** On touch the long press belongs to the drag: the context menu it also fires (the row's menu, Android's own)
+     *  must not open over the drag, nor right after the drop. A mouse right-click never starts a drag, so it keeps
+     *  its menu. */
+    private readonly onContextMenu = (e: Event): void => {
+        if (this.drag?.active || performance.now() < this.swallowClickUntil) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+        }
+    };
+
     private readonly onTouchMove = (e: TouchEvent): void => {
         if (this.drag?.active) e.preventDefault();
     };
@@ -147,8 +158,8 @@ export class LegendDragMerge {
         const target = d.active ? d.target : null;
         const wasActive = d.active;
         const id = d.id;
-        this.cancel();
         if (wasActive) this.swallowClickUntil = performance.now() + 350;
+        this.cancel();
         if (target) this.host.move(id, target.move);
     };
 
@@ -251,6 +262,8 @@ export class LegendDragMerge {
         doc.removeEventListener('pointerup', this.onUp, true);
         doc.removeEventListener('pointercancel', this.onCancel, true);
         doc.removeEventListener('keydown', this.onKey, true);
+        if (performance.now() >= this.swallowClickUntil) doc.removeEventListener('contextmenu', this.onContextMenu, true);
+        else window.setTimeout(() => doc.removeEventListener('contextmenu', this.onContextMenu, true), 400);
         doc.removeEventListener('touchmove', this.onTouchMove, { capture: true } as EventListenerOptions);
         this.drag = null;
         this.ghost?.remove();
