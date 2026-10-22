@@ -69,6 +69,10 @@ export type HostSettingsRow = (
     | { kind: 'toggle'; label: string; get: () => boolean; set: (v: boolean) => void; id?: string }
     | { kind: 'select'; label: string; options: readonly SettingsSelectOption[]; get: () => string; set: (v: string) => void; id?: string }
     | { kind: 'color'; label: string; get: () => string; set: (v: string) => void; id?: string }
+    /** The host draws the row itself (e.g. a grid of pictures): `render` gets an empty element, full width, when the
+     *  tab is built (`label` names the row for hiding it, it is not shown). It should stop any work once the
+     *  element leaves the page (`isConnected`). */
+    | { kind: 'custom'; label: string; render: (host: HTMLElement) => void; id?: string }
     /** A calendar date (`yyyy-mm-dd`); `max` caps the picker (e.g. today). */
     | { kind: 'date'; label: string; get: () => string; set: (v: string) => void; max?: () => string; id?: string }
 ) & {
@@ -644,6 +648,16 @@ export class SettingsDialog {
                     if (hr.kind === 'heading') el = this.sectionTitle(hr.label);
                     else if (hr.kind === 'toggle') el = this.boolRow(hr.label, hr.get(), after((v: boolean) => hr.set(v)));
                     else if (hr.kind === 'color') el = this.colorRow(hr.label, hr.get(), after((v: string) => hr.set(v)));
+                    else if (hr.kind === 'custom') {
+                        el = document.createElement('div');
+                        el.className = 'vela-sd-custom';
+                        el.style.cssText = 'grid-column:1 / -1;min-width:0;';
+                        try {
+                            hr.render(el);
+                        } catch (e) {
+                            console.warn('[vela] a host settings row failed to render', e);
+                        }
+                    }
                     else if (hr.kind === 'date') el = this.dateRow(hr.label, hr.get(), hr.max?.() ?? '', after((v: string) => hr.set(v)));
                     else el = this.selectRowLabeled(hr.label, hr.get(), normalizeSelectOptions(hr.options), after((v: string) => hr.set(v)));
                     if (hr.visible) gated.push([el, hr.visible]);
