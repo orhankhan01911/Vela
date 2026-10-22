@@ -197,6 +197,12 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     private replayQueue: OHLCV[] | null = null;
     /** The generation whose history reached the source's first bar (scroll-back paging stops). */
     private genesisGen = -1;
+    /** The generation and `from` floor whose history reached that floor: the next bar back is older than it. A floor
+     *  is a moment ("the last 60 days"), rarely a bar's time, so the oldest bar can sit just after it with nothing
+     *  left to load; without this, every page found only bars before the floor and asked again, forever. */
+    private floorHit: { gen: number; from: number } | null = null;
+    /** Bars held when the running scroll-back page started (-1: none running). */
+    private pageFromLen = -1;
     /** Scroll-back paging: `'auto'` loads older bars by itself; `'manual'` only reports the
      *  edge (`history:edge`) and waits for `loadOlderHistory()`; `'off'` does neither. */
     private historyPaging: 'auto' | 'manual' | 'off' = 'auto';
@@ -458,7 +464,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      * {@link MAX_PAGED_BARS}. Not for fixed data, a replay, or a series-replacing chart type
      * (those ask for raw depth themselves, see `ensureRawDepth`); overlay types (footprint, TPO) page like candles.
      */
-    private maybePageOlder(window: VisibleBarRange): void {
+    private maybePageOlder(window: VisibleBarRange, mayPage = true): void {
         if (this.historyPaging === 'off') return this.holdOlder(false);
         const manual = this.historyPaging === 'manual';
         if (this.replayQueue !== null) return this.holdOlder(false);
@@ -475,7 +481,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const stop = this.pageStop();
         const canLoadMore = stop === null;
         // Auto paging with more to come: panning waits at the oldest bar for the next page (see the renderer port).
-        this.holdOlder(!manual && canLoadMore);
+        this.holdOlder(!manual && canLoadMore && mayPage);
         const firstAtOrAfter = (t: number): number => {
             let lo = 0;
             let hi = n;
@@ -490,7 +496,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const span = Math.max(1, firstAtOrAfter(window.right) - left);
         // The edge is the oldest bar ON SCREEN (a host marks it: a manual control, or where auto paging loads).
         this.emitEdge(left === 0, stop);
-        if (manual || !canLoadMore) return;
+        if (manual || !canLoadMore || !mayPage) return;
         if (left > Math.max(PAGE_EDGE_BARS, span * PAGE_AHEAD_SCREENS)) return;
         this.pageOlder(Math.max(PAGE_MIN_BARS, span * PAGE_SCREENS));
     }
@@ -521,6 +527,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     private pageOlder(bars: number): void {
         const want = Math.min(MAX_PAGED_BARS, this.rawBars.length + Math.max(1, Math.floor(bars)));
         this.resetHistoryTracking();
+        this.pageFromLen = this.rawBars.length;
         this.events.emit('history:page', { bars: want - this.rawBars.length, oldestTime: this.rawBars[0]?.time ?? 0 });
         this.extendDepth(this.generation, want);
     }
@@ -634,7 +641,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     /** Whether the held history already reaches the time floor. */
     private reachedFrom(): boolean {
         const from = this.config.market.from;
-        return !!from && this.rawBars.length > 0 && this.rawBars[0]!.time <= from;
+        if (!from || this.rawBars.length === 0) return false;
+        return this.rawBars[0]!.time <= from || (this.floorHit?.gen === this.generation && this.floorHit.from === from);
     }
 
     private async loadMarketInner(gen: number, opts: { firstLoad: boolean }): Promise<void> {
@@ -1160,7 +1168,11 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 const from = this.config.market.from ?? -Infinity;
                 const older = chunk.filter((b) => b.time < oldest);
                 const head = older.filter((b) => b.time >= from);
-                if (head.length === 0 && older.length > 0) break; // the next bar back is before the time floor: done
+                if (head.length === 0 && older.length > 0) {
+                    // the next bar back is before the time floor: done, and nothing more to page
+                    this.floorHit = { gen: this.generation, from };
+                    break;
+                }
                 if (head.length === 0) {
                     this.completeHistory('genesis'); // nothing older exists at the source
                     return;
@@ -1194,10 +1206,14 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         this.historyState = 'complete';
         if (reason === 'genesis') this.genesisGen = this.generation;
         if (reason === 'aborted') this.pageFailedAt = Date.now();
-        // Report the edge (manual) or keep paging while the view is still near it (auto).
+        // Report the edge (manual) or keep paging while the view is still near it (auto). A page that added nothing
+        // does not start the next by itself (the next scroll does): a source that keeps answering nothing new must
+        // not page in a loop of microtasks, which never lets the page draw or take input.
+        const grew = this.pageFromLen < 0 || this.rawBars.length > this.pageFromLen;
+        this.pageFromLen = -1;
         if (this.historyPaging !== 'off' && this.visibleRange) {
             queueMicrotask(() => {
-                if (this.visibleRange) this.maybePageOlder(this.visibleRange);
+                if (this.visibleRange) this.maybePageOlder(this.visibleRange, grew);
             });
         }
         this.notifySessionsBars('complete');

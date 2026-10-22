@@ -1215,6 +1215,31 @@ describe('scroll-back paging — older bars as the view nears the oldest loaded 
         }
     });
 
+    it('a time floor between two bars ends the paging (it once paged again and again, freezing the page)', async () => {
+        const feed = new SwitchFeed();
+        feed.depth['AAA'] = 5_000;
+        const renderer = new PagingRenderer();
+        const newest = 1_700_000_000_000 + 4_999 * 3_600_000;
+        // "the last N days" is a moment, not a bar time: here half an hour after a bar opened
+        const from = newest - 299 * 3_600_000 - 1_800_000;
+        const chart = make({ symbol: 'AAA', timeframe: '60', bars: 400, from, volume: false }, { renderer, engines: [], dataFeed: feed });
+        await chart.ready();
+        await chart.historyComplete();
+        await flush();
+        expect(renderer.bars[0]!.time).toBe(from + 1_800_000); // the first bar at or after the floor
+        const edges: Array<{ canLoadMore: boolean; stop?: string | null }> = [];
+        chart.on('history:edge', (e) => edges.push({ canLoadMore: e.canLoadMore, stop: e.stop }));
+        const before = feed.rangeCalls.length;
+
+        renderer.show(0, 100); // the oldest bar on screen: auto paging asks once, finds only bars before the floor
+        await settle();
+        await settle();
+        expect(feed.rangeCalls.length - before).toBeLessThanOrEqual(1);
+        expect(renderer.bars[0]!.time).toBe(from + 1_800_000);
+        expect(edges[edges.length - 1]).toEqual({ canLoadMore: false, stop: 'floor' });
+        expect(chart.loadOlderHistory()).toBe('none');
+    });
+
     it('loads ahead: a page starts while the oldest bar is still a screen off to the left', async () => {
         const feed = new SwitchFeed();
         feed.depth['AAA'] = 5_000;
