@@ -49,12 +49,13 @@ const CSS = `
     justify-content: center;
     cursor: pointer;
     color: var(--vela-fg-muted);
-    background: var(--vela-bg);
+    /* Opaque: the buttons scrolled under the arrow must not show through (the hover tint layers on top). */
+    background-color: var(--vela-bg);
 }
 .vela-topbar-scroll[data-dir='l'] button { left: calc(-1 * var(--vela-space-2)); box-shadow: 6px 0 8px -4px var(--vela-bg); }
 .vela-topbar-scroll[data-dir='r'] button { right: calc(-1 * var(--vela-space-2)); box-shadow: -6px 0 8px -4px var(--vela-bg); }
 .vela-topbar-scroll[data-on='1'] button { display: inline-flex; }
-.vela-topbar-scroll button:hover { color: var(--vela-fg-bright); background: var(--vela-hover); }
+.vela-topbar-scroll button:hover { color: var(--vela-fg-bright); background-image: linear-gradient(var(--vela-hover), var(--vela-hover)); }
 .vela-topbar-scroll button:focus-visible { outline: 1px solid var(--vela-accent); outline-offset: -1px; }
 .vela-widget-symbol, .vela-widget-tf, .vela-widget-style, .vela-widget-indicators, .vela-widget-action-left {
     all: unset;
