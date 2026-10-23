@@ -225,6 +225,10 @@ export class NativeRenderer implements IChartRenderer {
      *  it paints the plot into. `null` until the first report or where the box type is
      *  unsupported (WebKit); syncSize then falls back to rounding the client rect. */
     private plotDeviceSize: { width: number; height: number } | null = null;
+    /** Pixel ratio forced for the length of one screenshot (null: the screen's own). */
+    private shotDpr: number | null = null;
+    /** CSS box (viewport coordinates) the last {@link screenshotCanvas} covers: the plot plus the left scales. */
+    private shotBox: { left: number; top: number; width: number; height: number } | null = null;
 
     private readonly coords = new CoordinateSystem();
     private readonly scene = new SceneGraph();
@@ -1363,12 +1367,43 @@ export class NativeRenderer implements IChartRenderer {
      * crosshair (L2) is intentionally excluded. {@link screenshot} is this canvas
      * as a PNG data URL.
      */
-    screenshotCanvas(): HTMLCanvasElement | null {
+    screenshotCanvas(opts: { scale?: number } = {}): HTMLCanvasElement | null {
+        if (!this.dataCanvas) return null;
+        // A sharper picture than the screen: every layer is drawn again at `scale` (all canvases resized, painted,
+        // read, then put back), in one task, so the screen never shows the big frame. Capped by the canvas size
+        // limit of phones (16.7 M pixels on iOS).
+        const box = this.plot?.getBoundingClientRect();
+        const leftW = this.leftScaleCol?.visible ? this.leftAxisW : 0;
+        const screenDpr = box && box.width > 0 ? this.dataCanvas.width / box.width : 1;
+        let want = opts.scale && opts.scale > 0 ? opts.scale : screenDpr;
+        const area = box ? (box.width + leftW) * box.height : 0;
+        if (area > 0) want = Math.min(want, Math.sqrt(16_000_000 / area));
+        const hires = area > 0 && want > screenDpr + 0.01;
+        if (hires) {
+            this.shotDpr = want;
+            this.syncSize();
+        }
+        try {
+            return this.composeShot(leftW);
+        } finally {
+            if (hires) {
+                this.shotDpr = null;
+                this.syncSize();
+            }
+        }
+    }
+
+    /** The canvas the screenshot is, at the canvases' current pixel ratio (see {@link screenshotCanvas}). */
+    private composeShot(leftW: number): HTMLCanvasElement | null {
         if (!this.dataCanvas) return null;
         this.computeScales();
         this.paintData();
+        const plotRect = this.plot?.getBoundingClientRect();
+        const dpr = plotRect && plotRect.width > 0 ? this.dataCanvas.width / plotRect.width : 1;
+        const col = leftW > 0 ? this.leftScaleCol : null;
+        const ox = col ? col.el.width : 0;
         const out = document.createElement('canvas');
-        out.width = this.dataCanvas.width;
+        out.width = ox + this.dataCanvas.width;
         out.height = this.dataCanvas.height;
         const ctx = out.getContext('2d');
         if (!ctx) return null;
@@ -1383,18 +1418,29 @@ export class NativeRenderer implements IChartRenderer {
             ctx.fillStyle = this.theme.background;
         }
         ctx.fillRect(0, 0, out.width, out.height);
+        // The merged panes' own scales (left of the plot) are part of the chart.
+        if (col && col.el.width > 0 && col.el.height > 0) ctx.drawImage(col.el, 0, 0);
         // DOM replicas share the plot's coordinate space (the canvases fill it).
-        const plotRect = this.plot?.getBoundingClientRect();
-        const frame = plotRect && plotRect.width > 0 ? { left: plotRect.left, top: plotRect.top, dpr: out.width / plotRect.width } : null;
+        const frame = plotRect && plotRect.width > 0 ? { left: plotRect.left - ox / dpr, top: plotRect.top, dpr } : null;
+        this.shotBox = plotRect ? { left: plotRect.left - leftW, top: plotRect.top, width: plotRect.width + leftW, height: plotRect.height } : null;
         const hostMarked = [...(this.mountContainer?.querySelectorAll('[data-vela-screenshot]') ?? [])];
         if (frame) {
             for (const el of hostMarked) {
                 if (el.getAttribute('data-vela-screenshot') === 'under') rasterizeOverlay(ctx, el, frame);
             }
         }
-        for (const canvas of [...this.canvasPile(), this.chromeCanvas, this.drawingsCanvas]) {
-            if (canvas && canvas.width > 0 && canvas.height > 0) ctx.drawImage(canvas, 0, 0);
+        for (const canvas of [...this.canvasPile(), this.chromeCanvas]) {
+            if (canvas && canvas.width > 0 && canvas.height > 0) ctx.drawImage(canvas, ox, 0);
         }
+        // A host's own canvases in the plot that opt in with `data-vela-shot-canvas` (an axis strip drawn over the
+        // chrome): at their place, between the chrome and the drawings, where they sit on screen.
+        for (const c of this.plot?.querySelectorAll<HTMLCanvasElement>(':scope > canvas[data-vela-shot-canvas]') ?? []) {
+            if (c.width <= 0 || c.height <= 0 || c.style.display === 'none') continue;
+            const w = c.offsetWidth || c.width / dpr;
+            const h = c.offsetHeight || c.height / dpr;
+            ctx.drawImage(c, ox + c.offsetLeft * dpr, c.offsetTop * dpr, w * dpr, h * dpr);
+        }
+        if (this.drawingsCanvas && this.drawingsCanvas.width > 0 && this.drawingsCanvas.height > 0) ctx.drawImage(this.drawingsCanvas, ox, 0);
         if (frame) {
             for (const lg of this.plot?.querySelectorAll('[data-vela-pane]') ?? []) rasterizeOverlay(ctx, lg, frame);
             for (const el of hostMarked) {
@@ -1404,8 +1450,13 @@ export class NativeRenderer implements IChartRenderer {
         return out;
     }
 
-    screenshot(): string | null {
-        return this.screenshotCanvas()?.toDataURL('image/png') ?? null;
+    /** CSS box (viewport coordinates) of the last {@link screenshotCanvas}, for a host placing it in a layout. */
+    screenshotBox(): { left: number; top: number; width: number; height: number } | null {
+        return this.shotBox;
+    }
+
+    screenshot(opts: { scale?: number } = {}): string | null {
+        return this.screenshotCanvas(opts)?.toDataURL('image/png') ?? null;
     }
 
     /**
@@ -4547,7 +4598,7 @@ export class NativeRenderer implements IChartRenderer {
         // Touch phones only: a zoomed desktop (Firefox / Chrome at 240-300 %) has fewer CSS px in the same screen, so
         // the full ratio costs no more device pixels than 100 % does, and a 2x cap there stretched (blurred) the chart.
         const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-        const dpr = coarse ? Math.min(window.devicePixelRatio || 1, 2) : window.devicePixelRatio || 1;
+        const dpr = this.shotDpr ?? (coarse ? Math.min(window.devicePixelRatio || 1, 2) : window.devicePixelRatio || 1);
         // The plot area is inset to the right of the toolbar gutter; the canvases fill the plot
         // sub-container (0-based), so the coordinate system / pointer coords stay unchanged.
         this.plot.style.left = `${this.plotLeft()}px`;
@@ -4564,7 +4615,7 @@ export class NativeRenderer implements IChartRenderer {
         // rounding by up to a pixel, which is exactly why its report wins). A stale report
         // (e.g. right after the toolbar gutter moved the plot) is rejected; the observer
         // fires again with the fresh box and re-syncs.
-        const dev = this.plotDeviceSize;
+        const dev = this.shotDpr === null ? this.plotDeviceSize : null;
         if (dev && Math.abs(dev.width - rect.width * dpr) <= 1 && Math.abs(dev.height - rect.height * dpr) <= 1) {
             bw = Math.max(1, dev.width);
             bh = Math.max(1, dev.height);

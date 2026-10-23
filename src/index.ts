@@ -111,6 +111,7 @@ export type {
     DataWindowGroup,
     DataWindowRow,
     DataWindowOHLC,
+    ScreenshotOptions,
 } from './core/ports/IChartRenderer';
 export type {
     ScriptingEngine,

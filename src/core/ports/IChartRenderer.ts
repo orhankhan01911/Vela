@@ -11,6 +11,13 @@ import type { IDrawingsRendererPort } from '../drawings/port';
 import type { MarkClickEvent, MarkGroup, TimelineMark } from '../marks/types';
 
 /** What a rendering backend supports — drives graceful degradation + warnings. */
+/** How a screenshot is taken. */
+export interface ScreenshotOptions {
+    /** Pixels per CSS pixel. Above the screen's own ratio the chart is drawn again at it, sharper than the screen;
+     *  capped so the picture stays under 16 M pixels. Default: the screen's ratio. */
+    scale?: number;
+}
+
 export interface RendererCapabilities {
     panes: boolean;
     /**
@@ -483,12 +490,14 @@ export interface IChartRenderer {
      * Export the current chart as a PNG data URL (optional — a renderer that can't
      * rasterize its surface omits it). DOM overlays may not be included.
      */
-    screenshot?(): string | null;
+    screenshot?(opts?: ScreenshotOptions): string | null;
     /**
      * Raster of the current chart onto a canvas (optional). Same pixels as
      * {@link screenshot}, for hosts that composite several charts into one image.
      */
-    screenshotCanvas?(): HTMLCanvasElement | null;
+    screenshotCanvas?(opts?: ScreenshotOptions): HTMLCanvasElement | null;
+    /** CSS box (viewport coordinates) the last {@link screenshotCanvas} covers (optional). */
+    screenshotBox?(): { left: number; top: number; width: number; height: number } | null;
 
     /**
      * Snapshot the renderer's full cosmetic configuration as a serializable,

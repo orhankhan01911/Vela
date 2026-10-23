@@ -77,7 +77,8 @@ import {
     type TrackSizes,
 } from './layouts';
 import { SplitterLayer, evenTracks } from './splitters';
-import { compositeLayoutScreenshot, tilesFromCellRects, triggerPngDownload, type LayoutShotTile } from './screenshot';
+import { compositeLayoutCanvas, tilesFromCellRects, triggerPngDownload, type LayoutShotTile } from './screenshot';
+import type { ScreenshotOptions } from '../core/ports/IChartRenderer';
 
 /**
  * The workspace options: the widget's chart vocabulary + the shared shell surface + the
@@ -861,11 +862,17 @@ export class VelaWorkspace {
      * maximized cell alone. Same pixels the screenshot button downloads. A single
      * visible cell returns that cell's own chart export (the one-chart case).
      */
-    screenshot(): string | null {
+    screenshot(opts?: ScreenshotOptions): string | null {
+        return this.screenshotCanvas(opts)?.toDataURL('image/png') ?? null;
+    }
+
+    /** {@link screenshot} as a canvas (for a host that previews, copies or shares it without a PNG round trip).
+     *  `scale` above the screen's pixel ratio draws every chart again at it: a sharper picture than the screen. */
+    screenshotCanvas(opts?: ScreenshotOptions): HTMLCanvasElement | null {
         const cells = this.shotCells();
         if (cells.length === 0) return null;
-        if (cells.length === 1) return cells[0]!.chart.renderer.screenshot();
-        return this.compositeLayoutShot(cells);
+        if (cells.length === 1) return cells[0]!.screenshotCanvas(opts);
+        return this.compositeLayoutShot(cells, opts);
     }
 
     /** Download {@link screenshot} as a PNG. A multi-cell layout is named
@@ -876,7 +883,7 @@ export class VelaWorkspace {
             (cells[0] ?? this.active).downloadScreenshot();
             return;
         }
-        const url = this.compositeLayoutShot(cells);
+        const url = this.compositeLayoutShot(cells)?.toDataURL('image/png');
         if (!url) return;
         triggerPngDownload(this.root.ownerDocument, url, 'vela-layout.png');
     }
@@ -886,28 +893,33 @@ export class VelaWorkspace {
         return this.cells().filter((c) => c.host.style.visibility !== 'hidden');
     }
 
-    /** Place every cell's raster onto one canvas the size of the grid. */
-    private compositeLayoutShot(cells: ChartCell[]): string | null {
+    /** Place every cell's raster onto one canvas the size of the grid, each where its chart is on screen. */
+    private compositeLayoutShot(cells: ChartCell[], opts?: ScreenshotOptions): HTMLCanvasElement | null {
         const gridEl = this.gridEl;
         const grid = gridEl.getBoundingClientRect();
         const win = gridEl.ownerDocument.defaultView;
-        const dpr = win?.devicePixelRatio ?? 1;
+        // One ratio for the whole picture, capped like a single chart's (16 M pixels).
+        let dpr = Math.max(win?.devicePixelRatio ?? 1, opts?.scale ?? 0);
+        if (grid.width * grid.height > 0) dpr = Math.min(dpr, Math.max(1, Math.sqrt(16_000_000 / (grid.width * grid.height))));
         const gapColor = win ? win.getComputedStyle(gridEl).backgroundColor : '';
         const tiles: LayoutShotTile[] = [];
         for (const cell of cells) {
-            const source = cell.screenshotCanvas();
+            const source = cell.screenshotCanvas({ scale: dpr });
             if (!source) continue;
-            const r = cell.host.getBoundingClientRect();
+            const r = cell.screenshotBox() ?? cell.host.getBoundingClientRect();
             const place = tilesFromCellRects(grid, [{ left: r.left, top: r.top, width: r.width, height: r.height }])[0];
             if (!place) continue;
             tiles.push({ source, ...place });
         }
-        return compositeLayoutScreenshot(gridEl.ownerDocument, {
+        const out = compositeLayoutCanvas(gridEl.ownerDocument, {
             width: grid.width,
             height: grid.height,
             dpr,
             gapColor: gapColor || '#000000',
         }, tiles);
+        // The per-chart rasters are ours and done with: free them now (phones count canvas memory until collected).
+        for (const t of tiles) if (t.source instanceof HTMLCanvasElement) t.source.width = t.source.height = 0;
+        return out;
     }
 
     setActiveCell(id: string | null): void {

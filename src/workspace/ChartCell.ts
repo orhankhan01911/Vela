@@ -10,7 +10,7 @@ import { Vela } from '../Vela';
 import { normalizeSession, type IndicatorPlacement, type MarketSession, type NativeBackend, type VelaOptions, type VelaTheme } from '../core/options';
 import type { OHLCV } from '../core/model/ohlcv';
 import type { VisibleRangePreset } from '../core/visible-range';
-import type { VisibleRange } from '../core/ports/IChartRenderer';
+import type { ScreenshotOptions, VisibleRange } from '../core/ports/IChartRenderer';
 import type { DrawingsOption } from '../core/drawings';
 import type { MarketDataFeed } from '../core/ports/MarketDataFeed';
 import type { ScriptingEngine } from '../core/ports/ScriptingEngine';
@@ -1294,8 +1294,13 @@ export class ChartCell {
     }
 
     /** Raster of this cell's chart (same pixels as the PNG download), or null. */
-    screenshotCanvas(): HTMLCanvasElement | null {
-        return this.inner?.renderer.screenshotCanvas() ?? null;
+    screenshotCanvas(opts?: ScreenshotOptions): HTMLCanvasElement | null {
+        return this.inner?.renderer.screenshotCanvas(opts) ?? null;
+    }
+
+    /** CSS box (viewport coordinates) the last {@link screenshotCanvas} covers. */
+    screenshotBox(): { left: number; top: number; width: number; height: number } | null {
+        return this.inner?.renderer.screenshotBox() ?? null;
     }
 
     /** Download this cell's chart as a PNG (named after its market). */

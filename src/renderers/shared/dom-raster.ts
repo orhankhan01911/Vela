@@ -67,6 +67,17 @@ function canDrawUntainted(img: HTMLImageElement): boolean {
  * hidden segments (`display:none`), folded legend rows and zero-size boxes are
  * skipped, and subtree opacity multiplies down (the 5%-alpha watermark stays 5%).
  */
+/** The element's own opacity: 0 is fully transparent (a bare `parseFloat(...) || 1` read 0 as opaque, so faded-out
+ *  content, such as a folded-away name, was painted into the picture). */
+function opacityOf(cs: CSSStyleDeclaration): number {
+    return unit(cs.opacity);
+}
+/** A 0..1 CSS number (opacity, fill-opacity, stroke-opacity); unset or unreadable is 1. */
+function unit(v: string): number {
+    const o = parseFloat(v);
+    return Number.isFinite(o) ? Math.max(0, Math.min(1, o)) : 1;
+}
+
 export function rasterizeOverlay(ctx: CanvasRenderingContext2D, root: Element, frame: OverlayRasterFrame): void {
     const win = root.ownerDocument.defaultView;
     if (!win) return;
@@ -139,13 +150,13 @@ export function rasterizeOverlay(ctx: CanvasRenderingContext2D, root: Element, f
             if (!path) continue;
             const cs = win.getComputedStyle(el);
             if (cs.fill && cs.fill !== 'none' && hasInk(cs.fill)) {
-                ctx.globalAlpha = alpha * (parseFloat(cs.fillOpacity) || 1);
+                ctx.globalAlpha = alpha * unit(cs.fillOpacity);
                 ctx.fillStyle = cs.fill;
                 ctx.fill(path);
             }
             const sw = parseFloat(cs.strokeWidth) || 0;
             if (cs.stroke && cs.stroke !== 'none' && hasInk(cs.stroke) && sw > 0) {
-                ctx.globalAlpha = alpha * (parseFloat(cs.strokeOpacity) || 1);
+                ctx.globalAlpha = alpha * unit(cs.strokeOpacity);
                 ctx.strokeStyle = cs.stroke;
                 ctx.lineWidth = sw;
                 if (cs.strokeLinecap === 'round' || cs.strokeLinecap === 'square' || cs.strokeLinecap === 'butt') ctx.lineCap = cs.strokeLinecap;
@@ -160,7 +171,7 @@ export function rasterizeOverlay(ctx: CanvasRenderingContext2D, root: Element, f
         if (r.width <= 0 || r.height <= 0) return;
         const cs = win.getComputedStyle(svg);
         if (cs.display === 'none' || cs.visibility === 'hidden') return;
-        const alpha = parentAlpha * (parseFloat(cs.opacity) || 1);
+        const alpha = parentAlpha * opacityOf(cs);
         if (alpha <= 0.001) return;
         const vb = svg.viewBox.baseVal;
         const vw = vb && vb.width > 0 ? vb.width : r.width;
@@ -176,7 +187,7 @@ export function rasterizeOverlay(ctx: CanvasRenderingContext2D, root: Element, f
     const drawElement = (el: HTMLElement, parentAlpha: number): void => {
         const cs = win.getComputedStyle(el);
         if (cs.display === 'none' || cs.visibility === 'hidden') return;
-        const alpha = parentAlpha * (parseFloat(cs.opacity) || 1);
+        const alpha = parentAlpha * opacityOf(cs);
         if (alpha <= 0.001) return;
         const r = el.getBoundingClientRect();
         if (r.width > 0 && r.height > 0) {

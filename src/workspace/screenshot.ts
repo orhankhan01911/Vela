@@ -61,6 +61,15 @@ export function compositeLayoutScreenshot(
     frame: LayoutShotFrame,
     tiles: readonly LayoutShotTile[],
 ): string | null {
+    return compositeLayoutCanvas(doc, frame, tiles)?.toDataURL('image/png') ?? null;
+}
+
+/** {@link compositeLayoutScreenshot} as the canvas itself (no PNG encode). */
+export function compositeLayoutCanvas(
+    doc: Document,
+    frame: LayoutShotFrame,
+    tiles: readonly LayoutShotTile[],
+): HTMLCanvasElement | null {
     if (frame.width <= 0 || frame.height <= 0 || tiles.length === 0) return null;
     const dpr = frame.dpr > 0 ? frame.dpr : 1;
     const out = doc.createElement('canvas');
@@ -79,7 +88,7 @@ export function compositeLayoutScreenshot(
         painted += 1;
     }
     if (painted === 0) return null;
-    return out.toDataURL('image/png');
+    return out;
 }
 
 /** Fire a PNG download in `doc` (the same `<a download>` the cell screenshot uses). */

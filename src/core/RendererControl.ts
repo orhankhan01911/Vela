@@ -1,4 +1,4 @@
-import type { AxisLongPressEvent, ClickEvent, CrosshairEvent, DataWindowReadout, IChartRenderer, LegendActionView, LegendCalloutView, RendererCapabilities, SettingsTemplateMenuView } from './ports/IChartRenderer';
+import type { AxisLongPressEvent, ClickEvent, CrosshairEvent, DataWindowReadout, IChartRenderer, LegendActionView, LegendCalloutView, RendererCapabilities, ScreenshotOptions, SettingsTemplateMenuView } from './ports/IChartRenderer';
 import type { Unsubscribe } from './util/types';
 import type { WallClock } from './util/wall-clock';
 import type { SymbolPickerFn } from './model/inputs';
@@ -96,8 +96,8 @@ export class RendererControl {
      * Export the current chart as a PNG data URL, or null if the active renderer
      * doesn't support it (warns). DOM overlays (tables, legend) are not included.
      */
-    screenshot(): string | null {
-        if (typeof this.renderer.screenshot === 'function') return this.renderer.screenshot();
+    screenshot(opts?: ScreenshotOptions): string | null {
+        if (typeof this.renderer.screenshot === 'function') return this.renderer.screenshot(opts);
         console.warn(`[vela] renderer "${this.renderer.name}" does not support screenshot().`);
         return null;
     }
@@ -107,9 +107,14 @@ export class RendererControl {
      * or null if the renderer has no canvas export. Silent — a host compositing
      * several charts skips a renderer that cannot contribute.
      */
-    screenshotCanvas(): HTMLCanvasElement | null {
-        if (typeof this.renderer.screenshotCanvas === 'function') return this.renderer.screenshotCanvas();
+    screenshotCanvas(opts?: ScreenshotOptions): HTMLCanvasElement | null {
+        if (typeof this.renderer.screenshotCanvas === 'function') return this.renderer.screenshotCanvas(opts);
         return null;
+    }
+
+    /** CSS box (viewport coordinates) the last {@link screenshotCanvas} covers, or null. */
+    screenshotBox(): { left: number; top: number; width: number; height: number } | null {
+        return this.renderer.screenshotBox?.() ?? null;
     }
 
     /**

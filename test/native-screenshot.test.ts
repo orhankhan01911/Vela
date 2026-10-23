@@ -79,4 +79,61 @@ describe('NativeRenderer.screenshot() layer composition', () => {
         const renderer = new NativeRenderer();
         expect(renderer.screenshot()).toBeNull();
     });
+
+    it('draws the chart again at a higher scale for a sharper picture, then puts the screen back', () => {
+        const { renderer, drawn } = setupRenderer();
+        const r = renderer as unknown as Record<string, unknown>;
+        r.dataCanvas = layer('data', 400, 300); // the screen: 1 px per CSS px
+        r.plot = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 300 }), querySelectorAll: () => [] };
+        const sizes: Array<number | null> = [];
+        let paintedAt: number | null = -1;
+        r.syncSize = () => sizes.push(r.shotDpr as number | null);
+        r.paintData = () => { paintedAt = r.shotDpr as number | null; };
+        renderer.screenshotCanvas({ scale: 2 });
+        expect(sizes).toEqual([2, null]); // resized for the picture, then back to the screen
+        expect(paintedAt).toBe(2); // painted (and read) at the picture's scale
+        expect(r.shotDpr).toBeNull();
+        expect(drawn).toContain('data');
+    });
+
+    it('keeps the screen when the scale asked for is not above it', () => {
+        const { renderer } = setupRenderer();
+        const r = renderer as unknown as Record<string, unknown>;
+        r.dataCanvas = layer('data', 800, 600);
+        r.plot = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 300 }), querySelectorAll: () => [] };
+        let resized = 0;
+        r.syncSize = () => { resized += 1; };
+        renderer.screenshotCanvas({ scale: 2 });
+        expect(resized).toBe(0);
+    });
+
+    it('puts the merged panes\' left scales and opted-in host canvases where they are on screen', () => {
+        const calls: Array<{ layer: string; x: number; y: number }> = [];
+        const ctx = { fillStyle: '', fillRect() {}, drawImage(src: FakeCanvas, x: number, y: number) { calls.push({ layer: src.__layer, x, y }); } };
+        const out = { width: 0, height: 0, getContext: () => ctx, toDataURL: () => '' };
+        (globalThis as { document?: unknown }).document = { createElement: () => out };
+        const renderer = new NativeRenderer();
+        const r = renderer as unknown as Record<string, unknown>;
+        r.backdropCanvas = layer('backdrop', 400, 300);
+        r.dataCanvas = layer('data', 400, 300);
+        r.chromeCanvas = layer('chrome', 400, 300);
+        r.drawingsCanvas = layer('drawings', 400, 300);
+        r.theme = { background: '#101010' };
+        r.computeScales = () => {};
+        r.paintData = () => {};
+        r.leftAxisW = 72;
+        r.leftScaleCol = { visible: true, el: layer('left', 72, 300) };
+        const strip = { ...layer('strip', 400, 20), style: { display: '' }, offsetLeft: 0, offsetTop: 280, offsetWidth: 400, offsetHeight: 20 };
+        r.plot = {
+            getBoundingClientRect: () => ({ left: 100, top: 0, width: 400, height: 300 }),
+            querySelectorAll: (sel: string) => (sel.includes('data-vela-shot-canvas') ? [strip] : []),
+        };
+        renderer.screenshotCanvas();
+        expect(out.width).toBe(472);
+        expect(calls.map((c) => c.layer)).toEqual(['left', 'backdrop', 'data', 'chrome', 'strip', 'drawings']);
+        expect(calls[0]).toMatchObject({ x: 0, y: 0 });
+        expect(calls[1]).toMatchObject({ x: 72 });
+        expect(calls[4]).toMatchObject({ x: 72, y: 280 });
+        expect(renderer.screenshotBox()).toEqual({ left: 28, top: 0, width: 472, height: 300 });
+    });
 });
