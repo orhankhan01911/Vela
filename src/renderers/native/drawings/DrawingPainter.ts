@@ -1230,6 +1230,8 @@ export class DrawingPainter {
         line(sy, d.lossColor);
         line(ey, d.style.lineColor); // entry — accent
         if (!d.showText) return;
+        // TradingView: the stats show while the tool is hovered, selected or dragged, unless "Always show stats".
+        if (!d.alwaysShowStats && !handleIdsFor(this.targets).has(d.id)) return;
         const fs = namedFontSize(d.text?.size ?? 'normal');
         const ink = d.text?.color ?? '#ffffff'; // palette-exempt: TradingView-style white label text
         ctx.font = `${fs}px ${theme.fontFamily}`;

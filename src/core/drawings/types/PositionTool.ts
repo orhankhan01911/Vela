@@ -48,6 +48,8 @@ export class PositionTool extends Drawing {
     accountBalance!: number;
     /** Master toggle for every painted label. */
     showText!: boolean;
+    /** TradingView's "Always show stats": off, the labels show only while the tool is hovered or selected. */
+    alwaysShowStats!: boolean;
     /** Show the `DIR · R:R` header line above the box. */
     showHeader!: boolean;
     /** Append the level price to the target/stop labels. */
@@ -68,6 +70,7 @@ export class PositionTool extends Drawing {
         if (this.riskPercent === undefined) this.riskPercent = PositionTool.DEFAULT_RISK_PERCENT;
         if (this.accountBalance === undefined) this.accountBalance = PositionTool.DEFAULT_ACCOUNT_BALANCE;
         if (this.showText === undefined) this.showText = true;
+        if (this.alwaysShowStats === undefined) this.alwaysShowStats = false;
         if (this.showHeader === undefined) this.showHeader = true;
         if (this.showPrices === undefined) this.showPrices = true;
         if (this.showLossSize === undefined) this.showLossSize = true;
@@ -422,6 +425,7 @@ export class PositionTool extends Drawing {
                 { path: 'stopPrice', label: 'Stop price', kind: 'number', group: 'behavior' },
                 { path: 'targetPrice', label: 'Target price', kind: 'number', group: 'behavior' },
                 { path: 'showText', label: 'Show text', kind: 'boolean', group: 'behavior' },
+                { path: 'alwaysShowStats', label: 'Always show stats', kind: 'boolean', group: 'behavior' },
                 { path: 'showHeader', label: 'Show risk/reward ratio', kind: 'boolean', group: 'behavior' },
                 { path: 'showLossSize', label: 'Show size & risk', kind: 'boolean', group: 'behavior' },
                 { path: 'showTargetLabel', label: 'Show target label', kind: 'boolean', group: 'behavior' },
@@ -443,6 +447,7 @@ export class PositionTool extends Drawing {
             showText: this.showText,
             showHeader: this.showHeader,
             showPrices: this.showPrices,
+            alwaysShowStats: this.alwaysShowStats,
             showLossSize: this.showLossSize,
             showTargetLabel: this.showTargetLabel,
             showStopLabel: this.showStopLabel,
@@ -461,6 +466,7 @@ export class PositionTool extends Drawing {
         if (typeof props.showText === 'boolean') this.showText = props.showText;
         if (typeof props.showHeader === 'boolean') this.showHeader = props.showHeader;
         if (typeof props.showPrices === 'boolean') this.showPrices = props.showPrices;
+        if (typeof props.alwaysShowStats === 'boolean') this.alwaysShowStats = props.alwaysShowStats;
         if (typeof props.showLossSize === 'boolean') this.showLossSize = props.showLossSize;
         if (typeof props.showTargetLabel === 'boolean') this.showTargetLabel = props.showTargetLabel;
         if (typeof props.showStopLabel === 'boolean') this.showStopLabel = props.showStopLabel;
