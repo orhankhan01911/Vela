@@ -114,7 +114,7 @@ export function filterSymbols(list: readonly SymbolDescriptor[], query: string, 
         if (made.includes(s)) continue;
         const t = s.ticker.toUpperCase();
         if (t.startsWith(q)) prefix.push(s);
-        else if (t.includes(q)) substr.push(s);
+        else if (t.includes(q) || s.aliases?.some((x) => x.toUpperCase().startsWith(q))) substr.push(s);
         else if ((s.description ?? '').toUpperCase().includes(q)) desc.push(s);
         // Inside a scope the venue is fixed — the tier would swallow the whole pool.
         else if (!scope && (venueOf(s)?.toLowerCase().includes(qLower) || s.provider?.toLowerCase().includes(qLower))) venue.push(s);

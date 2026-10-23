@@ -14,6 +14,8 @@ export interface SymbolDescriptor {
      * its description contains the typed text.
      */
     matches?: string;
+    /** Other names the search finds this row by (a broker's `USTEC` is also `US100` and `NAS100`). Never shown. */
+    aliases?: readonly string[];
     ticker: string;
     /** Human-readable label (e.g. `Bitcoin / TetherUS`). */
     description?: string;
