@@ -189,7 +189,7 @@ export class HyperliquidProvider implements DataProvider {
         if (coin.includes('/')) {
             const spot = await this.fetchSpotMeta().catch(() => null);
             const entry = spot?.universe?.find((u) => u.name === coin);
-            const baseTok = entry && spot?.tokens ? spot.tokens[entry.tokens?.[0] ?? -1] : undefined;
+            const baseTok = entry ? tokenAt(spot?.tokens, entry.tokens?.[0]) : undefined;
             const [base = coin, quote = 'USDC'] = coin.split('/');
             const mintick = decimalsToTick(Math.max(0, 8 - (baseTok?.szDecimals ?? 2)));
             return symbolInfo(ticker, base, quote, 'crypto', `${base} / ${quote}`, mintick);
@@ -234,8 +234,7 @@ export class HyperliquidProvider implements DataProvider {
 
     private async listSpot(): Promise<SymbolDescriptor[]> {
         const meta = await this.fetchSpotMeta();
-        const tokens = meta.tokens ?? [];
-        const nameOf = (i: number | undefined): string | null => (i != null ? tokens[i]?.name ?? null : null);
+        const nameOf = (i: number | undefined): string | null => tokenAt(meta.tokens, i)?.name ?? null;
         return (meta.universe ?? []).map((u) => {
             const base = nameOf(u.tokens?.[0]);
             const quote = nameOf(u.tokens?.[1]);
@@ -397,5 +396,18 @@ interface PerpMeta {
 /** The subset of Hyperliquid `spotMeta` this provider reads. */
 interface SpotMeta {
     universe?: Array<{ name: string; tokens?: number[]; isCanonical?: boolean }>;
-    tokens?: Array<{ name: string; szDecimals?: number }>;
+    tokens?: Array<{ name: string; index?: number; szDecimals?: number }>;
+}
+
+/** The token a spot pair names by its `index`. `spotMeta.tokens` has gaps (510 tokens, indices up to 1275 on
+ *  2026-10-23), so a token's place in the array is not its index. */
+const tokenIndex = new WeakMap<object, Map<number, { name: string; index?: number; szDecimals?: number }>>();
+function tokenAt(tokens: SpotMeta['tokens'], i: number | undefined): { name: string; szDecimals?: number } | undefined {
+    if (!tokens || i == null) return undefined;
+    let m = tokenIndex.get(tokens);
+    if (!m) {
+        m = new Map(tokens.map((t, k) => [t.index ?? k, t]));
+        tokenIndex.set(tokens, m);
+    }
+    return m.get(i);
 }

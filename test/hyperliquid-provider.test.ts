@@ -226,3 +226,28 @@ describe('HyperliquidProvider.subscribe', () => {
         warn.mockRestore();
     });
 });
+
+describe('HyperliquidProvider.listSymbols spot names (stubbed fetch)', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('names a spot pair by its tokens\' `index`, not their place in the array (spotMeta.tokens has gaps)', async () => {
+        const tokens = [
+            { name: 'USDC', index: 0 },
+            { name: 'PURR', index: 1 },
+            { name: 'SPCXD', index: 610 },
+        ];
+        stubInfo((b) =>
+            b.type === 'spotMeta'
+                ? { tokens, universe: [{ name: 'PURR/USDC', tokens: [1, 0] }, { name: '@465', tokens: [610, 0] }, { name: '@9', tokens: [2, 0] }] }
+                : b.type === 'meta'
+                  ? { universe: [] }
+                  : [],
+        );
+        const rows = await new HyperliquidProvider().listSymbols();
+        const desc = Object.fromEntries(rows.map((r) => [r.ticker, r.description]));
+        expect(desc['PURR/USDC']).toBe('PURR / USDC');
+        expect(desc['@465']).toBe('SPCXD / USDC');
+        // index 2 is not a token: the array's third entry (SPCXD) must not lend its name
+        expect(desc['@9']).toBe('@9');
+    });
+});
