@@ -233,6 +233,9 @@ function instanceDeltas(handle: IndicatorHandle | null): { inputs?: Record<strin
     return inputs || props || style ? { ...(inputs ? { inputs } : {}), ...(props ? { props } : {}), ...(style ? { style } : {}) } : undefined;
 }
 
+/** How long a just-added indicator's own changes are not recorded as undo steps (see `ChartCell.addedAt`). */
+const SETTLE_MS = 1500;
+
 export class ChartCell {
     /** The grid item this cell renders into (owned; removed on destroy). */
     readonly host: HTMLElement;
@@ -246,6 +249,14 @@ export class ChartCell {
     private pendingLayout: { layout: PaneLayoutState; natives: Array<IndicatorHandle | null>; until: number } | null = null;
     /** Each indicator's settings as last seen, so an edit's undo step knows what it changed from. */
     private readonly settingsSeen = new Map<string, IndicatorSettings>();
+    /** When each indicator joined the chart. An indicator settles itself for a moment after it is added (saved
+     *  inputs restored, its own pane placed): those changes are not the user's edits, so they must not become undo
+     *  steps. They did, and each Ctrl+Z after an undone removal spent itself on one of them (2026-10-23). */
+    private readonly addedAt = new Map<string, number>();
+    private settling(id: string): boolean {
+        const t = this.addedAt.get(id);
+        return t !== undefined && Date.now() - t < SETTLE_MS;
+    }
     /** The settings edit still being merged into one undo step (the dialog commits every keystroke and swatch drag
      *  live; TradingView undoes a dialog's changes as one step, not one per keystroke). */
     private settingsEdit: { id: string; at: number; before: IndicatorSettings; after: IndicatorSettings; action: HistoryAction } | null = null;
@@ -550,6 +561,7 @@ export class ChartCell {
             this.lastCrossPrice = e.price;
         });
         this.inner.on('indicator:added', ({ id }) => {
+            this.addedAt.set(id, Date.now());
             this.syncPresentNatives();
             this.refreshNativeCatalog();
             const h = this.indicatorById(id);
@@ -564,6 +576,7 @@ export class ChartCell {
         this.inner.on('indicator:visibility', ({ id, visible }) => {
             this.deps.onStateDirty();
             // TradingView's "hide {title}" / "show {title}": the eye is an undo step.
+            if (this.settling(id)) return;
             this.history.push({ undo: () => this.indicatorById(id)?.setVisible(!visible), redo: () => this.indicatorById(id)?.setVisible(visible) });
         });
         // A move or merge (legend drag, "Move to", object tree, a pane's merge button) is one undo step; the
@@ -571,7 +584,7 @@ export class ChartCell {
         this.inner.on('indicator:moved', ({ id, paneId, ownScale, from }) => {
             this.deps.onStateDirty();
             this.layoutMoved = true;
-            if (!from || !this.history.recording) return;
+            if (!from || !this.history.recording || this.settling(id)) return;
             const order = this.inner?.panes.list().map((p) => p.id) ?? [];
             const below = paneId === 'price' ? undefined : order[order.indexOf(paneId) + 1];
             const to: IndicatorPlacement = { paneId, ownScale: ownScale === true, ...(below ? { before: below } : {}) };
@@ -616,10 +629,13 @@ export class ChartCell {
                 const gone = this.presentNatives.find((n) => n.id === id);
                 if (gone) {
                     const { type } = gone;
+                    // Its last settings (inputs, style), so the undo brings back the same indicator, not a default one.
+                    const settings = this.settingsSeen.get(id);
                     let revived: IndicatorHandle | null = null;
                     this.history.push({
                         undo: () => {
                             revived = this.inner?.addNativeIndicator(type) ?? null;
+                            if (revived && settings) revived.restoreSettings(settings);
                             this.refreshNativeCatalog();
                         },
                         redo: () => {
@@ -1572,7 +1588,7 @@ export class ChartCell {
         const now = h.settings();
         const before = this.settingsSeen.get(id);
         this.settingsSeen.set(id, now);
-        if (!before || !this.history.recording) return;
+        if (!before || !this.history.recording || this.settling(id)) return;
         const same = (a: IndicatorSettings, b: IndicatorSettings): boolean => JSON.stringify(a) === JSON.stringify(b);
         if (same(before, now)) return;
         const t = Date.now();
