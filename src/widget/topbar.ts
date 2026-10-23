@@ -337,11 +337,58 @@ export class Topbar {
         this.hairlineRaf = win?.requestAnimationFrame(() => {
             this.hairlineRaf = 0;
             this.fitStyleChips();
+            this.restoreScroll();
             this.syncHairlines();
             this.syncScrollArrows();
         }) ?? 0;
     };
+    /** Where the reader scrolled the bar to (`end`: all the way right). Rebuilds of the bar's buttons (actions
+     *  re-rendered, a host control removed and put back a frame later) shrink it for a moment, and the browser
+     *  then clamps the scroll position; this puts the reader's position back once the bar has settled. */
+    private scrollIntent: { x: number; end: boolean } | null = null;
+    /** Set by a change inside the bar until the next settle: scroll events meanwhile are the browser's clamp. */
+    private relayout = false;
+    /** A position this class is moving the bar to (an arrow's smooth scroll, a restore): the scroll events on the
+     *  way are not the reader's. Dropped on arrival, or after `ownUntil` if the browser never gets there. */
+    private ownScroll: number | null = null;
+    private ownUntil = 0;
+    private moveTo(left: number, smooth: boolean): void {
+        this.ownScroll = left;
+        this.ownUntil = performance.now() + (smooth ? 900 : 250);
+        if (smooth) this.el.scrollTo({ left, behavior: 'smooth' });
+        else this.el.scrollLeft = left;
+    }
+    private readonly onBarMutation = (): void => {
+        this.relayout = true;
+        this.observeItems();
+        this.onHairlineSync();
+    };
+    /** The bar's own size stays put when its buttons grow (a font loading, a host style); watching the items
+     *  catches that, so the scroll arrows appear as soon as something is cut off. */
+    private itemsRo: ResizeObserver | null = null;
+    private observeItems(): void {
+        if (typeof ResizeObserver === 'undefined') return;
+        this.itemsRo ??= new ResizeObserver(this.onHairlineSync);
+        for (const c of this.el.children) this.itemsRo.observe(c);
+    }
+    private restoreScroll(): void {
+        this.relayout = false;
+        const it = this.scrollIntent;
+        if (!it) return;
+        const max = Math.max(0, this.el.scrollWidth - this.el.clientWidth);
+        const want = it.end ? max : Math.min(it.x, max);
+        if (Math.abs(this.el.scrollLeft - want) > 1) {
+            this.moveTo(want, false);
+        }
+    }
     private readonly onBarScroll = (): void => {
+        const x = this.el.scrollLeft;
+        if (this.ownScroll !== null) {
+            if (Math.abs(x - this.ownScroll) <= 1 || performance.now() > this.ownUntil) this.ownScroll = null;
+        } else if (!this.relayout) {
+            const max = this.el.scrollWidth - this.el.clientWidth;
+            this.scrollIntent = { x, end: max > 1 && x >= max - 1 };
+        }
         this.syncScrollArrows();
         this.syncHairlines();
     };
@@ -350,6 +397,7 @@ export class Topbar {
         const max = this.el.scrollWidth - this.el.clientWidth;
         if (max <= 1) return;
         e.preventDefault();
+        this.ownScroll = null;
         this.el.scrollLeft += e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
     };
     private hairlineRo: ResizeObserver | null = null;
@@ -531,7 +579,10 @@ export class Topbar {
             b.appendChild(iconEl(dir === 'l' ? 'chevron-left' : 'chevron-right', doc));
             b.addEventListener('click', () => {
                 const step = Math.max(120, this.el.clientWidth * 0.6);
-                this.el.scrollBy({ left: dir === 'l' ? -step : step, behavior: 'smooth' });
+                const max = Math.max(0, this.el.scrollWidth - this.el.clientWidth);
+                const left = Math.min(max, Math.max(0, this.el.scrollLeft + (dir === 'l' ? -step : step)));
+                this.scrollIntent = { x: left, end: left >= max - 1 };
+                this.moveTo(left, true);
             });
             slot.appendChild(b);
             return slot;
@@ -551,10 +602,11 @@ export class Topbar {
         doc.defaultView?.addEventListener('resize', this.onHairlineSync);
         if (typeof MutationObserver !== 'undefined') {
             // Direct children only, plus `data-on` flips: the chips' own `hidden` toggles must not retrigger.
-            this.barMo = new MutationObserver(this.onHairlineSync);
+            this.barMo = new MutationObserver(this.onBarMutation);
             this.barMo.observe(this.el, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-on'] });
         }
         this.renderActions();
+        this.observeItems();
 
         this.tooltips.push(new Tooltip(this.tfCaret, { content: 'Timeframe', triggerId: 'vela-topbar-tf', host }));
         this.tooltips.push(new Tooltip(this.styleButton, { content: 'Chart style', triggerId: 'vela-topbar-style', host }));
@@ -878,6 +930,7 @@ export class Topbar {
 
     destroy(): void {
         this.hairlineRo?.disconnect();
+        this.itemsRo?.disconnect();
         const win = this.el.ownerDocument.defaultView;
         win?.removeEventListener('resize', this.onHairlineSync);
         this.barMo?.disconnect();
