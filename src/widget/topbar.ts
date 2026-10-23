@@ -27,7 +27,35 @@ const CSS = `
     color: var(--vela-fg);
     font-size: var(--vela-font-size-md);
     flex: none;
+    /* A bar wider than the chart scrolls sideways (wheel or the arrows below), as TradingView's does;
+       without it the buttons past the edge are unreachable on a narrow or portrait screen. */
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
 }
+.vela-widget-topbar::-webkit-scrollbar { display: none; }
+/* Zero-width sticky slots at both ends; the arrow inside overlays the bar's edge while content is cut off there. */
+.vela-topbar-scroll { position: sticky; flex: none; width: 0; align-self: stretch; z-index: 2; }
+.vela-topbar-scroll[data-dir='l'] { left: 0; margin-right: calc(-1 * var(--vela-space-1)); }
+.vela-topbar-scroll[data-dir='r'] { right: 0; margin-left: calc(-1 * var(--vela-space-1)); }
+.vela-topbar-scroll button {
+    all: unset;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 28px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--vela-fg-muted);
+    background: var(--vela-bg);
+}
+.vela-topbar-scroll[data-dir='l'] button { left: calc(-1 * var(--vela-space-2)); box-shadow: 6px 0 8px -4px var(--vela-bg); }
+.vela-topbar-scroll[data-dir='r'] button { right: calc(-1 * var(--vela-space-2)); box-shadow: -6px 0 8px -4px var(--vela-bg); }
+.vela-topbar-scroll[data-on='1'] button { display: inline-flex; }
+.vela-topbar-scroll button:hover { color: var(--vela-fg-bright); background: var(--vela-hover); }
+.vela-topbar-scroll button:focus-visible { outline: 1px solid var(--vela-accent); outline-offset: -1px; }
 .vela-widget-symbol, .vela-widget-tf, .vela-widget-style, .vela-widget-indicators, .vela-widget-action-left {
     all: unset;
     display: inline-flex;
@@ -309,12 +337,26 @@ export class Topbar {
             this.hairlineRaf = 0;
             this.fitStyleChips();
             this.syncHairlines();
+            this.syncScrollArrows();
         }) ?? 0;
+    };
+    private readonly onBarScroll = (): void => {
+        this.syncScrollArrows();
+        this.syncHairlines();
+    };
+    private readonly onBarWheel = (e: WheelEvent): void => {
+        if (e.ctrlKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+        const max = this.el.scrollWidth - this.el.clientWidth;
+        if (max <= 1) return;
+        e.preventDefault();
+        this.el.scrollLeft += e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
     };
     private hairlineRo: ResizeObserver | null = null;
     /** Host additions to the bar (controls placed next to the chart-type button) change its width too. */
     private barMo: MutationObserver | null = null;
     private hairlineRaf = 0;
+    private readonly scrollL: HTMLElement;
+    private readonly scrollR: HTMLElement;
 
     constructor(host: HTMLElement, opts: TopbarOptions) {
         this.opts = opts;
@@ -478,7 +520,27 @@ export class Topbar {
         const right = doc.createElement('span');
         right.className = 'vela-topbar-right';
         right.append(...sideEls(this.comp.right, false));
-        this.el.append(...sideEls(this.comp.left, true), right);
+        const arrow = (dir: 'l' | 'r'): HTMLElement => {
+            const slot = doc.createElement('span');
+            slot.className = 'vela-topbar-scroll';
+            slot.dataset.dir = dir;
+            const b = doc.createElement('button');
+            b.type = 'button';
+            b.setAttribute('aria-label', dir === 'l' ? 'Scroll toolbar left' : 'Scroll toolbar right');
+            b.appendChild(iconEl(dir === 'l' ? 'chevron-left' : 'chevron-right', doc));
+            b.addEventListener('click', () => {
+                const step = Math.max(120, this.el.clientWidth * 0.6);
+                this.el.scrollBy({ left: dir === 'l' ? -step : step, behavior: 'smooth' });
+            });
+            slot.appendChild(b);
+            return slot;
+        };
+        this.scrollL = arrow('l');
+        this.scrollR = arrow('r');
+        this.el.append(this.scrollL, ...sideEls(this.comp.left, true), right, this.scrollR);
+        this.el.addEventListener('scroll', this.onBarScroll, { passive: true });
+        // A plain mouse wheel scrolls the bar sideways while it overflows (the bar has nothing to scroll vertically).
+        this.el.addEventListener('wheel', this.onBarWheel, { passive: false });
         host.appendChild(this.el);
         this.renderTfChips();
         // Snap after layout; RO catches later reflows (symbol / timeframe length).
@@ -818,6 +880,8 @@ export class Topbar {
         const win = this.el.ownerDocument.defaultView;
         win?.removeEventListener('resize', this.onHairlineSync);
         this.barMo?.disconnect();
+        this.el.removeEventListener('scroll', this.onBarScroll);
+        this.el.removeEventListener('wheel', this.onBarWheel);
         if (this.hairlineRaf) win?.cancelAnimationFrame(this.hairlineRaf);
         this.tfMenu.destroy();
         this.offIntervals();
@@ -843,6 +907,18 @@ export class Topbar {
     }
 
     /** Paint each `.vela-sep` as exactly one device pixel, snapped to the pixel grid. */
+    /** Shows each arrow while content is cut off on its side. */
+    private syncScrollArrows(): void {
+        const max = this.el.scrollWidth - this.el.clientWidth;
+        const x = this.el.scrollLeft;
+        const on = (slot: HTMLElement, v: boolean): void => {
+            const want = v ? '1' : '';
+            if ((slot.dataset.on ?? '') !== want) slot.dataset.on = want;
+        };
+        on(this.scrollL, max > 1 && x > 1);
+        on(this.scrollR, max > 1 && x < max - 1);
+    }
+
     private syncHairlines(): void {
         const win = this.el.ownerDocument.defaultView;
         if (!win) return;
