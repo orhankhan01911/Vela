@@ -253,6 +253,8 @@ export class ChartCell {
      *  inputs restored, its own pane placed): those changes are not the user's edits, so they must not become undo
      *  steps. They did, and each Ctrl+Z after an undone removal spent itself on one of them (2026-10-23). */
     private readonly addedAt = new Map<string, number>();
+    /** Indicators the saved chart restored: they do not settle (`addedAt` is for a user's add). */
+    private readonly restoredIds = new Set<string>();
     private settling(id: string): boolean {
         const t = this.addedAt.get(id);
         return t !== undefined && Date.now() - t < SETTLE_MS;
@@ -462,6 +464,8 @@ export class ChartCell {
                 const handle = this.inner.addNativeIndicator(ledgerNativeType(entry));
                 this.applyNativeLedgerEntry(handle, entry);
                 natives.push(handle);
+                // a restored chart's indicators are editable at once: only a user's add settles (SETTLE_MS)
+                if (handle) this.restoredIds.add(handle.id);
             }
             this.pendingManifestNames = [...seed.indicators.manifest] as LedgerManifestEntry[];
             if (seed.panes) this.awaitPaneLayout(seed.panes, natives);
@@ -561,7 +565,7 @@ export class ChartCell {
             this.lastCrossPrice = e.price;
         });
         this.inner.on('indicator:added', ({ id }) => {
-            this.addedAt.set(id, Date.now());
+            if (!this.restoredIds.delete(id)) this.addedAt.set(id, Date.now());
             this.syncPresentNatives();
             this.refreshNativeCatalog();
             const h = this.indicatorById(id);
