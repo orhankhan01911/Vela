@@ -1,6 +1,7 @@
 import type { VelaTheme } from '../../../core/options';
 import type { Projector } from '../../../core/drawings';
 import { formatDuration } from '../../../core/drawings';
+import { ACCENT, BEARISH } from '../../../core/palette';
 
 /**
  * Decimals for a price change measured at `ref`: about five significant digits of the price, at least 2. EURUSD
@@ -20,8 +21,8 @@ export function signed(n: number, decimals = 2): string {
 
 // TradingView's ruler colours (blue up, red down). Fixed, not the theme's candle colors: it must stay readable
 // over candles of any user-chosen color.
-const UP = '#2962ff';
-const DOWN = '#f23645';
+const UP = ACCENT;
+const DOWN = BEARISH;
 const DRAG_SLOP = 3;
 
 type MeasureState = 'idle' | 'measuring' | 'finished';
