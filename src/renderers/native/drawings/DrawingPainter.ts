@@ -837,8 +837,8 @@ export class DrawingPainter {
             lines[MAX_LINES - 1] = `${lines[MAX_LINES - 1]!.replace(/.$/, '')}…`;
         }
         const LH = 19;
-        const head = 32;
-        d.cardH = pad + head + 12 + lines.length * LH + 10 + 18 + 8 + 16 + pad;
+        const head = 36;
+        d.cardH = pad + head + 12 + lines.length * LH + 10 + 18 + 10 + 1 + 10 + 16 + pad;
         const { x, y, h } = d.layout(proj)!.card;
         // -- the card --
         ctx.save();
@@ -881,10 +881,10 @@ export class DrawingPainter {
         ctx.textBaseline = 'alphabetic';
         ctx.fillStyle = theme.textColor;
         ctx.font = `600 14px ${font}`;
-        ctx.fillText(fit(p?.name || p?.handle || 'X'), tx, y + pad + 13);
+        ctx.fillText(fit(p?.name || p?.handle || 'X'), tx, y + pad + 15);
         ctx.font = `12px ${font}`;
         ctx.fillStyle = withAlpha(theme.textColor, 0.55);
-        if (p?.handle) ctx.fillText(fit(`@${p.handle}`), tx, y + pad + 29);
+        if (p?.handle) ctx.fillText(fit(`@${p.handle}`), tx, y + pad + 32);
         // the post's text
         let cy = y + pad + head + 12;
         ctx.fillStyle = theme.textColor;
@@ -899,7 +899,11 @@ export class DrawingPainter {
             ctx.font = `14px ${font}`;
             ctx.fillStyle = ACCENT;
             ctx.fillText('Link to X post', x + pad, cy + 14);
-            cy += 18 + 8;
+            cy += 18 + 10;
+            // a rule above the date, as on TradingView's card
+            ctx.fillStyle = withAlpha(theme.textColor, 0.12);
+            ctx.fillRect(x + pad, cy, inner, 1);
+            cy += 1 + 10;
             ctx.font = `12px ${font}`;
             ctx.fillStyle = withAlpha(theme.textColor, 0.5);
             ctx.fillText(xpostDate(p.t), x + pad, cy + 12);

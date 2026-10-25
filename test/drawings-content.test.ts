@@ -31,12 +31,13 @@ const POST = {
 };
 
 describe('Image limits (TradingView)', () => {
-    it('JPG and PNG only, 2 MB at most, 2000 x 2000 px at most', () => {
+    it('JPG, PNG or WEBP, 2 MB at most, 2000 x 2000 px at most', () => {
         expect(checkImageFile({ type: 'image/png', size: 1000 }, { width: 2000, height: 2000 })).toBeNull();
         expect(checkImageFile({ type: 'image/jpeg', size: 2 * 1024 * 1024 })).toBeNull();
-        expect(checkImageFile({ type: 'image/gif', size: 10 })).toMatch(/JPG or PNG/);
-        expect(checkImageFile({ type: 'image/webp', size: 10 })).toMatch(/JPG or PNG/);
-        expect(checkImageFile({ type: 'image/png', size: 2 * 1024 * 1024 + 1 })).toMatch(/2 MB/);
+        expect(checkImageFile({ type: 'image/webp', size: 10 })).toBeNull();
+        expect(checkImageFile({ type: 'image/gif', size: 10 })).toMatch(/JPG, PNG or WEBP/);
+        expect(checkImageFile({ type: 'image/svg+xml', size: 10 })).toMatch(/JPG, PNG or WEBP/);
+        expect(checkImageFile({ type: 'image/png', size: 2 * 1024 * 1024 + 1 })).toMatch(/2MB/);
         expect(checkImageFile({ type: 'image/png', size: 10 }, { width: 2001, height: 10 })).toMatch(/2000 x 2000/);
     });
 
