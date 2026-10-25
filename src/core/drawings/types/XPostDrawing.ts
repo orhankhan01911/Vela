@@ -1,14 +1,10 @@
 import { Drawing, type AnchorSlot } from '../Drawing';
 import type { DrawingPoint, Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
-import { pointInBox } from '../hittest';
+import { pointInBox, handleAt } from '../hittest';
 
-/** The card's width in CSS px (its height follows the text and picture, see {@link XPostDrawing.cardH}). */
-export const XPOST_W = 280;
-/** Gap between the card and the dot on the post's time. */
-export const XPOST_GAP = 10;
-/** The band at a pane's top the legend covers; a card that would reach into it goes below its dot. */
-export const XPOST_LEGEND_BAND = 56;
+/** The card's width in CSS px (its height follows the text, see {@link XPostDrawing.cardH}). */
+export const XPOST_W = 300;
 
 /** One X post as the host fetched it. Pictures are same-origin paths (a host relay): a cross-origin picture
  *  on the canvas would block screenshots. */
@@ -59,45 +55,43 @@ export function toXPostCard(v: unknown): XPostCard | null {
 }
 
 /**
- * TradingView's "X post" annotation: a post's card on the chart, on the time axis at the moment it was posted (a dot
- * there), the card above it. Dragging the card moves it up or down; the time stays the post's.
+ * TradingView's X post (its `LineToolTweet`): the post's card, hanging below one handle. As on TradingView the handle has
+ * a time (the post's own time when placed; dragging moves it) and a HEIGHT ON THE PANE rather than a price: anchor 0's
+ * `price` holds that height as a fraction of the pane (0 top .. 1 bottom), so a price-scale change never moves the
+ * card. The card shows what TradingView's does: picture, name, @handle, the post's text, "Link to X post" and the date.
  */
 export class XPostDrawing extends Drawing {
     readonly type = 'xpost' as const;
     // `!` (no initializer): the base constructor runs readProps first.
     post!: XPostCard | null;
-    /** Height the painter last laid the card out at (CSS px) — the hit box until the next paint. */
+    /** Height the painter last laid the card out at (CSS px): the hit box until the next paint. */
     cardH = 150;
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         return { min: 1, max: 1, slots: [{ role: 'point', free: 'both' }] };
     }
 
-    /** The dot on the post's time and the card's box above it, or below it when the pane has no room above (a post
-     *  near the top of the prices would otherwise run off the plot, under the legend). */
+    /** The handle (time, height on the pane) and the card's box below it. */
     layout(proj: Projector): { dot: [number, number]; card: { x: number; y: number; w: number; h: number } } | null {
         const a = this.anchors[0];
-        if (!a) return null;
-        const y = proj.yOf(a.price, this.paneId);
-        if (y == null) return null;
+        const pane = proj.paneRect?.(this.paneId);
+        if (!a || !pane) return null;
         const x = proj.xOf(a.time);
-        // the legend (symbol line and indicator rows) sits over the pane's top: keep the card clear of it
-        const top = (proj.paneRect?.(this.paneId)?.top ?? 0) + XPOST_LEGEND_BAND;
-        const above = y - XPOST_GAP - this.cardH;
-        return { dot: [x, y], card: { x: x - XPOST_W / 2, y: above >= top ? above : y + XPOST_GAP, w: XPOST_W, h: this.cardH } };
+        const y = pane.top + clampFrac(a.price) * pane.height;
+        return { dot: [x, y], card: { x: x - XPOST_W / 2, y, w: XPOST_W, h: this.cardH } };
     }
 
-    handlePoints(): Array<[number, number]> {
-        return []; // the whole card is the grip
+    handlePoints(proj: Projector): Array<[number, number]> {
+        const l = this.layout(proj);
+        return l ? [l.dot] : [];
     }
 
-    hitHandle(): number {
-        return -1;
+    hitHandle(px: number, py: number, proj: Projector, tol: number): number {
+        return handleAt(px, py, this.handlePoints(proj), tol + 3);
     }
 
     bounds(proj: Projector): { x: number; y: number; w: number; h: number } | null {
-        const l = this.layout(proj);
-        return l ? { x: l.card.x, y: l.card.y, w: l.card.w, h: l.card.h + XPOST_GAP } : null;
+        return this.layout(proj)?.card ?? null;
     }
 
     hitTest(px: number, py: number, proj: Projector, tol: number): boolean {
@@ -105,14 +99,26 @@ export class XPostDrawing extends Drawing {
         return b != null && pointInBox(px, py, b.x, b.y, b.x + b.w, b.y + b.h, tol);
     }
 
-    /** Up or down only: the post stays at the time it was posted. */
-    override translateBody(_dt: number, dp: number, orig: DrawingPoint[]): DrawingPoint[] {
-        return orig.map((o) => ({ time: o.time, price: o.price + dp }));
+    /** The card moves on the screen: time along the axis, height as a share of the pane. */
+    override translateBodyPx(dx: number, dy: number, orig: DrawingPoint[], proj: Projector): DrawingPoint[] {
+        const o = orig[0];
+        const pane = proj.paneRect?.(this.paneId);
+        if (!o || !pane || pane.height <= 0) return orig;
+        const time = proj.pxToPoint(proj.xOf(o.time) + dx, pane.top, this.paneId).time;
+        return [{ time, price: clampFrac(clampFrac(o.price) + dy / pane.height) }];
     }
 
+    /** Dragging the handle moves the card the same way (never onto a price). */
+    override dragHandlePx(_index: number, x: number, y: number, proj: Projector): boolean {
+        const pane = proj.paneRect?.(this.paneId);
+        if (!pane || pane.height <= 0) return true;
+        this.anchors = [{ time: proj.pxToPoint(x, y, this.paneId).time, price: clampFrac((y - pane.top) / pane.height) }];
+        return true;
+    }
+
+    /** Not a price: never part of the price scale's range. */
     priceRange(): { min: number; max: number } | null {
-        const a = this.anchors[0];
-        return a ? { min: a.price, max: a.price } : null;
+        return null;
     }
 
     override timeExtent(): { min: number; max: number } | null {
@@ -131,4 +137,9 @@ export class XPostDrawing extends Drawing {
     protected override readProps(props: Record<string, unknown>): void {
         if ('post' in props) this.post = toXPostCard(props.post);
     }
+}
+
+/** A card's height on the pane, kept where the handle stays grabbable. */
+function clampFrac(v: number): number {
+    return Number.isFinite(v) ? Math.min(0.97, Math.max(0, v)) : 0.25;
 }

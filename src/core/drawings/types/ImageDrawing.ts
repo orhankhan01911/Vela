@@ -33,15 +33,31 @@ export function safeImageUrl(v: unknown): string | null {
     }
 }
 
-/** TradingView's image: a picture (an https link or pasted image data) shown in a box between two corners. */
+/** Smallest and largest size of a picture on the chart, CSS px. */
+const MIN_PX = 8;
+const MAX_PX = 4000;
+
+/**
+ * TradingView's image: a picture (an https link or pasted image data). As on TradingView it is pinned at its top-left
+ * corner (anchor 0) and has its own size in screen pixels (`cssWidth` x `cssHeight`), so zooming or scrolling the chart
+ * moves it but never stretches it; the bottom-right handle resizes it. A picture saved before that (two corners, no
+ * size) keeps its box between the two corners.
+ */
 export class ImageDrawing extends Drawing {
     readonly type = 'image' as const;
     // `!` (no initializer): the base constructor runs readProps first.
     url!: string;
     opacity!: number;
+    cssWidth!: number;
+    cssHeight!: number;
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
-        return { min: 2, max: 2, slots: [{ role: 'c1', free: 'both' }, { role: 'c2', free: 'both' }] };
+        return { min: 1, max: 2, slots: [{ role: 'c1', free: 'both' }, { role: 'c2', free: 'both' }] };
+    }
+
+    /** True for a picture with its own pixel size (TradingView's model); false for an old two-corner one. */
+    sized(): boolean {
+        return this.cssWidth > 0 && this.cssHeight > 0;
     }
 
     /** The URL to draw, or null when it is not an https link / image data. */
@@ -49,14 +65,19 @@ export class ImageDrawing extends Drawing {
         return safeImageUrl(this.url);
     }
 
+    private corner(proj: Projector, i: number): [number, number] | null {
+        const a = this.anchors[i];
+        if (!a) return null;
+        const y = proj.yOf(a.price, this.paneId);
+        return y == null ? null : [proj.xOf(a.time), y];
+    }
+
     handlePoints(proj: Projector): Array<[number, number]> {
-        const out: Array<[number, number]> = [];
-        for (const a of this.anchors) {
-            const y = proj.yOf(a.price, this.paneId);
-            if (y == null) return [];
-            out.push([proj.xOf(a.time), y]);
-        }
-        return out;
+        const tl = this.corner(proj, 0);
+        if (!tl) return [];
+        if (this.sized()) return [tl, [tl[0] + this.cssWidth, tl[1] + this.cssHeight]];
+        const br = this.corner(proj, 1);
+        return br ? [tl, br] : [tl];
     }
 
     bounds(proj: Projector): { x: number; y: number; w: number; h: number } | null {
@@ -76,9 +97,20 @@ export class ImageDrawing extends Drawing {
         return handleAt(px, py, this.handlePoints(proj), tol + 3);
     }
 
+    /** The bottom-right handle of a sized picture sets its size; the top-left one moves it (an anchor drag). */
+    override dragHandlePx(index: number, x: number, y: number, proj: Projector): boolean {
+        if (index !== 1 || !this.sized()) return false;
+        const tl = this.corner(proj, 0);
+        if (!tl) return true;
+        this.cssWidth = Math.min(MAX_PX, Math.max(MIN_PX, x - tl[0]));
+        this.cssHeight = Math.min(MAX_PX, Math.max(MIN_PX, y - tl[1]));
+        return true;
+    }
+
     priceRange(): { min: number; max: number } | null {
         const a = this.anchors[0];
         const b = this.anchors[1];
+        if (a && this.sized()) return { min: a.price, max: a.price };
         return a && b ? { min: Math.min(a.price, b.price), max: Math.max(a.price, b.price) } : null;
     }
 
@@ -92,11 +124,21 @@ export class ImageDrawing extends Drawing {
     }
 
     protected override writeProps(): Record<string, unknown> {
-        return { url: this.imageUrl() ?? '', opacity: this.opacity ?? 1 };
+        const out: Record<string, unknown> = { url: this.imageUrl() ?? '', opacity: this.opacity ?? 1 };
+        if (this.sized()) Object.assign(out, { cssWidth: Math.round(this.cssWidth), cssHeight: Math.round(this.cssHeight) });
+        return out;
     }
 
     protected override readProps(props: Record<string, unknown>): void {
         if (typeof props.url === 'string') this.url = safeImageUrl(props.url) ?? '';
         if (typeof props.opacity === 'number' && Number.isFinite(props.opacity)) this.opacity = Math.min(1, Math.max(0, props.opacity));
+        const px = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? Math.min(MAX_PX, Math.max(MIN_PX, v)) : 0);
+        if ('cssWidth' in props || 'cssHeight' in props) {
+            this.cssWidth = px(props.cssWidth);
+            this.cssHeight = px(props.cssHeight);
+        } else {
+            this.cssWidth ??= 0;
+            this.cssHeight ??= 0;
+        }
     }
 }

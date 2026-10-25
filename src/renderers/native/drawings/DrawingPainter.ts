@@ -2,7 +2,7 @@ import type { Drawing, Projector, DrawingStyle, Box, TrendLine, TextLabel, Ellip
 import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
-import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP, X_VERIFIED, X_VERIFIED_CHECK } from '../../../core/palette';
+import { ACCENT, BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP } from '../../../core/palette';
 import { withAlpha } from '../../../core/color';
 import { barTransformFor } from '../../../core/price-styles/BarTransform';
 import type { OHLCV } from '../../../core/model/ohlcv';
@@ -792,56 +792,66 @@ export class DrawingPainter {
         return e.state === 'ok' ? e.img : null;
     }
 
-    /** An X post's card: author (picture, name, verified mark, @handle), the text, the first picture, the time and
-     *  counts; a dot on the post's own time below it. Laid out first so the card's height is known before drawing. */
+    /** An X post's card as TradingView draws it: picture, name, @handle, the post's text (its own line breaks kept),
+     *  "Link to X post" and the date. Laid out first so its height is known before drawing. */
     private paintXPost(ctx: CanvasRenderingContext2D, d: XPostDrawing, proj: Projector, theme: VelaTheme): void {
         const p = d.post;
-        const pad = 12;
+        const pad = 14;
         const font = theme.fontFamily;
-        const muted = withAlpha(theme.textColor, 0.6);
         const l0 = d.layout(proj);
         if (!l0) return;
         const w = l0.card.w;
         const inner = w - pad * 2;
         ctx.save();
-        // -- layout: wrap the text, then the card's height --
+        // -- layout: wrap each of the post's own lines, then the card's height --
         ctx.font = `14px ${font}`;
-        const words = (p?.text || (p ? '' : 'This post is not available')).replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
         const lines: string[] = [];
-        for (const word of words) {
-            const last = lines[lines.length - 1];
-            if (last !== undefined && ctx.measureText(`${last} ${word}`).width <= inner) lines[lines.length - 1] = `${last} ${word}`;
-            else lines.push(word);
+        for (const para of (p ? p.text : 'This post is not available').split('\n')) {
+            const words = para.split(' ').filter(Boolean);
+            if (!words.length) {
+                lines.push('');
+                continue;
+            }
+            let cur = '';
+            for (const word of words) {
+                let wd = word;
+                // a word wider than the card (a long link) breaks by characters
+                while (ctx.measureText(wd).width > inner && wd.length > 1) {
+                    let k = wd.length - 1;
+                    while (k > 1 && ctx.measureText(wd.slice(0, k)).width > inner) k--;
+                    if (cur) lines.push(cur);
+                    lines.push(wd.slice(0, k));
+                    cur = '';
+                    wd = wd.slice(k);
+                }
+                if (cur && ctx.measureText(`${cur} ${wd}`).width > inner) {
+                    lines.push(cur);
+                    cur = wd;
+                } else cur = cur ? `${cur} ${wd}` : wd;
+            }
+            if (cur) lines.push(cur);
         }
-        const MAX_LINES = 7;
+        const MAX_LINES = 12;
         if (lines.length > MAX_LINES) {
             lines.length = MAX_LINES;
-            let t = lines[MAX_LINES - 1]!;
-            while (t.length > 1 && ctx.measureText(`${t}…`).width > inner) t = t.slice(0, -1);
-            lines[MAX_LINES - 1] = `${t}…`;
+            lines[MAX_LINES - 1] = `${lines[MAX_LINES - 1]!.replace(/.$/, '')}…`;
         }
-        const picPath = p?.media[0] ?? '';
-        const pic = picPath ? this.relayImage(picPath) : null;
-        const picH = picPath ? Math.round((inner * 9) / 16) : 0;
-        d.cardH = pad + 36 + 10 + lines.length * 19 + (picH ? 10 + picH : 0) + 10 + 16 + pad;
-        const l = d.layout(proj)!;
-        const { x, y, h } = l.card;
-        // -- the dot on the post's time and a stem up to the card --
-        ctx.strokeStyle = withAlpha(theme.textColor, 0.35);
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(Math.round(l.dot[0]) + 0.5, y > l.dot[1] ? y : y + h); // the card's near edge, above or below
-        ctx.lineTo(Math.round(l.dot[0]) + 0.5, l.dot[1]);
-        ctx.stroke();
-        ctx.fillStyle = theme.textColor;
-        ctx.beginPath();
-        ctx.arc(l.dot[0], l.dot[1], 3.5, 0, Math.PI * 2);
-        ctx.fill();
+        const LH = 20;
+        const head = 32;
+        d.cardH = pad + head + 12 + lines.length * LH + 10 + 18 + 8 + 16 + pad;
+        const { x, y, h } = d.layout(proj)!.card;
         // -- the card --
+        ctx.save();
+        ctx.shadowColor = withAlpha(theme.textColor, 0.18);
+        ctx.shadowBlur = 12;
+        ctx.shadowOffsetY = 2;
         ctx.fillStyle = theme.background;
-        ctx.strokeStyle = withAlpha(theme.textColor, 0.18);
-        roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 12);
+        roundRect(ctx, x, y, w, h, 8);
         ctx.fill();
+        ctx.restore();
+        ctx.strokeStyle = withAlpha(theme.textColor, 0.12);
+        ctx.lineWidth = 1;
+        roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 8);
         ctx.stroke();
         ctx.beginPath();
         ctx.rect(x, y, w, h);
@@ -850,93 +860,49 @@ export class DrawingPainter {
         const av = p?.avatar ? this.relayImage(p.avatar) : null;
         ctx.save();
         ctx.beginPath();
-        ctx.arc(x + pad + 18, y + pad + 18, 18, 0, Math.PI * 2);
+        ctx.arc(x + pad + head / 2, y + pad + head / 2, head / 2, 0, Math.PI * 2);
         ctx.clip();
-        if (av) ctx.drawImage(av, x + pad, y + pad, 36, 36);
+        if (av) ctx.drawImage(av, x + pad, y + pad, head, head);
         else {
-            ctx.fillStyle = withAlpha(theme.textColor, 0.15);
+            ctx.fillStyle = withAlpha(theme.textColor, 0.12);
             ctx.fill();
         }
         ctx.restore();
-        // name (cut to fit), verified mark, @handle
-        const tx = x + pad + 36 + 10;
-        const nameMax = w - (tx - x) - pad - 24 - (p?.verified ? 20 : 0);
+        // name and @handle, cut to fit
+        const tx = x + pad + head + 10;
+        const room = x + w - pad - tx;
+        const fit = (t: string): string => {
+            if (ctx.measureText(t).width <= room) return t;
+            let k = t.length;
+            while (k > 1 && ctx.measureText(`${t.slice(0, k)}…`).width > room) k--;
+            return `${t.slice(0, k)}…`;
+        };
         ctx.textAlign = 'left';
         ctx.textBaseline = 'alphabetic';
         ctx.fillStyle = theme.textColor;
         ctx.font = `600 14px ${font}`;
-        const full = p?.name || p?.handle || 'X';
-        let name = full;
-        while (name.length > 1 && ctx.measureText(`${name}…`).width > nameMax) name = name.slice(0, -1);
-        if (name !== full) name = `${name}…`;
-        ctx.fillText(name, tx, y + pad + 15);
-        if (p?.verified) {
-            const vx = tx + ctx.measureText(name).width + 10;
-            const vy = y + pad + 10;
-            ctx.fillStyle = X_VERIFIED;
-            ctx.beginPath();
-            ctx.arc(vx, vy, 7, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = X_VERIFIED_CHECK;
-            ctx.lineWidth = 1.6;
-            ctx.beginPath();
-            ctx.moveTo(vx - 3.2, vy);
-            ctx.lineTo(vx - 0.8, vy + 2.4);
-            ctx.lineTo(vx + 3.4, vy - 2.4);
-            ctx.stroke();
-        }
-        ctx.font = `13px ${font}`;
-        ctx.fillStyle = muted;
-        if (p?.handle) ctx.fillText(`@${p.handle}`, tx, y + pad + 33);
-        // the X mark, top right
-        ctx.strokeStyle = theme.textColor;
-        ctx.lineWidth = 1.8;
-        const mx = x + w - pad - 12;
-        const my = y + pad + 2;
-        ctx.beginPath();
-        ctx.moveTo(mx, my);
-        ctx.lineTo(mx + 12, my + 12);
-        ctx.moveTo(mx + 12, my);
-        ctx.lineTo(mx, my + 12);
-        ctx.stroke();
-        // text
-        let cy = y + pad + 36 + 10;
+        ctx.fillText(fit(p?.name || p?.handle || 'X'), tx, y + pad + 13);
+        ctx.font = `12px ${font}`;
+        ctx.fillStyle = withAlpha(theme.textColor, 0.55);
+        if (p?.handle) ctx.fillText(fit(`@${p.handle}`), tx, y + pad + 29);
+        // the post's text
+        let cy = y + pad + head + 12;
         ctx.fillStyle = theme.textColor;
         ctx.font = `14px ${font}`;
         for (const line of lines) {
-            ctx.fillText(line, x + pad, cy + 14);
-            cy += 19;
+            ctx.fillText(line, x + pad, cy + 15);
+            cy += LH;
         }
-        // the first picture, cropped to fill a 16:9 frame
-        if (picH) {
-            cy += 10;
-            ctx.save();
-            roundRect(ctx, x + pad, cy, inner, picH, 10);
-            ctx.clip();
-            if (pic && pic.naturalWidth > 0 && pic.naturalHeight > 0) {
-                const s = Math.max(inner / pic.naturalWidth, picH / pic.naturalHeight);
-                const sw = inner / s;
-                const sh = picH / s;
-                ctx.drawImage(pic, (pic.naturalWidth - sw) / 2, (pic.naturalHeight - sh) / 2, sw, sh, x + pad, cy, inner, picH);
-            } else {
-                ctx.fillStyle = withAlpha(theme.textColor, 0.08);
-                ctx.fillRect(x + pad, cy, inner, picH);
-            }
-            ctx.restore();
-            cy += picH;
-        }
-        // time and counts
+        // link and date
         cy += 10;
-        ctx.font = `12px ${font}`;
-        ctx.fillStyle = muted;
         if (p) {
-            // UTC, as the time axis reads by default (a local time here would disagree with the dot's place)
-            const when = new Date(p.t);
-            const hm = `${String(when.getUTCHours()).padStart(2, '0')}:${String(when.getUTCMinutes()).padStart(2, '0')}`;
-            const day = when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-            ctx.fillText(`${hm} UTC · ${day}`, x + pad, cy + 12);
-            ctx.textAlign = 'right';
-            ctx.fillText(`${p.likes} likes · ${p.replies} replies`, x + w - pad, cy + 12);
+            ctx.font = `14px ${font}`;
+            ctx.fillStyle = ACCENT;
+            ctx.fillText('Link to X post', x + pad, cy + 14);
+            cy += 18 + 8;
+            ctx.font = `12px ${font}`;
+            ctx.fillStyle = withAlpha(theme.textColor, 0.5);
+            ctx.fillText(xpostDate(p.t), x + pad, cy + 12);
         }
         ctx.restore();
     }
@@ -2943,4 +2909,14 @@ export function labelLayout(d: Drawing, proj: Projector): {
         default:
             return pts[0] ? { x: pts[0][0], top: pts[0][1], align: 'left' } : null;
     }
+}
+
+/** TradingView's date on a post card, `24 Oct '26 · 08:35 PM`, in UTC (the time axis's default). */
+export function xpostDate(ms: number): string {
+    const d = new Date(ms);
+    const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()];
+    const h = d.getUTCHours();
+    const hh = String(h % 12 === 0 ? 12 : h % 12).padStart(2, '0');
+    const mm = String(d.getUTCMinutes()).padStart(2, '0');
+    return `${d.getUTCDate()} ${mon} '${String(d.getUTCFullYear()).slice(2)} · ${hh}:${mm} ${h < 12 ? 'AM' : 'PM'}`;
 }

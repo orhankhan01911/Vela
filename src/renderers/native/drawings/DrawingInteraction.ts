@@ -322,7 +322,9 @@ export class DrawingInteraction {
         }
         for (const t of this.state.clones ?? this.dragSources(d)) {
             const { dt, dp } = this.bodyDelta(t.d.paneId, x, y);
-            t.d.anchors = t.d.translateBody(dt, dp, t.orig); // a callout pins its tip + moves only the box
+            // a post card moves on the screen, not by price; others translate in data space
+            const px = t.d.translateBodyPx(x - this.state.px, y - this.state.py, t.orig, this.deps.projector());
+            t.d.anchors = px ?? t.d.translateBody(dt, dp, t.orig); // a callout pins its tip + moves only the box
         }
     }
 
@@ -363,6 +365,8 @@ export class DrawingInteraction {
         this.state.moved = true;
         if (this.state.handle < 0) {
             this.dragBody(d, x, y);
+        } else if (d.dragHandlePx(this.state.handle, x, y, this.deps.projector())) {
+            // a size in pixels (an image's corner): the type took it
         } else {
             const a = d.anchors[this.state.handle]; // a handle snaps to the candle
             if (a) {

@@ -1,7 +1,8 @@
-// TradingView's "Content" tools: Image (JPG/PNG, at most 2 MB and 2000 x 2000 px) and X post (a post's card on the
-// time it was posted; the card moves up or down only).
+// TradingView's "Content" tools, as its own chart stores them (read from a logged-in TradingView 2026-10-26):
+// Image = one top-left point + a size in screen pixels; X post (LineToolTweet) = a time + a height on the pane.
 import { describe, it, expect } from 'vitest';
-import { buildToolbar, checkImageFile, createDrawing, deserializeDrawing, safeImageUrl, toXPostCard, type Projector, type XPostDrawing } from '../src/core/drawings';
+import { buildToolbar, checkImageFile, createDrawing, deserializeDrawing, safeImageUrl, toXPostCard, type ImageDrawing, type Projector, type XPostDrawing } from '../src/core/drawings';
+import { xpostDate } from '../src/renderers/native/drawings/DrawingPainter';
 
 function proj(): Projector {
     return {
@@ -46,22 +47,51 @@ describe('Image limits (TradingView)', () => {
     });
 });
 
-describe('X post drawing', () => {
-    it('sits on the post time, card above the dot, and keeps that time when dragged', () => {
-        const d = createDrawing('xpost', { paneId: 'price', anchors: [{ time: 300, price: 100 }], props: { post: POST } }) as XPostDrawing;
-        const l = d.layout(proj())!;
-        expect(l.dot).toEqual([300, 300]);
-        expect(l.card.x + l.card.w / 2).toBe(300);
-        expect(l.card.y + l.card.h).toBeLessThan(300);
-        expect(d.hitTest(300, l.card.y + 5, proj(), 3)).toBe(true);
-        expect(d.hitTest(10, 10, proj(), 3)).toBe(false);
-        expect(d.translateBody(50, 20, d.anchors)).toEqual([{ time: 300, price: 120 }]);
+describe('Image drawing (TradingView: a top-left point and a size in screen pixels)', () => {
+    it('keeps its pixel size when the chart zooms, and the corner handle resizes it', () => {
+        const d = createDrawing('image', { paneId: 'price', anchors: [{ time: 100, price: 300 }], props: { url: 'data:image/png;base64,AA==', cssWidth: 200, cssHeight: 100 } }) as ImageDrawing;
+        expect(d.bounds(proj())).toEqual({ x: 100, y: 100, w: 200, h: 100 });
+        const zoomed: Projector = { ...proj(), xOf: (t) => t * 3 };
+        expect(d.bounds(zoomed)).toEqual({ x: 300, y: 100, w: 200, h: 100 });
+        expect(d.handlePoints(proj())).toEqual([[100, 100], [300, 200]]);
+        expect(d.dragHandlePx(1, 500, 400, proj())).toBe(true);
+        expect([d.cssWidth, d.cssHeight]).toEqual([400, 300]);
+        expect(d.dragHandlePx(0, 500, 400, proj())).toBe(false); // the top-left handle moves it, as an anchor
+        expect((deserializeDrawing(JSON.parse(JSON.stringify(d.serialize()))) as ImageDrawing).cssWidth).toBe(400);
     });
 
-    it('drops below its dot when there is no room above (a post near the top of the prices)', () => {
-        const d = createDrawing('xpost', { paneId: 'price', anchors: [{ time: 300, price: 350 }], props: { post: POST } }) as XPostDrawing;
-        const l = d.layout(proj())!; // dot at y 50, card 150 tall
-        expect(l.card.y).toBeGreaterThan(l.dot[1]);
+    it('a picture saved between two corners keeps that box', () => {
+        const d = createDrawing('image', { paneId: 'price', anchors: [{ time: 100, price: 300 }, { time: 200, price: 250 }], props: { url: 'https://example.com/a.png' } }) as ImageDrawing;
+        expect(d.sized()).toBe(false);
+        expect(d.bounds(proj())).toEqual({ x: 100, y: 100, w: 100, h: 50 });
+    });
+});
+
+describe('X post drawing', () => {
+    it('hangs below its handle at a time and a height on the pane; a price-scale change never moves it', () => {
+        const d = createDrawing('xpost', { paneId: 'price', anchors: [{ time: 300, price: 0.25 }], props: { post: POST } }) as XPostDrawing;
+        const l = d.layout(proj())!;
+        expect(l.dot).toEqual([300, 100]); // a quarter down a 400 px pane
+        expect(l.card.x + l.card.w / 2).toBe(300);
+        expect(l.card.y).toBe(100);
+        expect(d.priceRange()).toBeNull();
+        const squashed: Projector = { ...proj(), yOf: (p) => 400 - p / 10 }; // another price scale, same pane
+        expect(d.layout(squashed)!.dot).toEqual([300, 100]);
+        expect(d.hitTest(300, 120, proj(), 3)).toBe(true);
+        expect(d.hitTest(10, 10, proj(), 3)).toBe(false);
+    });
+
+    it('moves on the screen: time along the axis, height as a share of the pane', () => {
+        const d = createDrawing('xpost', { paneId: 'price', anchors: [{ time: 300, price: 0.25 }], props: { post: POST } }) as XPostDrawing;
+        expect(d.translateBodyPx(40, 100, d.anchors, proj())).toEqual([{ time: 340, price: 0.5 }]);
+        expect(d.translateBodyPx(0, 5000, d.anchors, proj())![0]!.price).toBeLessThan(1); // the handle stays on the pane
+        expect(d.dragHandlePx(0, 500, 200, proj())).toBe(true);
+        expect(d.anchors).toEqual([{ time: 500, price: 0.5 }]);
+    });
+
+    it("dates the card as TradingView does, 24 Oct '26 · 08:35 PM", () => {
+        expect(xpostDate(Date.UTC(2026, 9, 24, 20, 35))).toBe("24 Oct '26 · 08:35 PM");
+        expect(xpostDate(Date.UTC(2026, 0, 3, 0, 5))).toBe("3 Jan '26 · 12:05 AM");
     });
 
     it('round-trips through a saved layout', () => {

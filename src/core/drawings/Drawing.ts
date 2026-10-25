@@ -230,6 +230,22 @@ export abstract class Drawing {
         return orig.map((o) => ({ time: o.time + dt, price: o.price + dp }));
     }
 
+    /**
+     * A handle drag in screen pixels, for a type whose geometry is partly in pixels (an image's size). Return true
+     * when handled: the interaction then skips the anchor move. Default: not handled.
+     */
+    dragHandlePx(_index: number, _x: number, _y: number, _proj: Projector): boolean {
+        return false;
+    }
+
+    /**
+     * A whole-body drag in screen pixels from the press point, for a type whose anchors are not all price/time (a post
+     * card's height on the pane). Return the moved anchors, or null to use {@link translateBody}. Default: null.
+     */
+    translateBodyPx(_dx: number, _dy: number, _orig: DrawingPoint[], _proj: Projector): DrawingPoint[] | null {
+        return null;
+    }
+
     // ── geometry behaviors: PURE functions of (anchors, projector) ──
     /** Is the pixel (px,py) on this drawing's body, within `tol` px? */
     abstract hitTest(px: number, py: number, proj: Projector, tol: number): boolean;
