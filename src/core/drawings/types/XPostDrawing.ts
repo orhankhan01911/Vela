@@ -7,6 +7,8 @@ import { pointInBox } from '../hittest';
 export const XPOST_W = 280;
 /** Gap between the card and the dot on the post's time. */
 export const XPOST_GAP = 10;
+/** The band at a pane's top the legend covers; a card that would reach into it goes below its dot. */
+export const XPOST_LEGEND_BAND = 56;
 
 /** One X post as the host fetched it. Pictures are same-origin paths (a host relay): a cross-origin picture
  *  on the canvas would block screenshots. */
@@ -79,7 +81,8 @@ export class XPostDrawing extends Drawing {
         const y = proj.yOf(a.price, this.paneId);
         if (y == null) return null;
         const x = proj.xOf(a.time);
-        const top = proj.paneRect?.(this.paneId)?.top ?? 0;
+        // the legend (symbol line and indicator rows) sits over the pane's top: keep the card clear of it
+        const top = (proj.paneRect?.(this.paneId)?.top ?? 0) + XPOST_LEGEND_BAND;
         const above = y - XPOST_GAP - this.cardH;
         return { dot: [x, y], card: { x: x - XPOST_W / 2, y: above >= top ? above : y + XPOST_GAP, w: XPOST_W, h: this.cardH } };
     }
