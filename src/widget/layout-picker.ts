@@ -120,7 +120,7 @@ const CSS = `
 /* Free-form / TradingView mode switch under the LAYOUT heading (only when the host gives a catalog). */
 .vela-lp-layout[data-modes='1'] { min-width: 156px; }
 .vela-lp-mode { display: flex; align-self: stretch; margin: 0 0 8px; padding: 2px; gap: 2px; border-radius: 6px; background: var(--vela-hover); }
-.vela-lp-mode button { all: unset; flex: 1; text-align: center; box-sizing: border-box; cursor: pointer; padding: 3px 8px; border-radius: 4px; font-size: 11px;
+.vela-lp-mode button { all: unset; flex: 1; text-align: center; white-space: nowrap; box-sizing: border-box; cursor: pointer; padding: 3px 8px; border-radius: 4px; font-size: 11px;
     letter-spacing: 0; text-transform: none; color: var(--vela-fg-muted); }
 .vela-lp-mode button:hover { color: var(--vela-fg-bright); }
 .vela-lp-mode button[aria-pressed='true'] { background: var(--vela-bg); color: var(--vela-fg-bright); }
