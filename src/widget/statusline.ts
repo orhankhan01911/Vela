@@ -313,6 +313,12 @@ export class Statusline {
     /** Fit mode (multi-chart cells): one row, overflowing segments hidden — see {@link setFitMode}. */
     private fitMode = false;
     private fitRO: ResizeObserver | null = null;
+    /** An embedder that relabels the symbol or meta after Vela writes them (a longer display
+     *  name) changes the row's width without a resize: re-fit on the next frame, or the values
+     *  stay beside a name that no longer leaves them room and run off the plot. Text only —
+     *  fit() itself never writes this row's text, so it cannot loop. */
+    private textMO: MutationObserver | null = null;
+    private textQueued = false;
     /** The identity row (avatar / symbol / meta / market) and the values row (readout /
      *  eye) — one line side by side, or a two-line column once the ladder stacks them. */
     private readonly identityRow: HTMLElement;
@@ -393,6 +399,17 @@ export class Statusline {
         if (typeof ResizeObserver !== 'undefined') {
             this.fitRO = new ResizeObserver(() => this.fit());
             this.fitRO.observe(host);
+        }
+        if (typeof MutationObserver !== 'undefined') {
+            this.textMO = new MutationObserver(() => {
+                if (this.textQueued) return;
+                this.textQueued = true;
+                requestAnimationFrame(() => {
+                    this.textQueued = false;
+                    if (this.textMO) this.fit();
+                });
+            });
+            this.textMO.observe(this.identityRow, { subtree: true, childList: true, characterData: true });
         }
         doc.fonts?.addEventListener('loadingdone', this.onFontsLoaded);
         // The tooltips portal to the nearest `.vela-ui` ancestor for theme tokens — resolve
@@ -647,6 +664,8 @@ export class Statusline {
         this.detach();
         this.fitRO?.disconnect();
         this.fitRO = null;
+        this.textMO?.disconnect();
+        this.textMO = null;
         this.el.ownerDocument.fonts?.removeEventListener('loadingdone', this.onFontsLoaded);
         this.el.removeEventListener('contextmenu', this.onContextMenu);
         this.menu?.destroy();

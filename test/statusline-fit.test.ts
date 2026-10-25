@@ -84,6 +84,23 @@ describe('Statusline fit', () => {
         line.destroy();
     });
 
+    it('re-fits when an embedder relabels the symbol after Vela wrote it', async () => {
+        const { line, hover, measures } = make();
+        hover({ open: 100, high: 101, low: 99, close: 100.5 });
+        const after = measures();
+        // e.g. 'BTCUSDT.P' -> 'BTCUSDT Perpetual Contract': wider, with no resize to tell the ladder
+        line.el.querySelector('.vela-sl-symbol')!.textContent = 'BTCUSDT Perpetual Contract';
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+        await new Promise((r) => setTimeout(r, 0));
+        expect(measures()).toBeGreaterThan(after);
+        // a crosshair move rewrites only the values row: no extra fit from the text observer
+        const settled = measures();
+        hover({ open: 100, high: 101, low: 99, close: 100.25 });
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+        expect(measures()).toBe(settled);
+        line.destroy();
+    });
+
     it('sets the values in tabular figures, so digits alone never move the width', () => {
         make().line.destroy();
         const css = [...document.querySelectorAll('style')].map((s) => s.textContent ?? '').join('\n');
