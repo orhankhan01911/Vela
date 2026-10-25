@@ -1,17 +1,27 @@
 import type { VelaTheme } from '../../../core/options';
 import type { Projector } from '../../../core/drawings';
 import { formatDuration } from '../../../core/drawings';
-import { BEARISH, BULLISH } from '../../../core/palette';
 
-/** Signed value with 2 decimals (e.g. "+12.34"). */
-function signed(n: number): string {
-    return `${n >= 0 ? '+' : ''}${n.toFixed(2)}`;
+/**
+ * Decimals for a price change measured at `ref`: about five significant digits of the price, at least 2. EURUSD
+ * (1.12) gets 5 (`0.00089`, not `0.00`), a JPY pair (150.1) 3, BTC (80,000) 2, a small coin (0.0305) 7.
+ */
+export function measureDecimals(ref: number): number {
+    const a = Math.abs(ref);
+    if (!(a > 0) || !Number.isFinite(a)) return 2;
+    return Math.min(12, Math.max(2, 5 - Math.floor(Math.log10(a))));
 }
 
-// The ruler's direction tint is fixed, not the theme's candle colors: it must stay readable
+/** Signed value with digit grouping (e.g. "+2,062.08", "-0.00089"). */
+export function signed(n: number, decimals = 2): string {
+    const body = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    return `${n >= 0 ? '+' : '-'}${body}`;
+}
+
+// TradingView's ruler colours (blue up, red down). Fixed, not the theme's candle colors: it must stay readable
 // over candles of any user-chosen color.
-const UP = BULLISH;
-const DOWN = BEARISH;
+const UP = '#2962ff';
+const DOWN = '#f23645';
 const DRAG_SLOP = 3;
 
 type MeasureState = 'idle' | 'measuring' | 'finished';
@@ -104,20 +114,21 @@ export class MeasureOverlay {
         const midY = (y1 + y2) / 2;
 
         ctx.save();
-        ctx.globalAlpha = 0.12;
+        ctx.globalAlpha = 0.2;
         ctx.fillStyle = color;
         ctx.fillRect(left, top, right - left, bot - top);
         ctx.globalAlpha = 1;
         ctx.strokeStyle = color;
         ctx.lineWidth = 1;
-        ctx.setLineDash([4, 4]);
+        // solid center lines on the half pixel, so a 1 px line covers one device row instead of smearing over two
+        const cx = Math.round(midX) + 0.5;
+        const cy = Math.round(midY) + 0.5;
         ctx.beginPath();
-        ctx.moveTo(midX, y1);
-        ctx.lineTo(midX, y2);
-        ctx.moveTo(x1, midY);
-        ctx.lineTo(x2, midY);
+        ctx.moveTo(cx, y1);
+        ctx.lineTo(cx, y2);
+        ctx.moveTo(x1, cy);
+        ctx.lineTo(x2, cy);
         ctx.stroke();
-        ctx.setLineDash([]);
         // a filled arrow at the destination edge, pointing the way price moved
         const ay = up ? top : bot;
         const dir = up ? 1 : -1;
@@ -130,13 +141,18 @@ export class MeasureOverlay {
         ctx.fill();
         ctx.restore();
 
-        this.paintLabel(ctx, proj, theme, midX, top, bot, color, [
-            `${signed(priceDiff)} (${signed(pct)}%)`,
-            bars != null ? `${bars} bars · ${formatDuration(p2.time - p1.time)}` : formatDuration(p2.time - p1.time),
+        const dec = measureDecimals(p1.price);
+        this.paintLabel(ctx, proj, theme, midX, top, bot, up, color, [
+            `${signed(priceDiff, dec)} (${signed(pct)}%)`,
+            bars != null ? `${bars} bars, ${formatDuration(p2.time - p1.time)}` : formatDuration(p2.time - p1.time),
         ]);
     }
 
-    /** A bordered, two-line label centered under the box (flipped above if it would overflow). */
+    /**
+     * TradingView's label: a solid box in the ruler's colour with white text, past the end the price moved to (above
+     * the box going up, below it going down), flipped to the other side when it would leave the pane. Whole-pixel
+     * positions so the text stays sharp.
+     */
     private paintLabel(
         ctx: CanvasRenderingContext2D,
         proj: Projector,
@@ -144,29 +160,30 @@ export class MeasureOverlay {
         midX: number,
         boxTop: number,
         boxBot: number,
+        up: boolean,
         color: string,
         lines: string[],
     ): void {
         ctx.save();
-        ctx.font = `12px ${theme.fontFamily}`;
-        const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 16;
-        const lh = 16;
+        ctx.font = `500 13px ${theme.fontFamily}`;
+        const w = Math.ceil(Math.max(...lines.map((l) => ctx.measureText(l).width)) + 20);
+        const lh = 18;
         const h = lines.length * lh + 8;
-        let y = boxBot + 8;
-        if (y + h > proj.height) y = boxTop - h - 8;
-        const x = midX - w / 2;
-        ctx.fillStyle = theme.background;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1;
+        const above = Math.round(boxTop - h - 8);
+        const below = Math.round(boxBot + 8);
+        let y = up ? above : below;
+        if (y < 0) y = below;
+        else if (y + h > proj.height) y = above;
+        const x = Math.round(midX - w / 2);
+        ctx.fillStyle = color;
         ctx.beginPath();
-        const r = 4;
-        ctx.roundRect(x, y, w, h, r);
+        ctx.roundRect(x, y, w, h, 4);
         ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = theme.textColor;
+        ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        lines.forEach((line, i) => ctx.fillText(line, midX, y + 8 + lh / 2 + i * lh));
+        const tx = Math.round(midX);
+        lines.forEach((line, i) => ctx.fillText(line, tx, Math.round(y + 4 + lh / 2 + i * lh)));
         ctx.restore();
     }
 }
