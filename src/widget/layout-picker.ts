@@ -117,6 +117,14 @@ const CSS = `
 }
 .vela-lp-switch.on { background: var(--vela-selected-bg); border-color: var(--vela-selected-bg); }
 .vela-lp-switch.on::after { transform: translateX(16px); background: var(--vela-selected-fg); }
+/* Free-form / TradingView mode switch under the LAYOUT heading (only when the host gives a catalog). */
+.vela-lp-layout[data-modes='1'] { min-width: 156px; }
+.vela-lp-mode { display: flex; align-self: stretch; margin: 0 0 8px; padding: 2px; gap: 2px; border-radius: 6px; background: var(--vela-hover); }
+.vela-lp-mode button { all: unset; flex: 1; text-align: center; box-sizing: border-box; cursor: pointer; padding: 3px 8px; border-radius: 4px; font-size: 11px;
+    letter-spacing: 0; text-transform: none; color: var(--vela-fg-muted); }
+.vela-lp-mode button:hover { color: var(--vela-fg-bright); }
+.vela-lp-mode button[aria-pressed='true'] { background: var(--vela-bg); color: var(--vela-fg-bright); }
+.vela-lp-mode button:focus-visible { outline: 2px solid var(--vela-focus); }
 /* Catalog mode: every arrangement, grouped by chart count (the canvas is not shown). */
 .vela-lp-layout[data-catalog='1'] { width: auto; align-items: stretch; }
 .vela-lp-cat { display: flex; flex-direction: column; max-height: min(66vh, 520px); overflow-y: auto; margin-right: -4px; padding-right: 4px; }
@@ -261,6 +269,25 @@ export interface LayoutPickerOptions {
     onOpenChange?: (open: boolean) => void;
 }
 
+/** Which layout list the picker shows when the host gives a catalog: the free-form rows × columns canvas, or
+ *  TradingView's arrangement catalog. Remembered in this browser; free-form unless switched. */
+export type LayoutPickerMode = 'grid' | 'catalog';
+const MODE_KEY = 'vela.layout.mode';
+export function readLayoutMode(): LayoutPickerMode {
+    try {
+        return globalThis.localStorage?.getItem(MODE_KEY) === 'catalog' ? 'catalog' : 'grid';
+    } catch {
+        return 'grid';
+    }
+}
+function writeLayoutMode(m: LayoutPickerMode): void {
+    try {
+        globalThis.localStorage?.setItem(MODE_KEY, m);
+    } catch {
+        /* blocked storage: the choice lasts for this page */
+    }
+}
+
 export class LayoutPicker {
     private readonly opts: LayoutPickerOptions;
     private readonly doc: Document;
@@ -279,6 +306,11 @@ export class LayoutPicker {
     private exit: SurfaceExit | null = null;
     /** Hover preview (1-based rows/cols), null = show current shape. */
     private hover: { rows: number; cols: number } | null = null;
+    /** Free-form canvas or the catalog (only switchable when `opts.catalog` is given). */
+    private mode: LayoutPickerMode = 'grid';
+    private readonly grid: HTMLElement;
+    private readonly layoutCol: HTMLElement;
+    private readonly modeBtns: HTMLButtonElement[] = [];
 
     private readonly onDocPointerDown = (e: PointerEvent): void => {
         const t = e.target as Node | null;
@@ -328,15 +360,40 @@ export class LayoutPicker {
         const { el: grid, squares } = layoutGridCanvas(doc);
         this.squares.push(...squares);
         layoutCol.appendChild(grid);
-        // Catalog mode: the arrangement list replaces the canvas (kept for hosts without one).
+        this.grid = grid;
+        this.layoutCol = layoutCol;
+        // With a catalog: both lists exist and a switch in the heading picks one (free-form canvas or TradingView's
+        // arrangements); hosts without one keep the canvas.
         if (opts.catalog) {
-            grid.style.display = 'none';
-            layoutCol.dataset.catalog = '1';
             this.catalogHost = doc.createElement('div');
             layoutCol.appendChild(this.catalogHost);
+            const sw = doc.createElement('div');
+            sw.className = 'vela-lp-mode';
+            sw.setAttribute('role', 'group');
+            sw.setAttribute('aria-label', 'Layout list');
+            for (const [m, label, title] of [
+                ['grid', 'Free-form', 'Any rows × columns grid'],
+                ['catalog', 'TradingView', "TradingView's arrangements, grouped by chart count"],
+            ] as const) {
+                const b = doc.createElement('button');
+                b.type = 'button';
+                b.textContent = label;
+                b.title = title;
+                b.dataset.mode = m;
+                b.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.setMode(m);
+                });
+                this.modeBtns.push(b);
+                sw.appendChild(b);
+            }
+            layoutHeading.after(sw);
+            layoutCol.dataset.modes = '1';
+            this.mode = readLayoutMode();
         } else {
             this.catalogHost = null;
         }
+        this.applyMode();
 
         this.presetsEl = doc.createElement('div');
         this.presetsEl.className = 'vela-lp-presets';
@@ -426,6 +483,25 @@ export class LayoutPicker {
         this.opts.onOpenChange?.(false);
     }
 
+    /** Switch between the free-form canvas and the catalog (remembered). */
+    setMode(m: LayoutPickerMode): void {
+        if (!this.opts.catalog || m === this.mode) return;
+        this.mode = m;
+        writeLayoutMode(m);
+        this.applyMode();
+        this.refresh();
+        if (this.isOpen) this.position();
+    }
+
+    private applyMode(): void {
+        const catalog = this.mode === 'catalog' && !!this.catalogHost;
+        this.grid.style.display = catalog ? 'none' : '';
+        if (this.catalogHost) this.catalogHost.style.display = catalog ? '' : 'none';
+        if (catalog) this.layoutCol.dataset.catalog = '1';
+        else delete this.layoutCol.dataset.catalog;
+        for (const b of this.modeBtns) b.setAttribute('aria-pressed', String(b.dataset.mode === this.mode));
+    }
+
     /** Re-read shape/presets/syncs and re-render (no-op while closed — `open` re-reads). */
     refresh(): void {
         if (!this.isOpen) return;
@@ -456,9 +532,10 @@ export class LayoutPicker {
     private tipNode(): HTMLElement {
         const tip = this.doc.createElement('div');
         tip.className = 'vela-lp-tip';
-        tip.textContent = this.opts.catalog
-            ? 'Pick an arrangement. The number is how many charts it holds.'
-            : 'Click a square to apply that columns × rows layout.';
+        tip.textContent =
+            this.mode === 'catalog' && this.opts.catalog
+                ? 'Pick an arrangement. The number is how many charts it holds.'
+                : 'Click a square to apply that columns × rows layout.';
         return tip;
     }
 
@@ -468,7 +545,7 @@ export class LayoutPicker {
     }
 
     private renderCatalog(): void {
-        if (!this.catalogHost || !this.opts.catalog) return;
+        if (!this.catalogHost || !this.opts.catalog || this.mode !== 'catalog') return;
         const keep = this.catalogHost.querySelector('.vela-lp-cat')?.scrollTop ?? 0;
         const view = layoutCatalogView(this.doc, this.opts.catalog(), (id) => {
             this.close();
