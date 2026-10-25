@@ -117,7 +117,7 @@ const CSS = `
 }
 .vela-lp-switch.on { background: var(--vela-selected-bg); border-color: var(--vela-selected-bg); }
 .vela-lp-switch.on::after { transform: translateX(16px); background: var(--vela-selected-fg); }
-/* Free-form / TradingView mode switch under the LAYOUT heading (only when the host gives a catalog). */
+/* Free-form / Presets mode switch under the LAYOUT heading (only when the host gives a catalog). */
 .vela-lp-layout[data-modes='1'] { min-width: 156px; }
 .vela-lp-mode { display: flex; align-self: stretch; margin: 0 0 8px; padding: 2px; gap: 2px; border-radius: 6px; background: var(--vela-hover); }
 .vela-lp-mode button { all: unset; flex: 1; text-align: center; white-space: nowrap; box-sizing: border-box; cursor: pointer; padding: 3px 8px; border-radius: 4px; font-size: 11px;
@@ -270,7 +270,7 @@ export interface LayoutPickerOptions {
 }
 
 /** Which layout list the picker shows when the host gives a catalog: the free-form rows × columns canvas, or
- *  TradingView's arrangement catalog. Remembered in this browser; free-form unless switched. */
+ *  the preset arrangement catalog. Remembered in this browser; free-form unless switched. */
 export type LayoutPickerMode = 'grid' | 'catalog';
 const MODE_KEY = 'vela.layout.mode';
 export function readLayoutMode(): LayoutPickerMode {
@@ -362,7 +362,7 @@ export class LayoutPicker {
         layoutCol.appendChild(grid);
         this.grid = grid;
         this.layoutCol = layoutCol;
-        // With a catalog: both lists exist and a switch in the heading picks one (free-form canvas or TradingView's
+        // With a catalog: both lists exist and a switch in the heading picks one (free-form canvas or the preset
         // arrangements); hosts without one keep the canvas.
         if (opts.catalog) {
             this.catalogHost = doc.createElement('div');
@@ -373,7 +373,7 @@ export class LayoutPicker {
             sw.setAttribute('aria-label', 'Layout list');
             for (const [m, label, title] of [
                 ['grid', 'Free-form', 'Any rows × columns grid'],
-                ['catalog', 'TradingView', "TradingView's arrangements, grouped by chart count"],
+                ['catalog', 'Presets', 'Preset arrangements, grouped by chart count'],
             ] as const) {
                 const b = doc.createElement('button');
                 b.type = 'button';
