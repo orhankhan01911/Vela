@@ -804,7 +804,7 @@ export class DrawingPainter {
         const inner = w - pad * 2;
         ctx.save();
         // -- layout: wrap each of the post's own lines, then the card's height --
-        ctx.font = `14px ${font}`;
+        ctx.font = `13px ${font}`;
         const lines: string[] = [];
         for (const para of (p ? p.text : 'This post is not available').split('\n')) {
             const words = para.split(' ').filter(Boolean);
@@ -836,7 +836,7 @@ export class DrawingPainter {
             lines.length = MAX_LINES;
             lines[MAX_LINES - 1] = `${lines[MAX_LINES - 1]!.replace(/.$/, '')}…`;
         }
-        const LH = 20;
+        const LH = 19;
         const head = 32;
         d.cardH = pad + head + 12 + lines.length * LH + 10 + 18 + 8 + 16 + pad;
         const { x, y, h } = d.layout(proj)!.card;
@@ -888,7 +888,7 @@ export class DrawingPainter {
         // the post's text
         let cy = y + pad + head + 12;
         ctx.fillStyle = theme.textColor;
-        ctx.font = `14px ${font}`;
+        ctx.font = `13px ${font}`;
         for (const line of lines) {
             ctx.fillText(line, x + pad, cy + 15);
             cy += LH;
