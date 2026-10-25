@@ -43,6 +43,12 @@ export {
     deserializeDrawing,
     defaultToolbar,
     buildToolbar,
+    checkImageFile,
+    IMAGE_MAX_BYTES,
+    IMAGE_MAX_SIDE,
+    IMAGE_TYPES,
+    toXPostCard,
+    XPOST_W,
 } from './core/drawings';
 export type {
     DrawingTypeKey,
@@ -65,6 +71,7 @@ export type {
     DrawingSeriesBar,
     DrawingSeriesState,
     DrawingSeriesGateway,
+    XPostCard,
 } from './core/drawings';
 
 // Timeline marks (`chart.marks`): host events on a lane above the time axis.
