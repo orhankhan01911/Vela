@@ -71,14 +71,17 @@ export class XPostDrawing extends Drawing {
         return { min: 1, max: 1, slots: [{ role: 'point', free: 'both' }] };
     }
 
-    /** The dot on the post's time and the card's box above it. */
+    /** The dot on the post's time and the card's box above it, or below it when the pane has no room above (a post
+     *  near the top of the prices would otherwise run off the plot, under the legend). */
     layout(proj: Projector): { dot: [number, number]; card: { x: number; y: number; w: number; h: number } } | null {
         const a = this.anchors[0];
         if (!a) return null;
         const y = proj.yOf(a.price, this.paneId);
         if (y == null) return null;
         const x = proj.xOf(a.time);
-        return { dot: [x, y], card: { x: x - XPOST_W / 2, y: y - XPOST_GAP - this.cardH, w: XPOST_W, h: this.cardH } };
+        const top = proj.paneRect(this.paneId)?.top ?? 0;
+        const above = y - XPOST_GAP - this.cardH;
+        return { dot: [x, y], card: { x: x - XPOST_W / 2, y: above >= top ? above : y + XPOST_GAP, w: XPOST_W, h: this.cardH } };
     }
 
     handlePoints(): Array<[number, number]> {

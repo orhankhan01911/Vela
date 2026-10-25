@@ -830,7 +830,7 @@ export class DrawingPainter {
         ctx.strokeStyle = withAlpha(theme.textColor, 0.35);
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(Math.round(l.dot[0]) + 0.5, y + h);
+        ctx.moveTo(Math.round(l.dot[0]) + 0.5, y > l.dot[1] ? y : y + h); // the card's near edge, above or below
         ctx.lineTo(Math.round(l.dot[0]) + 0.5, l.dot[1]);
         ctx.stroke();
         ctx.fillStyle = theme.textColor;

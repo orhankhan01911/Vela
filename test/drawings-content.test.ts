@@ -58,6 +58,12 @@ describe('X post drawing', () => {
         expect(d.translateBody(50, 20, d.anchors)).toEqual([{ time: 300, price: 120 }]);
     });
 
+    it('drops below its dot when there is no room above (a post near the top of the prices)', () => {
+        const d = createDrawing('xpost', { paneId: 'price', anchors: [{ time: 300, price: 350 }], props: { post: POST } }) as XPostDrawing;
+        const l = d.layout(proj())!; // dot at y 50, card 150 tall
+        expect(l.card.y).toBeGreaterThan(l.dot[1]);
+    });
+
     it('round-trips through a saved layout', () => {
         const d = createDrawing('xpost', { paneId: 'price', anchors: [{ time: POST.t, price: 1 }], props: { post: POST } })!;
         const back = deserializeDrawing(JSON.parse(JSON.stringify(d.serialize()))) as XPostDrawing;
