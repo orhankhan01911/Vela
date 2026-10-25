@@ -79,7 +79,7 @@ export class XPostDrawing extends Drawing {
         const y = proj.yOf(a.price, this.paneId);
         if (y == null) return null;
         const x = proj.xOf(a.time);
-        const top = proj.paneRect(this.paneId)?.top ?? 0;
+        const top = proj.paneRect?.(this.paneId)?.top ?? 0;
         const above = y - XPOST_GAP - this.cardH;
         return { dot: [x, y], card: { x: x - XPOST_W / 2, y: above >= top ? above : y + XPOST_GAP, w: XPOST_W, h: this.cardH } };
     }
