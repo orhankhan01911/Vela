@@ -19,6 +19,7 @@ import { TypedEventBus } from '../events/EventBus';
 import { IndicatorRegistry, type CodeSnapshot, type IndicatorRecord } from './IndicatorRegistry';
 import {
     getNativeIndicator,
+    nativeInstanceCap,
     nativeIndicatorDescriptors,
     nativeInstanceChannel,
     type NativeIndicatorContext,
@@ -2170,6 +2171,16 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (!descriptor?.multiInstance) {
             const existing = this.registry.all().find((r) => r.native?.type === type);
             if (existing) return this.handles.get(existing.id) ?? new IndicatorHandleImpl(existing.id, existing.title, this, undefined, type);
+        } else {
+            // Past the type's cap the add does nothing (each copy of a layer type holds a full plot-sized canvas;
+            // unlimited copies crashed the tab, 2026-10-26): the newest copy's handle comes back, and the host hears why.
+            const max = nativeInstanceCap(type);
+            const mine = max != null ? this.registry.all().filter((r) => r.native?.type === type) : [];
+            if (max != null && mine.length >= max) {
+                const last = mine[mine.length - 1]!;
+                this.events.emit('indicator:limit', { type, title: descriptor.title, max });
+                return this.handles.get(last.id) ?? new IndicatorHandleImpl(last.id, last.title, this, undefined, type);
+            }
         }
 
         const id = this.registry.nextId('native', (candidate) => this.handles.has(candidate));

@@ -41,6 +41,8 @@ export interface VelaEventMap extends Record<string, unknown> {
   "load:end": { symbol: string; timeframe: string; bars: number };
   "indicator:added": { id: string };
   "indicator:removed": { id: string };
+  /** An add of a native type was refused: the chart already holds its cap of instances (see `maxInstances`). */
+  "indicator:limit": { type: string; title: string; max: number };
   /** An indicator's stored input/prop VALUES changed (settings dialog, `setInputs`) — what state persistence listens to. */
   "indicator:inputs": { id: string };
   "indicator:error": { id: string; error: Error };

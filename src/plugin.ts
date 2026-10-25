@@ -50,6 +50,8 @@ export {
     unregisterNativeIndicator,
     getNativeIndicator,
     nativeIndicatorTypes,
+    setNativeInstanceCap,
+    nativeInstanceCap,
     type NativeIndicator,
     type NativeIndicatorDescriptor,
     type NativeIndicatorContext,

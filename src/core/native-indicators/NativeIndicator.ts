@@ -129,6 +129,12 @@ export interface NativeIndicatorDescriptor {
      * overwrite each other (see `IndicatorModel.native.channel`).
      */
     readonly multiInstance?: boolean;
+    /**
+     * Most instances of a `multiInstance` type on one chart; an add past it does nothing and the chart emits
+     * `indicator:limit`. Absent => {@link nativeInstanceCap} (a host-wide cap per type), else no limit. A type that
+     * paints through its own renderer layer costs a full plot-sized canvas per instance, so a host caps those.
+     */
+    readonly maxInstances?: number;
     inputsSchema(): InputSchema[];
     defaultInputs(): Record<string, InputValue>;
     create(): NativeIndicator;
@@ -187,6 +193,19 @@ export function unregisterNativeIndicator(type: string): void {
 /** Look up a registered native-indicator descriptor (undefined if the type isn't registered). */
 export function getNativeIndicator(type: string): NativeIndicatorDescriptor | undefined {
     return REGISTRY.get(type);
+}
+
+const CAPS = new Map<string, number>();
+
+/** Cap the instances of `type` per chart (a host policy for types it did not register itself); `undefined` removes it. */
+export function setNativeInstanceCap(type: string, max: number | undefined): void {
+    if (max == null || !Number.isFinite(max) || max < 1) CAPS.delete(type);
+    else CAPS.set(type, Math.floor(max));
+}
+
+/** The most instances of `type` one chart may hold (the descriptor's `maxInstances`, else the host cap), or undefined. */
+export function nativeInstanceCap(type: string): number | undefined {
+    return REGISTRY.get(type)?.maxInstances ?? CAPS.get(type);
 }
 
 /** All registered native-indicator types (for a host "add native indicator" menu). */

@@ -4,6 +4,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { registerRendererLayer, unregisterRendererLayer, rendererLayers, foldBaseModulation, type RendererLayerArgs, type RendererLayerInstance } from '../src/renderers/native/layers';
 import { NativeRenderer } from '../src/renderers/native/NativeRenderer';
+import { registerNativeIndicator, unregisterNativeIndicator } from '../src/core/native-indicators/NativeIndicator';
 import { SceneGraph } from '../src/renderers/native/core/SceneGraph';
 
 afterEach(() => unregisterRendererLayer('demo'));
@@ -154,5 +155,46 @@ describe('chart-type SDK settings (config bag + channel + notification)', () => 
         expect(notified).toHaveLength(2);
         r.applyConfig({ layout: { fontSize: 12 } }); // untouched bag → no notification
         expect(notified).toHaveLength(2);
+    });
+});
+
+describe('idle indicator layers hold no canvas memory (tab crash, 2026-10-26)', () => {
+    // Every registered layer gets a base entry on every chart. A layer of an INDICATOR type with no copy of that
+    // indicator on its base channel has nothing to paint, so its canvas is dropped to 0x0 and it is not painted.
+    type Probe = { extLayers: unknown[]; scene: SceneGraph; idleLayerTypes(): Set<string>; layerIdle(l: unknown, idle: Set<string>): boolean; releaseLayerCanvas(c: { width: number; height: number }): void };
+    const layer = (id: string, owner: string | null = null) => ({ def: { id, create: () => ({ mount() {}, render() {} }) }, instance: { mount() {}, render() {} }, canvas: {}, channel: owner ? `${id}#${owner}` : id, owner });
+    const desc = (type: string) => ({ type, title: type, inputsSchema: () => [], defaultInputs: () => ({}), create: () => ({ start() {}, onBars() {}, onViewport() {}, setInputs() {}, suspend() {}, resume() {}, stop() {} }) });
+    afterEach(() => {
+        unregisterNativeIndicator('ind-layer');
+        unregisterNativeIndicator('multi-layer');
+    });
+
+    it('idles an indicator type\'s base layer only while no copy uses it; chart types and non-indicator layers stay', () => {
+        registerNativeIndicator(desc('ind-layer') as never);
+        registerNativeIndicator(desc('multi-layer') as never);
+        const r = new NativeRenderer() as unknown as Probe;
+        const ind = layer('ind-layer');
+        const multiBase = layer('multi-layer');
+        const multiCopy = layer('multi-layer', 'native-3');
+        const chrome = layer('chrome-overlay'); // not an indicator type: always painted, as before
+        r.extLayers = [ind, multiBase, multiCopy, chrome];
+        r.scene.priceStyle = 'candles';
+        let idle = r.idleLayerTypes();
+        expect(r.layerIdle(ind, idle)).toBe(true);
+        expect(r.layerIdle(multiBase, idle)).toBe(true);
+        expect(r.layerIdle(multiCopy, idle)).toBe(false); // a dedicated copy's own canvas
+        expect(r.layerIdle(chrome, idle)).toBe(false);
+        // a single-channel copy of the type on the chart wakes its base layer; a multi copy (own channel) does not
+        r.scene.indicators.set('native-1', { id: 'native-1', native: { type: 'ind-layer' } } as never);
+        r.scene.indicators.set('native-3', { id: 'native-3', native: { type: 'multi-layer', channel: 'multi-layer#native-3' } } as never);
+        idle = r.idleLayerTypes();
+        expect(r.layerIdle(ind, idle)).toBe(false);
+        expect(r.layerIdle(multiBase, idle)).toBe(true);
+        // the active chart type's layer always paints, even when an indicator type shares its id
+        r.scene.priceStyle = 'multi-layer';
+        expect(r.layerIdle(multiBase, r.idleLayerTypes())).toBe(false);
+        const c = { width: 3200, height: 1800 };
+        r.releaseLayerCanvas(c);
+        expect(c).toEqual({ width: 0, height: 0 });
     });
 });

@@ -20,6 +20,7 @@ import type {
 } from '../../core/ports/IChartRenderer';
 import type { VelaTheme } from '../../core/options';
 import { replacesSeries } from '../../chart-types/registry';
+import { getNativeIndicator } from '../../core/native-indicators/NativeIndicator';
 import type { OHLCV } from '../../core/model/ohlcv';
 import type { Millis } from '../../core/model/time';
 import type { VolumeLayerData, VpvrLayerData } from '../../core/model/volume-layers';
@@ -3657,8 +3658,9 @@ export class NativeRenderer implements IChartRenderer {
         const pane = this.scene.panes.get(PRICE_PANE_ID);
         if (!pane) return;
         const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const idle = this.idleLayerTypes();
         for (const l of this.extLayers) {
-            if (!l.def.repaintOnCursor) continue;
+            if (!l.def.repaintOnCursor || this.layerIdle(l, idle)) continue;
             const lp = this.layerPane(l) ?? pane;
             if (lp.collapsed || this.layerHiddenWithCandles(l)) continue; // blanked by the data frame; nothing to hover
             l.instance.render(this.extLayerArgs(l, lp.scale, lp.bounds, nowMs));
@@ -3731,7 +3733,13 @@ export class NativeRenderer implements IChartRenderer {
             // the price pane for chart-type channels and price-pane overlays alike.
             const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
             let folded: BasePaintingModulation | null = null;
+            const idle = this.idleLayerTypes();
             for (const l of this.extLayers) {
+                if (this.layerIdle(l, idle)) {
+                    this.releaseLayerCanvas(l.canvas);
+                    continue;
+                }
+                this.fitLayerCanvas(l.canvas);
                 const lp: PaneNode = this.layerPane(l) ?? pane;
                 // A collapsed host pane shows its legend strip only, and a hidden price
                 // series takes its chart type's layer with it — blank the layer for the
@@ -4153,6 +4161,47 @@ export class NativeRenderer implements IChartRenderer {
             if (m.native?.type === type) return this.scene.panes.get(m.paneId ?? PRICE_PANE_ID) ?? null;
         }
         return null;
+    }
+
+    /**
+     * Types of the INDICATOR layers no indicator on this chart paints through: their base entries hold no canvas
+     * memory and are not painted (2026-10-26, a tab crash adding copies). Every registered layer gets a base entry,
+     * and each held a full plot-sized canvas whether or not its indicator was on the chart: 77 canvases, ~1.4 GB of
+     * backing store at 2x DPI on a page with nothing added. A layer of an indicator type paints only data its
+     * indicator pushes, so with no copy of that indicator using the base channel there is nothing to show. Layers
+     * that are not an indicator's (a chart type, chrome, a background) keep painting as before.
+     */
+    private idleLayerTypes(): Set<string> {
+        const used = new Set<string>();
+        for (const m of this.scene.indicators.values()) if (m.native && !m.native.channel) used.add(m.native.type);
+        const idle = new Set<string>();
+        for (const l of this.extLayers) {
+            const id = l.def.id;
+            if (l.owner === null && !used.has(id) && id !== this.scene.priceStyle && getNativeIndicator(id)) idle.add(id);
+        }
+        return idle;
+    }
+
+    private layerIdle(l: ExtLayer, idle: Set<string>): boolean {
+        return l.owner === null && idle.has(l.def.id);
+    }
+
+    /** Drop an idle layer canvas's backing store (a 0x0 canvas holds none). */
+    private releaseLayerCanvas(canvas: HTMLCanvasElement): void {
+        if (canvas.width !== 0 || canvas.height !== 0) {
+            canvas.width = 0;
+            canvas.height = 0;
+        }
+    }
+
+    /** Give a layer canvas the plot's backing size again (it was idle, or is new). */
+    private fitLayerCanvas(canvas: HTMLCanvasElement): void {
+        const d = this.dataCanvas;
+        if (canvas.width === d.width && canvas.height === d.height) return;
+        canvas.width = d.width;
+        canvas.height = d.height;
+        canvas.style.width = d.style.width || '100%';
+        canvas.style.height = d.style.height || '100%';
     }
 
     /** One transparent, pointer-transparent SDK layer canvas covering the plot. */
@@ -4661,7 +4710,8 @@ export class NativeRenderer implements IChartRenderer {
         size(this.dataCanvas);
         size(this.backdropCanvas);
         size(this.volumeCanvas); // shared with vpvrRenderer, see field comment
-        for (const l of this.extLayers) size(l.canvas);
+        const idle = this.idleLayerTypes();
+        for (const l of this.extLayers) if (!this.layerIdle(l, idle)) size(l.canvas);
         size(this.chromeCanvas);
         size(this.drawingsCanvas);
         size(this.cursorCanvas);

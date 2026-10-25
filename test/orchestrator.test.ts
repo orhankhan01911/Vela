@@ -25,7 +25,7 @@ import type { MarketDataFeed, BarRange } from '../src/core/ports/MarketDataFeed'
 import { MultiProviderFeed } from '../src/data/MultiProviderFeed';
 import type { DataProvider, ProviderInfo, ProviderCapabilities, SymbolDescriptor } from '../src/core/ports/DataProvider';
 import type { OHLCV } from '../src/core/model/ohlcv';
-import { registerNativeIndicator, unregisterNativeIndicator } from '../src/core/native-indicators/NativeIndicator';
+import { registerNativeIndicator, setNativeInstanceCap, unregisterNativeIndicator } from '../src/core/native-indicators/NativeIndicator';
 import { heikinAshiFull } from '../src/core/price-styles/heikin-ashi';
 import { registerChartType, unregisterChartType, replacesSeries, type SeriesDataEngineHost } from '../src/chart-types/registry';
 import type { BarTransform } from '../src/core/price-styles/BarTransform';
@@ -599,6 +599,33 @@ describe('EngineOrchestrator', () => {
             expect(chart.indicators().map((h) => h.id)).toEqual([h2.id]);
         } finally {
             unregisterNativeIndicator('test-multi');
+        }
+    });
+
+    it('addNativeIndicator: past a multiInstance type\'s cap the add does nothing and the chart emits indicator:limit', async () => {
+        registerNativeIndicator({ ...testNativeDescriptor, type: 'test-capped', title: 'Capped', multiInstance: true, maxInstances: 2 });
+        registerNativeIndicator({ ...testNativeDescriptor, type: 'test-hostcap', title: 'Host capped', multiInstance: true });
+        setNativeInstanceCap('test-hostcap', 1);
+        try {
+            const chart = new Vela({} as unknown as HTMLElement, { live: false, volume: false }, { renderer: new FakeRenderer(), engines: [], dataFeed: new MockDataFeed() });
+            const limits: Array<{ type: string; max: number }> = [];
+            chart.on('indicator:limit', (e) => limits.push({ type: e.type, max: e.max }));
+            const a = chart.addNativeIndicator('test-capped');
+            const b = chart.addNativeIndicator('test-capped');
+            const c = chart.addNativeIndicator('test-capped');
+            expect(b.id).not.toBe(a.id);
+            expect(c.id).toBe(b.id); // the newest copy comes back
+            const h = chart.addNativeIndicator('test-hostcap');
+            expect(chart.addNativeIndicator('test-hostcap').id).toBe(h.id);
+            expect(chart.presentNativeIndicators().sort()).toEqual(['test-capped', 'test-capped', 'test-hostcap']);
+            expect(limits).toEqual([{ type: 'test-capped', max: 2 }, { type: 'test-hostcap', max: 1 }]);
+            // a removed copy frees its place
+            a.remove();
+            expect(chart.addNativeIndicator('test-capped').id).not.toBe(b.id);
+        } finally {
+            setNativeInstanceCap('test-hostcap', undefined);
+            unregisterNativeIndicator('test-capped');
+            unregisterNativeIndicator('test-hostcap');
         }
     });
 
