@@ -930,10 +930,11 @@ export class DrawingPainter {
         ctx.font = `12px ${font}`;
         ctx.fillStyle = muted;
         if (p) {
+            // UTC, as the time axis reads by default (a local time here would disagree with the dot's place)
             const when = new Date(p.t);
-            const hm = `${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`;
-            const day = when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-            ctx.fillText(`${hm} · ${day}`, x + pad, cy + 12);
+            const hm = `${String(when.getUTCHours()).padStart(2, '0')}:${String(when.getUTCMinutes()).padStart(2, '0')}`;
+            const day = when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+            ctx.fillText(`${hm} UTC · ${day}`, x + pad, cy + 12);
             ctx.textAlign = 'right';
             ctx.fillText(`${p.likes} likes · ${p.replies} replies`, x + w - pad, cy + 12);
         }
