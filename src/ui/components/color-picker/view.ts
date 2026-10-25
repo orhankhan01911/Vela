@@ -1,4 +1,4 @@
-// Color-picker VIEW — swatch grid + recents + opacity slider, plus the field trigger.
+// Color-picker VIEW — swatch grid + recents + opacity slider, a custom-colour panel, plus the field trigger.
 import type { VelaTheme } from '../../../core/options';
 import { ACCENT, BEARISH, BULLISH, NEUTRAL, WARNING } from '../../../core/palette';
 import { injectStyles } from '../../styles';
@@ -6,6 +6,9 @@ import { Popover, closeOpenPopovers, openPopoverTrigger, type PopoverBoundary, t
 import {
     buildPalette,
     combineColor,
+    hexHsv,
+    hsvHex,
+    parseHexInput,
     splitColor,
     transparencyChecker,
     type ColorFieldShape,
@@ -82,21 +85,17 @@ export function buildColorPicker(color: string, theme: VelaTheme, onChange: (v: 
 
     const recentRow = document.createElement('div');
     recentRow.style.cssText = 'display:flex;align-items:center;gap:5px;flex-wrap:wrap;border-top:1px solid var(--vela-border);padding-top:9px;';
-    // Swatches get their own wrapper so re-rendering them never detaches the native
-    // color input — the browser closes its chooser the moment its input leaves the DOM.
     const recentSwatches = document.createElement('div');
     recentSwatches.style.cssText = 'display:contents;';
-    const add = document.createElement('label');
-    add.style.cssText = `width:17px;height:17px;border-radius:var(--vela-radius-sm);border:1px dashed var(--vela-border-strong);cursor:pointer;display:flex;align-items:center;justify-content:center;color:${theme.textColor};font:14px ${theme.fontFamily};position:relative;`;
+    // "+" opens TradingView's custom-colour panel (a hex field, a saturation square and a hue bar), not the browser's
+    // own chooser, which opens on RGB numbers.
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.title = 'Custom color';
+    add.setAttribute('aria-label', 'Custom color');
+    add.dataset.testid = 'color-custom';
+    add.style.cssText = `width:17px;height:17px;border-radius:var(--vela-radius-sm);border:1px dashed var(--vela-border-strong);cursor:pointer;display:flex;align-items:center;justify-content:center;color:${theme.textColor};font:14px ${theme.fontFamily};background:transparent;padding:0;`;
     add.textContent = '+';
-    const customInput = document.createElement('input');
-    customInput.type = 'color';
-    customInput.value = curHex;
-    customInput.style.cssText = 'position:absolute;inset:0;opacity:0;cursor:pointer;';
-    // `input` streams while the chooser is open (preview); `change` is the committed pick.
-    customInput.addEventListener('input', () => previewHex(customInput.value));
-    customInput.addEventListener('change', () => pickHex(customInput.value, true));
-    add.appendChild(customInput);
     recentRow.append(recentSwatches, add);
     const renderRecents = (): void => {
         recentSwatches.replaceChildren();
@@ -207,15 +206,150 @@ export function buildColorPicker(color: string, theme: VelaTheme, onChange: (v: 
     function pickHex(hex: string, custom = false): void {
         previewHex(hex);
         addRecent(curHex);
-        customInput.value = curHex;
         if (custom) renderRecents();
     }
+
+    const palette = document.createElement('div');
+    palette.style.cssText = 'display:contents;';
+    palette.append(grid, recentRow, opLabel, opRow);
+    let custom: HTMLElement | null = null;
+    const back = (): void => {
+        custom?.remove();
+        custom = null;
+        palette.style.display = 'contents';
+    };
+    add.addEventListener('click', (e) => {
+        e.stopPropagation();
+        palette.style.display = 'none';
+        custom = buildCustomPanel(curHex, theme, previewHex, (hex) => {
+            pickHex(hex, true);
+            back();
+        });
+        root.appendChild(custom);
+        custom.querySelector('input')?.focus();
+    });
 
     renderRecents();
     paintSelection();
     paintOpacity();
-    root.append(grid, recentRow, opLabel, opRow);
+    root.append(palette);
     return root;
+}
+
+/**
+ * TradingView's custom colour (the palette's "+"): the colour, its hex code in a field, Add; below, a saturation ×
+ * brightness square and a hue bar. Dragging or typing previews the colour at once; Add keeps it (into the recents).
+ */
+function buildCustomPanel(start: string, theme: VelaTheme, preview: (hex: string) => void, done: (hex: string) => void): HTMLElement {
+    let { h, s, v } = hexHsv(start);
+    let hex = splitColor(start).hex6;
+    const panel = document.createElement('div');
+    panel.dataset.testid = 'color-custom-panel';
+    panel.style.cssText = 'display:flex;flex-direction:column;gap:10px;';
+
+    const top = document.createElement('div');
+    top.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const chip = document.createElement('span');
+    chip.style.cssText = 'flex:none;width:28px;height:28px;border-radius:5px;border:1px solid var(--vela-border);';
+    const field = document.createElement('input');
+    field.type = 'text';
+    field.spellcheck = false;
+    field.maxLength = 7;
+    field.setAttribute('aria-label', 'Hex color');
+    field.dataset.testid = 'color-hex';
+    field.style.cssText = `flex:1;min-width:0;box-sizing:border-box;height:28px;font:var(--vela-font-size-md) ${theme.fontFamily};color:var(--vela-fg);background:transparent;border:1px solid var(--vela-border);border-radius:5px;padding:0 8px;outline:none;`;
+    const ok = document.createElement('button');
+    ok.type = 'button';
+    ok.textContent = 'Add';
+    ok.dataset.testid = 'color-add';
+    ok.style.cssText = `flex:none;height:28px;padding:0 12px;border-radius:6px;border:none;cursor:pointer;font:600 var(--vela-font-size-md) ${theme.fontFamily};color:var(--vela-selected-fg, var(--vela-bg));background:var(--vela-selected-bg, var(--vela-fg));`;
+    top.append(chip, field, ok);
+
+    const body = document.createElement('div');
+    body.style.cssText = 'display:flex;gap:10px;height:180px;';
+    const square = document.createElement('div');
+    square.dataset.testid = 'color-square';
+    square.style.cssText = 'flex:1;position:relative;border-radius:4px;cursor:crosshair;touch-action:none;';
+    const dot = document.createElement('div');
+    dot.style.cssText = 'position:absolute;width:12px;height:12px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,0.5);transform:translate(-50%,-50%);pointer-events:none;';
+    square.appendChild(dot);
+    const bar = document.createElement('div');
+    bar.dataset.testid = 'color-hue';
+    bar.style.cssText = `flex:none;width:18px;position:relative;border-radius:4px;cursor:pointer;touch-action:none;background:linear-gradient(to bottom,${[0, 60, 120, 180, 240, 300, 360].map((hue) => hsvHex(hue % 360, 1, 1)).join(',')});`;
+    const tab = document.createElement('div');
+    tab.style.cssText = 'position:absolute;left:-3px;right:-3px;height:6px;border-radius:2px;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,0.5);transform:translateY(-50%);pointer-events:none;';
+    bar.appendChild(tab);
+    body.append(square, bar);
+    panel.append(top, body);
+
+    const paint = (typed = false): void => {
+        square.style.background = `linear-gradient(to top,#000,rgba(0,0,0,0)),linear-gradient(to right,#fff,${hsvHex(h, 1, 1)})`;
+        dot.style.left = `${s * 100}%`;
+        dot.style.top = `${(1 - v) * 100}%`;
+        dot.style.background = hex;
+        tab.style.top = `${(h / 360) * 100}%`;
+        chip.style.background = hex;
+        if (!typed) field.value = hex;
+        field.style.borderColor = 'var(--vela-border)';
+    };
+    const fromHsv = (): void => {
+        hex = hsvHex(h, s, v);
+        paint();
+        preview(hex);
+    };
+    const drag = (el: HTMLElement, at: (x: number, y: number) => void): void => {
+        let on = false;
+        const move = (e: PointerEvent): void => {
+            const r = el.getBoundingClientRect();
+            at(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)));
+        };
+        el.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            on = true;
+            el.setPointerCapture(e.pointerId);
+            move(e);
+        });
+        el.addEventListener('pointermove', (e) => on && move(e));
+        el.addEventListener('pointerup', () => (on = false));
+        el.addEventListener('pointercancel', () => (on = false));
+    };
+    drag(square, (x, y) => {
+        s = x;
+        v = 1 - y;
+        fromHsv();
+    });
+    drag(bar, (_x, y) => {
+        h = Math.min(359.9, y * 360);
+        fromHsv();
+    });
+    field.addEventListener('input', () => {
+        const got = parseHexInput(field.value);
+        if (!got) {
+            field.style.borderColor = `var(--vela-down, ${BEARISH})`;
+            return;
+        }
+        hex = got;
+        ({ h, s, v } = hexHsv(got));
+        paint(true);
+        preview(hex);
+    });
+    field.addEventListener('keydown', (e) => {
+        // Typing must not reach chart/dialog shortcuts; Escape stays with the popover.
+        if (e.key === 'Escape') return;
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            ok.click();
+        }
+    });
+    ok.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const got = parseHexInput(field.value);
+        if (got) done(got);
+        else field.style.borderColor = `var(--vela-down, ${BEARISH})`;
+    });
+    paint();
+    return panel;
 }
 
 export interface ColorFieldOpts {

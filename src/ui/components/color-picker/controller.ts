@@ -53,6 +53,35 @@ export function hslHex(h: number, s: number, l: number): string {
     return `#${to(f(0))}${to(f(8))}${to(f(4))}`;
 }
 
+/** HSV (h 0-360, s/v 0-1) → `#rrggbb`: the custom panel's square (saturation × brightness) and hue bar. */
+export function hsvHex(h: number, s: number, v: number): string {
+    const f = (n: number): number => {
+        const k = (n + h / 60) % 6;
+        return v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
+    };
+    const to = (x: number): string => Math.round(Math.max(0, Math.min(1, x)) * 255).toString(16).padStart(2, '0');
+    return `#${to(f(5))}${to(f(3))}${to(f(1))}`;
+}
+
+/** `#rrggbb` → HSV (h 0-360, s/v 0-1). A grey keeps hue 0. */
+export function hexHsv(hex: string): { h: number; s: number; v: number } {
+    const n = parseInt(splitColor(hex).hex6.slice(1), 16);
+    const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((x) => x / 255) as [number, number, number];
+    const max = Math.max(r, g, b);
+    const d = max - Math.min(r, g, b);
+    let h = 0;
+    if (d > 0) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return { h: (h * 60 + 360) % 360, s: max > 0 ? d / max : 0, v: max };
+}
+
+/** A typed hex colour (3 or 6 hex digits, with or without `#`, any case) as `#rrggbb`, or null when it is not one. */
+export function parseHexInput(text: string): string | null {
+    const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(text.trim());
+    if (!m) return null;
+    const h = m[1]!.toLowerCase();
+    return h.length === 3 ? `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}` : `#${h}`;
+}
+
 /** A swatch palette: a grayscale row, then hue columns × shade rows. */
 export function buildPalette(): string[][] {
     const grays = [100, 90, 80, 68, 56, 45, 35, 25, 14, 0].map((l) => hslHex(0, 0, l));

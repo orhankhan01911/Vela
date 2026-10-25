@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { VelaTheme } from '../src/core/options';
-import { splitColor, combineColor, buildColorPicker } from '../src/ui/components/color-picker';
+import { splitColor, combineColor, buildColorPicker, hsvHex, hexHsv, parseHexInput } from '../src/ui/components/color-picker';
 
 // A minimal element stub (this suite runs in the node env — no jsdom). It models just
 // enough of the tree for `buildColorPicker`: parent links so `isConnected` can be
@@ -21,6 +21,12 @@ interface FakeEl {
     appendChild: (c: FakeEl) => FakeEl;
     append: (...cs: FakeEl[]) => void;
     replaceChildren: (...cs: FakeEl[]) => void;
+    remove: () => void;
+    setAttribute: (k: string, v: string) => void;
+    querySelector: (tag: string) => FakeEl | null;
+    focus: () => void;
+    setPointerCapture: (id: number) => void;
+    getBoundingClientRect: () => { left: number; top: number; width: number; height: number };
 }
 
 function fakeEl(tag: string): FakeEl {
@@ -45,11 +51,24 @@ function fakeEl(tag: string): FakeEl {
         appendChild: (c) => { c.parentNode?.children.splice(c.parentNode.children.indexOf(c), 1); c.parentNode = el; el.children.push(c); return c; },
         append: (...cs) => { for (const c of cs) el.appendChild(c); },
         replaceChildren: (...cs) => { for (const c of el.children) c.parentNode = null; el.children = []; el.append(...cs); },
+        remove: () => { if (el.parentNode) { el.parentNode.children.splice(el.parentNode.children.indexOf(el), 1); el.parentNode = null; } },
+        setAttribute: () => {},
+        querySelector: (t) => {
+            for (const c of el.children) {
+                if (c.tag === t) return c;
+                const deep = c.querySelector(t);
+                if (deep) return deep;
+            }
+            return null;
+        },
+        focus: () => {},
+        setPointerCapture: () => {},
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }),
     };
     return el;
 }
 
-describe('color picker custom "+" input', () => {
+describe('color picker custom colour (TradingView: hex field, saturation square, hue bar, Add)', () => {
     const theme = { textColor: '#fff', fontFamily: 'sans-serif' } as unknown as VelaTheme;
     let savedDocument: unknown;
 
@@ -61,52 +80,84 @@ describe('color picker custom "+" input', () => {
         (globalThis as { document?: unknown }).document = savedDocument;
     });
 
-    function mount(): { input: FakeEl; recentSwatches: FakeEl; picked: string[] } {
+    const byId = (root: FakeEl, id: string): FakeEl | null => {
+        if (root.dataset.testid === id) return root;
+        for (const c of root.children) {
+            const f = byId(c, id);
+            if (f) return f;
+        }
+        return null;
+    };
+    const ev = (type: string, extra: Record<string, unknown> = {}): { type: string; stopPropagation(): void; preventDefault(): void } & Record<string, unknown> =>
+        ({ type, stopPropagation: () => {}, preventDefault: () => {}, ...extra });
+
+    function mount(): { root: FakeEl; palette: FakeEl; picked: string[]; open(): FakeEl } {
         const picked: string[] = [];
-        const body = fakeEl('body');
-        body.attached = true;
         const root = buildColorPicker('#089981', theme, (v) => picked.push(v)) as unknown as FakeEl;
-        body.appendChild(root);
-        // root → [grid, recentRow, …]; recentRow → [swatches wrapper, "+" label → [input]].
-        const recentRow = root.children[1]!;
-        const recentSwatches = recentRow.children[0]!;
-        const input = recentRow.children[1]!.children[0]!;
-        expect(input.type).toBe('color');
-        return { input, recentSwatches, picked };
+        const palette = root.children[0]!;
+        return {
+            root,
+            palette,
+            picked,
+            open: () => {
+                byId(root, 'color-custom')!.dispatchEvent(ev('click'));
+                return byId(root, 'color-custom-panel')!;
+            },
+        };
     }
 
-    it('keeps the same native color input in the DOM while the chooser streams values', () => {
-        const { input, recentSwatches, picked } = mount();
-        const recentsBefore = recentSwatches.children.length;
-        for (const v of ['#aa0000', '#bb1111', '#cc2222']) {
-            input.value = v;
-            input.dispatchEvent(new Event('input'));
-            // The browser closes its chooser if the owning input is detached — it must stay put.
-            expect(input.isConnected).toBe(true);
+    it('"+" opens our own panel on the current colour in hex, not the browser chooser (RGB)', () => {
+        const { root, palette, open } = mount();
+        expect(byId(root, 'color-custom')!.tag).toBe('button');
+        const panel = open();
+        expect(palette.style.display).toBe('none');
+        expect(byId(panel, 'color-hex')!.value).toBe('#089981');
+        expect(byId(panel, 'color-add')!.textContent).toBe('Add');
+    });
+
+    it('typing a hex code previews it; Add keeps it in the recents and goes back to the swatches', () => {
+        const { root, palette, picked, open } = mount();
+        const panel = open();
+        const hex = byId(panel, 'color-hex')!;
+        hex.value = 'F00';
+        hex.dispatchEvent(ev('input'));
+        expect(picked[picked.length - 1]).toBe('#ff0000');
+        hex.value = '#12';
+        hex.dispatchEvent(ev('input')); // half typed: no colour yet
+        expect(picked[picked.length - 1]).toBe('#ff0000');
+        hex.value = '#ff0000';
+        byId(panel, 'color-add')!.dispatchEvent(ev('click'));
+        expect(byId(root, 'color-custom-panel')).toBeNull();
+        expect(palette.style.display).toBe('contents');
+        const recentRow = palette.children[1]!;
+        expect(recentRow.children[0]!.children[0]!.style.cssText).toContain('background:#ff0000');
+    });
+
+    it('the square sets saturation and brightness, the bar the hue', () => {
+        const { picked, open } = mount();
+        const panel = open();
+        byId(panel, 'color-hue')!.dispatchEvent(ev('pointerdown', { clientX: 5, clientY: 0, pointerId: 1 }));
+        byId(panel, 'color-square')!.dispatchEvent(ev('pointerdown', { clientX: 100, clientY: 0, pointerId: 1 }));
+        expect(picked[picked.length - 1]).toBe('#ff0000'); // hue 0, full saturation and brightness
+        byId(panel, 'color-square')!.dispatchEvent(ev('pointerdown', { clientX: 0, clientY: 100, pointerId: 1 }));
+        expect(picked[picked.length - 1]).toBe('#000000');
+        expect(byId(panel, 'color-hex')!.value).toBe('#000000');
+    });
+});
+
+describe('custom colour math', () => {
+    it('hex, HSV and typed codes', () => {
+        expect(hsvHex(0, 1, 1)).toBe('#ff0000');
+        expect(hsvHex(120, 1, 1)).toBe('#00ff00');
+        expect(hsvHex(240, 1, 0.5)).toBe('#000080');
+        for (const c of ['#089981', '#f23645', '#2962ff', '#ffffff', '#000000', '#808080']) {
+            const { h, s: sat, v } = hexHsv(c);
+            expect(hsvHex(h, sat, v)).toBe(c);
         }
-        expect(picked).toEqual(['#aa0000', '#bb1111', '#cc2222']);
-        expect(recentSwatches.children.length).toBe(recentsBefore);
-    });
-
-    it('adds the committed color to the recents only on change, keeping the input attached', () => {
-        const { input, recentSwatches } = mount();
-        const recentsBefore = recentSwatches.children.length;
-        input.value = '#cc2222';
-        input.dispatchEvent(new Event('input'));
-        input.dispatchEvent(new Event('change'));
-        expect(input.isConnected).toBe(true);
-        expect(recentSwatches.children.length).toBe(recentsBefore + 1);
-        expect(recentSwatches.children[0]!.style.cssText).toContain('background:#cc2222');
-    });
-
-    it('syncs the native input to a swatch pick so the chooser opens on the current color', () => {
-        const { input, recentSwatches } = mount();
-        // Second recent: not the color the picker was opened with.
-        const swatch = recentSwatches.children[1]!;
-        const expected = /background:(#[0-9a-f]{6})/.exec(swatch.style.cssText)![1]!;
-        expect(input.value).not.toBe(expected);
-        swatch.dispatchEvent({ type: 'click', stopPropagation: () => {} });
-        expect(input.value).toBe(expected);
+        expect(parseHexInput('F00')).toBe('#ff0000');
+        expect(parseHexInput(' #2962FF ')).toBe('#2962ff');
+        expect(parseHexInput('#12')).toBeNull();
+        expect(parseHexInput('red')).toBeNull();
     });
 });
 
@@ -122,16 +173,16 @@ describe('color picker opacity slider', () => {
         (globalThis as { document?: unknown }).document = savedDocument;
     });
 
-    type Track = FakeEl & { getBoundingClientRect(): { left: number; width: number }; setPointerCapture(id: number): void; captured: number[] };
+    type Track = FakeEl & { captured: number[] };
 
     function mount(commit?: 'live' | 'release'): { track: Track; pct: FakeEl; emitted: string[] } {
         const emitted: string[] = [];
         const root = buildColorPicker('#089981', theme, (v) => emitted.push(v), commit ? { commit } : {}) as unknown as FakeEl;
-        // root → [grid, recentRow, opacity label, opacity row]; opacity row → [track, "%" box].
-        const opRow = root.children[3]!;
+        // root → [palette → [grid, recentRow, opacity label, opacity row]]; opacity row → [track, "%" box].
+        const opRow = root.children[0]!.children[3]!;
         const track = opRow.children[0]! as Track;
         track.captured = [];
-        track.getBoundingClientRect = () => ({ left: 100, width: 200 });
+        track.getBoundingClientRect = () => ({ left: 100, top: 0, width: 200, height: 13 });
         track.setPointerCapture = (id) => track.captured.push(id);
         return { track, pct: opRow.children[1]!, emitted };
     }
