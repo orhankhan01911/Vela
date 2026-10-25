@@ -11,6 +11,7 @@ import { BarsPattern } from './types/BarsPattern';
 import { GhostFeed } from './types/GhostFeed';
 import { AnchoredText, AnchoredNote, TableDrawing } from './types/Anchored';
 import { ImageDrawing } from './types/ImageDrawing';
+import { XPostDrawing } from './types/XPostDrawing';
 import { DoubleCurve } from './types/DoubleCurve';
 import { TimeCycles } from './types/TimeCycles';
 import { SineLine } from './types/SineLine';
@@ -1219,6 +1220,17 @@ registerDrawingType({
     coversSeries: true,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new ImageDrawing(init),
+});
+// The X logo (TradingView's "Post" tool).
+const XPOST_ICON = svg24('<path d="M4 4l16 16M20 4 4 20" stroke-width="1.6"/>');
+registerDrawingType({
+    type: 'xpost',
+    group: 'annotations',
+    label: 'Post',
+    icon: XPOST_ICON,
+    coversSeries: true,
+    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    create: (init) => new XPostDrawing(init),
 });
 const DOUBLE_CURVE_ICON = svg24('<path d="M3 19C1 8 9 3 12 12s11 4 9-7"/>');
 registerDrawingType({ type: 'doublecurve', group: 'shapes', label: 'Double Curve', icon: DOUBLE_CURVE_ICON, defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' }, create: (init) => new DoubleCurve(init) });

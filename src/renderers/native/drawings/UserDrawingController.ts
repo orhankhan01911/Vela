@@ -266,6 +266,23 @@ export class UserDrawingController implements IDrawingsRendererPort {
         return { front: Math.max(0, ...b), back: Math.min(0, ...b), price: this.deps.priceZ(paneId) ?? undefined };
     }
 
+    plotClientRect(): { left: number; top: number; width: number; height: number } | null {
+        const r = this.overlayHost.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
+    }
+
+    pointAtClient(clientX: number, clientY: number): { time: number; price: number; paneId: string } | null {
+        const r = this.plotClientRect();
+        if (!r) return null;
+        const x = clientX - r.left;
+        const y = clientY - r.top;
+        if (x < 0 || y < 0 || x > r.width || y > r.height) return null;
+        const proj = this.deps.projector();
+        const paneId = proj.paneIdAtY(y);
+        if (!paneId) return null;
+        return { ...proj.pxToPoint(x, y, paneId), paneId };
+    }
+
     /**
      * Union of the visible drawings' price ranges on `paneId` whose time extent
      * intersects [fromTime, toTime]. Hidden drawings and full-width references

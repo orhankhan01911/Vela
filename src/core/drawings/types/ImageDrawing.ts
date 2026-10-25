@@ -3,11 +3,27 @@ import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
 import { pointInBox, handleAt } from '../hittest';
 
+/** TradingView's limits for an image put on a chart: JPG or PNG, at most 2 MB, at most 2000 x 2000 px.
+ *  Hosts check them where a picture comes in (dialog, paste, drop); see {@link checkImageFile}. */
+export const IMAGE_MAX_BYTES = 2 * 1024 * 1024;
+export const IMAGE_MAX_SIDE = 2000;
+export const IMAGE_TYPES: readonly string[] = ['image/png', 'image/jpeg'];
+/** A 2 MB file as base64 data, plus the `data:image/jpeg;base64,` head. */
+const MAX_DATA_URL = Math.ceil(IMAGE_MAX_BYTES / 3) * 4 + 32;
+
+/** Why a picture cannot go on the chart (TradingView's words), or null when it can. */
+export function checkImageFile(file: { type: string; size: number }, dims?: { width: number; height: number }): string | null {
+    if (!IMAGE_TYPES.includes(file.type)) return 'The image must be in JPG or PNG format';
+    if (file.size > IMAGE_MAX_BYTES) return 'The image size must not exceed 2 MB';
+    if (dims && (dims.width > IMAGE_MAX_SIDE || dims.height > IMAGE_MAX_SIDE)) return 'The maximum resolution is 2000 x 2000 pixels';
+    return null;
+}
+
 /** Only web images and inline image data: no other URL scheme ever reaches an <img>. */
 export function safeImageUrl(v: unknown): string | null {
     if (typeof v !== 'string') return null;
     const s = v.trim();
-    if (s.length > 2_000_000) return null; // ~1.5 MB of inline data at most
+    if (s.length > MAX_DATA_URL) return null;
     if (/^data:image\/(png|jpeg|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(s)) return s;
     try {
         const u = new URL(s);

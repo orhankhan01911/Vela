@@ -115,6 +115,14 @@ export class DrawingController {
         return this.stayInDrawingMode;
     }
 
+    plotClientRect(): { left: number; top: number; width: number; height: number } | null {
+        return this.port?.plotClientRect?.() ?? null;
+    }
+
+    pointAtClient(clientX: number, clientY: number): { time: number; price: number; paneId: string } | null {
+        return this.port?.pointAtClient?.(clientX, clientY) ?? null;
+    }
+
     setStayMode(on: boolean): void {
         if (!this.port || on === this.stayInDrawingMode) return;
         this.stayInDrawingMode = on;

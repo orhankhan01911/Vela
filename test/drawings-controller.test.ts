@@ -568,8 +568,10 @@ describe('buildToolbar grouping', () => {
             'pricelabel',
             'signpost',
             'table',
-            'image',
         ]);
+        // TradingView's own split: text tools, then "Content" (pictures and posts)
+        expect(textGroup?.sections?.map((s) => s.label)).toEqual(['Text and notes', 'Content']);
+        expect(textGroup?.sections?.[1]?.tools.map((t) => t.type)).toEqual(['image', 'xpost']);
 
         const iconsGroup = definition.groups.find((g) => g.id === 'icons');
         expect(iconsGroup?.sections?.[0]?.tools.map((t) => t.type)).toEqual(['iconstamp', 'flagmark']);

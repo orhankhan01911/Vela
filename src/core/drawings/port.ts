@@ -110,6 +110,12 @@ export interface IDrawingsRendererPort {
      * among themselves, on a layer of their own.
      */
     stackRange?(paneId: string): { front: number; back: number; price?: number };
+    /** The plot's box in client (viewport) pixels — where a host drops or pastes content
+     *  (an image, a post) onto the chart. Optional — null when the renderer has no plot. */
+    plotClientRect?(): { left: number; top: number; width: number; height: number } | null;
+    /** The chart point under a client (viewport) position, with the pane it falls in; null
+     *  outside the plot. Pairs with {@link plotClientRect} for host-side placement. */
+    pointAtClient?(clientX: number, clientY: number): { time: number; price: number; paneId: string } | null;
     /** The one channel up — create/edit/select/delete/settings/tool-finished. */
     onDrawingIntent(cb: (intent: DrawingIntent) => void): Unsubscribe;
 }

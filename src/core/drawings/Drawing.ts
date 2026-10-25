@@ -41,6 +41,7 @@ export type DrawingTypeKey =
     | 'anchorednote'
     | 'table'
     | 'image'
+    | 'xpost'
     | 'doublecurve'
     | 'fixedrangetpo'
     | 'pricealert'

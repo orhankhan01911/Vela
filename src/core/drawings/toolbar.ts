@@ -80,7 +80,9 @@ const BRUSH_TYPES: DrawingTypeKey[] = ['freehand', 'highlighter'];
 const ARROW_TYPES: DrawingTypeKey[] = ['arrow', 'arrowmarker', 'arrowmarkup', 'arrowmarkdown'];
 const SHAPE_TYPES: DrawingTypeKey[] = ['box', 'ellipse', 'triangle', 'polyline', 'circle', 'rotatedrect', 'path', 'arc', 'curve', 'doublecurve'];
 
-const TEXT_TYPES: DrawingTypeKey[] = ['text', 'anchoredtext', 'callout', 'note', 'anchorednote', 'pricenote', 'comment', 'pricelabel', 'signpost', 'table', 'image'];
+const TEXT_TYPES: DrawingTypeKey[] = ['text', 'anchoredtext', 'callout', 'note', 'anchorednote', 'pricenote', 'comment', 'pricelabel', 'signpost', 'table'];
+/** TradingView's "Content" section under the text tools: pictures and posts a host places (dialog, paste, drop). */
+const CONTENT_TYPES: DrawingTypeKey[] = ['image', 'xpost'];
 const ICON_TYPES: DrawingTypeKey[] = ['iconstamp', 'flagmark'];
 
 type SectionSource = { label: string; registryGroup: string } | { label: string; types: readonly DrawingTypeKey[] };
@@ -142,7 +144,10 @@ const TOOLBAR_LAYOUT: readonly ToolbarGroupLayout[] = [
     {
         id: 'text',
         label: 'Text',
-        sections: [{ label: 'Text', types: TEXT_TYPES }],
+        sections: [
+            { label: 'Text and notes', types: TEXT_TYPES },
+            { label: 'Content', types: CONTENT_TYPES },
+        ],
     },
     {
         id: 'icons',

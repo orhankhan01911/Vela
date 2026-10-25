@@ -79,3 +79,7 @@ export function categoricalColor(key: string): string {
     for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
     return CATEGORICAL[h % CATEGORICAL.length]!;
 }
+
+/** X's own verified-account badge: the blue disc and its white check, drawn on an X post's card as X shows it. */
+export const X_VERIFIED = '#1d9bf0';
+export const X_VERIFIED_CHECK = '#ffffff';

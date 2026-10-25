@@ -55,6 +55,17 @@ export class DrawingsControl {
         return this.ctrl.getStayMode();
     }
 
+    /** The plot's box in client (viewport) pixels, or null without an interactive renderer.
+     *  For hosts that place content themselves (a pasted image, a dropped file). */
+    plotClientRect(): { left: number; top: number; width: number; height: number } | null {
+        return this.ctrl.plotClientRect();
+    }
+
+    /** The chart point (time, price, pane) under a client position; null outside the plot. */
+    pointAtClient(clientX: number, clientY: number): { time: number; price: number; paneId: string } | null {
+        return this.ctrl.pointAtClient(clientX, clientY);
+    }
+
     /** Enter/exit a renderer-local mode: `'measure'` (transient ruler), `'eraser'`, or
      *  `null` (none). Mutually exclusive with each other and with any armed tool — the
      *  renderer enforces the exclusion and the outcome lands on `drawing:mode`. */
