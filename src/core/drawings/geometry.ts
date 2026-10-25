@@ -86,6 +86,14 @@ export interface Projector {
      * an anchors-only rendering.
      */
     seriesInRange?(timeframe: string, from: number, to: number): DrawingSeriesState;
+    /**
+     * The main series' bar that holds `time`: the last bar opened at or before it (so on a 1m chart the minute, on
+     * 1h the hour, on a range or tick chart the bar that was forming then). `line` is true when the series is drawn
+     * as a line, which shows only the close. Null outside the loaded bars. Optional.
+     */
+    barAt?(time: number): { time: number; high: number; low: number; close: number; line: boolean } | null;
+    /** The chart's time zone (IANA name), for drawings that print a date. Optional: UTC. */
+    readonly timeZone?: string;
     /** Plot width in media px (excludes the right price-axis strip). */
     readonly width: number;
     /** Plot height in media px (excludes the bottom time-axis strip). */

@@ -87,6 +87,9 @@ export interface VelaEventMap extends Record<string, unknown> {
   /** Selection changed. `ids` is every selected drawing in selection order; `id` is the
    *  primary (`ids[0]`, the one a settings popup edits), null when nothing is selected. */
   "drawing:selected": { id: string | null; ids: string[] };
+  /** Drawings were copied (Ctrl+C or `drawings.copyToClipboard`). A host that pastes pictures or links from the
+   *  system clipboard marks it here, so a later Ctrl+V pastes whatever was copied last, as on TradingView. */
+  "drawing:copied": { ids: string[] };
   /** The favorite-tool set changed (star toggles or a bulk restore). */
   "drawing:favorites": { favorites: string[] };
   /** The armed drawing tool changed — toolbar click, one-shot tool finishing (back to

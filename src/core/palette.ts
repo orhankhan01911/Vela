@@ -79,3 +79,8 @@ export function categoricalColor(key: string): string {
     for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
     return CATEGORICAL[h % CATEGORICAL.length]!;
 }
+
+/** TradingView's X post card (its own palette, measured on its dark chart 2026-10-26): a black card with light
+ *  text and grey details in dark, the white card in light. `line` is the line to the post's bar. */
+export const XPOST_DARK = { back: '#000000', border: '#1A1A1A', name: '#DBDBDB', text: '#DBDBDB', muted: '#808080', line: '#808080', url: '#1848CC' } as const;
+export const XPOST_LIGHT = { back: '#FFFFFF', border: '#EBEBEB', name: '#000000', text: '#0F0F0F', muted: '#808080', line: '#808080', url: '#2962FF' } as const;

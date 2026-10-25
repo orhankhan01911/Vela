@@ -210,9 +210,10 @@ export class DrawingsControl {
         return this;
     }
 
-    /** Paste the clipboard as new drawings (fresh ids), selecting them. */
-    paste(): this {
-        if (this.ok('paste')) this.ctrl.paste();
+    /** Paste the clipboard (or `docs`, e.g. a copy kept by the host across charts) as new drawings with fresh ids,
+     *  40 px above where they were copied, as TradingView pastes, and select them. */
+    paste(docs?: readonly SerializedDrawing[]): this {
+        if (this.ok('paste')) this.ctrl.paste(docs);
         return this;
     }
 

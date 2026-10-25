@@ -24,7 +24,7 @@ export { CyclicLines, MAX_CYCLES } from './types/CyclicLines';
 export { Projection } from './types/Projection';
 export { AnchoredText, AnchoredNote, TableDrawing } from './types/Anchored';
 export { ImageDrawing, safeImageUrl, checkImageFile, IMAGE_MAX_BYTES, IMAGE_MAX_SIDE, IMAGE_TYPES } from './types/ImageDrawing';
-export { XPostDrawing, XPOST_W, toXPostCard, safeRelayPath, type XPostCard } from './types/XPostDrawing';
+export { XPostDrawing, XPOST_W, XPOST_POSITION, toXPostCard, safeRelayPath, type XPostCard } from './types/XPostDrawing';
 export { DoubleCurve } from './types/DoubleCurve';
 export { GhostFeed, type GhostCandle } from './types/GhostFeed';
 export { BarsPattern, type PatternBar } from './types/BarsPattern';

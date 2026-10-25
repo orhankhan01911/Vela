@@ -3796,7 +3796,31 @@ export class NativeRenderer implements IChartRenderer {
             this.userDrawings?.seriesGateway
                 ? (tf, from, to) => this.userDrawings!.seriesGateway!.seriesInRange(tf, from, to)
                 : undefined,
+            { barAt: (t) => this.barAtTime(t), timeZone: this.scene.timezone },
         );
+    }
+
+    /** The bar holding `t`: the last one opened at or before it (TradingView also takes the first bar for a time up
+     *  to a day before it). `this.bars` is ascending, so a binary search. */
+    private barAtTime(t: number): { time: number; high: number; low: number; close: number; line: boolean } | null {
+        const bars = this.bars;
+        const first = bars[0];
+        if (!first || !Number.isFinite(t)) return null;
+        let b: OHLCV | undefined;
+        if (t < first.time) b = first.time - t <= 86_400_000 ? first : undefined;
+        else {
+            let lo = 0;
+            let hi = bars.length - 1;
+            while (lo < hi) {
+                const mid = (lo + hi + 1) >> 1;
+                if (bars[mid]!.time <= t) lo = mid;
+                else hi = mid - 1;
+            }
+            b = bars[lo];
+        }
+        if (!b) return null;
+        const line = ['line', 'area', 'baseline', 'step', 'stepline', 'linemarkers'].includes(String(this.scene.priceStyle));
+        return { time: b.time, high: b.high, low: b.low, close: b.close, line };
     }
 
     /** OHLC bars whose open-time falls within `[from, to]` (inclusive) — the data a regression

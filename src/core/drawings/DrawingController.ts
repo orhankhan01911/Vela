@@ -350,7 +350,9 @@ export class DrawingController {
     /** Copy drawings into the in-memory clipboard (no model change, no event). */
     copy(ids: readonly string[]): void {
         const docs = this.resolve(ids).map((d) => clonePlain(d.serialize()));
-        if (docs.length) this.clipboard = docs;
+        if (!docs.length) return;
+        this.clipboard = docs;
+        this.events.emit('drawing:copied', { ids: docs.map((d) => d.id) });
     }
 
     /** True when {@link paste} would place something. */
@@ -358,9 +360,11 @@ export class DrawingController {
         return this.enabled && this.clipboard.length > 0;
     }
 
-    paste(): Drawing[] {
-        if (!this.enabled || this.clipboard.length === 0) return [];
-        return this.insertClones(this.clipboard);
+    /** Paste the clipboard, or `docs` (a host's own page-wide copy), as new selected drawings, where the renderer
+     *  puts a paste (TradingView: 40 px above the source). One undo step. */
+    paste(docs: readonly SerializedDrawing[] = this.clipboard): Drawing[] {
+        if (!this.enabled || docs.length === 0) return [];
+        return this.insertClones(this.port?.shiftForPaste?.(docs) ?? docs);
     }
 
     all(): SerializedDrawing[] {

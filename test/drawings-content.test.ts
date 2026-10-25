@@ -2,7 +2,7 @@
 // Image = one top-left point + a size in screen pixels; X post (LineToolTweet) = a time + a height on the pane.
 import { describe, it, expect } from 'vitest';
 import { buildToolbar, checkImageFile, createDrawing, deserializeDrawing, safeImageUrl, toXPostCard, type ImageDrawing, type Projector, type XPostDrawing } from '../src/core/drawings';
-import { xpostDate } from '../src/renderers/native/drawings/DrawingPainter';
+import { xpostColors, xpostDate } from '../src/renderers/native/drawings/DrawingPainter';
 
 function proj(): Projector {
     return {
@@ -69,30 +69,59 @@ describe('Image drawing (TradingView: a top-left point and a size in screen pixe
 });
 
 describe('X post drawing', () => {
-    it('hangs below its handle at a time and a height on the pane; a price-scale change never moves it', () => {
-        const d = createDrawing('xpost', { paneId: 'price', anchors: [{ time: 300, price: 0.25 }], props: { post: POST } }) as XPostDrawing;
-        const l = d.layout(proj())!;
-        expect(l.dot).toEqual([300, 100]); // a quarter down a 400 px pane
-        expect(l.card.x + l.card.w / 2).toBe(300);
-        expect(l.card.y).toBe(100);
+    // The post's bar: opened at 300, high 300 (y 100), low 200 (y 200) on a 400 px pane.
+    const withBar = (): Projector => ({ ...proj(), barAt: (t) => (t >= 300 && t < 360 ? { time: 300, high: 300, low: 200, close: 250, line: false } : null) });
+    const at = (time: number, position: number): XPostDrawing =>
+        createDrawing('xpost', { paneId: 'price', anchors: [{ time, price: position }], props: { post: { ...POST, t: 330 } } }) as XPostDrawing;
+
+    it("hangs below its handle, half way between the post's bar and the pane's top (TradingView's position 50)", () => {
+        const d = at(330, 50);
+        const l = d.layout(withBar())!;
+        expect(l.dot).toEqual([330, (100 - 3) / 2]); // 3 px clear of the high, as TradingView
+        expect(l.card.x + l.card.w / 2).toBe(330);
         expect(d.priceRange()).toBeNull();
-        const squashed: Projector = { ...proj(), yOf: (p) => 400 - p / 10 }; // another price scale, same pane
-        expect(d.layout(squashed)!.dot).toEqual([300, 100]);
-        expect(d.hitTest(300, 120, proj(), 3)).toBe(true);
-        expect(d.hitTest(10, 10, proj(), 3)).toBe(false);
+        expect(d.hitTest(330, 60, withBar(), 3)).toBe(true);
+        expect(d.hitTest(10, 300, withBar(), 3)).toBe(false);
     });
 
-    it('moves on the screen: time along the axis, height as a share of the pane', () => {
-        const d = createDrawing('xpost', { paneId: 'price', anchors: [{ time: 300, price: 0.25 }], props: { post: POST } }) as XPostDrawing;
-        expect(d.translateBodyPx(40, 100, d.anchors, proj())).toEqual([{ time: 340, price: 0.5 }]);
-        expect(d.translateBodyPx(0, 5000, d.anchors, proj())![0]!.price).toBeLessThan(1); // the handle stays on the pane
-        expect(d.dragHandlePx(0, 500, 200, proj())).toBe(true);
-        expect(d.anchors).toEqual([{ time: 500, price: 0.5 }]);
+    it('stays with its bar when the price scale moves', () => {
+        const d = at(330, 50);
+        const lower: Projector = { ...withBar(), yOf: (price) => 500 - price }; // the bar is now 100 px lower
+        expect(d.layout(lower)!.dot[1]).toBeCloseTo((200 - 3) / 2);
+        expect(at(330, -50).layout(withBar())!.dot[1]).toBeCloseTo(203 + (400 - 203) / 2); // below the low
     });
 
-    it("dates the card as TradingView does, 24 Oct '26 · 08:35 PM", () => {
+    it('sits in the middle of the pane when its bar is not loaded', () => {
+        expect(at(330, 50).layout(proj())!.dot).toEqual([330, 100]);
+    });
+
+    it('points its line at the bar the post was made in: high and low, or the close on a line chart', () => {
+        expect(at(900, 50).barPoints(withBar())).toEqual([[300, 100], [300, 200]]);
+        const line: Projector = { ...proj(), barAt: () => ({ time: 300, high: 300, low: 200, close: 250, line: true }) };
+        expect(at(900, 50).barPoints(line)).toEqual([[300, 150]]);
+        expect(at(900, 50).barPoints(proj())).toEqual([]);
+    });
+
+    it('moves on the screen: along the time axis, and up or down as a new position against its bar', () => {
+        const d = at(330, 50);
+        expect(d.translateBodyPx(0, 0, d.anchors, withBar())).toEqual([{ time: 330, price: 50 }]); // a click is not a move
+        expect(d.translateBodyPx(40, -25, d.anchors, withBar())).toEqual([{ time: 370, price: 75 }]);
+        expect(d.translateBodyPx(0, 100, d.anchors, withBar())![0]!.price).toBeCloseTo(0); // inside the bar: on it
+        expect(d.translateBodyPx(0, 250, d.anchors, withBar())![0]!.price).toBeCloseTo(-50); // y 300: half way below
+        expect(d.dragHandlePx(0, 500, 25, withBar())).toBe(true);
+        expect(d.anchors).toEqual([{ time: 500, price: 75 }]);
+    });
+
+    it("dates the card as TradingView does, 24 Oct '26 · 08:35 PM, in the chart's time zone", () => {
         expect(xpostDate(Date.UTC(2026, 9, 24, 20, 35))).toBe("24 Oct '26 · 08:35 PM");
         expect(xpostDate(Date.UTC(2026, 0, 3, 0, 5))).toBe("3 Jan '26 · 12:05 AM");
+        expect(xpostDate(Date.UTC(2026, 9, 24, 15, 35), 'Asia/Karachi')).toBe("24 Oct '26 · 08:35 PM");
+        expect(xpostDate(Date.UTC(2026, 9, 24, 15, 35), 'Not/AZone')).toBe("24 Oct '26 · 03:35 PM");
+    });
+
+    it("is TradingView's black card on a dark chart and its white card on a light one", () => {
+        for (const bg of ['#0e0e0e', '#131722', 'rgb(10, 12, 14)', '#000']) expect(xpostColors(bg).back, bg).toBe('#000000');
+        for (const bg of ['#ffffff', '#f0f3fa', '#fff']) expect(xpostColors(bg).back, bg).toBe('#FFFFFF');
     });
 
     it('round-trips through a saved layout', () => {

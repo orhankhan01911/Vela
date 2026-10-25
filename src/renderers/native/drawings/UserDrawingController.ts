@@ -26,6 +26,9 @@ import { topDrawingAt, deletableSelection, deleteTargets, HIT_TOLERANCE } from '
 import { keyToDrawingAction, isEditingText } from './DrawingKeys';
 import type { DrawingSlice } from '../core/SceneGraph';
 
+/** How far up a pasted copy lands (TradingView's paste, px). */
+const PASTE_SHIFT = 40;
+
 /** Shown in the inline editor while a label carries no text yet. */
 const TEXT_PLACEHOLDER = 'Enter Text';
 /** Extra width past the measured glyphs so the caret has somewhere to sit. */
@@ -373,6 +376,24 @@ export class UserDrawingController implements IDrawingsRendererPort {
         fn();
         const after = this.modeOf();
         if (after !== before) this.emit({ kind: 'mode', mode: after });
+    }
+
+    /** TradingView pastes a copy 40 px above its source. A card or a picture that moves on the screen moves the
+     *  same way here; everything else by price. */
+    shiftForPaste(docs: readonly SerializedDrawing[]): SerializedDrawing[] {
+        const proj = this.deps.projector();
+        return docs.map((doc) => {
+            const d = deserializeDrawing(doc);
+            if (!d) return doc;
+            const px = d.translateBodyPx(0, -PASTE_SHIFT, d.anchors, proj);
+            const anchors =
+                px ??
+                d.anchors.map((a) => {
+                    const y = proj.yOf(a.price, d.paneId);
+                    return y == null ? { ...a } : { ...a, price: proj.pxToPoint(proj.xOf(a.time), y - PASTE_SHIFT, d.paneId).price };
+                });
+            return { ...doc, anchors };
+        });
     }
 
     setSelection(ids: readonly string[]): void {

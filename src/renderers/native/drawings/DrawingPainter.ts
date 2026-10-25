@@ -2,7 +2,7 @@ import type { Drawing, Projector, DrawingStyle, Box, TrendLine, TextLabel, Ellip
 import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
-import { ACCENT, BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP } from '../../../core/palette';
+import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP, XPOST_DARK, XPOST_LIGHT } from '../../../core/palette';
 import { withAlpha } from '../../../core/color';
 import { barTransformFor } from '../../../core/price-styles/BarTransform';
 import type { OHLCV } from '../../../core/model/ohlcv';
@@ -792,121 +792,128 @@ export class DrawingPainter {
         return e.state === 'ok' ? e.img : null;
     }
 
-    /** An X post's card as TradingView draws it: picture, name, @handle, the post's text (its own line breaks kept),
-     *  "Link to X post" and the date. Laid out first so its height is known before drawing. */
+    /** An X post's card as TradingView's own renderer draws it (its `TweetRenderer`, read from TradingView's code):
+     *  the line to the post's bar first, then the card over it: picture, name, @handle, the post's text wrapped at
+     *  320 px, "Link to X post", a rule and the date. The card is as wide as its text needs. */
     private paintXPost(ctx: CanvasRenderingContext2D, d: XPostDrawing, proj: Projector, theme: VelaTheme): void {
         const p = d.post;
-        const pad = 14;
         const font = theme.fontFamily;
-        const l0 = d.layout(proj);
-        if (!l0) return;
-        const w = l0.card.w;
-        const inner = w - pad * 2;
+        const c = xpostColors(theme.background);
         ctx.save();
-        // -- layout: wrap each of the post's own lines, then the card's height --
-        ctx.font = `13px ${font}`;
-        const lines: string[] = [];
-        for (const para of (p ? p.text : 'This post is not available').split('\n')) {
-            const words = para.split(' ').filter(Boolean);
-            if (!words.length) {
-                lines.push('');
-                continue;
-            }
-            let cur = '';
-            for (const word of words) {
-                let wd = word;
-                // a word wider than the card (a long link) breaks by characters
-                while (ctx.measureText(wd).width > inner && wd.length > 1) {
-                    let k = wd.length - 1;
-                    while (k > 1 && ctx.measureText(wd.slice(0, k)).width > inner) k--;
-                    if (cur) lines.push(cur);
-                    lines.push(wd.slice(0, k));
-                    cur = '';
-                    wd = wd.slice(k);
-                }
-                if (cur && ctx.measureText(`${cur} ${wd}`).width > inner) {
-                    lines.push(cur);
-                    cur = wd;
-                } else cur = cur ? `${cur} ${wd}` : wd;
-            }
-            if (cur) lines.push(cur);
-        }
-        const MAX_LINES = 12;
-        if (lines.length > MAX_LINES) {
-            lines.length = MAX_LINES;
-            lines[MAX_LINES - 1] = `${lines[MAX_LINES - 1]!.replace(/.$/, '')}…`;
-        }
-        const LH = 19;
-        const head = 36;
-        d.cardH = pad + head + 12 + lines.length * LH + 10 + 18 + 10 + 1 + 10 + 16 + pad;
-        const { x, y, h } = d.layout(proj)!.card;
-        // -- the card --
-        ctx.save();
-        ctx.shadowColor = withAlpha(theme.textColor, 0.18);
-        ctx.shadowBlur = 12;
-        ctx.shadowOffsetY = 2;
-        ctx.fillStyle = theme.background;
-        roundRect(ctx, x, y, w, h, 8);
-        ctx.fill();
-        ctx.restore();
-        ctx.strokeStyle = withAlpha(theme.textColor, 0.12);
-        ctx.lineWidth = 1;
-        roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 8);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.rect(x, y, w, h);
-        ctx.clip();
-        // author picture
-        const av = p?.avatar ? this.relayImage(p.avatar) : null;
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(x + pad + head / 2, y + pad + head / 2, head / 2, 0, Math.PI * 2);
-        ctx.clip();
-        if (av) ctx.drawImage(av, x + pad, y + pad, head, head);
-        else {
-            ctx.fillStyle = withAlpha(theme.textColor, 0.12);
-            ctx.fill();
-        }
-        ctx.restore();
-        // name and @handle, cut to fit
-        const tx = x + pad + head + 10;
-        const room = x + w - pad - tx;
-        const fit = (t: string): string => {
-            if (ctx.measureText(t).width <= room) return t;
-            let k = t.length;
-            while (k > 1 && ctx.measureText(`${t.slice(0, k)}…`).width > room) k--;
-            return `${t.slice(0, k)}…`;
-        };
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'alphabetic';
-        ctx.fillStyle = theme.textColor;
-        ctx.font = `600 14px ${font}`;
-        ctx.fillText(fit(p?.name || p?.handle || 'X'), tx, y + pad + 15);
+        // -- measure (TradingView's `_precalculate`) --
+        ctx.font = `14px ${font}`;
+        const lines = wrapPost(ctx, p ? p.text : 'This post is not available', 320).slice(0, 40);
+        const textW = Math.max(0, ...lines.map((l) => ctx.measureText(l).width)) + 32;
+        const linkW = ctx.measureText(XPOST_LINK).width + 32;
         ctx.font = `12px ${font}`;
-        ctx.fillStyle = withAlpha(theme.textColor, 0.55);
-        if (p?.handle) ctx.fillText(fit(`@${p.handle}`), tx, y + pad + 32);
-        // the post's text
-        let cy = y + pad + head + 12;
-        ctx.fillStyle = theme.textColor;
-        ctx.font = `13px ${font}`;
-        for (const line of lines) {
-            ctx.fillText(line, x + pad, cy + 15);
-            cy += LH;
+        const handle = p?.handle ? `@${p.handle}` : '';
+        const date = p ? xpostDate(p.t, proj.timeZone) : '';
+        const handleW = ctx.measureText(handle).width;
+        const dateW = ctx.measureText(date).width + 32;
+        ctx.font = `bold 14px ${font}`;
+        const name = p?.name || p?.handle || 'X';
+        const nameW = ctx.measureText(name).width;
+        d.cardW = Math.ceil(Math.max(textW, linkW, Math.max(handleW, nameW) + 76, dateW));
+        d.cardH = Math.ceil(14 * (lines.length + 2) * 1.2 + 58 + 41);
+        const l = d.layout(proj);
+        if (!l) {
+            ctx.restore();
+            return;
         }
-        // link and date
-        cy += 10;
+        const { x, y, w, h } = l.card;
+        // -- the line to the post's bar, under the card --
+        this.paintXPostLine(ctx, x + w / 2, y + h / 2, h / 2, d.barPoints(proj), theme.background, c.line);
+        // -- the card --
+        const rx = Math.round(x);
+        const ry = Math.round(y);
+        ctx.fillStyle = c.back;
+        ctx.strokeStyle = c.border;
+        ctx.lineWidth = 1;
+        roundRect(ctx, rx + 0.5, ry + 0.5, w, h, 8);
+        ctx.fill();
+        ctx.stroke();
+        // author picture, a 36 px circle
+        const av = p?.avatar ? this.relayImage(p.avatar) : null;
+        if (av) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(rx + 16 + 18, ry + 13 + 18, 18, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(av, rx + 16, ry + 13, 36, 36);
+            ctx.restore();
+        }
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.font = `bold 14px ${font}`;
+        ctx.fillStyle = c.name;
+        ctx.fillText(name, rx + 60, ry + 15.5);
+        ctx.font = `12px ${font}`;
+        ctx.fillStyle = c.muted;
+        ctx.fillText(handle, rx + 60, ry + 34.5);
+        // the post's text, then the link after one empty line
+        ctx.font = `14px ${font}`;
+        ctx.fillStyle = c.text;
+        lines.forEach((t, i) => ctx.fillText(t, rx + 16, ry + 58 + i * 16.8));
         if (p) {
-            ctx.font = `14px ${font}`;
-            ctx.fillStyle = ACCENT;
-            ctx.fillText('Link to X post', x + pad, cy + 14);
-            cy += 18 + 10;
-            // a rule above the date, as on TradingView's card
-            ctx.fillStyle = withAlpha(theme.textColor, 0.12);
-            ctx.fillRect(x + pad, cy, inner, 1);
-            cy += 1 + 10;
-            ctx.font = `12px ${font}`;
-            ctx.fillStyle = withAlpha(theme.textColor, 0.5);
-            ctx.fillText(xpostDate(p.t), x + pad, cy + 12);
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(rx + 16, ry + 58 + (lines.length + 1) * 16.8, w - 32, 14);
+            ctx.clip();
+            ctx.fillStyle = c.url;
+            ctx.fillText(XPOST_LINK, rx + 16, ry + 58 + (lines.length + 1) * 16.8);
+            ctx.restore();
+        }
+        // the rule and the date
+        ctx.fillStyle = c.border;
+        ctx.fillRect(rx + 16, ry + h - 33, w - 32, 1);
+        ctx.textBaseline = 'middle';
+        ctx.font = `12px ${font}`;
+        ctx.fillStyle = c.muted;
+        ctx.fillText(date, rx + 16, ry + h - 33 + 16.5);
+        ctx.restore();
+    }
+
+    /** TradingView's connector (`_drawConnector`): from the card's top or bottom edge to the nearer end of the post's
+     *  bar, as an elbow through the half-way height, stopping 2 px short of the bar; a plain horizontal line when the
+     *  half-way height falls inside the card. Drawn twice, a 3 px stroke in the chart's background under a 1 px one,
+     *  so it stays readable over candles. */
+    private paintXPostLine(ctx: CanvasRenderingContext2D, cx: number, cy: number, m: number, pts: Array<[number, number]>, bg: string, color: string): void {
+        let best: [number, number] | null = null;
+        let dist = Infinity;
+        for (const pt of pts) {
+            const dd = Math.hypot(pt[0] - cx, pt[1] - cy);
+            if (dd < dist) {
+                dist = dd;
+                best = pt;
+            }
+        }
+        if (!best) return;
+        const below = best[1] > cy;
+        const from = Math.round(cy + (below ? m : -m)) + 0.5;
+        const to = Math.round(best[1]) + (below ? -2 : 2) + 0.5;
+        const bx = Math.round(best[0]) + 0.5;
+        const ax = Math.round(cx) + 0.5;
+        const mid = Math.round((to + from) / 2) + 0.5;
+        ctx.save();
+        ctx.lineCap = 'square';
+        for (const [stroke, lw] of [[bg, 3], [color, 1]] as const) {
+            ctx.strokeStyle = stroke;
+            ctx.lineWidth = lw;
+            ctx.beginPath();
+            if (Math.abs(cx - best[0]) < 1) {
+                ctx.moveTo(bx, from);
+                ctx.lineTo(bx, to);
+            } else if (mid > cy - m && mid < cy + m) {
+                ctx.moveTo(ax, to);
+                ctx.lineTo(bx, to);
+            } else {
+                ctx.moveTo(ax, from);
+                ctx.lineTo(ax, mid);
+                ctx.lineTo(bx, mid);
+                ctx.lineTo(bx, to);
+            }
+            ctx.stroke();
         }
         ctx.restore();
     }
@@ -2915,12 +2922,61 @@ export function labelLayout(d: Drawing, proj: Projector): {
     }
 }
 
-/** TradingView's date on a post card, `24 Oct '26 · 08:35 PM`, in UTC (the time axis's default). */
-export function xpostDate(ms: number): string {
-    const d = new Date(ms);
-    const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()];
-    const h = d.getUTCHours();
-    const hh = String(h % 12 === 0 ? 12 : h % 12).padStart(2, '0');
-    const mm = String(d.getUTCMinutes()).padStart(2, '0');
-    return `${d.getUTCDate()} ${mon} '${String(d.getUTCFullYear()).slice(2)} · ${hh}:${mm} ${h < 12 ? 'AM' : 'PM'}`;
+/** The card's link text, TradingView's. */
+const XPOST_LINK = 'Link to X post';
+
+/** TradingView's card colours for the chart's background. */
+export function xpostColors(background: string): { back: string; border: string; name: string; text: string; muted: string; line: string; url: string } {
+    return isDarkColor(background) ? XPOST_DARK : XPOST_LIGHT;
+}
+
+/** True for a dark colour; a colour it cannot read (a gradient, a variable) counts as dark. */
+function isDarkColor(c: string): boolean {
+    const rgb = parseRgb(c);
+    return !rgb || 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2] < 128;
+}
+
+/** The post's text wrapped to `max` px as TradingView wraps it: its own line breaks kept, words kept whole, a word
+ *  wider than the card (a long link) broken by characters. */
+function wrapPost(ctx: CanvasRenderingContext2D, text: string, max: number): string[] {
+    const lines: string[] = [];
+    for (const para of text.split(/\r?\n|\r/)) {
+        const words = para.split(' ').filter(Boolean);
+        if (!words.length) {
+            lines.push('');
+            continue;
+        }
+        let cur = '';
+        for (const word of words) {
+            let wd = word;
+            while (ctx.measureText(wd).width > max && wd.length > 1) {
+                let k = wd.length - 1;
+                while (k > 1 && ctx.measureText(wd.slice(0, k)).width > max) k--;
+                if (cur) lines.push(cur);
+                lines.push(wd.slice(0, k));
+                cur = '';
+                wd = wd.slice(k);
+            }
+            if (cur && ctx.measureText(`${cur} ${wd}`).width > max) {
+                lines.push(cur);
+                cur = wd;
+            } else cur = cur ? `${cur} ${wd}` : wd;
+        }
+        if (cur) lines.push(cur);
+    }
+    return lines;
+}
+
+/** TradingView's date on a post card, `24 Oct '26 · 08:35 PM`, in the chart's time zone (UTC when it has none). */
+export function xpostDate(ms: number, timeZone = 'UTC'): string {
+    let parts: Intl.DateTimeFormatPart[];
+    const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true };
+    try {
+        parts = new Intl.DateTimeFormat('en-US', { ...opts, timeZone }).formatToParts(ms);
+    } catch {
+        parts = new Intl.DateTimeFormat('en-US', { ...opts, timeZone: 'UTC' }).formatToParts(ms);
+    }
+    const v = (t: string): string => parts.find((x) => x.type === t)?.value ?? '';
+    const hh = v('hour').padStart(2, '0');
+    return `${v('day')} ${v('month')} '${v('year')} · ${hh}:${v('minute')} ${v('dayPeriod').toUpperCase()}`;
 }

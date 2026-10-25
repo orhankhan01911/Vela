@@ -329,6 +329,20 @@ describe('DrawingController — editing foundation', () => {
         expect(seen).toContainEqual(['drawing:created', pasted[0]!.id]);
     });
 
+    it('announces a copy (so a host can mark the system clipboard) and pastes where the renderer shifts it', () => {
+        const { port, ctrl, events } = setup();
+        const d = ctrl.add('hline', { anchors: [{ time: 1, price: 1 }] })!;
+        const copied: string[][] = [];
+        events.on('drawing:copied', (e) => copied.push(e.ids));
+        ctrl.copy([d.id]);
+        expect(copied).toEqual([[d.id]]);
+        (port as unknown as { shiftForPaste: (docs: SerializedDrawing[]) => SerializedDrawing[] }).shiftForPaste = (docs) =>
+            docs.map((doc) => ({ ...doc, anchors: doc.anchors.map((a) => ({ ...a, price: a.price + 40 })) }));
+        const pasted = ctrl.paste();
+        expect(pasted[0]!.anchors).toEqual([{ time: 1, price: 41 }]);
+        expect(ctrl.paste()[0]!.anchors).toEqual([{ time: 1, price: 41 }]); // each paste from the same copy, as TradingView
+    });
+
     it('generalized select: additive toggles membership; primary is ids[0]; the event carries the full list', () => {
         const { port, ctrl, seen, events } = setup();
         const payloads: Array<{ id: string | null; ids: string[] }> = [];

@@ -74,6 +74,9 @@ export interface IDrawingsRendererPort {
     setActiveTool(type: DrawingTypeKey | null, lastStyle?: SerializedDrawing['style']): void;
     /** Reflect which drawings are selected (drives handle painting); `[]` = none. */
     setSelection(ids: readonly string[]): void;
+    /** Where pasted copies land: TradingView puts them 40 px above their source, so the copy is seen. Optional —
+     *  without it a copy lands on its source. */
+    shiftForPaste?(docs: readonly SerializedDrawing[]): SerializedDrawing[];
     /** Push the FAVORITE tool set (flyout stars + any favorites-driven UI). Optional —
      *  favorites still work headless without a renderer reflection. */
     setFavorites?(types: readonly DrawingTypeKey[]): void;

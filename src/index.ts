@@ -49,6 +49,7 @@ export {
     IMAGE_TYPES,
     toXPostCard,
     XPOST_W,
+    XPOST_POSITION,
 } from './core/drawings';
 export type {
     DrawingTypeKey,
