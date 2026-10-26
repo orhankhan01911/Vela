@@ -251,7 +251,8 @@ describe('gridlines and price labels share one tick source', () => {
         const { gridYs, labels } = paintFrame(src, s, c);
         const price = s.panes.get('price')!;
         const study = s.panes.get('study-1')!;
-        const expectY = (p: number, pane: PaneNode) => c.priceToY(p, pane.scale, pane.bounds);
+        // labels sit on whole device pixels
+        const expectY = (p: number, pane: PaneNode) => Math.round(c.priceToY(p, pane.scale, pane.bounds) * c.dpr) / c.dpr;
         expect(labels.map((l) => l.text)).toEqual(['P120', 'P150', 'P180', 'S25', 'S75']);
         expect(labels.map((l) => l.y)).toEqual([...[120, 150, 180].map((p) => expectY(p, price)), ...[25, 75].map((p) => expectY(p, study))]);
         expect(gridYs).toEqual(labels.map((l) => Math.round(l.y) + 0.5));

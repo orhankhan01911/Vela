@@ -391,7 +391,8 @@ export class ChromeRenderer {
         for (const pane of panes) {
             if (pane.collapsed) continue; // collapsed strip: legend only, no scale numbers
             for (const t of this.axisTicks.ticksFor(scene, pane, coords)) {
-                const y = coords.priceToY(t.price, pane.scale, pane.bounds);
+                // on a whole device pixel: a fractional baseline smears the strokes over two pixel rows at 110-150 % zoom
+                const y = Math.round(coords.priceToY(t.price, pane.scale, pane.bounds) * coords.dpr) / coords.dpr;
                 if (y < pane.bounds.top + 6 || y > pane.bounds.top + pane.bounds.height - 4) continue;
                 if (t.major === true) ctx.font = majorFont;
                 else if (t.major === false) ctx.globalAlpha = alpha * MINOR_LABEL_ALPHA;
@@ -405,7 +406,7 @@ export class ChromeRenderer {
             // categorical axis) — same column, same typography as the price ticks.
             if (pane.axisBands) {
                 for (const b of pane.axisBands) {
-                    const y = pane.bounds.top + b.frac * pane.bounds.height;
+                    const y = Math.round((pane.bounds.top + b.frac * pane.bounds.height) * coords.dpr) / coords.dpr;
                     if (y < pane.bounds.top + 6 || y > pane.bounds.top + pane.bounds.height - 4) continue;
                     ctx.fillText(b.label, dataW + 6, y);
                     const w = this.measureCached(ctx, b.label);
