@@ -22,7 +22,13 @@ export interface ChromeTooltipOptions {
     placement?: 'below' | 'right' | 'above';
     /** Allow wrapping (long texts, e.g. an input's docs). Default false — one line. */
     wrap?: boolean;
+    /** A finger tap opens the tip (and the next tap anywhere closes it). For ⓘ hints, which a
+     *  touch screen otherwise has no way to read. Default false. */
+    tapToOpen?: boolean;
 }
+
+/** Above every in-page layer, the dialogs' own positioners included. */
+const TIP_Z = '2147483000';
 
 /**
  * Attach the tooltip to an anchor. Returns a disposer that removes the listeners AND any
@@ -48,31 +54,40 @@ export function attachChromeTooltip(anchor: HTMLElement, opts: ChromeTooltipOpti
         const doc = anchor.ownerDocument;
         tip = doc.createElement('div');
         tip.textContent = text;
-        // The tooltip layer token (60) keeps tips above the in-chart dialogs (40) — the
-        // settings dialog's own control tips used to open BEHIND its card at a fixed 25.
+        // On the page's top layer, positioned on the viewport. Mounted in `host` (the chart),
+        // the tip shared the chart's stacking context and opened BEHIND any dialog that lives
+        // in its own positioner (every settings dialog in the app, 2026-10-26): hovering an ⓘ
+        // showed nothing. The fullscreen element when there is one, or the tip is not shown.
         tip.style.cssText =
-            'position:absolute;z-index:var(--vela-z-tooltip);pointer-events:none;' +
+            `position:fixed;z-index:${TIP_Z};pointer-events:none;` +
             'background:var(--vela-bg);border:1px solid var(--vela-border);color:var(--vela-fg);' +
             'border-radius:var(--vela-radius-md);padding:4px 9px;box-shadow:var(--vela-shadow);' +
             'font:var(--vela-font-size-md) var(--vela-font);' +
-            (opts.wrap ? 'max-width:260px;' : 'white-space:nowrap;');
+            (opts.wrap ? 'max-width:min(260px,calc(100vw - 16px));' : 'white-space:nowrap;');
         applyChromeTokens(tip, opts.theme());
-        opts.host.appendChild(tip);
+        (doc.fullscreenElement ?? doc.body).appendChild(tip);
 
         const a = anchor.getBoundingClientRect();
-        const h = opts.host.getBoundingClientRect();
+        const vw = doc.documentElement.clientWidth;
+        const vh = doc.documentElement.clientHeight;
+        const w = tip.offsetWidth;
+        const th = tip.offsetHeight;
+        let left: number;
+        let top: number;
         if (opts.placement === 'right') {
-            tip.style.left = `${a.right - h.left + 8}px`;
-            tip.style.top = `${a.top - h.top + (a.height - tip.offsetHeight) / 2}px`;
+            left = a.right + 8;
+            top = a.top + (a.height - th) / 2;
         } else {
-            // Left-aligned, clamped so it never spills out of the host. `above` is for
-            // anchors sitting on the bottom edge (the A/L scale buttons).
-            const left = Math.min(a.left - h.left, Math.max(0, h.width - tip.offsetWidth - 4));
-            tip.style.left = `${Math.max(0, left)}px`;
-            tip.style.top = opts.placement === 'above'
-                ? `${Math.max(0, a.top - h.top - tip.offsetHeight - 6)}px`
-                : `${a.bottom - h.top + 6}px`;
+            // Left-aligned at the anchor. `above` is for anchors sitting on the bottom edge
+            // (the A/L scale buttons); `below` flips above when it would run off the screen.
+            left = a.left;
+            const below = a.bottom + 6;
+            const above = a.top - th - 6;
+            top = opts.placement === 'above' ? above : below + th > vh - 4 && above >= 4 ? above : below;
         }
+        // Kept on screen (a hint near the dialog's right edge or a phone's edge).
+        tip.style.left = `${Math.max(4, Math.min(left, vw - w - 4))}px`;
+        tip.style.top = `${Math.max(4, Math.min(top, vh - th - 4))}px`;
     };
 
     // Mouse only: a tap fires a SYNTHETIC mouseenter/pointerenter with no leave to
@@ -85,14 +100,51 @@ export function attachChromeTooltip(anchor: HTMLElement, opts: ChromeTooltipOpti
         timer = window.setTimeout(show, opts.delayMs ?? 700);
     };
 
+    // Touch (tapToOpen): a tap opens the tip, the next tap ANYWHERE closes it (a second tap
+    // on the same ⓘ included), so nothing is left stuck on screen. The tap is kept from
+    // reaching the row (the ⓘ sits inside the checkbox's label: it must not tick the box).
+    let touchDown = false;
+    let wasOpen = false;
+    let docListening = false;
+    const offDoc = (): void => {
+        if (!docListening) return;
+        docListening = false;
+        anchor.ownerDocument.removeEventListener('pointerdown', onDocDown, true);
+    };
+    const onDocDown = (e: PointerEvent): void => {
+        if (e.target instanceof Node && anchor.contains(e.target)) return;
+        offDoc();
+        clear();
+    };
+    const down = (e: PointerEvent): void => {
+        touchDown = e.pointerType !== 'mouse';
+        wasOpen = tip !== null;
+        clear(); // a click answers the question the tip poses
+    };
+    const tap = (e: MouseEvent): void => {
+        if (!opts.tapToOpen || !touchDown) return;
+        e.preventDefault();
+        e.stopPropagation();
+        offDoc();
+        if (wasOpen) return;
+        show();
+        if (tip) {
+            anchor.ownerDocument.addEventListener('pointerdown', onDocDown, true);
+            docListening = true;
+        }
+    };
+
     anchor.addEventListener('pointerenter', arm);
     anchor.addEventListener('pointerleave', clear);
-    anchor.addEventListener('pointerdown', clear); // a click answers the question the tip poses
+    anchor.addEventListener('pointerdown', down);
+    anchor.addEventListener('click', tap);
 
     return () => {
         anchor.removeEventListener('pointerenter', arm);
         anchor.removeEventListener('pointerleave', clear);
-        anchor.removeEventListener('pointerdown', clear);
+        anchor.removeEventListener('pointerdown', down);
+        anchor.removeEventListener('click', tap);
+        offDoc();
         clear();
     };
 }
@@ -130,6 +182,6 @@ export function chromeHint(text: string, opts: ChromeHintOptions): { el: HTMLEle
     };
     el.addEventListener('pointerenter', () => hover(true));
     el.addEventListener('pointerleave', () => hover(false));
-    const dispose = attachChromeTooltip(el, { host: opts.host, theme: opts.theme, text: () => text, wrap: true, delayMs: 250 });
+    const dispose = attachChromeTooltip(el, { host: opts.host, theme: opts.theme, text: () => text, wrap: true, delayMs: 250, tapToOpen: true });
     return { el, dispose };
 }

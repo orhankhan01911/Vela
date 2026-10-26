@@ -188,3 +188,6 @@ export {
     type IntervalSection,
     type IntervalChoice,
 } from './widget/interval-sections';
+// The ⓘ hint and themed tooltip the chart's own dialogs use (hover on desktop, tap on touch, always on top), so a
+// host's own panels show their hints the same way instead of a native `title` a phone cannot open.
+export { chromeHint, attachChromeTooltip, type ChromeHintOptions, type ChromeTooltipOptions } from './renderers/shared/chrome-tooltip';
