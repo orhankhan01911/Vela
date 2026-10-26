@@ -3266,6 +3266,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
 
         const handle = this.handles.get(id);
         if (!record.native && this.styleModel(record, model) && record.renderHandle) record.pendingStructural = true;
+        // A native's pane axis (e.g. row labels that arrive with its data) is not in the value patch: remount on change.
+        if (record.native && record.renderHandle && JSON.stringify(model.paneAxis ?? null) !== JSON.stringify(record.model?.paneAxis ?? null)) record.pendingStructural = true;
 
         if (!record.renderHandle) {
             const paneId = this.routePane(id, model, record.options ?? {});
