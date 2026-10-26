@@ -4,6 +4,9 @@ import { BEARISH, BULLISH } from './palette';
 /** Chart canvas text (axes, drawing labels, Fibonacci levels). Plain `sans-serif` is DejaVu Sans on Linux: wide,
  *  heavy and soft next to TradingView's. Inter first (the host page provides it), then each platform's UI face. */
 export const CHART_FONT_FAMILY = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif';
+/** Pine's `font.family_monospace` on the chart. The generic monospace is DejaVu Sans Mono on Linux; IBM Plex Mono
+ *  first when the host page provides it, then each platform's own mono face. */
+export const CHART_MONO_FONT_FAMILY = '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
 
 // The reference dark palette (the design spec's first-run chart cosmetics: surface,
 // axis text, subtle grid, candle green/red).

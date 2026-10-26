@@ -9,6 +9,7 @@ import type {
 } from '../../core/model/drawings';
 import type { VelaTheme } from '../../core/options';
 import { dashPattern, extendEndpoints, contrastColor, namedFontSize, autoFontSize } from './drawing-geometry';
+import { CHART_MONO_FONT_FAMILY } from '../../core/theme';
 
 /** The full set of Pine drawings for one indicator, batched into one pass. */
 export interface DrawingSet {
@@ -463,7 +464,7 @@ export class DrawingSceneRenderer {
 
     private drawBoxText(ctx: CanvasRenderingContext2D, bx: DrawingBox, left: number, top: number, w: number, h: number): void {
         const text = bx.text!;
-        const family = bx.fontFamily === 'monospace' ? 'monospace' : this.deps.theme.fontFamily || 'sans-serif';
+        const family = bx.fontFamily === 'monospace' ? CHART_MONO_FONT_FAMILY : this.deps.theme.fontFamily || 'sans-serif';
         const variant = `${bx.italic ? 'italic ' : ''}${bx.bold ? 'bold ' : ''}`;
         const pad = 4;
 
@@ -555,7 +556,7 @@ export class DrawingSceneRenderer {
 
     /** Canvas font for a label's text — family + Pine `text_formatting` (bold/italic). */
     private labelFont(lb: DrawingLabel, fontPx: number): string {
-        const family = lb.fontFamily === 'monospace' ? 'monospace' : this.deps.theme.fontFamily || 'sans-serif';
+        const family = lb.fontFamily === 'monospace' ? CHART_MONO_FONT_FAMILY : this.deps.theme.fontFamily || 'sans-serif';
         return `${lb.italic ? 'italic ' : ''}${lb.bold ? 'bold ' : ''}${fontPx}px ${family}`;
     }
 

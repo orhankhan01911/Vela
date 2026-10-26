@@ -1,5 +1,6 @@
 import type { DrawingTable, TableCell, BoxTextSize, TablePosition } from '../../core/model/drawings';
 import type { VelaTheme } from '../../core/options';
+import { CHART_MONO_FONT_FAMILY } from '../../core/theme';
 
 const SIZE_PX: Record<BoxTextSize, number> = {
     auto: 13,
@@ -167,7 +168,7 @@ export class TableOverlay {
                     textAlign: cell.hAlign,
                     verticalAlign: cell.vAlign === 'top' ? 'top' : cell.vAlign === 'bottom' ? 'bottom' : 'middle',
                     fontSize: `${fontPxOf(cell.textSize)}px`,
-                    fontFamily: cell.fontFamily === 'monospace' ? 'monospace' : 'inherit',
+                    fontFamily: cell.fontFamily === 'monospace' ? CHART_MONO_FONT_FAMILY : 'inherit',
                     fontWeight: cell.bold ? 'bold' : 'normal',
                     fontStyle: cell.italic ? 'italic' : 'normal',
                     // Pine cell text never wraps; `\n` still breaks lines. Wrapping

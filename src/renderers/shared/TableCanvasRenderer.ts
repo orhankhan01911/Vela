@@ -2,6 +2,7 @@ import type { DrawingTable, TableCell, TablePosition } from '../../core/model/dr
 import type { VelaTheme } from '../../core/options';
 import { fontPxOf, tableHasContent, mergeRenderPlan } from './TableOverlay';
 import type { LabelTipRegion } from './DrawingSceneRenderer';
+import { CHART_MONO_FONT_FAMILY } from '../../core/theme';
 
 // Mirrors the DOM TableOverlay's box model: 2px 6px cell padding, a 6px anchor
 // margin, and the browser's default ~1.2 line height for `white-space: pre` text.
@@ -204,6 +205,6 @@ function anchorOrigin(position: TablePosition, totalW: number, totalH: number, a
 }
 
 function cellFont(cell: TableCell, px: number, theme: VelaTheme): string {
-    const family = cell.fontFamily === 'monospace' ? 'monospace' : theme.fontFamily || 'sans-serif';
+    const family = cell.fontFamily === 'monospace' ? CHART_MONO_FONT_FAMILY : theme.fontFamily || 'sans-serif';
     return `${cell.italic ? 'italic ' : ''}${cell.bold ? 'bold ' : ''}${px}px ${family}`;
 }
