@@ -3,6 +3,7 @@ import { chartTypes, settingsRowValueKeys, type SettingsRowDescriptor } from '..
 import { isDarkColor, mix, parseRgb, toHex6, withAlpha } from '../../../core/color';
 import { ACCENT, BEARISH, BULLISH, CHIP_PLATE, CROSSHAIR, SERIES_LINE, WARNING } from '../../../core/palette';
 import type { PriceStyle } from '../../../core/options';
+import { CHART_FONT_FAMILY } from '../../../core/theme';
 import type { ScaleMode } from './SceneGraph';
 
 /**
@@ -561,6 +562,9 @@ export function sanitizeCrosshairOverride(value: unknown): CrosshairOverride | n
     return Object.keys(out).length > 0 ? out : null;
 }
 
+function chartFont(v: string): string {
+    return v.trim() === 'sans-serif' ? CHART_FONT_FAMILY : v;
+}
 function isColor(v: unknown): v is string {
     return typeof v === 'string' && v.trim().length > 0;
 }
@@ -738,7 +742,8 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
             backgroundTop: isGradientColor(layout.backgroundTop) ? layout.backgroundTop : base.layout.backgroundTop,
             backgroundBottom: isGradientColor(layout.backgroundBottom) ? layout.backgroundBottom : base.layout.backgroundBottom,
             textColor: isColor(layout.textColor) ? layout.textColor : base.layout.textColor,
-            fontFamily: isColor(layout.fontFamily) ? layout.fontFamily : base.layout.fontFamily,
+            // Plain `sans-serif` was the old default and every saved chart carries it: it now means the chart font.
+            fontFamily: isColor(layout.fontFamily) ? chartFont(layout.fontFamily) : chartFont(base.layout.fontFamily),
             fontSize: isNum(layout.fontSize) ? Math.max(6, Math.min(32, layout.fontSize)) : base.layout.fontSize,
         },
         grid: {

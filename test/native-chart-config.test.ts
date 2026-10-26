@@ -3,6 +3,7 @@ import { NativeRenderer } from '../src/renderers/native/NativeRenderer';
 import { registerChartType, unregisterChartType } from '../src/chart-types/registry';
 import { CHART_CONFIG_VERSION, candleOverrideFor, defaultChartStyle, factoryResetConfig, mergeConfig, type ChartConfig } from '../src/renderers/native/core/chartConfig';
 import type { PriceStyle } from '../src/core/options';
+import { CHART_FONT_FAMILY } from '../src/core/theme';
 
 /** A known-good baseline config for the pure mergeConfig tests. */
 function baseConfig(): ChartConfig {
@@ -136,7 +137,7 @@ describe('NativeRenderer.getConfig — defaults resolve to concrete values', () 
             backgroundTop: '#151619',
             backgroundBottom: '#2c2d30',
             textColor: '#b2b5be',
-            fontFamily: 'sans-serif',
+            fontFamily: CHART_FONT_FAMILY,
             fontSize: 11,
         });
         expect(cfg.grid.vertLines).toEqual({ visible: true, color: '#20222c' });
@@ -524,5 +525,13 @@ describe('NativeRenderer settings feature (item 15)', () => {
         expect(r.readFeature('settings')).toBe(false);
         r.applyFeature('settings', true);
         expect(r.readFeature('settings')).toBe(true);
+    });
+});
+
+describe('chart font', () => {
+    it('a saved chart with the old plain sans-serif gets the chart font; another family is kept', () => {
+        const base = new NativeRenderer().getConfig();
+        expect(mergeConfig(base, { layout: { fontFamily: 'sans-serif' } }).layout.fontFamily).toBe(CHART_FONT_FAMILY);
+        expect(mergeConfig(base, { layout: { fontFamily: 'Georgia, serif' } }).layout.fontFamily).toBe('Georgia, serif');
     });
 });

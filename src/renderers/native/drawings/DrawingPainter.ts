@@ -22,6 +22,14 @@ const BADGE_STROKE = SLATE;
 /** The frame a text label wears when it's the target: firm once clicked, a hint under the cursor.
  *  (Its box is the shared TEXT_FRAME inset/rise, so it coincides with the inline editor's border.) */
 const TEXT_FRAME_ALPHA = { selected: 0.3, hovered: 0.12 };
+/** Tools whose text can sit ON the line (vertical "middle"); the line breaks around it there. */
+const ON_LINE_LABEL_TYPES: ReadonlySet<string> = new Set(['hline', 'hray', 'trendline', 'ray', 'extendedline', 'infoline', 'trendangle', 'arrow']);
+/** Clear space between on-line text and where its line resumes, each side (TradingView's ~4 px). */
+const LABEL_GAP_PX = 4;
+
+function labelFont(text: NonNullable<Drawing['text']>, fs: number, theme: VelaTheme): string {
+    return `${text.bold ? 'bold ' : ''}${text.italic ? 'italic ' : ''}${fs}px ${theme.fontFamily}`;
+}
 
 /**
  * Paints user drawings onto the L1.5 canvas. The caller has already applied the DPR
@@ -380,6 +388,15 @@ export class DrawingPainter {
             this.paintPriceLabel(ctx, d, proj, theme);
             return;
         }
+        // TradingView cuts the line where its text sits on it ("middle"), so the text never has a stroke through it.
+        const gap = this.labelGap(ctx, d, proj, theme);
+        if (gap) this.withGaps(ctx, [gap], () => this.paintBasic(ctx, d, proj, theme));
+        else this.paintBasic(ctx, d, proj, theme);
+        this.paintLabel(ctx, d, proj, theme); // every drawing can carry an optional label
+    }
+
+    /** The plain line and shape tools: geometry only, their label is painted by the caller. */
+    private paintBasic(ctx: CanvasRenderingContext2D, d: Drawing, proj: Projector, theme: VelaTheme): void {
         switch (d.type) {
             case 'hline': {
                 const pts = d.handlePoints(proj);
@@ -546,9 +563,54 @@ export class DrawingPainter {
                 break;
             }
             default:
-                break; // text has no geometry — its label is drawn below
+                break; // text has no geometry — its label is drawn by the caller
         }
-        this.paintLabel(ctx, d, proj, theme); // every drawing can carry an optional label
+    }
+
+    /** Where an on-line label (vertical "middle" on a line tool, "on" for a vertical line) covers its line: the
+     *  text's box plus a margin, as four corners in plot px (rotated with the text), or null when there is none. */
+    private labelGap(ctx: CanvasRenderingContext2D, d: Drawing, proj: Projector, theme: VelaTheme): Array<[number, number]> | null {
+        const text = d.text;
+        if (!text || !text.value || d.id === this.targets.mutedLabel) return null;
+        const on = ON_LINE_LABEL_TYPES.has(d.type) ? text.vAlign === 'center' : d.type === 'vline' && text.hAlign === 'center';
+        if (!on) return null;
+        const layout = labelLayout(d, proj);
+        if (!layout) return null;
+        const fs = namedFontSize(text.size);
+        const lines = text.value.split('\n');
+        ctx.save();
+        ctx.font = labelFont(text, fs, theme);
+        const w = Math.max(...lines.map((l) => ctx.measureText(l).width));
+        ctx.restore();
+        const left = layout.align === 'center' ? layout.x - w / 2 : layout.align === 'right' || layout.align === 'end' ? layout.x - w : layout.x;
+        const top = layout.top - 1;
+        const bottom = layout.top + lines.length * labelLineHeight(fs) + 1;
+        const box: Array<[number, number]> = [
+            [left - LABEL_GAP_PX, top],
+            [left + w + LABEL_GAP_PX, top],
+            [left + w + LABEL_GAP_PX, bottom],
+            [left - LABEL_GAP_PX, bottom],
+        ];
+        const r = layout.rotate;
+        if (!r) return box;
+        const cos = Math.cos(r.angle);
+        const sin = Math.sin(r.angle);
+        return box.map(([x, y]) => [r.cx + x * cos - y * sin, r.cy + x * sin + y * cos]);
+    }
+
+    /** Paint with holes cut where text sits on the strokes: an even-odd clip of the whole plot minus each box. */
+    private withGaps(ctx: CanvasRenderingContext2D, gaps: ReadonlyArray<ReadonlyArray<readonly [number, number]>>, paint: () => void): void {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(-1e5, -1e5, 2e5, 2e5);
+        for (const q of gaps) {
+            ctx.moveTo(q[0]![0], q[0]![1]);
+            for (let i = 1; i < q.length; i += 1) ctx.lineTo(q[i]![0], q[i]![1]);
+            ctx.closePath();
+        }
+        ctx.clip('evenodd');
+        paint();
+        ctx.restore();
     }
 
     /** Draw a drawing's optional text label at a type-appropriate anchor (multi-line aware).
@@ -564,7 +626,7 @@ export class DrawingPainter {
             ctx.translate(layout.rotate.cx, layout.rotate.cy);
             ctx.rotate(layout.rotate.angle);
         }
-        ctx.font = `${text.bold ? 'bold ' : ''}${text.italic ? 'italic ' : ''}${fs}px ${theme.fontFamily}`;
+        ctx.font = labelFont(text, fs, theme);
         ctx.textBaseline = 'top';
         ctx.textAlign = layout.align;
         ctx.fillStyle = text.color ?? theme.textColor;
@@ -658,10 +720,26 @@ export class DrawingPainter {
         const numFont = `${namedFontSize(d.numbersSize)}px ${theme.fontFamily}`;
         const lblFont = `${namedFontSize(d.labelsSize)}px ${theme.fontFamily}`;
         for (const l of lines) {
-            this.stroke(ctx, { ...d.style, lineColor: l.color }, () => {
+            // A level's text set on the line (vertical "middle") breaks the line around it, like TradingView.
+            const gaps: Array<Array<[number, number]>> = [];
+            if (l.y1 === l.y2) {
+                const onLine = (text: string | undefined, font: string, x: number, y: number, align: CanvasTextAlign): void => {
+                    if (!text || Math.abs(y - l.y1) > 0.5) return;
+                    ctx.font = font;
+                    const w = ctx.measureText(text).width;
+                    const left = align === 'center' ? x - w / 2 : align === 'right' || align === 'end' ? x - w : x;
+                    const half = parseFloat(font) / 2 + 1;
+                    gaps.push([[left - LABEL_GAP_PX, y - half], [left + w + LABEL_GAP_PX, y - half], [left + w + LABEL_GAP_PX, y + half], [left - LABEL_GAP_PX, y + half]]);
+                };
+                onLine(l.numberText, numFont, l.numberX, l.numberY, l.numberAlign);
+                onLine(l.label, lblFont, l.labelX, l.labelY, 'center');
+            }
+            const line = (): void => this.stroke(ctx, { ...d.style, lineColor: l.color }, () => {
                 ctx.moveTo(l.x1, l.y1);
                 ctx.lineTo(l.x2, l.y2);
             });
+            if (gaps.length) this.withGaps(ctx, gaps, line);
+            else line();
             ctx.fillStyle = l.color;
             ctx.font = numFont;
             ctx.textAlign = l.numberAlign;
