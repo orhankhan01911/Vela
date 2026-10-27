@@ -148,17 +148,29 @@ function growValueArea(rows: readonly FrvpRow[], poc: number, valueAreaFrac: num
     return { vaFrom, vaTo };
 }
 
-/** Add one bar's volume into `rows` using the estimation rule (any OHLC in a row → full volume). */
+/**
+ * Add one bar's volume into `rows`, spread evenly over its high-low range: each row gets the share of the range it
+ * covers. (It used to add the full volume only to the rows holding the open, high, low and close, which left the rows
+ * between them empty: at 100+ rows the profile drew as a comb of thin, scattered lines.)
+ */
 function accumulateBar(rows: FrvpRow[], min: number, rowH: number, bar: FrvpBar): void {
     const v = bar.volume;
     if (!(v > 0)) return;
     const n = rows.length;
     const side = bar.close >= bar.open ? 'up' : 'down';
-    const hit = new Set<number>();
-    for (const p of [bar.open, bar.high, bar.low, bar.close]) {
-        hit.add(clampIndex(Math.floor((p - min) / rowH), n));
+    const lo = Math.min(bar.low, bar.high);
+    const hi = Math.max(bar.low, bar.high);
+    const kLo = clampIndex(Math.floor((lo - min) / rowH), n);
+    const kHi = clampIndex(Math.floor((hi - min) / rowH), n);
+    if (!(hi > lo) || kLo === kHi) {
+        rows[kLo]![side] += v;
+        return;
     }
-    for (const k of hit) rows[k]![side] += v;
+    for (let k = kLo; k <= kHi; k += 1) {
+        const bottom = min + k * rowH;
+        const covered = Math.min(hi, k === n - 1 ? Infinity : bottom + rowH) - Math.max(lo, k === 0 ? -Infinity : bottom);
+        if (covered > 0) rows[k]![side] += (v * covered) / (hi - lo);
+    }
 }
 
 /** POC index + max row total, or null when every row is empty. */
@@ -176,11 +188,9 @@ function findPoc(rows: readonly FrvpRow[]): { poc: number; maxTotal: number } | 
 }
 
 /**
- * Estimation-based volume profile: for each bar, the full bar volume is added to every
- * price row that contains **any** of its OHLC prices (open / high / low / close). Volume
- * is split up/down by bar direction (`close >= open`). Unlike a proportional H–L
- * distribution this does not conserve total volume across rows — a wide bar can contribute
- * to several rows. Returns null when the window holds no volume.
+ * Estimation-based volume profile: each bar's volume is spread evenly over its high-low range,
+ * so every row gets the share of the range it covers and the total is conserved. Volume is
+ * split up/down by bar direction (`close >= open`). Returns null when the window holds no volume.
  */
 export function buildEstimatedProfile(
     bars: readonly FrvpBar[],

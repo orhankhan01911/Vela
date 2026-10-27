@@ -1,7 +1,7 @@
 import type { InputSchema, InputValue } from '../../model/inputs';
 import type { VolumeLayerData } from '../../model/volume-layers';
 import type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor } from '../NativeIndicator';
-import { registerNativeIndicator } from '../NativeIndicator';
+import { getNativeIndicator, registerNativeIndicator } from '../NativeIndicator';
 import { BEARISH, BULLISH } from '../../palette';
 
 const DEFAULT_UP = BULLISH;
@@ -87,5 +87,6 @@ export const volumeDescriptor: NativeIndicatorDescriptor = {
 
 /** Register the built-in volume native indicator (idempotent). Called by the composition root. */
 export function registerVolume(): void {
-    registerNativeIndicator(volumeDescriptor);
+    // skip when registered: a host's wrapped descriptor survives the next chart (see registerClassicIndicators)
+    if (!getNativeIndicator(volumeDescriptor.type)) registerNativeIndicator(volumeDescriptor);
 }

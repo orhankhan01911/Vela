@@ -11,7 +11,7 @@ import { resolveTopbarComposition, topbarHas, TOPBAR_BUILTIN_IDS, type ResolvedT
 import { BUILTIN_PRICE_STYLES, priceStyleIds } from '../renderers/native/core/chartConfig';
 import { favoriteTimeframeChips, timeframeLabel } from './timeframe';
 import { currentIntervalLabel, IntervalMenu } from './interval-menu';
-import { activeIntervalSection, onIntervalSectionsChanged } from './interval-sections';
+import { activeIntervalSection, onIntervalSectionsChanged, parseSectionFavorite, sectionFavorite } from './interval-sections';
 import { parseSymbol } from '../data/ProviderRegistry';
 
 // The component owns its stylesheet (id-guarded, injected at construction) so EVERY
@@ -683,14 +683,32 @@ export class Topbar {
         // Bars that are not a time span (ticks, ranges…) are on: no time chip is current, and the
         // current-interval chip shows that section's label ("100T").
         const plugin = ctx ? activeIntervalSection(ctx) : null;
-        const currentIsFav = !plugin && chips.includes(this.timeframe);
+        const pluginKey = plugin ? sectionFavorite(plugin.section.id, plugin.value) : null;
+        const currentIsFav = plugin ? chips.includes(pluginKey!) : chips.includes(this.timeframe);
         // The current interval when it is not a starred chip (an unstarred time, or "100T") sits next
-        // to the caret, so the favorite row never jumps.
-        const entries: { tf: string | null; label: string; current: boolean }[] = chips.map((tf) => ({
-            tf,
-            label: timeframeLabel(tf),
-            current: !plugin && tf === this.timeframe,
-        }));
+        // to the caret, so the favorite row never jumps. A starred section size ("Box 40") switches to
+        // that section's bars; one whose section is gone (its plugin is not loaded) is not shown.
+        const entries: { tf: string | null; label: string; current: boolean; pick?: () => void }[] = [];
+        for (const tf of chips) {
+            const fav = parseSectionFavorite(tf);
+            if (tf.startsWith('@') && !fav) continue;
+            if (fav) {
+                const { section, value } = fav;
+                entries.push({
+                    tf,
+                    label: section.chip?.(value) ?? section.short(value),
+                    current: tf === pluginKey,
+                    // The chart as it is at the click (the chips are not redrawn on every chart-type change).
+                    pick: () => {
+                        const now = this.opts.getContext?.() ?? null;
+                        if (!now) return;
+                        const on = activeIntervalSection(now);
+                        if (on && on.section.id !== section.id) on.section.leave(now);
+                        section.select(now, value);
+                    },
+                });
+            } else entries.push({ tf, label: timeframeLabel(tf), current: !plugin && tf === this.timeframe });
+        }
         if (chips.length > 0 && !currentIsFav) {
             entries.push(
                 plugin
@@ -709,9 +727,13 @@ export class Topbar {
             } else {
                 const tf = e.tf!;
                 b.setAttribute('aria-label', `Switch timeframe to ${label}`);
+                const pick = e.pick;
                 b.addEventListener('click', () => {
+                    if (pick) return pick();
                     // Leaving tick/range/… bars for a time interval.
-                    if (ctx && plugin) plugin.section.leave(ctx);
+                    const now = this.opts.getContext?.() ?? null;
+                    const on = now ? activeIntervalSection(now) : null;
+                    if (now && on) on.section.leave(now);
                     this.opts.onTimeframe(tf);
                 });
             }

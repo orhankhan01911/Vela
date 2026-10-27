@@ -33,6 +33,9 @@ export interface IntervalSection {
     current(ctx: WidgetContext): number | null;
     /** Compact topbar label of a value (`'100T'`). */
     short(value: number): string;
+    /** Label of a STARRED value's quick-switch chip, which shows whether or not the value is on
+     *  (`short` may describe the value in use only). Default: `short`. */
+    chip?(value: number): string;
     /** Row label of a value that is not among `choices` (the one in use, a custom size).
      *  Default: `'<value> <unit>'`. */
     label?(value: number): string;
@@ -81,6 +84,22 @@ export function activeIntervalSection(ctx: WidgetContext): { section: IntervalSe
         if (value !== null) return { section, value };
     }
     return null;
+}
+
+/** A section value in the host's favorite-interval list, next to the starred times: `'@<section id>:<value>'`. */
+export function sectionFavorite(id: string, value: number): string {
+    return `@${id}:${value}`;
+}
+
+/** The section and value of a favorite written by {@link sectionFavorite}; null for a time interval, or a
+ *  section that is not registered (any more). */
+export function parseSectionFavorite(key: string): { section: IntervalSection; value: number } | null {
+    if (!key.startsWith('@')) return null;
+    const i = key.lastIndexOf(':');
+    if (i < 2) return null;
+    const section = registry.get(key.slice(1, i));
+    const value = Number(key.slice(i + 1));
+    return section && Number.isFinite(value) && value > 0 ? { section, value } : null;
 }
 
 /** A plugin changed what its sections show or which value is on (settings edited elsewhere):

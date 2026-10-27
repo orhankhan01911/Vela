@@ -192,8 +192,10 @@ const pivotPoints: ClassicIndicatorSpec = {
         colorInput(BEARISH, 'Resistances', 'resistanceColor', 'Color of the resistance (R) levels.'),
         colorInput(BULLISH, 'Supports', 'supportColor', 'Color of the support (S) levels.'),
     ],
-    compute: (bars, inputs) => {
-        const interval = barInterval(bars);
+    compute: (bars, inputs, period) => {
+        // Bars built from trades: the period OHLC comes from the host's time candles and "Auto" from the chart's
+        // interval (the drawn bars' spacing says nothing about it), as TradingView reads pivots off the time series.
+        const interval = period ? period.intervalMs : barInterval(bars);
         const requested = str(inputs, 'anchor', PIVOT_AUTO);
         const auto: Anchor = interval <= 15 * 60000 ? 'Session' : interval < DAY_MS ? 'Week' : interval <= DAY_MS ? 'Month' : 'Year';
         const anchor: Anchor = requested === 'Daily' ? 'Session' : requested === 'Weekly' ? 'Week' : requested === 'Monthly' ? 'Month' : requested === 'Yearly' ? 'Year' : auto;
@@ -201,7 +203,7 @@ const pivotPoints: ClassicIndicatorSpec = {
         // Aggregate each period's OHLC; a period's levels come from the PREVIOUS one.
         interface Agg { open: number; high: number; low: number; close: number }
         const aggs = new Map<number, Agg>();
-        for (const b of bars) {
+        for (const b of period?.bars ?? bars) {
             const key = periodKey(anchor, b.time);
             const a = aggs.get(key);
             if (!a) aggs.set(key, { open: b.open, high: b.high, low: b.low, close: b.close });

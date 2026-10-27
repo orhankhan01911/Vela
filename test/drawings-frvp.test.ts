@@ -40,17 +40,40 @@ function fakeProjector(data: FrvpBar[]): Projector {
 }
 
 describe('drawings/frvp math (estimation)', () => {
-    it('adds a bar\'s full volume to every row that contains any OHLC price', () => {
-        // One up bar spanning 100→110: O=100, H=110, L=100, C=110 → hits the edge rows of a 2-row profile.
+    it('spreads a bar\'s volume evenly over its high-low range', () => {
+        // One up bar spanning 100→110 on a 2-row profile: each row holds half of it.
         const data: FrvpBar[] = [
             { time: 0, open: 100, high: 110, low: 100, close: 110, volume: 1000 },
         ];
         const p = buildEstimatedProfile(data, 2, 0.7)!;
         expect(p.rows).toHaveLength(2);
-        // Both rows receive the full 1000 (estimation does not conserve volume across rows).
-        expect(p.rows[0]!.up + p.rows[0]!.down).toBeCloseTo(1000, 6);
-        expect(p.rows[1]!.up + p.rows[1]!.down).toBeCloseTo(1000, 6);
-        expect(p.rows[0]!.up).toBeCloseTo(1000, 6); // close >= open → up
+        expect(p.rows[0]!.up + p.rows[0]!.down).toBeCloseTo(500, 6);
+        expect(p.rows[1]!.up + p.rows[1]!.down).toBeCloseTo(500, 6);
+        expect(p.rows[0]!.up).toBeCloseTo(500, 6); // close >= open → up
+    });
+
+    it('leaves no empty rows inside a bar\'s range however many rows there are (2026-10-26: 100+ rows drew a comb)', () => {
+        // Two bars: 100→110 and 105→120. With only the OHLC rows filled, 300 rows left most of the range empty.
+        const data: FrvpBar[] = [
+            { time: 0, open: 100, high: 110, low: 100, close: 110, volume: 1000 },
+            { time: HR, open: 110, high: 120, low: 105, close: 106, volume: 600 },
+        ];
+        for (const n of [24, 100, 300]) {
+            const p = buildEstimatedProfile(data, n, 0.7)!;
+            expect(p.rows.every((r) => r.up + r.down > 0)).toBe(true);
+            const total = p.rows.reduce((s, r) => s + r.up + r.down, 0);
+            expect(total).toBeCloseTo(1600, 6); // volume is conserved
+        }
+    });
+
+    it('puts a flat bar (high = low) in the one row holding its price', () => {
+        const data: FrvpBar[] = [
+            { time: 0, open: 100, high: 120, low: 100, close: 120, volume: 1000 },
+            { time: HR, open: 115, high: 115, low: 115, close: 115, volume: 400 },
+        ];
+        const p = buildEstimatedProfile(data, 4, 0.7)!;
+        // Rows of 5: [100,105) [105,110) [110,115) [115,120]; 115 falls in the top row.
+        expect(p.rows[3]!.up + p.rows[3]!.down).toBeCloseTo(250 + 400, 6);
     });
 
     it('splits up/down volume by bar direction', () => {

@@ -18,7 +18,7 @@ const MARKER_STYLE: Record<string, LabelStyle> = {
     flag: 'flag',
 };
 import { stableSeriesId } from '../../model/identity';
-import type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor } from '../NativeIndicator';
+import type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor, PeriodBars } from '../NativeIndicator';
 
 /**
  * The classic-indicator adapter: each catalog entry is metadata plus a PURE
@@ -92,7 +92,9 @@ export interface ClassicIndicatorSpec {
     /** true = draws over the price candles; false = its own pane below. */
     overlay: boolean;
     inputs: InputSchema[];
-    compute(bars: readonly OHLCV[], inputs: Record<string, InputValue>): ClassicOutput;
+    /** `period`: time candles to aggregate period OHLC from when the drawn bars are not time candles
+     *  ({@link NativeIndicatorContext.periodBars}); only period-anchored specs read it. */
+    compute(bars: readonly OHLCV[], inputs: Record<string, InputValue>, period?: PeriodBars | null): ClassicOutput;
 }
 
 export function num(inputs: Record<string, InputValue>, key: string, fallback: number): number {
@@ -162,7 +164,7 @@ class ClassicIndicator implements NativeIndicator {
     private recompute(): void {
         if (!this.ctx) return;
         const bars = this.ctx.bars();
-        const out = this.spec.compute(bars, this.inputs);
+        const out = this.spec.compute(bars, this.inputs, this.ctx.periodBars?.() ?? null);
         const instanceId = this.spec.type;
         const series: SeriesSpec[] = [];
         const idsByKey = new Map<string, string>();

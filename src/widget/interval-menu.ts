@@ -7,7 +7,15 @@ import { Popover } from '../ui/components/popover';
 import { iconEl } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
 import type { WidgetContext } from './contributions';
-import { activeIntervalSection, BUILTIN_INTERVAL_ORDER, intervalSections, type IntervalChoice, type IntervalSection } from './interval-sections';
+import {
+    activeIntervalSection,
+    BUILTIN_INTERVAL_ORDER,
+    intervalSections,
+    parseSectionFavorite,
+    sectionFavorite,
+    type IntervalChoice,
+    type IntervalSection,
+} from './interval-sections';
 import { parseTimeframe, timeframeLabel, timeframeMs } from './timeframe';
 
 const STYLE_ID = 'vela-widget-interval-menu';
@@ -40,6 +48,8 @@ const CSS = `
 
 const OPEN_KEY = 'vela.interval.open';
 const CUSTOM_KEY = 'vela.interval.custom';
+/** Custom section sizes (a typed brick size, tick count…), as `'@<section id>:<value>'`. */
+const CUSTOM_SECTION_KEY = 'vela.interval.custom.sections';
 
 type TimeGroup = 'seconds' | 'minutes' | 'hours' | 'days';
 const TIME_TITLES: Record<TimeGroup, string> = { seconds: 'Seconds', minutes: 'Minutes', hours: 'Hours', days: 'Days' };
@@ -92,6 +102,23 @@ function writeList(key: string, list: readonly string[]): void {
 /** Custom time intervals the user added (canonical values, e.g. `'45'`, `'2S'`). */
 export function customTimeframes(): string[] {
     return readList(CUSTOM_KEY) ?? [];
+}
+
+/** Custom sizes the user added to a plugin section (kept, so they can be picked again and starred). */
+export function customSectionValues(id: string): number[] {
+    const out: number[] = [];
+    for (const key of readList(CUSTOM_SECTION_KEY) ?? []) {
+        const i = key.lastIndexOf(':');
+        const v = Number(key.slice(i + 1));
+        if (i > 1 && key.slice(1, i) === id && Number.isFinite(v) && v > 0) out.push(v);
+    }
+    return out;
+}
+
+function addCustomSectionValue(id: string, value: number): void {
+    const list = readList(CUSTOM_SECTION_KEY) ?? [];
+    const key = sectionFavorite(id, value);
+    if (!list.includes(key)) writeList(CUSTOM_SECTION_KEY, [...list, key]);
 }
 
 export interface IntervalMenuOptions {
@@ -308,7 +335,9 @@ export class IntervalMenu {
             const [kind, id] = unit.value.split(':');
             if (kind === 'sec') {
                 const s = sections.find((x) => x.id === id);
-                if (s) this.pickSection(s, n);
+                if (!s) return;
+                addCustomSectionValue(s.id, n);
+                this.pickSection(s, n);
                 return;
             }
             if (!Number.isInteger(n)) return;
@@ -340,12 +369,22 @@ export class IntervalMenu {
                 const paint = (choices: readonly IntervalChoice[]): void => {
                     rows.replaceChildren();
                     const values = [...choices];
-                    // The value in use stays listed even when it is not one of the offered sizes (a custom one).
-                    if (holds && active && !values.some((c) => c.value === active.value)) {
-                        values.push({ value: active.value, label: s.label?.(active.value) ?? `${active.value} ${active.value === 1 ? s.unit.one : s.unit.many}` });
-                        values.sort((a, b) => a.value - b.value);
+                    // Listed besides the offered sizes: the value in use, the user's custom sizes and starred ones.
+                    const extra = [
+                        ...(holds && active ? [active.value] : []),
+                        ...customSectionValues(s.id),
+                        ...favs.map(parseSectionFavorite).flatMap((f) => (f && f.section.id === s.id ? [f.value] : [])),
+                    ];
+                    for (const v of extra) {
+                        if (values.some((c) => c.value === v)) continue;
+                        values.push({ value: v, label: s.label?.(v) ?? `${v} ${v === 1 ? s.unit.one : s.unit.many}` });
                     }
-                    for (const c of values) rows.appendChild(this.row(c.label, holds && c.value === active?.value, () => this.pickSection(s, c.value), { hint: c.hint }));
+                    values.sort((a, b) => a.value - b.value);
+                    for (const c of values) {
+                        const key = sectionFavorite(s.id, c.value);
+                        const star = this.opts.onFavorite ? { on: favs.includes(key), toggle: () => this.opts.onFavorite!(key, !favs.includes(key)) } : undefined;
+                        rows.appendChild(this.row(c.label, holds && c.value === active?.value, () => this.pickSection(s, c.value), { hint: c.hint, star }));
+                    }
                     if (!values.length) {
                         const n = this.doc.createElement('div');
                         n.className = 'vela-ivm-note';

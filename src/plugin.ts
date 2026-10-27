@@ -57,8 +57,22 @@ export {
     type NativeIndicatorContext,
     type NativeIndicatorOutput,
     type NativeIndicatorInfo,
+    type PeriodBars,
 } from './core/native-indicators/NativeIndicator';
 export { classicCatalog, classicPlots, type ClassicPlotValues } from './core/native-indicators/classics';
+import { registerVolume as registerBuiltinVolume } from './core/native-indicators/volume';
+import { registerVpvr as registerBuiltinVpvr } from './core/native-indicators/vpvr';
+import { registerClassicIndicators as registerBuiltinClassics } from './core/native-indicators/classics';
+/**
+ * Register Vela's built-in native indicators (Volume, VPVR, the classic studies) now. Every chart does this when it
+ * is constructed; a host that wraps a built-in (guards it per chart type, feeds it extra data) calls this first so
+ * the wrap exists before the first chart starts restored indicators. Idempotent; a wrapped descriptor is kept.
+ */
+export function registerBuiltinIndicators(): void {
+    registerBuiltinVolume();
+    registerBuiltinVpvr();
+    registerBuiltinClassics();
+}
 export {
     registerRendererLayer,
     unregisterRendererLayer,

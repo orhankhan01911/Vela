@@ -1,7 +1,7 @@
 import type { InputSchema, InputValue } from '../../model/inputs';
 import type { VpvrLayerData } from '../../model/volume-layers';
 import type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor } from '../NativeIndicator';
-import { registerNativeIndicator } from '../NativeIndicator';
+import { getNativeIndicator, registerNativeIndicator } from '../NativeIndicator';
 import { ACCENT, BEARISH } from '../../palette';
 
 const DEFAULT_ROWS = 24;
@@ -105,5 +105,6 @@ export const vpvrDescriptor: NativeIndicatorDescriptor = {
 
 /** Register the built-in VPVR native indicator (idempotent). Called by the composition root. */
 export function registerVpvr(): void {
-    registerNativeIndicator(vpvrDescriptor);
+    // skip when registered: a host's wrapped descriptor survives the next chart (see registerClassicIndicators)
+    if (!getNativeIndicator(vpvrDescriptor.type)) registerNativeIndicator(vpvrDescriptor);
 }

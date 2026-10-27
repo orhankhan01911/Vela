@@ -1,7 +1,7 @@
 import type { OHLCV } from '../../model/ohlcv';
 import type { InputValue } from '../../model/inputs';
 import type { SeriesDisplay } from '../../model/series';
-import { registerNativeIndicator } from '../NativeIndicator';
+import { getNativeIndicator, registerNativeIndicator } from '../NativeIndicator';
 import { classicDescriptor } from './define';
 import type { ClassicIndicatorSpec } from './define';
 import { averageSpecs } from './averages';
@@ -30,7 +30,9 @@ export const classicSpecs: ClassicIndicatorSpec[] = [
 
 /** Register the classic indicator catalog (idempotent). Called by the composition root. */
 export function registerClassicIndicators(): void {
-    for (const spec of classicSpecs) registerNativeIndicator(classicDescriptor(spec));
+    // Every chart construction calls this: skip a type already registered, so a host's wrapped descriptor (an app
+    // that guards or feeds a built-in, e.g. Pivot Points' period candles) survives the next chart.
+    for (const spec of classicSpecs) if (!getNativeIndicator(spec.type)) registerNativeIndicator(classicDescriptor(spec));
 }
 
 /** One plot of a classic indicator, bar-aligned to the bars it was computed on (NaN where it has no value). */

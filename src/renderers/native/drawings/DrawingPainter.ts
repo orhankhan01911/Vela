@@ -1882,7 +1882,7 @@ export class DrawingPainter {
             const yA = yEdges[k]!;
             const yB = yEdges[k + 1]!;
             const yTop = Math.min(yA, yB);
-            const h = Math.max(1, Math.abs(yB - yA) - 1);
+            const h = profileRowHeight(Math.abs(yB - yA));
             const w = (total / profile.maxTotal) * maxW;
             const upW = (row.up / total) * w;
             const inVa = k >= profile.vaFrom && k <= profile.vaTo;
@@ -1966,7 +1966,7 @@ export class DrawingPainter {
             const n = row.periods.length;
             if (n <= 0) continue;
             const yTop = Math.min(yEdges[k]!, yEdges[k + 1]!);
-            const h = Math.max(1, Math.abs(yEdges[k + 1]! - yEdges[k]!) - 1);
+            const h = profileRowHeight(Math.abs(yEdges[k + 1]! - yEdges[k]!));
             const inVa = k >= profile.vaFrom && k <= profile.vaTo;
             ctx.fillStyle = k === profile.poc && s.showPoc ? pocInk : inVa ? s.vaColor : s.color;
             if (asLetters) {
@@ -2770,6 +2770,12 @@ export class DrawingPainter {
             ctx.stroke();
         }
     }
+}
+
+/** Painted height of one profile row `rowPx` tall: a 1 px gap separates rows only while they are tall enough to read
+ *  as rows; thinner rows fill their whole height (a gap on 1-2 px rows striped the profile into a hatch). */
+export function profileRowHeight(rowPx: number): number {
+    return rowPx >= 4 ? rowPx - 1 : rowPx;
 }
 
 /** True when a color is fully transparent (8-digit hex `…00` or an `rgba(…,0)`) — so we can

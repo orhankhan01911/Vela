@@ -63,6 +63,20 @@ export interface NativeIndicatorContext {
     pushData(data: unknown): void;
     /** Set the indicator's legend status: `'loading'` (fetching), `'live'` (live-updating), `'idle'`. */
     setStatus(status: IndicatorStatus): void;
+    /**
+     * Optional, host-provided: the TIME candles a period-anchored classic (Pivot Points) builds each period's open,
+     * high, low and close from when the drawn bars are not time candles (bars built from trades, Renko), plus the
+     * chart's own interval for its "Auto" period. Null / absent = the drawn bars, as on a time chart.
+     */
+    periodBars?(): PeriodBars | null;
+}
+
+/** See {@link NativeIndicatorContext.periodBars}. */
+export interface PeriodBars {
+    /** Time candles at a period or finer step (e.g. daily), oldest first. */
+    bars: readonly OHLCV[];
+    /** The chart's interval in ms (what "Auto" reads instead of the drawn bars' spacing). */
+    intervalMs: number;
 }
 
 /**
