@@ -280,7 +280,11 @@ export function readLayoutMode(): LayoutPickerMode {
         return 'grid';
     }
 }
-function writeLayoutMode(m: LayoutPickerMode): void {
+/** The picker's stylesheet (switch pill, mode switch), for the mobile drawer's copy of these controls. */
+export function injectLayoutPickerStyles(doc: Document): void {
+    injectStyles(STYLE_ID, CSS, doc);
+}
+export function writeLayoutMode(m: LayoutPickerMode): void {
     try {
         globalThis.localStorage?.setItem(MODE_KEY, m);
     } catch {

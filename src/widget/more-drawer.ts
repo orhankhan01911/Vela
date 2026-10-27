@@ -8,7 +8,15 @@
 import { Drawer } from '../ui/components/drawer';
 import { iconEl } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
-import { layoutCatalogView, layoutGridCanvas, paintLayoutGrid, type LayoutCatalogGroup } from './layout-picker';
+import {
+    injectLayoutPickerStyles,
+    layoutCatalogView,
+    layoutGridCanvas,
+    paintLayoutGrid,
+    readLayoutMode,
+    writeLayoutMode,
+    type LayoutCatalogGroup,
+} from './layout-picker';
 
 const STYLE_ID = 'vela-widget-more-drawer';
 const CSS = `
@@ -81,6 +89,12 @@ const CSS = `
     color: var(--vela-fg-muted);
 }
 .vela-md-empty { padding: 18px 2px; color: var(--vela-fg-muted); font-size: 13px; }
+/* The desktop picker's Free-form / Presets switch and sync pills, touch-sized. */
+.vela-md-list .vela-lp-mode { margin: 12px 0 0; padding: 3px; }
+.vela-md-list .vela-lp-mode button { padding: 9px 8px; font-size: 13px; }
+.vela-md-row .vela-lp-switch { width: 40px; height: 22px; border-radius: 11px; }
+.vela-md-row .vela-lp-switch::after { width: 16px; height: 16px; }
+.vela-md-row .vela-lp-switch.on::after { transform: translateX(18px); }
 `;
 
 export interface MoreDrawerAction {
@@ -289,13 +303,40 @@ export class MoreDrawer {
     private renderLayout(doc: Document): void {
         const layout = this.opts.layout;
         if (!layout) return;
+        injectLayoutPickerStyles(doc);
         const list = doc.createElement('div');
         list.className = 'vela-md-list';
+        // With a catalog, the desktop dropdown's Free-form / Presets switch (same remembered choice); without one,
+        // the canvas alone.
+        const mode = layout.catalog ? readLayoutMode() : 'grid';
+        if (layout.catalog) {
+            const sw = doc.createElement('div');
+            sw.className = 'vela-lp-mode';
+            sw.setAttribute('role', 'group');
+            sw.setAttribute('aria-label', 'Layout list');
+            for (const [m, label] of [
+                ['grid', 'Free-form'],
+                ['catalog', 'Presets'],
+            ] as const) {
+                const b = doc.createElement('button');
+                b.type = 'button';
+                b.textContent = label;
+                b.dataset.mode = m;
+                b.setAttribute('aria-pressed', String(m === mode));
+                b.addEventListener('click', () => {
+                    if (m === mode) return;
+                    writeLayoutMode(m);
+                    this.render();
+                });
+                sw.appendChild(b);
+            }
+            list.appendChild(sw);
+        }
         // The desktop dropdown's grid canvas, touch-sized: the current rows×cols
         // rectangle is lit, a tap applies that grid immediately (no hover preview).
         const wrap = doc.createElement('div');
         wrap.className = 'vela-md-gridwrap';
-        if (layout.catalog) {
+        if (layout.catalog && mode === 'catalog') {
             // Every arrangement by chart count, touch-sized; a tap applies it.
             wrap.appendChild(
                 layoutCatalogView(
@@ -338,15 +379,20 @@ export class MoreDrawer {
             heading.textContent = 'Sync';
             list.appendChild(heading);
             for (const s of syncs) {
-                list.appendChild(
-                    this.row(doc, s.label, {
-                        checked: s.checked,
-                        onClick: () => {
-                            layout.onToggleSync?.(s.id);
-                            this.render(); // a toggle stays in the drawer — reflect the flip in place
-                        },
-                    }),
-                );
+                // An on/off switch like the desktop dropdown's (a lit row read as a selection, not a toggle).
+                const row = this.row(doc, s.label, {
+                    onClick: () => {
+                        layout.onToggleSync?.(s.id);
+                        this.render(); // a toggle stays in the drawer — reflect the flip in place
+                    },
+                });
+                row.setAttribute('role', 'switch');
+                row.setAttribute('aria-checked', String(s.checked));
+                const pill = doc.createElement('span');
+                pill.className = 'vela-lp-switch' + (s.checked ? ' on' : '');
+                pill.setAttribute('aria-hidden', 'true');
+                row.appendChild(pill);
+                list.appendChild(row);
             }
         }
         this.drawer.body.appendChild(list);
