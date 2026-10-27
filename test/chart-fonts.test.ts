@@ -53,3 +53,53 @@ describe('chart text never starts with a generic font', () => {
         expect(LIGHT_THEME.fontFamily).toBe(CHART_FONT_FAMILY);
     });
 });
+
+/**
+ * Price-scale chips read like the axis beside them (2026-10-27, a repeat offender): the crosshair chip and a drawing's
+ * price chip printed `80120.61` (toFixed, no grouping) in a bolder `600 11px` face next to `80,100.00`. Every price on
+ * the scale goes through `formatAxisValue` / `formatPriceLabel` (ticks.ts) and the axis font. The browser side of this
+ * is vela-sandbox e2e/text-zoom-matrix.mjs (grouping, one face, whole device pixels, overlaps, at every zoom).
+ */
+describe('price-scale chips use the axis formatter and face', () => {
+    const body = (file: string, name: string): string => {
+        const src = readFileSync(file, 'utf8');
+        const i = src.indexOf(`${name}(`);
+        expect(i, `${name} in ${file}`).toBeGreaterThan(-1);
+        const rest = src.slice(i);
+        const end = rest.slice(1).search(/\n {4}(private |public |get |set |[a-zA-Z]+\()|\n\}/);
+        return end < 0 ? rest : rest.slice(0, end + 1);
+    };
+
+    it('no renderer formats a price with toFixed outside ticks.ts', () => {
+        const hits: string[] = [];
+        for (const f of sources(`${SRC}/renderers`)) {
+            if (f.endsWith('/chrome/ticks.ts')) continue;
+            readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
+                if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;
+                if (/\b(price|close|a\.price|p\.price|last\.close)\w*\)?\.toFixed\(/.test(line)) hits.push(`${f}:${i + 1}: ${line.trim()}`);
+            });
+        }
+        expect(hits).toEqual([]);
+    });
+
+    it('the chip painters take their text from the axis formatter, not a font size of their own', () => {
+        const chips: Array<[string, string, RegExp]> = [
+            ['src/renderers/native/drawings/DrawingPainter.ts', 'private paintAxisChip', /axisLabel/],
+            ['src/renderers/native/chrome/CrosshairRenderer.ts', 'private chip', /./],
+            ['src/renderers/native/chrome/ChromeRenderer.ts', 'private drawPriceLineAndCountdown', /formatAxisValue/],
+        ];
+        for (const [file, name, formatter] of chips) {
+            const b = body(file, name);
+            expect(b, `${name} formats with the axis formatter`).toMatch(formatter);
+            // a literal size (`600 11px ...`) is how the drawing chip drifted from the axis face
+            expect(b.match(/font\s*=\s*`[^`]*\b\d+(\.\d+)?px/g) ?? [], `${name} sets no literal font size`).toEqual([]);
+        }
+    });
+
+    it('crosshair price chips go through formatAxisValue', () => {
+        const src = readFileSync('src/renderers/native/chrome/CrosshairRenderer.ts', 'utf8');
+        const calls = src.match(/this\.chip\(ctx, dataW \+ 1, [^;]+;/g) ?? [];
+        expect(calls.length).toBeGreaterThan(0);
+        for (const c of calls) expect(c).toMatch(/formatAxisValue\(/);
+    });
+});
