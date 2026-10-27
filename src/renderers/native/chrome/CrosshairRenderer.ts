@@ -106,7 +106,7 @@ export class CrosshairRenderer {
         // An unscaled pane (axisFormat 'none') has no value axis, so no value chip either.
         if (horizontal && pane && pane.axisFormat !== 'none') {
             const price = coords.yToPrice(ch.y, pane.scale, pane.bounds);
-            this.chip(ctx, dataW + 1, ch.y, formatAxisValue(pane.scale, pane.bounds.height, price, percentScaleFor(scene, pane), scene.priceMintick, pane.axisFormat), chipBg, 'left', false, theme.background);
+            this.chip(ctx, dataW + 1, ch.y, formatAxisValue(pane.scale, pane.bounds.height, price, percentScaleFor(scene, pane), scene.priceMintick, pane.axisFormat), chipBg, 'left', false, theme.background, true);
         }
         // time chip on the bottom axis
         if (vertical) this.chip(ctx, x, dataH + 1, formatTimeStamp(coords.logicalToTime(logical), scene.timezone, coords.barInterval), chipBg, 'center', true, theme.background);
@@ -169,7 +169,7 @@ export class CrosshairRenderer {
                 }
             }
             if (pane && pane.axisFormat !== 'none') {
-                this.chip(ctx, dataW + 1, ext.y, formatAxisValue(pane.scale, pane.bounds.height, ext.price, percentScaleFor(scene, pane), scene.priceMintick, pane.axisFormat), chipBg, 'left', false, theme.background);
+                this.chip(ctx, dataW + 1, ext.y, formatAxisValue(pane.scale, pane.bounds.height, ext.price, percentScaleFor(scene, pane), scene.priceMintick, pane.axisFormat), chipBg, 'left', false, theme.background, true);
             }
         }
         this.chip(ctx, x, dataH + 1, formatTimeStamp(ext.time, scene.timezone, coords.barInterval), chipBg, 'center', true, theme.background);
@@ -199,20 +199,31 @@ export class CrosshairRenderer {
         ctx.globalAlpha = 1;
     }
 
-    private chip(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, bg: string, align: 'left' | 'center', below = false, over = '#000000'): void {
+    /** `column`: a price chip spanning the whole price column, text where the axis numbers start (dataW + 6), as
+     *  TradingView draws it. A chip only as wide as its text let a wider axis number under it peek out at its edge
+     *  (Inter's digits differ in width: "80,400.00" next to "80,398.22"). */
+    private chip(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, bg: string, align: 'left' | 'center', below = false, over = '#000000', column = false): void {
         // On whole device pixels, as the axis numbers are: the cursor's y is fractional at 110-150 % zoom, and text
         // there smears over two pixel rows (soft next to the scale it sits on).
         const dpr = ctx.getTransform?.().a || 1;
         const snap = (v: number): number => Math.round(v * dpr) / dpr;
-        const w = Math.ceil(ctx.measureText(text).width + 8);
+        const textW = Math.ceil(ctx.measureText(text).width + 8);
+        const colW = column && ctx.canvas ? ctx.canvas.width / dpr - x : 0;
+        const w = Math.max(textW, colW);
         const h = 16;
         const rx = snap(align === 'left' ? x : x - w / 2);
         const ry = snap(below ? y : y - h / 2);
         ctx.fillStyle = bg;
         ctx.fillRect(rx, ry, w, h);
         ctx.fillStyle = readableText(bg, over); // legible whatever the chip color is (light or dark)
-        ctx.textAlign = 'center';
-        ctx.fillText(text, rx + w / 2, snap(ry + h / 2 + (below ? 2 : 0))); // the text row too: h / 2 is not whole device px at 67-133 %
+        const ty = snap(ry + h / 2 + (below ? 2 : 0)); // the text row too: h / 2 is not whole device px at 67-133 %
+        if (column) {
+            ctx.textAlign = 'left';
+            ctx.fillText(text, snap(x + 5), ty);
+        } else {
+            ctx.textAlign = 'center';
+            ctx.fillText(text, rx + w / 2, ty);
+        }
         ctx.textAlign = 'start';
     }
 }
