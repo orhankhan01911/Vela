@@ -4172,6 +4172,9 @@ export class NativeRenderer implements IChartRenderer {
      * that are not an indicator's (a chart type, chrome, a background) keep painting as before.
      */
     private idleLayerTypes(): Set<string> {
+        // OFF (user's iPhone, 2026-10-26/27): releasing idle layer canvases crashes iPhone Safari ("A problem repeatedly
+        // occurred"), on the Tester, dmcharts and Local through a tunnel. Same line as the release builds (633b14f).
+        if ((true as boolean)) return new Set<string>();
         const used = new Set<string>();
         for (const m of this.scene.indicators.values()) if (m.native && !m.native.channel) used.add(m.native.type);
         const idle = new Set<string>();
