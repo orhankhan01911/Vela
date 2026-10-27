@@ -269,6 +269,10 @@ export class ChromeRenderer {
                 }
             }
             if (!tags.length) continue;
+            // a short pane (a phone, three panes on a tablet) shows the tags that fit, in series order (an indicator
+            // lists its main lines first), instead of a stack spilling over the next pane
+            const fit = Math.max(1, Math.floor((pane.bounds.height + 1) / (H + 1)));
+            if (tags.length > fit) tags.length = fit;
             tags.sort((a, b) => a.y - b.y);
             const top = pane.bounds.top + H / 2;
             const bot = pane.bounds.top + pane.bounds.height - H / 2;
