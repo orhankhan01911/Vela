@@ -680,6 +680,49 @@ describe('EngineOrchestrator', () => {
         }
     });
 
+    it('show puts a layer native back on its own pane before it resumes (its resume pushes layer data without emitting)', async () => {
+        // Bar Stats' shape: emits its model once, then only pushes layer data. Before the fix the model came back
+        // only on the next emit, so for the whole time after a show the layer had no owner and painted on the
+        // price pane, over the candles.
+        let mountsAtResume = -1;
+        let renderer!: FakeRenderer;
+        let id = '';
+        class LayerNative implements NativeIndicator {
+            private ctx: NativeIndicatorContext | null = null;
+            start(ctx: NativeIndicatorContext): void { this.ctx = ctx; ctx.emit({ series: [] }); ctx.pushData({ rows: 1 }); }
+            onBars(): void {}
+            onViewport(): void {}
+            setInputs(): void {}
+            suspend(): void { this.ctx!.pushData(null); }
+            resume(): void {
+                mountsAtResume = renderer.mountedModels.filter((m) => m.id === id).length;
+                this.ctx!.pushData({ rows: 1 });
+            }
+            stop(): void {}
+        }
+        registerNativeIndicator({ ...testNativeDescriptor, type: 'layer-native', title: 'Layer', paneHint: 'new', overlay: false, create: () => new LayerNative() });
+        try {
+            renderer = new FakeRenderer();
+            const chart = new Vela({} as unknown as HTMLElement, { live: false, volume: false }, { renderer, engines: [], dataFeed: new MockDataFeed() });
+            const h = chart.addNativeIndicator('layer-native');
+            id = h.id;
+            await chart.ready();
+            await flush();
+            const mounted = renderer.mountedModels.filter((m) => m.id === id);
+            const pane = mounted[mounted.length - 1]!.paneId;
+            expect(pane).not.toBe('price');
+            h.setVisible(false);
+            const mountsHidden = renderer.mountedModels.filter((m) => m.id === id).length;
+            h.setVisible(true);
+            expect(mountsAtResume).toBe(mountsHidden + 1); // re-mounted BEFORE resume pushed its data
+            const again = renderer.mountedModels.filter((m) => m.id === id);
+            expect(again[again.length - 1]!.paneId).toBe(pane); // on its own pane, not the price pane
+            chart.destroy();
+        } finally {
+            unregisterNativeIndicator('layer-native');
+        }
+    });
+
     it('native context: each instance knows its own id; a multiInstance type pushes layer data on a per-instance channel stamped on its model', async () => {
         // A layer-backed native: pushes a payload tagged with its context id, and emits an
         // empty model (the legend row) like the built-in layer natives do.

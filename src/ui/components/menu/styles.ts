@@ -12,6 +12,10 @@ export const MENU_CSS = `
     box-shadow: var(--vela-shadow);
     padding: 6px;
     min-width: 180px;
+    /* Never wider than the screen: a row of label + hint (the chart settings' template list) ran ~630 px and
+       widened a phone's page, cutting the names off. A row that does not fit puts its hint under the label. */
+    max-width: calc(100vw - 16px);
+    box-sizing: border-box;
     /* Never past the room on the side it opened (the positioner's --available-height): a long checklist opened
        from low in a dialog flips up and scrolls instead of running off the top of the window. */
     max-height: min(60vh, var(--available-height, 60vh));
@@ -38,8 +42,9 @@ export const MENU_CSS = `
 .vela-menu-item[data-highlighted] { background: var(--vela-hover); }
 .vela-menu-item[data-disabled] { opacity: 0.4; cursor: default; }
 .vela-menu-item .vela-icon { width: 16px; height: 16px; font-size: 16px; justify-content: center; color: var(--vela-fg-muted); }
-.vela-menu-item .vela-menu-label { flex: 1 1 auto; }
-.vela-menu-item .vela-menu-hint { color: var(--vela-fg-faint); font-size: var(--vela-font-size-sm); }
+.vela-menu-item { flex-wrap: wrap; row-gap: 2px; }
+.vela-menu-item .vela-menu-label { flex: 1 1 auto; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.vela-menu-item .vela-menu-hint { color: var(--vela-fg-faint); font-size: var(--vela-font-size-sm); white-space: normal; min-width: 0; }
 /* Active entry: the row surface carries the selection — a stronger background wash
    than the hover one, plus bright ink. Declared after the hover rule so a selected
    row stays visibly selected while highlighted. */

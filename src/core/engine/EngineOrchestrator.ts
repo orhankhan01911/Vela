@@ -2560,6 +2560,10 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                     const handle = this.handles.get(id);
                     if (handle) void this.startNativeIndicator(id, handle);
                 } else {
+                    // Put the kept model back on its pane BEFORE the instance resumes: a layer
+                    // native's resume pushes its layer data without emitting a model, and a layer
+                    // with no owner in the scene paints on the price pane (Bar Stats over the candles).
+                    if (record.model) this.applyModel(id, record.model);
                     record.native.instance.resume();
                 }
             } else {
