@@ -448,6 +448,8 @@ export class ChromeRenderer {
         for (const pane of panes) {
             if (pane.collapsed) continue; // collapsed strip: legend only, no scale numbers
             const tags = tagLayout?.get(pane.id);
+            // the current-price label block: numbers under it peeked out around it (TradingView hides them)
+            const block = this.priceBlockSpan(scene, coords, pane);
             // a number within a text height of a series tag would show half covered by it
             const clear = SERIES_TAG_H / 2 + scene.style.fontSize / 2 + 1;
             // a drawing's price chip (19 px, DrawingPainter.paintAxisChip) likewise
@@ -459,6 +461,7 @@ export class ChromeRenderer {
                 if (y < pane.bounds.top + 6 || y > pane.bounds.top + pane.bounds.height - 4) continue;
                 if (tags?.some((g) => Math.abs(g.y - y) < clear)) continue;
                 if (chips?.some((cy) => Math.abs(cy - y) < chipClear)) continue;
+                if (block && y > block.top - scene.style.fontSize / 2 - 1 && y < block.bottom + scene.style.fontSize / 2 + 1) continue;
                 if (t.major === true) ctx.font = majorFont;
                 else if (t.major === false) ctx.globalAlpha = alpha * MINOR_LABEL_ALPHA;
                 ctx.fillText(t.label, dataW + 6, y);
@@ -509,13 +512,26 @@ export class ChromeRenderer {
      * price level with centered text. The countdown repaints on the renderer's second pulse
      * and disappears once the bar has closed, until the next bar arrives.
      */
+    /** The current-price label block's vertical span on `pane` (the label row centred on the last close, the countdown
+     *  row under it), as {@link drawPriceLineAndCountdown} paints it; null when it is not shown there. */
+    private priceBlockSpan(scene: SceneGraph, coords: CoordinateSystem, pane: PaneNode): { top: number; bottom: number } | null {
+        const n = scene.bars.length;
+        if (pane.kind !== 'price' || n === 0 || scene.candlesHidden || pane.collapsed || pane.bounds.height <= 0) return null;
+        const label = scene.showPriceLabel;
+        const countdown = scene.showCountdown && !replacesSeries(scene.priceStyle);
+        if (!label && !countdown) return null;
+        const y = coords.priceToY(scene.bars[n - 1]!.close, pane.scale, pane.bounds);
+        return { top: y - 8, bottom: y + (label && countdown ? 24 : 8) };
+    }
+
     private drawPriceLineAndCountdown(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, pricePane: PaneNode | null): void {
         const n = scene.bars.length;
         // A hidden price series takes its current-price line/label/countdown down with it —
         // as does a hidden price PANE (collapsed, or zero-height while a study pane is maximized).
         if (!pricePane || n === 0 || scene.candlesHidden || pricePane.collapsed || pricePane.bounds.height <= 0) return;
         const last = scene.bars[n - 1]!;
-        const y = coords.priceToY(last.close, pricePane.scale, pricePane.bounds);
+        // On a whole device pixel, as the axis numbers are: a fractional y smears the chip text over two pixel rows.
+        const y = Math.round(coords.priceToY(last.close, pricePane.scale, pricePane.bounds) * coords.dpr) / coords.dpr;
         if (y < pricePane.bounds.top || y > pricePane.bounds.top + pricePane.bounds.height) return;
         const color = this.priceElementColor(scene, coords, theme, last);
 
