@@ -24,6 +24,17 @@ import { clusterTooltip, layoutMarkLane, markGlyphAt, markStackAt, type MarkLane
 import { MarkIconRaster, paintMarkLane } from './marks/paint';
 
 /** Opacity factor of a price-axis label whose tick is `major: false` (de-emphasized). */
+/** Height of a series' latest-value tag on the price scale (`axisTag`). */
+const SERIES_TAG_H = 15;
+
+/** One series tag, laid out: its centre after overlapping tags are pushed apart. */
+interface SeriesAxisTag {
+    y: number;
+    name: string;
+    val: string;
+    color: string;
+}
+
 const MINOR_LABEL_ALPHA = 0.5;
 
 /**
@@ -220,22 +231,27 @@ export class ChromeRenderer {
         }
 
         // ── axes + current-price line + countdown ──
-        this.drawPriceAxes(ctx, scene, coords, theme, dataW, panes);
+        // series tags are laid out first: a scale number they would cover is not drawn (no half-hidden "200M")
+        const tagLayout = this.layoutSeriesAxisTags(scene, coords, panes);
+        this.drawPriceAxes(ctx, scene, coords, theme, dataW, panes, tagLayout);
         // merged (own-scale) indicators read on the left scale (LeftScaleColumn), not here
         this.drawPaneSeparators(ctx, scene, theme, fullW, panes);
         this.drawPriceLineAndCountdown(ctx, scene, coords, theme, dataW, pricePane);
-        this.drawSeriesAxisTags(ctx, scene, coords, theme, dataW, fullW, panes);
+        this.drawSeriesAxisTags(ctx, scene, coords, theme, dataW, fullW, panes, tagLayout);
         this.drawTimeAxis(ctx, scene, coords, theme, dataW, dataH, fullH);
         this.drawMarkLane(ctx, scene, coords, theme, dataW, dataH);
     }
 
     /** Tags on a pane's price scale for series that ask for one (`axisTag`): each line's latest value, in its colour,
-     *  named by its `legendLabel`. Tags that would overlap are pushed apart (in value order) and kept inside the pane. */
-    private drawSeriesAxisTags(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, fullW: number, panes: PaneNode[]): void {
-        const H = 15;
+     *  named by its `legendLabel`. Tags that would overlap are pushed apart (in value order) and kept inside the pane.
+     *  A named tag is two cells, the name and the value, and all tags of a pane share the cell widths, so names and
+     *  values read as two columns. Edges and text sit on whole device pixels (sharp at any browser zoom). */
+    private layoutSeriesAxisTags(scene: SceneGraph, coords: CoordinateSystem, panes: PaneNode[]): Map<string, SeriesAxisTag[]> {
+        const H = SERIES_TAG_H;
+        const out = new Map<string, SeriesAxisTag[]>();
         for (const pane of panes) {
             if (pane.collapsed) continue;
-            const tags: { y: number; text: string; color: string }[] = [];
+            const tags: SeriesAxisTag[] = [];
             for (const m of scene.indicators.values()) {
                 if ((m.paneId || '') !== pane.id || m.ownScale === true) continue; // a merged one tags its left scale
                 for (const s of m.series) {
@@ -249,7 +265,7 @@ export class ChromeRenderer {
                     if (y < pane.bounds.top || y > pane.bounds.top + pane.bounds.height) continue;
                     // a compact pane (money or size) reads 327.5M on its tags too, like its axis
                     const val = formatAxisValue(sc, pane.bounds.height, v, undefined, scene.priceMintick, pane.axisFormat === 'volume' || m.paneAxis === 'compact' ? 'volume' : undefined);
-                    tags.push({ y, text: s.legendLabel ? `${s.legendLabel} ${val}` : val, color: s.style.color });
+                    tags.push({ y, name: s.legendLabel ?? '', val, color: s.style.color });
                 }
             }
             if (!tags.length) continue;
@@ -259,17 +275,48 @@ export class ChromeRenderer {
             for (let i = 0; i < tags.length; i++) tags[i]!.y = Math.max(tags[i]!.y, i ? tags[i - 1]!.y + H + 1 : top);
             // pushed past the bottom: pull the stack back up from there
             for (let i = tags.length - 1; i >= 0; i--) tags[i]!.y = Math.min(tags[i]!.y, i < tags.length - 1 ? tags[i + 1]!.y - H - 1 : bot);
-            ctx.font = `600 ${scene.style.fontSize}px ${theme.fontFamily}`;
+            out.set(pane.id, tags);
+        }
+        return out;
+    }
+
+    private drawSeriesAxisTags(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, fullW: number, panes: PaneNode[], layout: Map<string, SeriesAxisTag[]>): void {
+        const H = SERIES_TAG_H;
+        const PAD = 4;
+        const dpr = coords.dpr || 1;
+        const snap = (v: number): number => Math.round(v * dpr) / dpr;
+        for (const pane of panes) {
+            const tags = layout.get(pane.id);
+            if (pane.collapsed || !tags?.length) continue;
+            ctx.font = `500 ${scene.style.fontSize}px ${theme.fontFamily}`;
             ctx.textBaseline = 'middle';
-            ctx.textAlign = 'left';
+            let nameW = 0;
+            let valW = 0;
             for (const t of tags) {
-                const w = this.measureCached(ctx, t.text) + 8;
-                // a tag wider than the scale reaches left over the plot instead of being cut at the canvas edge
-                const x = Math.min(dataW + 1, fullW - w);
+                if (t.name) nameW = Math.max(nameW, this.measureCached(ctx, t.name));
+                valW = Math.max(valW, this.measureCached(ctx, t.val));
+            }
+            const nameCell = nameW > 0 ? Math.ceil(nameW) + 2 * PAD : 0;
+            const w = nameCell + (nameCell ? 1 : 0) + Math.ceil(valW) + 2 * PAD;
+            // a tag wider than the scale reaches left over the plot instead of being cut at the canvas edge
+            const x = snap(Math.min(dataW + 1, fullW - w));
+            const valX = snap(x + nameCell + (nameCell ? 1 : 0));
+            const right = snap(x + w);
+            for (const t of tags) {
+                const top = snap(t.y - H / 2);
+                const bottom = snap(top + H);
+                const mid = (top + bottom) / 2;
+                const start = t.name ? x : valX;
                 ctx.fillStyle = t.color;
-                ctx.fillRect(x, Math.round(t.y - H / 2), w, H);
+                if (t.name) ctx.fillRect(x, top, valX - x - 1 / dpr, bottom - top);
+                ctx.fillRect(valX, top, right - valX, bottom - top);
                 ctx.fillStyle = tagTextColor(t.color, theme.background);
-                ctx.fillText(t.text, x + 4, t.y);
+                if (t.name) {
+                    ctx.textAlign = 'left';
+                    ctx.fillText(t.name, start + PAD, mid);
+                }
+                ctx.textAlign = 'right';
+                ctx.fillText(t.val, right - PAD, mid);
             }
             ctx.textAlign = 'start';
         }
@@ -371,7 +418,7 @@ export class ChromeRenderer {
     }
 
     // ── axes ──
-    private drawPriceAxes(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, panes: PaneNode[]): void {
+    private drawPriceAxes(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, panes: PaneNode[], tagLayout?: Map<string, SeriesAxisTag[]>): void {
         ctx.strokeStyle = scene.style.borderColor ?? theme.borderColor;
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -390,10 +437,14 @@ export class ChromeRenderer {
         const alpha = ctx.globalAlpha;
         for (const pane of panes) {
             if (pane.collapsed) continue; // collapsed strip: legend only, no scale numbers
+            const tags = tagLayout?.get(pane.id);
+            // a number within a text height of a series tag would show half covered by it
+            const clear = SERIES_TAG_H / 2 + scene.style.fontSize / 2 + 1;
             for (const t of this.axisTicks.ticksFor(scene, pane, coords)) {
                 // on a whole device pixel: a fractional baseline smears the strokes over two pixel rows at 110-150 % zoom
                 const y = Math.round(coords.priceToY(t.price, pane.scale, pane.bounds) * coords.dpr) / coords.dpr;
                 if (y < pane.bounds.top + 6 || y > pane.bounds.top + pane.bounds.height - 4) continue;
+                if (tags?.some((g) => Math.abs(g.y - y) < clear)) continue;
                 if (t.major === true) ctx.font = majorFont;
                 else if (t.major === false) ctx.globalAlpha = alpha * MINOR_LABEL_ALPHA;
                 ctx.fillText(t.label, dataW + 6, y);

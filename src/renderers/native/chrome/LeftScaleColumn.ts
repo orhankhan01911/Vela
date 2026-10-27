@@ -93,9 +93,9 @@ export class LeftScaleColumn {
                 for (const t of paneAxisTicks(sc, pane.bounds.height, undefined, scene.priceMintick)) {
                     const y = coords.priceToY(t.price, sc, pane.bounds);
                     if (y < top + 6 || y > bottom - 4) continue;
-                    ctx.fillText(format === 'volume' ? formatAxisValue(sc, pane.bounds.height, t.price, undefined, undefined, 'volume') : t.label, right - 6, y);
+                    ctx.fillText(format === 'volume' ? formatAxisValue(sc, pane.bounds.height, t.price, undefined, undefined, 'volume') : t.label, right - 6, this.snap(y));
                 }
-                ctx.font = `600 ${fs}px ${theme.fontFamily}`;
+                ctx.font = `500 ${fs}px ${theme.fontFamily}`;
                 // latest-value tags: one per line that asks for a tag (CVD by Exchange: one per venue, pushed apart),
                 // else the indicator's latest value. Values only: a name would not fit the column.
                 const tags = latestValues(model)
@@ -123,11 +123,18 @@ export class LeftScaleColumn {
     private tag(ctx: CanvasRenderingContext2D, right: number, y: number, text: string, color: string, over: string): void {
         if (!text) return;
         const H = TAG_H;
-        const w = Math.min(LEFT_SCALE_COL_W - 2, ctx.measureText(text).width + 8);
+        const w = this.snap(Math.min(LEFT_SCALE_COL_W - 2, Math.ceil(ctx.measureText(text).width) + 8));
+        // whole device pixels: sharp edges and text at any browser zoom
+        const top = this.snap(y - H / 2);
+        const bottom = this.snap(top + H);
         ctx.fillStyle = color;
-        ctx.fillRect(right - w - 1, Math.round(y - H / 2), w, H);
+        ctx.fillRect(this.snap(right - w - 1), top, w, bottom - top);
         ctx.fillStyle = tagTextColor(color, over);
-        ctx.fillText(text, right - 5, y);
+        ctx.fillText(text, this.snap(right - 5), (top + bottom) / 2);
+    }
+
+    private snap(v: number): number {
+        return Math.round(v * this.dpr) / this.dpr;
     }
 }
 
