@@ -2,6 +2,7 @@ import { Drawing, type AnchorSlot } from '../Drawing';
 import type { DrawingPoint, Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
 import { pointInBox, handleAt } from '../hittest';
+import { timePlusBars } from '../futureAnchors';
 
 /** One copied bar resolved to pixels. */
 export interface PatternBar {
@@ -63,7 +64,8 @@ export class BarsPattern extends Drawing {
         if (!a || !this.bars?.length) return [];
         const span = this.bars[this.bars.length - 1]!.dt;
         const out: PatternBar[] = [];
-        for (const bar of this.bars) {
+        const last = this.bars.length - 1;
+        for (const [j, bar] of this.bars.entries()) {
             const s = this.flipped ? -1 : 1;
             const y = (v: number): number | null => proj.yOf(a.price + s * v, this.paneId);
             const o = y(bar.o);
@@ -71,7 +73,8 @@ export class BarsPattern extends Drawing {
             const l = y(this.flipped ? bar.h : bar.l);
             const c = y(bar.c);
             if (o == null || h == null || l == null || c == null) continue;
-            const x = proj.xOf(a.time + (this.mirrored ? span - bar.dt : bar.dt));
+            // the copied bars are consecutive: on a chart whose x counts bars they sit one bar apart
+            const x = proj.xOf(timePlusBars(proj, a.time, this.mirrored ? last - j : j, this.mirrored ? span - bar.dt : bar.dt));
             // Mirrored, a bar runs backwards in time: its open and close swap.
             out.push(this.mirrored ? { x, open: c, high: h, low: l, close: o } : { x, open: o, high: h, low: l, close: c });
         }

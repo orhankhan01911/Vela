@@ -1,6 +1,7 @@
 import type { Projector } from '../geometry';
 import { DEFAULT_DRAWING_COLOR } from '../style';
 import { FibRatios, type FibEntryLine, type FibLevel } from './FibRatios';
+import { timeBetween } from '../futureAnchors';
 
 /** A resolved time-zone line: its Fibonacci index, color, label, and pixel x. */
 export interface FibZoneLine {
@@ -35,7 +36,7 @@ export class FibTimeZones extends FibRatios {
         const out: FibZoneLine[] = [];
         for (const lv of this.levels) {
             if (!lv.enabled) continue;
-            out.push({ n: lv.ratio, color: lv.color, label: lv.label, x: proj.xOf(a.time + lv.ratio * unit) });
+            out.push({ n: lv.ratio, color: lv.color, label: lv.label, x: proj.xOf(timeBetween(proj, a.time, b.time, lv.ratio)) });
         }
         return out;
     }

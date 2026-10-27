@@ -1,5 +1,5 @@
 import type { Drawing, DrawingIntent, DrawingPoint, DrawingStyle, DrawingTypeKey, FreeAxis, Projector, SnapMode } from '../../../core/drawings';
-import { createDrawing, deserializeDrawing } from '../../../core/drawings';
+import { createDrawing, deserializeDrawing, resolveAnchors, translateInBars } from '../../../core/drawings';
 import { topDrawingAt, HIT_TOLERANCE } from './DrawingHitTester';
 
 /** Pixels of motion before a press counts as a drag (vs a click → open settings). */
@@ -289,12 +289,14 @@ export class DrawingInteraction {
 
     /** The data-space delta a body drag from the press to (x, y) means on `paneId` — resolved per
      *  pane so drawings riding along on another pane move by the same PIXELS, not the same price. */
-    private bodyDelta(paneId: string, x: number, y: number): { dt: number; dp: number } {
-        if (this.state.kind !== 'pressed') return { dt: 0, dp: 0 };
+    private bodyDelta(paneId: string, x: number, y: number): { dt: number; dp: number; dBars: number } {
+        if (this.state.kind !== 'pressed') return { dt: 0, dp: 0, dBars: 0 };
         const proj = this.deps.projector();
         const from = proj.pxToPoint(this.state.px, this.state.py, paneId);
         const to = proj.pxToPoint(x, y, paneId);
-        return { dt: to.time - from.time, dp: to.price - from.price };
+        const ax = proj.barAxis;
+        const dBars = ax ? ax.logicalOf(to.time) - ax.logicalOf(from.time) : 0;
+        return { dt: to.time - from.time, dp: to.price - from.price, dBars };
     }
 
     /** The pressed drawing and its riders, each with its anchors at the press. */
@@ -317,14 +319,19 @@ export class DrawingInteraction {
         if (this.state.mod && !this.state.clones) {
             this.state.clones = this.dragSources(d).flatMap((s) => {
                 const c = deserializeDrawing(s.d.serialize());
+                if (c) resolveAnchors(c.anchors, this.deps.projector().barAxis ?? null); // a copy starts where its source draws
                 return c ? [{ d: c, orig: cloneAnchors(c) }] : [];
             });
         }
         for (const t of this.state.clones ?? this.dragSources(d)) {
-            const { dt, dp } = this.bodyDelta(t.d.paneId, x, y);
+            const { dt, dp, dBars } = this.bodyDelta(t.d.paneId, x, y);
             // a post card moves on the screen, not by price; others translate in data space
-            const px = t.d.translateBodyPx(x - this.state.px, y - this.state.py, t.orig, this.deps.projector());
-            t.d.anchors = px ?? t.d.translateBody(dt, dp, t.orig); // a callout pins its tip + moves only the box
+            const proj = this.deps.projector();
+            const px = t.d.translateBodyPx(x - this.state.px, y - this.state.py, t.orig, proj);
+            // on a chart whose x counts bars every anchor moves by the same number of bars, so the shape keeps its spacing
+            const ax = proj.barAxis;
+            const moved = ax ? translateInBars(t.orig, dBars, dp, ax, (d, p, o) => t.d.translateBody(d, p, o)) : t.d.translateBody(dt, dp, t.orig);
+            t.d.anchors = px ?? moved; // a callout pins its tip + moves only the box
         }
     }
 

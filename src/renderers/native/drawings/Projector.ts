@@ -32,9 +32,10 @@ export function createProjector(
     paneIdAtY: (y: number) => string | null,
     barsInRange?: (from: number, to: number) => ReadonlyArray<ProjectorBar>,
     seriesInRange?: (timeframe: string, from: number, to: number) => DrawingSeriesState,
-    extra: Pick<Projector, 'barAt' | 'timeZone'> = {},
+    extra: Pick<Projector, 'barAt' | 'timeZone' | 'barAxis'> = {},
 ): Projector {
     return {
+        barAxis: extra.barAxis ?? null,
         xOf: (time: number): number => coords.timeToX(time),
         yOf: (price: number, paneId: string): number | null => {
             const p = paneOf(paneId);

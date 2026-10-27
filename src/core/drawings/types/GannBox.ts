@@ -2,6 +2,7 @@ import type { Projector } from '../geometry';
 import { pointInBox } from '../hittest';
 import { FibRatios, type FibEntryLine, type FibLevel } from './FibRatios';
 import { fibLevels, LEVEL_ANCHOR } from '../levelPalette';
+import { timeBetween } from '../futureAnchors';
 
 /** The Gann-box subdivisions, applied to BOTH the price (horizontal) and time (vertical) axes. */
 const GANN_BOX_LEVELS = fibLevels([0, 0.25, 0.382, 0.5, 0.618, 0.75, 1].map((ratio) => ({ ratio, label: String(ratio) })));
@@ -71,8 +72,8 @@ export class GannBox extends FibRatios {
                 if (y1 != null && y2 != null) out.push({ color: hi.color, x: g.left, y: Math.min(y1, y2), w: g.right - g.left, h: Math.abs(y2 - y1) });
             }
             if (this.fillTime) {
-                const x1 = proj.xOf(g.c1.time + lo.ratio * (g.c2.time - g.c1.time));
-                const x2 = proj.xOf(g.c1.time + hi.ratio * (g.c2.time - g.c1.time));
+                const x1 = proj.xOf(timeBetween(proj, g.c1.time, g.c2.time, lo.ratio));
+                const x2 = proj.xOf(timeBetween(proj, g.c1.time, g.c2.time, hi.ratio));
                 out.push({ color: hi.color, x: Math.min(x1, x2), y: g.top, w: Math.abs(x2 - x1), h: g.bot - g.top });
             }
         }
@@ -113,7 +114,7 @@ export class GannBox extends FibRatios {
                 if (this.labelsRight) out.push({ color: lv.color, x1: right, y1: py, x2: right, y2: py, numberText: text, numberX: right + 5, numberY: py, numberAlign: 'left', labelX: right, labelY: py });
             }
             // vertical (time) gridline — labelled above the top and / or under the bottom edge
-            const vx = proj.xOf(c1.time + lv.ratio * (c2.time - c1.time));
+            const vx = proj.xOf(timeBetween(proj, c1.time, c2.time, lv.ratio));
             out.push({ color: lv.color, x1: vx, y1: top, x2: vx, y2: bot, numberText: this.labelsTop ? text : '', numberX: vx, numberY: top - 8, numberAlign: 'center', labelX: vx, labelY: top });
             if (this.labelsBottom) out.push({ color: lv.color, x1: vx, y1: bot, x2: vx, y2: bot, numberText: text, numberX: vx, numberY: bot + 8, numberAlign: 'center', labelX: vx, labelY: bot });
         }

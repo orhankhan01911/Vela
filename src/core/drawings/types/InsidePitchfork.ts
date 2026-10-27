@@ -1,6 +1,7 @@
 import { type AnchorSlot } from '../Drawing';
 import type { DrawingPoint, Projector } from '../geometry';
 import { PitchforkBase, type PitchforkFrame } from './PitchforkBase';
+import { timeBetween } from '../futureAnchors';
 
 /**
  * An inside pitchfork: the median is anchored at M = midpoint(p2, p3) but takes its slope from
@@ -35,7 +36,7 @@ export class InsidePitchfork extends PitchforkBase {
         if (!P0 || !P1) return null;
         const c = this.anchors[2];
         if (!c) return { placing: [P0[0], P0[1], P1[0], P1[1]] }; // back trend line only (placing)
-        const B = px({ time: (a.time + b.time) / 2, price: (a.price + b.price) / 2 }); // modified base
+        const B = px({ time: timeBetween(proj, a.time, b.time, 0.5), price: (a.price + b.price) / 2 }); // modified base
         const P2 = px(c);
         if (!B || !P2) return null;
         const M: [number, number] = [(P1[0] + P2[0]) / 2, (P1[1] + P2[1]) / 2]; // median target M

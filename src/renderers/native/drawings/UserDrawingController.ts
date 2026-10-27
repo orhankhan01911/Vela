@@ -12,7 +12,7 @@ import type {
     SnapMode,
     ToolbarDefinition,
 } from '../../../core/drawings';
-import { deserializeDrawing, getDrawingType, resetDrawingSettings, shownOnBarMs, Callout, Magnifier, PriceAlert, TextLabel } from '../../../core/drawings';
+import { deserializeDrawing, getDrawingType, resetDrawingSettings, shownOnBarMs, resolveAnchors, writeAnchor, Callout, Magnifier, PriceAlert, TextLabel, type BarAxis } from '../../../core/drawings';
 import type { Unsubscribe } from '../../../core/util/types';
 import { contrastColor, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE } from '../../shared/drawing-geometry';
 import { withAlpha } from '../core/chartConfig';
@@ -125,6 +125,8 @@ export class UserDrawingController implements IDrawingsRendererPort {
     private intentCb: ((i: DrawingIntent) => void) | null = null;
     /** Another chart's in-progress placement, mirrored here as a ghost (drawings sync). */
     private externalGhost: Drawing | null = null;
+    /** The chart's bar axis when its x counts bars, else null (see core `futureAnchors`). */
+    private barAxis: BarAxis | null = null;
     /** Core-pushed series gateway (finer-timeframe bars for data-driven drawings). */
     private seriesGw: DrawingSeriesGateway | null = null;
     private seriesGwUnsub: Unsubscribe | null = null;
@@ -256,8 +258,22 @@ export class UserDrawingController implements IDrawingsRendererPort {
         this.render();
     }
 
+    /**
+     * Place anchors kept as "n bars after a bar" for the chart's axis: at their bar on a chart whose x counts bars,
+     * at their saved time on a time chart (`null`). The renderer calls it whenever it builds the projector.
+     */
+    applyBarAxis(axis: BarAxis | null): void {
+        this.barAxis = axis;
+        for (const d of this.drawings) {
+            d.barAxis = axis;
+            resolveAnchors(d.anchors, axis);
+        }
+        if (this.externalGhost) resolveAnchors(this.externalGhost.anchors, axis);
+    }
+
     syncDrawings(docs: readonly SerializedDrawing[]): void {
         this.drawings = docs.map((d) => deserializeDrawing(d)).filter((d): d is Drawing => d != null);
+        this.applyBarAxis(this.barAxis);
         // The edited drawing can vanish from under the editor (deleted, erased, undone) — take the
         // editor with it instead of leaving a live textarea over nothing.
         if (this.textEditor && !this.editedDrawing(this.textEditor.id)) this.closeTextEditor();
@@ -1363,6 +1379,14 @@ export class UserDrawingController implements IDrawingsRendererPort {
     }
 
     private emit(i: DrawingIntent): void {
+        // A placed or moved point past the newest bar of a bar-axis chart is saved as "n bars after a bar"; drafts and
+        // copies are not in `drawings`, so their anchors are classified here.
+        const axis = this.barAxis;
+        if (axis) {
+            const fix = (doc: SerializedDrawing): SerializedDrawing => ({ ...doc, anchors: doc.anchors.map((a) => (a.bars ? a : writeAnchor(a, axis))) });
+            if (i.kind === 'create' || i.kind === 'edit') i = { ...i, doc: fix(i.doc) };
+            else if (i.kind === 'edit-many' || i.kind === 'clone') i = { ...i, docs: i.docs.map(fix) };
+        }
         // A freshly-placed drawing surfaces its editing UI by default once it's set: every type opens
         // its settings menu, and a text label / callout additionally opens its inline editor so the
         // caret is already waiting. Works for both click + drag finalize — the core reassigns the id,

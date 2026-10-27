@@ -2,6 +2,7 @@ import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
 import { LINE_FIELDS } from '../schema';
 import { PathDrawing } from './PathDrawing';
+import { timeBetween } from '../futureAnchors';
 
 /** One made-up candle in pixels. */
 export interface GhostCandle {
@@ -29,7 +30,6 @@ export class GhostFeed extends PathDrawing {
             const a = this.anchors[i - 1]!;
             const b = this.anchors[i]!;
             const n = Math.max(1, Math.min(MAX_GHOST, Math.round(Math.abs(proj.barsBetween?.(a.time, b.time) ?? 1))));
-            const dt = (b.time - a.time) / n;
             const dp = (b.price - a.price) / n;
             for (let k = 0; k < n && out.length < MAX_GHOST; k += 1) {
                 const o = a.price + dp * k;
@@ -40,7 +40,7 @@ export class GhostFeed extends PathDrawing {
                 const yh = proj.yOf(Math.max(o, c) + wick, this.paneId);
                 const yl = proj.yOf(Math.min(o, c) - wick * (k % 3 ? 0.6 : 1), this.paneId);
                 if (yo == null || yc == null || yh == null || yl == null) continue;
-                out.push({ x: proj.xOf(a.time + dt * (k + 1)), open: yo, high: yh, low: yl, close: yc });
+                out.push({ x: proj.xOf(timeBetween(proj, a.time, b.time, (k + 1) / n)), open: yo, high: yh, low: yl, close: yc });
             }
         }
         return out;

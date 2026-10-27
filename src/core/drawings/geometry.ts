@@ -7,6 +7,7 @@
  */
 
 import type { DrawingSeriesState } from './series';
+import type { BarAxis } from './futureAnchors';
 
 /** A drawing anchor in DATA space (epoch-ms time + data-space price). */
 export interface DrawingPoint {
@@ -14,6 +15,8 @@ export interface DrawingPoint {
     time: number;
     /** Data-space price (not normalized, not pane-relative). */
     price: number;
+    /** Past the newest bar of a chart whose x counts bars: `n` bars after the bar at `from` (see `futureAnchors`). */
+    bars?: { from: number; n: number };
 }
 
 /** Axes a handle is free to move along — drives drag constraints + handle generation. */
@@ -60,6 +63,8 @@ export interface Projector {
     yOf(price: number, paneId: string): number | null;
     /** Inverse — pixel → data point on a pane (used on create/drag commit). */
     pxToPoint(x: number, y: number, paneId: string): DrawingPoint;
+    /** The chart's bar axis when its x counts bars (tick, Renko ... bars), else null/absent; see `futureAnchors`. */
+    barAxis?: BarAxis | null;
     /** Which pane owns a pixel y, or `null` outside every pane. */
     paneIdAtY(y: number): string | null;
     /**

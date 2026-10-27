@@ -3,6 +3,7 @@ import type { Projector, SegmentGeometry } from '../geometry';
 import type { SettingsSchema } from '../schema';
 import { LINE_FIELDS, FILL_FIELDS, TEXT_FIELDS } from '../schema';
 import { SegmentDrawing } from './SegmentDrawing';
+import { timeBetween } from '../futureAnchors';
 
 /**
  * A flat top/bottom channel: a sloped baseline p1→p2 plus a FLAT (horizontal) side at a constant
@@ -39,7 +40,7 @@ export class FlatTopBottom extends SegmentDrawing {
         const c = this.anchors[2];
         if (c) {
             const yc = proj.yOf(c.price, this.paneId);
-            if (yc != null) pts.push([proj.xOf((a.time + b.time) / 2), yc]);
+            if (yc != null) pts.push([proj.xOf(timeBetween(proj, a.time, b.time, 0.5)), yc]);
         }
         return pts;
     }

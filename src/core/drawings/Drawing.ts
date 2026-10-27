@@ -4,6 +4,7 @@ import { defaultStyle, defaultText } from './style';
 import { ALONG_LINE_TEXT_TYPES } from './schema';
 import type { SettingsSchema } from './schema';
 import { compactIntervals, type IntervalVisibility } from './intervals';
+import { readAnchor, writeAnchor, type BarAxis } from './futureAnchors';
 
 /**
  * The interactive user-drawing types. The lean-core set ships first; new types
@@ -165,13 +166,15 @@ export abstract class Drawing {
     intervals?: IntervalVisibility;
     zIndex = 0;
     readonly createdAt: number;
+    /** The bar axis of the chart showing this drawing (null on a time chart); see `futureAnchors`. Not saved. */
+    barAxis: BarAxis | null = null;
 
     // Public so the registry can construct concrete subclasses; `abstract` still
     // prevents `new Drawing()` directly.
     constructor(init: Partial<SerializedDrawing> & { paneId: string }) {
         this.id = init.id ?? `dw-${(Drawing.seq += 1)}`;
         this.paneId = init.paneId;
-        this.anchors = (init.anchors ?? []).map((p) => ({ time: p.time, price: p.price }));
+        this.anchors = (init.anchors ?? []).map(readAnchor);
         this.style = init.style ? { ...init.style } : defaultStyle();
         this.text = init.text ? { ...init.text } : undefined;
         this.locked = init.locked ?? false;
@@ -305,7 +308,7 @@ export abstract class Drawing {
             id: this.id,
             type: this.type,
             paneId: this.paneId,
-            anchors: this.anchors.map((p) => ({ time: p.time, price: p.price })),
+            anchors: this.anchors.map((p) => writeAnchor(p, this.barAxis)),
             style: { ...this.style },
             text: this.text ? { ...this.text } : undefined,
             locked: this.locked,

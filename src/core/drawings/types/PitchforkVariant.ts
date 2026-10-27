@@ -23,7 +23,7 @@ export abstract class PitchforkVariant extends PitchforkBase {
     }
 
     /** The median's start point, in DATA space (time+price), derived from the three anchors. */
-    protected abstract medianStart(p0: DrawingPoint, p1: DrawingPoint, p2: DrawingPoint): DrawingPoint;
+    protected abstract medianStart(p0: DrawingPoint, p1: DrawingPoint, p2: DrawingPoint, proj: Projector): DrawingPoint;
 
     protected frame(proj: Projector): PitchforkFrame | { placing: [number, number, number, number] } | null {
         const a = this.anchors[0];
@@ -38,7 +38,7 @@ export abstract class PitchforkVariant extends PitchforkBase {
         if (!P0 || !P1) return null;
         const c = this.anchors[2];
         if (!c) return { placing: [P0[0], P0[1], P1[0], P1[1]] }; // pivot → cursor only (placing)
-        const S = px(this.medianStart(a, b, c));
+        const S = px(this.medianStart(a, b, c, proj));
         const P2 = px(c);
         if (!S || !P2) return null;
         const M: [number, number] = [(P1[0] + P2[0]) / 2, (P1[1] + P2[1]) / 2]; // median target = midpoint of the tine anchors

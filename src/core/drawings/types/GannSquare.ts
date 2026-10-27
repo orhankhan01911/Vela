@@ -2,6 +2,7 @@ import type { Projector } from '../geometry';
 import { pointInBox } from '../hittest';
 import { FibRatios, type FibEntryLine, type FibLevel } from './FibRatios';
 import { fibLevels, LEVEL_BLUE, LEVEL_GREEN, LEVEL_ORANGE, LEVEL_RED, LEVEL_TEAL, LEVEL_UNITY } from '../levelPalette';
+import { timeBetween } from '../futureAnchors';
 
 /** The H/V grid subdivisions (editable, like GannBox), applied to both the price + time axes. */
 const GRID_LEVELS = fibLevels([0, 0.25, 0.382, 0.5, 0.618, 0.75, 1].map((ratio) => ({ ratio, label: String(ratio) })));
@@ -122,7 +123,7 @@ export class GannSquare extends FibRatios {
             if (hy != null) {
                 out.push({ color: lv.color, x1: b.left, y1: hy, x2: b.right, y2: hy, numberText: this.showLabels === false ? '' : lv.label ?? String(lv.ratio), numberX: b.left - 5, numberY: hy, numberAlign: 'right', labelX: b.left, labelY: hy });
             }
-            const vx = proj.xOf(c1.time + lv.ratio * (c2.time - c1.time)); // vertical (time) line — unlabelled
+            const vx = proj.xOf(timeBetween(proj, c1.time, c2.time, lv.ratio)); // vertical (time) line — unlabelled
             out.push({ color: lv.color, x1: vx, y1: b.top, x2: vx, y2: b.bot, numberText: '', numberX: vx, numberY: b.top, numberAlign: 'center', labelX: vx, labelY: b.top });
         }
         for (const f of FAN) {

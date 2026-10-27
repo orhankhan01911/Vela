@@ -2,6 +2,7 @@ import type { Unsubscribe } from '../util/types';
 import { Drawing, type SerializedDrawing } from './Drawing';
 import { deserializeDrawing } from './registry';
 import { migrate, type DrawingsDocument, DRAWINGS_DOC_VERSION } from './document';
+import { readAnchor } from './futureAnchors';
 
 /**
  * The single source of truth for a chart's user drawings. Owns identity + paint
@@ -50,7 +51,7 @@ export class DrawingStore {
     update(id: string, patch: Partial<SerializedDrawing>): Drawing | null {
         const d = this.byId.get(id);
         if (!d) return null;
-        if (patch.anchors) d.anchors = patch.anchors.map((p) => ({ time: p.time, price: p.price }));
+        if (patch.anchors) d.anchors = patch.anchors.map(readAnchor);
         // Replace style wholesale — edit intents write back `serialize().style`, and a settings
         // reset must be able to drop keys (e.g. fillColor) that are absent from the type default.
         // Callers that want a partial style patch merge before calling update.

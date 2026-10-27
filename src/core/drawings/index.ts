@@ -3,6 +3,7 @@
  * the renderer depends on this, never the reverse.
  */
 export type { DrawingPoint, FreeAxis, Projector, SnapMode, SegmentGeometry } from './geometry';
+export { resolveAnchors, translateInBars, readAnchor, writeAnchor, timeBetween, timeAfter, timePlusBars, type BarAxis, type FutureBars } from './futureAnchors';
 export type { DrawingStyle, DrawingText } from './style';
 export { defaultStyle, defaultText, DEFAULT_DRAWING_COLOR } from './style';
 export type { FieldKind, SettingsField, SettingsSchema } from './schema';

@@ -72,7 +72,7 @@ import { SettingsDialog } from './chrome/SettingsDialog';
 import { UserDrawingController } from './drawings/UserDrawingController';
 import { IndicatorDrawingSlices, mergeSlices } from './drawings/IndicatorDrawingSlices';
 import { createProjector } from './drawings/Projector';
-import type { Projector, SnapMode } from '../../core/drawings';
+import type { BarAxis, Projector, SnapMode } from '../../core/drawings';
 import type { IDrawingsRendererPort } from '../../core/drawings';
 import { formatAxisValue, formatCompactValue, formatPriceLabel } from './chrome/ticks';
 import { zonedDate } from './chrome/tz';
@@ -3802,6 +3802,8 @@ export class NativeRenderer implements IChartRenderer {
 
     /** Build the data→pixel projector user drawings resolve their anchors through. */
     private drawingProjector(): Projector {
+        const axis = this.drawingBarAxis();
+        this.userDrawings?.applyBarAxis(axis);
         return createProjector(
             this.coords,
             (paneId) => {
@@ -3813,7 +3815,7 @@ export class NativeRenderer implements IChartRenderer {
             this.userDrawings?.seriesGateway
                 ? (tf, from, to) => this.userDrawings!.seriesGateway!.seriesInRange(tf, from, to)
                 : undefined,
-            { barAt: (t) => this.barAtTime(t), timeZone: this.scene.timezone },
+            { barAt: (t) => this.barAtTime(t), timeZone: this.scene.timezone, barAxis: axis },
         );
     }
 
@@ -3838,6 +3840,20 @@ export class NativeRenderer implements IChartRenderer {
         if (!b) return null;
         const line = ['line', 'area', 'baseline', 'step', 'stepline', 'linemarkers'].includes(String(this.scene.priceStyle));
         return { time: b.time, high: b.high, low: b.low, close: b.close, line };
+    }
+
+    /** The bar axis drawings place their future anchors on, while the chart type supplies its own bars (their x
+     *  counts bars, not time); null on a time chart. See core `futureAnchors`. */
+    private drawingBarAxis(): BarAxis | null {
+        const n = this.coords.barCount;
+        if (n === 0 || !replacesSeries(this.scene.priceStyle)) return null;
+        const c = this.coords;
+        return {
+            lastTime: c.logicalToTime(n - 1),
+            lastLogical: n - 1,
+            logicalOf: (t) => c.timeToLogical(t),
+            timeOf: (l) => c.logicalToTime(l),
+        };
     }
 
     /** OHLC bars whose open-time falls within `[from, to]` (inclusive) — the data a regression

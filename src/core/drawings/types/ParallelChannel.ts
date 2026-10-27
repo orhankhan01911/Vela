@@ -3,6 +3,7 @@ import type { Projector, SegmentGeometry } from '../geometry';
 import type { SettingsSchema } from '../schema';
 import { LINE_FIELDS, FILL_FIELDS, TEXT_FIELDS } from '../schema';
 import { SegmentDrawing } from './SegmentDrawing';
+import { timeBetween } from '../futureAnchors';
 
 /**
  * A parallel channel: a baseline through p1→p2 plus a second line parallel to it.
@@ -66,7 +67,7 @@ export class ParallelChannel extends SegmentDrawing {
         const c = this.anchors[2];
         if (c) {
             const yc = proj.yOf(c.price, this.paneId); // c.price IS the parallel-line price at the midpoint
-            if (yc != null) pts.push([proj.xOf((a.time + b.time) / 2), yc]);
+            if (yc != null) pts.push([proj.xOf(timeBetween(proj, a.time, b.time, 0.5)), yc]);
         }
         return pts;
     }

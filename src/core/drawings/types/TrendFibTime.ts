@@ -2,6 +2,7 @@ import { type AnchorSlot } from '../Drawing';
 import type { Projector } from '../geometry';
 import { FibRatios, type FibEntryLine, type FibLevel } from './FibRatios';
 import { fibLevels } from '../levelPalette';
+import { timeAfter } from '../futureAnchors';
 
 const TIME_LEVELS = fibLevels([
     0,
@@ -44,7 +45,7 @@ export class TrendFibTime extends FibRatios {
         const out: FibEntryLine[] = [];
         for (const lv of this.levels) {
             if (!lv.enabled) continue;
-            const x = proj.xOf(c.time + lv.ratio * unit);
+            const x = proj.xOf(timeAfter(proj, c.time, a.time, b.time, lv.ratio));
             out.push({
                 color: lv.color,
                 label: lv.label,
