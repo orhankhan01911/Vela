@@ -219,16 +219,24 @@ export function formatAxisValue(
  * Format a price for an axis/chip. Decimals come from {@link axisDecimals} (exchange
  * tick size when known, else the zoom-derived formula, floored at 2), EXCEPT on wide
  * (multi-decade) log scales which use per-value decimals so tiny + huge prices both
- * read well. Shared by the price axis, the current-price line, and the crosshair so
- * they always agree.
+ * read well. Shared by the price axis, the current-price line, the crosshair and the drawings'
+ * price chips so they always agree. Digits are grouped (`80,120.61`), as TradingView does.
  */
 export function formatPriceLabel(scale: { min: number; max: number; log?: boolean }, heightPx: number, value: number, mintick?: number): string {
     const wideLog = scale.log && Math.log10(scale.max) - Math.log10(scale.min) >= 1.1;
     if (wideLog) {
         const d = valueDecimals(value);
-        return value.toFixed(d === 0 ? 2 : d);
+        return groupDigits(value.toFixed(d === 0 ? 2 : d));
     }
-    return value.toFixed(axisDecimals(scale, heightPx, mintick));
+    return groupDigits(value.toFixed(axisDecimals(scale, heightPx, mintick)));
+}
+
+/** `-1234567.891` -> `-1,234,567.891`: commas in the integer part of a `toFixed` string. Own code, not
+ *  `toLocaleString`, so the output never depends on the viewer's locale. */
+export function groupDigits(fixed: string): string {
+    const m = /^(-?)(\d+)(\.\d+)?$/.exec(fixed);
+    if (!m || m[2]!.length <= 3) return fixed;
+    return m[1]! + m[2]!.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (m[3] ?? '');
 }
 
 export interface TimeTick {

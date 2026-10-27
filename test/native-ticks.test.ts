@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { logPriceTicks, valueDecimals, priceTicks, tickDecimals, axisDecimals, formatPriceLabel, formatAxisValue, formatTimeStamp } from '../src/renderers/native/chrome/ticks';
+import { logPriceTicks, valueDecimals, priceTicks, tickDecimals, axisDecimals, formatPriceLabel, formatAxisValue, formatTimeStamp, groupDigits } from '../src/renderers/native/chrome/ticks';
 
 describe('native ticks · logPriceTicks', () => {
     it('a wide (multi-decade) range keeps the decade marks and stays in order', () => {
@@ -116,9 +116,18 @@ describe('native ticks · axisDecimals (tick size vs formula, floor 2)', () => {
 
 describe('native ticks · formatPriceLabel / formatAxisValue', () => {
     it('renders the exchange precision when a tick size is supplied', () => {
-        expect(formatPriceLabel({ min: 58000, max: 67000 }, 600, 58732, 0.01)).toBe('58732.00');
-        expect(formatPriceLabel({ min: 58000, max: 67000 }, 600, 58732)).toBe('58732.00'); // formula floored to 2
+        expect(formatPriceLabel({ min: 58000, max: 67000 }, 600, 58732, 0.01)).toBe('58,732.00');
+        expect(formatPriceLabel({ min: 58000, max: 67000 }, 600, 58732)).toBe('58,732.00'); // formula floored to 2
         expect(formatAxisValue({ min: 0.5, max: 0.9 }, 600, 0.6234, undefined, 0.0001)).toBe('0.6234');
+    });
+
+    it('groups digits like the axis (crosshair and drawing chips read 80,120.61, never 80120.61)', () => {
+        expect(groupDigits('80120.61')).toBe('80,120.61');
+        expect(groupDigits('-1234567.891')).toBe('-1,234,567.891');
+        expect(groupDigits('999.5')).toBe('999.5');
+        expect(groupDigits('1000')).toBe('1,000');
+        expect(groupDigits('+5.00%')).toBe('+5.00%'); // not a plain number: left alone
+        expect(formatAxisValue({ min: 80000, max: 81000 }, 600, 80120.61, undefined, 0.1)).toBe('80,120.6');
     });
 
     it('percent mode ignores the tick size (always ±x.xx%)', () => {

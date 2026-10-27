@@ -58,7 +58,7 @@ import { Scheduler, InvalidateLevel, repaintsData, repaintsChrome } from './core
 import { Animator, EaseSetting, easeToward } from './core/Animator';
 import { InputController } from './core/InputController';
 import { KeyboardController } from './core/KeyboardController';
-import { SceneGraph, paneLogScale, paneScaleMode, paneInvert, type PaneNode, type HighlightArea, type SessionZones, type ScaleMode } from './core/SceneGraph';
+import { SceneGraph, percentScaleFor, paneLogScale, paneScaleMode, paneInvert, type PaneNode, type HighlightArea, type SessionZones, type ScaleMode } from './core/SceneGraph';
 import { clampBarSpacing, defaultViewport, MIN_BAR_SPACING, MAX_BAR_SPACING, type ViewportState } from './core/ViewportState';
 import { Canvas2dBackend } from './backend/Canvas2dBackend';
 import type { IRenderBackend } from './backend/IRenderBackend';
@@ -74,7 +74,7 @@ import { IndicatorDrawingSlices, mergeSlices } from './drawings/IndicatorDrawing
 import { createProjector } from './drawings/Projector';
 import type { Projector, SnapMode } from '../../core/drawings';
 import type { IDrawingsRendererPort } from '../../core/drawings';
-import { formatCompactValue, formatPriceLabel } from './chrome/ticks';
+import { formatAxisValue, formatCompactValue, formatPriceLabel } from './chrome/ticks';
 import { zonedDate } from './chrome/tz';
 import { computePaneScale, expandScaleByPixels, overlaySeriesRange } from './core/autoscale';
 import { mergeTradeMarkersState, tradesPriceHints, type TradeMarkerHints } from '../shared/trade-markers';
@@ -1814,6 +1814,13 @@ export class NativeRenderer implements IChartRenderer {
             snap: (pt, paneId, mode, cursorPx) => this.snapToCandle(pt, paneId, mode, cursorPx),
             setSnapMode: (mode) => this.setSnapMode(mode),
             setToolbarGutter: (px) => this.setToolbarGutter(px),
+            // The crosshair chip's formatter and face (CrosshairRenderer), so a drawing's price chip matches it.
+            axisLabel: (paneId, price) => {
+                const pane = this.scene.panes.get(paneId);
+                if (!pane) return null;
+                const text = formatAxisValue(pane.scale, pane.bounds.height, price, percentScaleFor(this.scene, pane), this.scene.priceMintick, pane.axisFormat);
+                return text ? { text, font: `${this.scene.style.fontSize}px ${this.theme.fontFamily}` } : null;
+            },
             // As ChromeRenderer paints it: the label row centred on the last close, the countdown row under it.
             priceBlock: () => {
                 const n = this.scene.bars.length;
@@ -3615,6 +3622,7 @@ export class NativeRenderer implements IChartRenderer {
             // the geometry backend, volume/VPVR and SDK layers stay untouched. prepare()
             // re-wires the drawing resolvers (three closures over live refs — cheap).
             this.chrome.prepare(this.scene, this.coords, this.theme);
+            this.chrome.drawingChipYs = this.userDrawings?.axisChipCenters() ?? new Map(); // axis numbers skip the drawings' price chips
             this.chrome.render(this.scene, this.coords, this.theme, this.axisSurface());
             this.fitPriceColumn();
             this.trackMarkPopover();
@@ -3782,6 +3790,7 @@ export class NativeRenderer implements IChartRenderer {
         );
         this.backdropRenderer.render(this.scene, this.coords, this.theme, gridAlpha); // L-2, under every layer canvas
         this.backend.render(this.scene, this.coords, this.theme);
+        this.chrome.drawingChipYs = this.userDrawings?.axisChipCenters() ?? new Map(); // axis numbers skip the drawings' price chips
         this.chrome.render(this.scene, this.coords, this.theme, this.axisSurface());
         this.fitPriceColumn();
         this.trackMarkPopover();

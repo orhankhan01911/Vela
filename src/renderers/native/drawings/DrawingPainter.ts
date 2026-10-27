@@ -15,6 +15,8 @@ const HANDLE_RADIUS = 4.5; // px radius of the round drag handles
 const HANDLE_BORDER = DEFAULT_DRAWING_COLOR;
 const HANDLE_FILL = withAlpha(NEUTRAL, 0.55);
 const GHOST_ALPHA = 0.7;
+/** Price-chip text size without a renderer (`axisLabel` null): the chart's default axis size. */
+const AXIS_CHIP_FONT_PX = 12;
 /** Info badges (regression R², measure deltas) float over CHART CONTENT of any color, so
  *  they keep a fixed dark plate instead of a themed surface. */
 const BADGE_FILL = SLATE_DEEP;
@@ -91,6 +93,10 @@ export class DrawingPainter {
     /** Price-scale chip centre per drawing id, set by {@link layoutAxisChips} before the top-canvas paint. */
     private axisChipY = new Map<string, number>();
 
+    /** The renderer's price-axis formatter (text + font of the axis numbers on that pane); set by the controller
+     *  before each paint. Null (no renderer): grouped magnitude decimals in the theme face. */
+    axisLabel: ((paneId: string, price: number) => { text: string; font: string } | null) | null = null;
+
     /** Lay out the price-scale chips (alerts, horizontal-line prices) of every pane so none covers the
      *  current-price label (`priceBlock`, on its pane) or another chip. */
     layoutAxisChips(
@@ -109,11 +115,23 @@ export class DrawingPainter {
             else byPane.set(d.paneId, [{ id: d.id, y }]);
         }
         this.axisChipY = new Map();
+        this.axisChipYsByPane = new Map();
         for (const [paneId, chips] of byPane) {
             const by = priceBlock && priceBlock.paneId === paneId ? proj.yOf(priceBlock.price, paneId) : null;
             const block = priceBlock && by != null ? { top: by - priceBlock.above, bottom: by + priceBlock.below } : null;
-            for (const [id, y] of layoutAxisChips(chips, block)) this.axisChipY.set(id, y);
+            const ys: number[] = [];
+            for (const [id, y] of layoutAxisChips(chips, block)) {
+                this.axisChipY.set(id, y);
+                ys.push(y);
+            }
+            this.axisChipYsByPane.set(paneId, ys);
         }
+    }
+
+    /** Chip centres per pane from the last {@link layoutAxisChips}: the price axis skips the numbers under them. */
+    private axisChipYsByPane = new Map<string, number[]>();
+    get axisChipYs(): ReadonlyMap<string, readonly number[]> {
+        return this.axisChipYsByPane;
     }
 
     /** Paint every visible drawing, then selection handles for the targeted ones.
@@ -1208,22 +1226,35 @@ export class DrawingPainter {
     }
 
     private paintAxisPrice(ctx: CanvasRenderingContext2D, d: Drawing, y: number, proj: Projector, theme: VelaTheme): void {
-        const a = d.anchors[0]!;
-        const W = proj.width;
-        const ink = d.style.lineColor || theme.textColor;
-        const priceStr = a.price >= 100 ? a.price.toFixed(2) : formatPriceTag(a.price);
         ctx.save();
         ctx.setLineDash([]);
-        ctx.font = `600 11px ${theme.fontFamily}`;
+        this.paintAxisChip(ctx, d, y, proj, theme, d.style.lineColor || theme.textColor);
+        ctx.restore();
+    }
+
+    /**
+     * A drawing's price chip on the price scale (horizontal line / ray / cross line, alert line). Text, decimals and
+     * font come from the renderer's axis formatter (`axisLabel`), the one the axis numbers and the crosshair chip use,
+     * so the chip reads like the scale beside it (`80,120.61` in the axis face, not a bolder 11 px face with its own
+     * decimals). Box and baseline sit on whole device pixels: a fractional y smears the glyphs over two pixel rows.
+     */
+    private paintAxisChip(ctx: CanvasRenderingContext2D, d: Drawing, y: number, proj: Projector, theme: VelaTheme, ink: string): void {
+        const a = d.anchors[0]!;
+        const W = proj.width;
+        const label = this.axisLabel?.(d.paneId, a.price) ?? null;
+        const priceStr = label?.text || formatPriceTag(a.price);
+        ctx.font = label?.font ?? `${AXIS_CHIP_FONT_PX}px ${theme.fontFamily}`;
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'left';
-        const chipW = Math.max(54, ctx.measureText(priceStr).width + 14);
-        roundRect(ctx, W + 1, y - 9.5, chipW, 19, 4);
+        const dpr = ctx.getTransform?.().a || 1;
+        const snap = (v: number): number => Math.round(v * dpr) / dpr;
+        const cy = snap(y);
+        const chipW = Math.ceil(Math.max(54, ctx.measureText(priceStr).width + 14));
+        roundRect(ctx, snap(W + 1), snap(cy - 9.5), chipW, 19, 4);
         ctx.fillStyle = ink;
         ctx.fill();
         ctx.fillStyle = contrastColor(ink);
-        ctx.fillText(priceStr, W + 8, y + 0.5);
-        ctx.restore();
+        ctx.fillText(priceStr, snap(W + 8), cy);
     }
 
     /** Paint a concentric-ring fib tool (circles / arcs / wedge): each enabled level as an arc of
@@ -2289,18 +2320,10 @@ export class DrawingPainter {
         ctx.arc(W - 6, y + 0.5, 3.5, 0, Math.PI * 2);
         ctx.fillStyle = ink;
         ctx.fill();
-        // axis chip: solid, price only (two decimals, no grouping: reads like the axis beside it)
-        const priceStr = a.price >= 100 ? a.price.toFixed(2) : formatPriceTag(a.price);
-        ctx.font = `600 11px ${theme.fontFamily}`;
-        ctx.textBaseline = 'middle';
-        ctx.textAlign = 'left';
-        const chipW = Math.max(54, ctx.measureText(priceStr).width + 14);
+        // axis chip: solid, price only, in the axis format and face (reads like the scale beside it)
+        const priceStr = this.axisLabel?.(d.paneId, a.price)?.text || formatPriceTag(a.price);
         const cy = this.axisChipY.get(d.id) ?? y; // moved off the current-price label / another chip
-        roundRect(ctx, W + 1, cy - 9.5, chipW, 19, 4);
-        ctx.fillStyle = ink;
-        ctx.fill();
-        ctx.fillStyle = contrastColor(ink);
-        ctx.fillText(priceStr, W + 8, cy + 0.5);
+        this.paintAxisChip(ctx, d, cy, proj, theme, ink);
         // hover pill: [bell] label  price | [trash]
         if (engaged) {
             const label = d.alert.label;

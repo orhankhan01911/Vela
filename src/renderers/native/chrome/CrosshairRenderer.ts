@@ -200,10 +200,14 @@ export class CrosshairRenderer {
     }
 
     private chip(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, bg: string, align: 'left' | 'center', below = false, over = '#000000'): void {
-        const w = ctx.measureText(text).width + 8;
+        // On whole device pixels, as the axis numbers are: the cursor's y is fractional at 110-150 % zoom, and text
+        // there smears over two pixel rows (soft next to the scale it sits on).
+        const dpr = ctx.getTransform?.().a || 1;
+        const snap = (v: number): number => Math.round(v * dpr) / dpr;
+        const w = Math.ceil(ctx.measureText(text).width + 8);
         const h = 16;
-        const rx = align === 'left' ? x : x - w / 2;
-        const ry = below ? y : y - h / 2;
+        const rx = snap(align === 'left' ? x : x - w / 2);
+        const ry = snap(below ? y : y - h / 2);
         ctx.fillStyle = bg;
         ctx.fillRect(rx, ry, w, h);
         ctx.fillStyle = readableText(bg, over); // legible whatever the chip color is (light or dark)

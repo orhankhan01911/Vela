@@ -36,6 +36,8 @@ interface SeriesAxisTag {
 }
 
 const MINOR_LABEL_ALPHA = 0.5;
+/** Height of a drawing's price chip on the scale (DrawingPainter.paintAxisChip). */
+const DRAWING_CHIP_H = 19;
 
 /**
  * Renderer-owned chrome layer (canvas2d) on its own canvas, stacked above the
@@ -170,6 +172,10 @@ export class ChromeRenderer {
         this.gutterRamp = { key, fill };
         return fill;
     }
+
+    /** Centre y of every drawing price chip on the scale, per pane (set by the renderer before {@link render}): the
+     *  axis numbers under one are skipped, as under a series tag, instead of peeking out around the chip. */
+    drawingChipYs: ReadonlyMap<string, readonly number[]> = new Map();
 
     /** Clear the chrome canvas and draw drawings + axes + current-price line.
      *  `surface` (background + text) paints the axis-scale gutters — the host passes the live
@@ -444,11 +450,15 @@ export class ChromeRenderer {
             const tags = tagLayout?.get(pane.id);
             // a number within a text height of a series tag would show half covered by it
             const clear = SERIES_TAG_H / 2 + scene.style.fontSize / 2 + 1;
+            // a drawing's price chip (19 px, DrawingPainter.paintAxisChip) likewise
+            const chips = this.drawingChipYs.get(pane.id);
+            const chipClear = DRAWING_CHIP_H / 2 + scene.style.fontSize / 2 + 1;
             for (const t of this.axisTicks.ticksFor(scene, pane, coords)) {
                 // on a whole device pixel: a fractional baseline smears the strokes over two pixel rows at 110-150 % zoom
                 const y = Math.round(coords.priceToY(t.price, pane.scale, pane.bounds) * coords.dpr) / coords.dpr;
                 if (y < pane.bounds.top + 6 || y > pane.bounds.top + pane.bounds.height - 4) continue;
                 if (tags?.some((g) => Math.abs(g.y - y) < clear)) continue;
+                if (chips?.some((cy) => Math.abs(cy - y) < chipClear)) continue;
                 if (t.major === true) ctx.font = majorFont;
                 else if (t.major === false) ctx.globalAlpha = alpha * MINOR_LABEL_ALPHA;
                 ctx.fillText(t.label, dataW + 6, y);

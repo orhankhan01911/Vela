@@ -75,6 +75,9 @@ export interface UserDrawingDeps {
     /** The current-price label block on the price scale (`above`/`below` its price, px), or null when it is not
      *  shown: drawing chips on the scale stack clear of it. */
     priceBlock?(): { paneId: string; price: number; above: number; below: number } | null;
+    /** A price as the pane's scale prints it (grouping, decimals, percent mode) and the axis font: the drawings'
+     *  price chips use it so they read like the axis numbers and the crosshair chip. Null when the pane is gone. */
+    axisLabel?(paneId: string, price: number): { text: string; font: string } | null;
 }
 
 /** No interaction targets on the interleave layers — handles always paint in front. */
@@ -161,6 +164,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
     ) {
         this.ctx = canvas.getContext('2d');
         this.popup = new DrawingSettingsPopup(overlayHost, deps.theme(), () => deps.chartBarMs());
+        this.painter.axisLabel = (paneId, price) => deps.axisLabel?.(paneId, price) ?? null;
         // An image drawing's picture arrives later: repaint both layers (it may sit under the candles) once it has.
         this.painter.onAssetLoaded = () => {
             this.render();
@@ -1095,6 +1099,14 @@ export class UserDrawingController implements IDrawingsRendererPort {
         for (const key of [...this.sliceCache.keys()]) if (!buckets.has(key)) this.sliceCache.delete(key); // drop stale layers
         for (const slices of out.values()) slices.sort((a, b) => a.beforeZ - b.beforeZ);
         return out;
+    }
+
+    /** Where the drawings' price chips sit on the scale this frame (centre y per pane), laid out as {@link render} will
+     *  paint them. The renderer asks before the chrome paint so the axis can skip the numbers a chip would cover. */
+    axisChipCenters(): ReadonlyMap<string, readonly number[]> {
+        this.painter.barMs = this.deps.chartBarMs();
+        this.painter.layoutAxisChips(this.drawings, this.deps.projector(), this.deps.priceBlock?.() ?? null);
+        return this.painter.axisChipYs;
     }
 
     /** Repaint the TOP drawings layer (called every data frame + on internal changes): the
