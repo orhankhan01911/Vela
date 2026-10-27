@@ -73,6 +73,9 @@ export interface InputSchema {
      *  `inline=` row show while ANY member's gate passes. A hidden input keeps its value. */
     when?: InputWhen;
     tooltip?: string;
+    /** Numbers only: the settings dialog shows a slider (with the value typed beside it) instead of a bare
+     *  number field. `ends` labels the two ends in plain words ("Fewer", "More"); `unit` trails the value ("%"). */
+    slider?: { ends?: readonly [string, string]; unit?: string };
 }
 
 /** A row of an input's own menu (see {@link InputMenu}); the shape of the UI menu's items. */

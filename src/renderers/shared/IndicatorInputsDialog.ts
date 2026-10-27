@@ -433,7 +433,8 @@ export class IndicatorInputsDialog {
         }
 
         // A host menu's button hugs its label (see buildInputMenu), so its row does not box it at 100px.
-        const fit = lead.type === 'color' || lead.type === 'session' || lead.type === 'time' || inputMenuFor(row.id, lead, this.host.container) !== null;
+        const slider = lead.slider != null && (lead.type === 'int' || lead.type === 'float');
+        const fit = slider || lead.type === 'color' || lead.type === 'session' || lead.type === 'time' || inputMenuFor(row.id, lead, this.host.container) !== null;
         return append(fieldRow({
             label: nameOf(lead),
             id,
@@ -481,6 +482,7 @@ export class IndicatorInputsDialog {
                 onChange: (v) => emit(v),
             }).el;
         }
+        if (inp.slider && (inp.type === 'int' || inp.type === 'float')) return this.buildSlider(row, inp, id);
         if (inp.type === 'int' || inp.type === 'float' || inp.type === 'price') {
             return buildFieldControl({
                 kind: 'number',
@@ -495,6 +497,94 @@ export class IndicatorInputsDialog {
             }).el;
         }
         return this.buildTextField(id, String(current), emit);
+    }
+
+    /**
+     * A slider for a number input (`slider` in its schema): the track, the value as typed text beside it, and the
+     * two ends named below. Dragging commits as it goes (at most every 120 ms) so the chart answers live.
+     */
+    private buildSlider(row: IndicatorDialogRow, inp: DialogDecl, id: string): HTMLElement {
+        const opts = inp.slider ?? {};
+        const min = inp.min ?? 0;
+        const max = inp.max ?? 100;
+        const step = inp.step ?? (inp.type === 'int' ? 1 : 0.1);
+        const read = (): number => {
+            const v = Number(bagOf(row, inp)[inp.key] ?? inp.defval);
+            return Number.isFinite(v) ? v : Number(inp.defval);
+        };
+        const wrap = document.createElement('div');
+        wrap.className = 'vela-ind-slider';
+        const line = document.createElement('div');
+        line.className = 'vela-ind-slider-line';
+        const range = document.createElement('input');
+        range.type = 'range';
+        range.id = id;
+        range.min = String(min);
+        range.max = String(max);
+        range.step = String(step);
+        range.value = String(read());
+        const num = buildFieldControl({
+            kind: 'number',
+            value: read(),
+            min,
+            max,
+            step,
+            integer: inp.type === 'int',
+            fill: false,
+            commit: 'blur',
+            onChange: (v) => {
+                range.value = String(v);
+                paint();
+                this.commit(row, inp, v);
+            },
+        });
+        num.el.classList.add('vela-ind-slider-num');
+        const paint = (): void => {
+            const t = max > min ? ((Number(range.value) - min) / (max - min)) * 100 : 0;
+            range.style.setProperty('--vela-slider-fill', `${t}%`);
+        };
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        let pending: number | null = null;
+        const flush = (): void => {
+            timer = null;
+            if (pending == null) return;
+            const v = pending;
+            pending = null;
+            this.commit(row, inp, v);
+        };
+        range.addEventListener('input', () => {
+            const v = inp.type === 'int' ? Math.round(Number(range.value)) : Number(range.value);
+            num.setValue?.(v);
+            paint();
+            pending = v;
+            if (!timer) timer = setTimeout(flush, 120);
+        });
+        range.addEventListener('change', () => {
+            if (timer) clearTimeout(timer);
+            flush();
+        });
+        const track = document.createElement('div');
+        track.className = 'vela-ind-slider-track';
+        track.append(range);
+        line.append(track, num.el);
+        // always there (empty without a unit) so every slider in the dialog is the same length
+        const u = document.createElement('span');
+        u.className = 'vela-ind-slider-unit';
+        u.textContent = opts.unit ?? '';
+        line.append(u);
+        wrap.append(line);
+        if (opts.ends) {
+            const ends = document.createElement('div');
+            ends.className = 'vela-ind-slider-ends';
+            for (const t of opts.ends) {
+                const s = document.createElement('span');
+                s.textContent = t;
+                ends.append(s);
+            }
+            track.append(ends);
+        }
+        paint();
+        return wrap;
     }
 
     /**
@@ -932,7 +1022,7 @@ const CLOCK_SVG = iconAt('clock', 14);
 
 const DIALOG_STYLE_ID = 'vela-ind-dialog-styles';
 /** Bump when the injected sheet's rules change so an already-mounted page refreshes them. */
-const DIALOG_STYLE_REV = '30';
+const DIALOG_STYLE_REV = '34';
 const LEGEND_ICON_PX = 16;
 
 /** Inject the scoped styles inline cssText can't reach (color-swatch, focus ring, scrollbar). */
@@ -958,7 +1048,20 @@ ${overlayScrollbarCss('.vela-dialog.vela-ind-dialog *', 9)}
 .vela-ind-ctl:hover{background-color:var(--vela-hover-strong);}
 .vela-ind-close:hover{color:var(--vela-danger) !important;background-color:var(--vela-hover-strong);}
 .vela-ind-fold{transition:border-color var(--vela-dur-fast) ease,opacity var(--vela-dur-fast) ease;}
-.vela-ind-fold:hover{border-color:var(--vela-border-strong);opacity:0.9;}`;
+.vela-ind-fold:hover{border-color:var(--vela-border-strong);opacity:0.9;}
+.vela-ind-slider{display:flex;flex-direction:column;gap:1px;width:clamp(150px,calc(50vw - 20px),240px);}
+.vela-ind-slider-line{display:flex;align-items:flex-start;gap:10px;}
+.vela-ind-slider-track{flex:1;min-width:0;display:flex;flex-direction:column;padding-top:5px;}
+.vela-ind-slider-line input[type=range]{width:100%;height:22px;margin:0;background:transparent;cursor:pointer;-webkit-appearance:none;appearance:none;touch-action:pan-y;}
+.vela-ind-slider-line input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,var(--vela-accent) var(--vela-slider-fill,0%),var(--vela-border) var(--vela-slider-fill,0%));}
+.vela-ind-slider-line input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--vela-border);}
+.vela-ind-slider-line input[type=range]::-moz-range-progress{height:4px;border-radius:2px;background:var(--vela-accent);}
+.vela-ind-slider-line input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-6px;border-radius:50%;background:var(--vela-fg-bright);border:2px solid var(--vela-accent);box-sizing:border-box;}
+.vela-ind-slider-line input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--vela-fg-bright);border:2px solid var(--vela-accent);box-sizing:border-box;}
+.vela-ind-slider-line input[type=range]:focus-visible{outline:2px solid var(--vela-focus);outline-offset:2px;border-radius:4px;}
+.vela-ind-slider-num{flex:none;width:58px !important;}
+.vela-ind-slider-unit{flex:none;width:12px;height:34px;display:flex;align-items:center;margin-left:-6px;color:var(--vela-fg-muted);}
+.vela-ind-slider-ends{display:flex;justify-content:space-between;color:var(--vela-fg-muted);font-size:11px;line-height:14px;white-space:nowrap;gap:6px;}`;
     if (!existing) document.head.appendChild(s);
 }
 
