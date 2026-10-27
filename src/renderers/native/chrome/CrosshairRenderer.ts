@@ -212,7 +212,7 @@ export class CrosshairRenderer {
         ctx.fillRect(rx, ry, w, h);
         ctx.fillStyle = readableText(bg, over); // legible whatever the chip color is (light or dark)
         ctx.textAlign = 'center';
-        ctx.fillText(text, rx + w / 2, ry + h / 2 + (below ? 2 : 0));
+        ctx.fillText(text, rx + w / 2, snap(ry + h / 2 + (below ? 2 : 0))); // the text row too: h / 2 is not whole device px at 67-133 %
         ctx.textAlign = 'start';
     }
 }

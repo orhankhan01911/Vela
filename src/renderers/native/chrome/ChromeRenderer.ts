@@ -573,8 +573,9 @@ export class ChromeRenderer {
             ctx.fillRect(x, top, w, 32);
             ctx.fillStyle = textColor;
             ctx.textAlign = 'left';
-            ctx.fillText(priceText, tx, top + 8);
-            ctx.fillText(cdText, tx, top + 24);
+            ctx.fillText(priceText, tx, y);
+            // 16 CSS px under it is not whole device px at 67-133 %: snap the countdown row too
+            ctx.fillText(cdText, tx, Math.round((y + 16) * coords.dpr) / coords.dpr);
             ctx.textAlign = 'start';
             return;
         }
