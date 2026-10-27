@@ -1722,7 +1722,7 @@ export class NativeRenderer implements IChartRenderer {
             },
             beginPriceScale: (x, y) => this.beginPriceScale(x, y),
             priceScaleBy: (dy) => this.priceScaleBy(dy),
-            beginPricePan: (y) => this.beginPricePan(y),
+            beginPricePan: (y, force) => this.beginPricePan(y, force),
             pricePanBy: (dy) => this.pricePanBy(dy),
             resetPriceScale: (x, y) => this.resetPriceScale(x, y),
             dataDblClick: (x, y) => this.dataDblClick(x, y),
@@ -3213,9 +3213,9 @@ export class NativeRenderer implements IChartRenderer {
 
     /** Grab inside the data area: vertical price-pan is available only when the pane is
      *  already manual (so a normal drag stays a pure time-pan until the user opts in). */
-    private beginPricePan(y: number): boolean {
+    private beginPricePan(y: number, force = false): boolean {
         const pane = this.paneNodeAtY(y);
-        if (!pane || !pane.manualScale) return false;
+        if (!pane || (!pane.manualScale && !force)) return false; // forced: a touch drag takes an autoscaled pane manual
         this.scaleDragHolder = pane;
         this.scaleDragHeight = pane.bounds.height;
         this.scaleDragStart = { ...pane.scale };

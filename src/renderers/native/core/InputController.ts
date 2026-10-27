@@ -20,7 +20,9 @@ export interface InputControllerDeps {
     priceScaleBy(dyTotal: number): void;
     /** Grab inside the data area at pixel `y` — returns true when vertical price-panning is
      *  enabled for that pane (i.e. it is already in manual-scale mode). */
-    beginPricePan(y: number): boolean;
+    /** Grab the pane's price window for a plot drag; false when it is autoscaled, unless `force` (a touch drag that
+     *  clearly goes up or down), which takes it manual from where it shows now. */
+    beginPricePan(y: number, force?: boolean): boolean;
     /** Pan the grabbed pane's price window by the TOTAL pixel drag (down ⇒ show lower prices). */
     pricePanBy(dyTotal: number): void;
     /** Double-click on the price axis → re-enable autoscale for the pane/column at (`x`,`y`). */
@@ -253,6 +255,10 @@ export class InputController {
     private moved = false;
     private region: DragRegion = 'data';
     private verticalPan = false; // data-area drag also pans price (pane in manual-scale mode)
+    // A touch drag on an autoscaled pane: it takes the price over once it clearly moves up or down. Phones have no
+    // other way to move price (the user, 2026-10-27: an up/down finger drag did not move the scale).
+    private touchPricePan = false;
+    private panOriginY = 0;
     private startX = 0;
     private startY = 0;
     private startRightOffset = 0;
@@ -479,9 +485,14 @@ export class InputController {
         this.region = this.regionAt(x, y);
         this.timePan = e.pointerType === 'touch' && this.region === 'time';
         this.verticalPan = false;
+        this.touchPricePan = false;
         if (this.region === 'price') this.deps.beginPriceScale(x, y);
         else if (this.region === 'separator') this.deps.beginPaneResize(y);
-        else if (this.region === 'data') this.verticalPan = this.deps.beginPricePan(y);
+        else if (this.region === 'data') {
+            this.verticalPan = this.deps.beginPricePan(y);
+            this.touchPricePan = !this.verticalPan && e.pointerType === 'touch';
+            this.panOriginY = y;
+        }
         // A stationary touch hold in the plot becomes crosshair inspection — the touch
         // substitute for hovering (a finger can't hover, and a pan would move the view).
         // On an axis strip the same hold opens the host's timezone / price-scale sheet
@@ -575,9 +586,19 @@ export class InputController {
         // Drag right → reveal earlier bars → rightOffset decreases. Track by the effective
         // pitch (zoom × spacing multiplier) so the chart follows the cursor 1:1.
         this.deps.apply({ barSpacing: vp.barSpacing, rightOffset: this.startRightOffset - dx / coords.pxPerBar() });
+        if (this.touchPricePan) {
+            // Past the slop and at least as much up/down as half the sideways move, so a swipe's wobble keeps autoscale;
+            // panned from here, so the chart does not jump by the slop.
+            const dy = y - this.startY;
+            if (Math.abs(dy) > slop && 2 * Math.abs(dy) >= Math.abs(dx)) {
+                this.touchPricePan = false;
+                this.verticalPan = this.deps.beginPricePan(y, true);
+                this.panOriginY = y;
+            }
+        }
         if (this.verticalPan) {
             if (Math.abs(y - this.startY) > slop) this.moved = true;
-            this.deps.pricePanBy(y - this.startY);
+            this.deps.pricePanBy(y - this.panOriginY);
         }
         // Track a low-passed pointer velocity for the release flick.
         const dt = e.timeStamp - this.lastT;
@@ -664,6 +685,7 @@ export class InputController {
                 const vp = this.deps.getCoords().getViewport();
                 this.region = 'data';
                 this.verticalPan = false;
+                this.touchPricePan = true; // an up/down move of the survivor takes the price again
                 this.startX = rest.x;
                 this.startY = rest.y;
                 this.startRightOffset = vp.rightOffset;

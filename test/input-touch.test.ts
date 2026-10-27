@@ -262,3 +262,44 @@ describe('touch crosshair', () => {
         }
     });
 });
+
+// ── one-finger price pan with autoscale on (phones, 2026-10-27) ──
+// The user: an up/down finger drag on the chart did not move the price scale. A plot drag pans price only on a
+// manual scale, and autoscale is the default; on a touch screen a clear vertical drag now takes the scale manual.
+describe('touch price pan on an autoscaled pane', () => {
+    const harness = () => {
+        const h = touchHarness();
+        const begin = vi.fn((_y: number, force?: boolean) => !!force); // autoscaled: only a forced start pans
+        (h.deps as { beginPricePan: unknown }).beginPricePan = begin;
+        const drag = (type: string, pts: Array<[number, number]>, id = 1) => {
+            const base = { button: 0, pointerId: id, pointerType: type };
+            const [fx, fy] = pts[0]!;
+            h.el.fire('pointerdown', { ...base, clientX: fx, clientY: fy, timeStamp: 0 });
+            pts.slice(1).forEach(([x, y], i) => h.el.fire('pointermove', { ...base, clientX: x, clientY: y, timeStamp: 16 * (i + 1) }));
+            const [lx, ly] = pts[pts.length - 1]!;
+            h.el.fire('pointerup', { ...base, clientX: lx, clientY: ly, timeStamp: 16 * pts.length });
+        };
+        return { ...h, begin, drag };
+    };
+
+    it('a vertical finger drag pans the price from where it took over, without a jump', () => {
+        const { deps, begin, drag } = harness();
+        drag('touch', [[400, 60], [401, 66], [402, 80], [402, 120]]);
+        expect(begin).toHaveBeenLastCalledWith(80, true); // took over once past the slop, at that point
+        expect(deps.pricePanBy).toHaveBeenLastCalledWith(40); // 120 - 80: no jump by the slop
+    });
+
+    it('a sideways swipe that wobbles a few px keeps autoscale', () => {
+        const { deps, begin, drag } = harness();
+        drag('touch', [[400, 100], [430, 104], [480, 106], [560, 103]]);
+        expect(begin).not.toHaveBeenCalledWith(expect.anything(), true);
+        expect(deps.pricePanBy).not.toHaveBeenCalled();
+    });
+
+    it('the mouse keeps the old rule (a plot drag pans price only on a manual scale)', () => {
+        const { deps, begin, drag } = harness();
+        drag('mouse', [[400, 60], [400, 80], [400, 140]], 2);
+        expect(begin).not.toHaveBeenCalledWith(expect.anything(), true);
+        expect(deps.pricePanBy).not.toHaveBeenCalled();
+    });
+});
