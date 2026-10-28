@@ -18,12 +18,12 @@ export const CELL_CONTROLS_PROXIMITY_PX = 120;
 const TIME_AXIS_H = 22;
 /** Cluster bottom inset — above the time axis, level with the scroll button. */
 const CONTROLS_BOTTOM_PX = TIME_AXIS_H + 12;
-/** Cluster height incl. padding (20px buttons + 2px padding each side). */
-const CLUSTER_H = 24;
+/** Cluster height incl. padding and border (28px buttons + 3px padding + 1px border each side). */
+const CLUSTER_H = 36;
 
-/** The cluster's scrim pill — floats over chart content, so a neutral darkening
- *  rather than a themed surface (same value as the pane clusters). */
-const CLUSTER_PILL = 'rgba(0,0,0,0.65)';
+/** The cluster's pill — a themed elevated surface (not a fixed black scrim), so the
+ *  icons keep full contrast on the light theme as well as the dark one. */
+const CLUSTER_PILL = 'var(--vela-surface-elev)';
 
 /**
  * CSS `left` that centers the cluster on the plot (candles), not the full cell.
@@ -35,8 +35,8 @@ export const CLUSTER_LEFT_CSS =
 
 const STYLE_ID = 'vela-cell-controls';
 const CSS = `
-.vela-cc-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:none;border-radius:var(--vela-radius-sm);background:transparent;line-height:0;font-size:12px;color:var(--vela-fg-muted);cursor:pointer;}
-.vela-cc-btn svg{display:block;}
+.vela-cc-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:none;border-radius:var(--vela-radius-sm);background:transparent;line-height:0;font-size:16px;color:var(--vela-fg);cursor:pointer;}
+.vela-cc-btn svg{display:block;stroke-width:1.6;}
 .vela-cc-btn:hover{background:var(--vela-active);color:var(--vela-fg-bright);}
 .vela-cc-on,.vela-cc-on:hover{background:var(--vela-selected-bg);color:var(--vela-selected-fg);}
 .vela-cc-grip{cursor:grab;touch-action:none;}
@@ -121,9 +121,11 @@ export class CellControls {
             zIndex: '6',
             display: 'none', // revealed by cursor proximity (onHostMove)
             gap: '2px',
-            padding: '2px',
+            padding: '3px',
+            border: '1px solid var(--vela-border-strong)',
             borderRadius: 'var(--vela-radius-md)',
             background: CLUSTER_PILL,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
             pointerEvents: 'auto',
         });
         // Hover on the HOST (not a canvas child) so moving the cursor onto the cluster —

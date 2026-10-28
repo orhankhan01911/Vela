@@ -105,10 +105,10 @@ afterEach(() => {
 
 describe('nearBottomCenter (pure)', () => {
     it('is true at the cluster spot and within the proximity radius', () => {
-        // 800×600 cell, no gutters: the cluster centers at (400, 600 − 34 − 12) = (400, 554).
-        expect(nearBottomCenter(400, 554, 800, 600)).toBe(true);
-        expect(nearBottomCenter(400 + CELL_CONTROLS_PROXIMITY_PX, 554, 800, 600)).toBe(true); // radius inclusive
-        expect(nearBottomCenter(400, 554 - CELL_CONTROLS_PROXIMITY_PX, 800, 600)).toBe(true);
+        // 800×600 cell, no gutters: the cluster centers at (400, 600 − 34 − 18) = (400, 548).
+        expect(nearBottomCenter(400, 548, 800, 600)).toBe(true);
+        expect(nearBottomCenter(400 + CELL_CONTROLS_PROXIMITY_PX, 548, 800, 600)).toBe(true); // radius inclusive
+        expect(nearBottomCenter(400, 548 - CELL_CONTROLS_PROXIMITY_PX, 800, 600)).toBe(true);
     });
 
     it('is false away from the bottom-center', () => {
@@ -119,8 +119,8 @@ describe('nearBottomCenter (pure)', () => {
     });
 
     it('scales with the cell size — the spot follows the cell, not the viewport', () => {
-        expect(nearBottomCenter(200, 254, 400, 300)).toBe(true); // half-size cell, its own bottom-center
-        expect(nearBottomCenter(400, 554, 400, 300)).toBe(false); // the big cell's spot is outside a small cell
+        expect(nearBottomCenter(200, 248, 400, 300)).toBe(true); // half-size cell, its own bottom-center
+        expect(nearBottomCenter(400, 548, 400, 300)).toBe(false); // the big cell's spot is outside a small cell
     });
 
     it('centers on the plot, not the full cell, when a scale gutter is reserved', () => {
@@ -128,11 +128,11 @@ describe('nearBottomCenter (pure)', () => {
         const scale = 64;
         const cx = plotCenterX(800, 0, scale);
         expect(cx).toBe(368);
-        expect(nearBottomCenter(cx, 554, 800, 600, CELL_CONTROLS_PROXIMITY_PX, { scale })).toBe(true);
-        expect(nearBottomCenter(cx + CELL_CONTROLS_PROXIMITY_PX, 554, 800, 600, CELL_CONTROLS_PROXIMITY_PX, { scale })).toBe(true);
+        expect(nearBottomCenter(cx, 548, 800, 600, CELL_CONTROLS_PROXIMITY_PX, { scale })).toBe(true);
+        expect(nearBottomCenter(cx + CELL_CONTROLS_PROXIMITY_PX, 548, 800, 600, CELL_CONTROLS_PROXIMITY_PX, { scale })).toBe(true);
         // The old full-cell right edge (400 + 120 = 520) is now outside the radius.
-        expect(nearBottomCenter(520, 554, 800, 600, CELL_CONTROLS_PROXIMITY_PX, { scale })).toBe(false);
-        expect(nearBottomCenter(520, 554, 800, 600)).toBe(true); // without a gutter, the old spot still holds
+        expect(nearBottomCenter(520, 548, 800, 600, CELL_CONTROLS_PROXIMITY_PX, { scale })).toBe(false);
+        expect(nearBottomCenter(520, 548, 800, 600)).toBe(true); // without a gutter, the old spot still holds
     });
 
     it('shifts right by half the toolbar gutter (drawings dock on the left)', () => {
