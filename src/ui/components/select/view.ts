@@ -6,6 +6,7 @@ import { Popover, closeOpenPopovers, openPopoverTrigger, type PopoverBoundary, t
 import { selectController, type SelectControllerOptions, type SelectOption, type SelectSize } from './controller';
 import { SELECT_CSS, SELECT_STYLE_ID } from './styles';
 import { vt } from '../../../i18n';
+import { Menu, phoneLike } from '../menu/view';
 
 export interface SelectListPopoverOpts {
     theme?: VelaTheme;
@@ -217,6 +218,25 @@ export class Select {
     }
 
     toggle(): void {
+        // On a phone a field of a dialog (an indicator's or a drawing's settings) picks from a bottom sheet, not a
+        // small list cut to the room under the field (phone menus are sheets; user report 2026-10-28).
+        if (this.trigger.closest('.vela-dialog') && phoneLike(this.trigger.ownerDocument)) {
+            const m = new Menu({
+                trigger: this.trigger,
+                items: this.ctrl.options.map((o) => ({ id: o.value, label: o.label, checked: o.value === this.ctrl.value })),
+                onOpenChange: (open) => {
+                    if (!open) setTimeout(() => m.destroy(), 0);
+                },
+                onSelect: (value) => {
+                    const o = this.ctrl.options.find((x) => x.value === value);
+                    if (!o) return;
+                    this.ctrl.pick(o.value);
+                    this.labelEl.textContent = vt(o.label);
+                },
+            });
+            m.open();
+            return;
+        }
         this.list = toggleSelectList(
             this.trigger,
             this.ctrl.options,

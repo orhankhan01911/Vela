@@ -348,7 +348,7 @@ const SHEET_CSS = `
 `;
 
 /** A phone (touch screen up to a foldable's width): menus without a visible button open as a bottom sheet. */
-function phoneLike(doc: Document): boolean {
+export function phoneLike(doc: Document): boolean {
     const win = doc.defaultView;
     if (!win) return false;
     let coarse = false;
@@ -365,6 +365,8 @@ export class Menu {
     private readonly opts: MenuOptions;
     private items: readonly MenuItemDescriptor[];
     private sheet: Drawer | null = null;
+    /** Re-render the open sheet's top page (setItems while it is open: a checklist pick flips other rows). */
+    private sheetRefresh: (() => void) | null = null;
 
     constructor(opts: MenuOptions) {
         this.opts = opts;
@@ -405,7 +407,11 @@ export class Menu {
         const anchor = this.opts.trigger ?? this.opts.host ?? document.body;
         const t = this.opts.trigger;
         const triggerShown = !!t && t.isConnected && t.getClientRects().length > 0;
-        return !triggerShown && phoneLike(anchor.ownerDocument);
+        // A menu from a field of a dialog (an indicator's or a drawing's settings) is a sheet too: as a dropdown the
+        // field's checklist was cut to the room under the field and scrolled with nothing showing it (21 exchanges,
+        // 3 visible; user report 2026-10-28).
+        const inDialog = !!t?.closest?.('.vela-dialog');
+        return (!triggerShown || inDialog) && phoneLike(anchor.ownerDocument);
     }
 
     private openSheet(): void {
@@ -420,7 +426,10 @@ export class Menu {
                 this.opts.onOpenChange?.(open);
                 if (open) return;
                 setTimeout(() => sheet.destroy(), 0);
-                if (this.sheet === sheet) this.sheet = null;
+                if (this.sheet === sheet) {
+                    this.sheet = null;
+                    this.sheetRefresh = null;
+                }
             },
         });
         this.sheet = sheet;
@@ -489,6 +498,7 @@ export class Menu {
                     if (item.toggle) {
                         // A switch keeps the sheet open, like the dropdown keeps itself open.
                         this.opts.onSelect?.(item.id);
+                        if (!row.isConnected) return; // the host's setItems already re-rendered the page
                         const on = row.getAttribute('aria-checked') !== 'true';
                         row.setAttribute('aria-checked', String(on));
                         row.querySelector('.vela-menu-switch')?.classList.toggle('on', on);
@@ -500,6 +510,9 @@ export class Menu {
                 list.appendChild(row);
             }
             sheet.body.appendChild(list);
+        };
+        this.sheetRefresh = () => {
+            if (stack.length === 0) render(this.items);
         };
         render(this.items);
         sheet.show();
@@ -523,11 +536,13 @@ export class Menu {
     setItems(items: readonly MenuItemDescriptor[]): void {
         this.items = items;
         this.root.setItems(items);
+        this.sheetRefresh?.();
     }
 
     destroy(): void {
         this.sheet?.destroy();
         this.sheet = null;
+        this.sheetRefresh = null;
         this.root.destroy();
     }
 }

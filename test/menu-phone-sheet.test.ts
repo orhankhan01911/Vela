@@ -93,4 +93,31 @@ describe('Menu on a phone without a visible trigger', () => {
         new Menu({ host, trigger: btn, items: [{ id: 'a', label: 'A' }] }).open();
         expect(document.querySelector('.vela-drawer')).toBeNull();
     });
+
+    it('a field of a dialog opens its menu as a sheet on a phone, and a pick re-renders the sheet', () => {
+        phone();
+        const panel = document.createElement('div');
+        panel.className = 'vela-dialog';
+        const btn = document.createElement('button');
+        btn.getClientRects = (() => [{ width: 10, height: 10 }]) as unknown as typeof btn.getClientRects;
+        panel.appendChild(btn);
+        document.body.appendChild(panel);
+        // an exchange checklist: picking one exchange turns "Follow chart" off
+        let picked = new Set(['chart']);
+        const items = () => ['chart', 'binance', 'okx'].map((id) => ({ id, label: id, toggle: true, checked: picked.has(id) }));
+        const m: Menu = new Menu({
+            trigger: btn,
+            items: items(),
+            onSelect: (id) => {
+                picked = id === 'chart' ? new Set(['chart']) : new Set([...picked].filter((x) => x !== 'chart').concat(id));
+                m.setItems(items());
+            },
+        });
+        m.open();
+        expect(document.querySelector('.vela-drawer')).toBeTruthy();
+        rows()[1]!.click();
+        expect(rows().map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false']);
+        rows()[2]!.click();
+        expect(rows().map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'true', 'true']);
+    });
 });
