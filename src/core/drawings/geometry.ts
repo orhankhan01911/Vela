@@ -97,6 +97,13 @@ export interface Projector {
      * as a line, which shows only the close. Null outside the loaded bars. Optional.
      */
     barAt?(time: number): { time: number; high: number; low: number; close: number; line: boolean } | null;
+    /**
+     * The app object attached with `chart.drawings.setHost(host)` (by default the chart itself): a host-registered
+     * drawing type reads its market and data through it. Typed unknown so core stays free of the app. Optional.
+     */
+    readonly host?: unknown;
+    /** Repaint the drawings: a drawing whose data loads in the background calls this when it lands. Optional. */
+    requestRepaint?(): void;
     /** The chart's time zone (IANA name), for drawings that print a date. Optional: UTC. */
     readonly timeZone?: string;
     /** Plot width in media px (excludes the right price-axis strip). */

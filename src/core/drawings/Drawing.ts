@@ -5,6 +5,7 @@ import { ALONG_LINE_TEXT_TYPES } from './schema';
 import type { SettingsSchema } from './schema';
 import { compactIntervals, type IntervalVisibility } from './intervals';
 import { readAnchor, writeAnchor, type BarAxis } from './futureAnchors';
+import type { VelaTheme } from '../options';
 
 /**
  * The interactive user-drawing types. The lean-core set ships first; new types
@@ -247,6 +248,27 @@ export abstract class Drawing {
      */
     translateBodyPx(_dx: number, _dy: number, _orig: DrawingPoint[], _proj: Projector): DrawingPoint[] | null {
         return null;
+    }
+
+    /**
+     * Paint this drawing yourself, instead of the renderer's built-in look: for a type the host app registers
+     * (`registerDrawingType`) whose body the app draws, e.g. a profile computed from the app's own data. Called by
+     * the native painter with the canvas already in media px and clipped to the drawing's pane. Return true when
+     * painted (the built-in painting is then skipped); the default paints nothing and returns false. Selection
+     * handles stay the renderer's. Read async data through {@link Projector.host} and call
+     * {@link Projector.requestRepaint} when it lands.
+     */
+    paintSelf(_ctx: CanvasRenderingContext2D, _proj: Projector, _theme: VelaTheme): boolean {
+        return false;
+    }
+
+    /**
+     * What the renderer paints while the tool is being placed: `'shape'` (the drawing itself, faded) or
+     * `'timespan'` (only a dashed guide at each time anchor, like the built-in fixed-range profiles: a data-driven
+     * body must not fetch on every cursor move). Default `'shape'`.
+     */
+    placementPreview(): 'shape' | 'timespan' {
+        return 'shape';
     }
 
     // ── geometry behaviors: PURE functions of (anchors, projector) ──

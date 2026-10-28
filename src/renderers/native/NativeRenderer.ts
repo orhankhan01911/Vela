@@ -3816,7 +3816,13 @@ export class NativeRenderer implements IChartRenderer {
             this.userDrawings?.seriesGateway
                 ? (tf, from, to) => this.userDrawings!.seriesGateway!.seriesInRange(tf, from, to)
                 : undefined,
-            { barAt: (t) => this.barAtTime(t), timeZone: this.scene.timezone, barAxis: axis },
+            {
+                barAt: (t) => this.barAtTime(t),
+                timeZone: this.scene.timezone,
+                barAxis: axis,
+                host: this.userDrawings?.host,
+                requestRepaint: () => this.userDrawings?.repaint(),
+            },
         );
     }
 

@@ -247,6 +247,24 @@ export class UserDrawingController implements IDrawingsRendererPort {
         });
     }
 
+    /** Core push: the app object drawings read as `Projector.host`. */
+    setHost(host: unknown): void {
+        this.hostObj = host;
+    }
+
+    /** What `setHost` attached (undefined before). */
+    get host(): unknown {
+        return this.hostObj;
+    }
+    private hostObj: unknown = undefined;
+
+    /** Repaint this layer and the interleave slices under the series: a drawing's background data landed. */
+    repaint(): void {
+        this.invalidateSlices();
+        this.render();
+        this.deps.requestDataPaint();
+    }
+
     /** The pushed series gateway, or null before the core provides one. */
     get seriesGateway(): DrawingSeriesGateway | null {
         return this.seriesGw;

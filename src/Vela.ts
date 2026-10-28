@@ -130,6 +130,7 @@ export class Vela {
         if (Object.keys(defaults).length > 0) this.rendererControl.set(defaults);
         this.panesControl = new PanesControl(this.orchestrator);
         this.drawingsControl = new DrawingsControl(this.orchestrator.drawings);
+        this.drawingsControl.setHost(this); // app-registered drawing types read the chart's market + data (Projector.host)
         this.marksControl = new MarksControl(this.orchestrator.marks);
         this.replayControl = new ReplayControl(this.orchestrator);
     }

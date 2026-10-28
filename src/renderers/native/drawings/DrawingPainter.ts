@@ -184,7 +184,7 @@ export class DrawingPainter {
         ctx.globalAlpha = GHOST_ALPHA;
         // Two-time-anchor tools (regression channel, fixed-range VP) preview their TIME SPAN while
         // placing (two vertical guides + a connecting line) rather than the finished shape.
-        if (ghost instanceof RegressionChannel || ghost instanceof FixedRangeVolumeProfile || ghost instanceof FixedRangeTpoProfile) {
+        if (ghost instanceof RegressionChannel || ghost instanceof FixedRangeVolumeProfile || ghost instanceof FixedRangeTpoProfile || ghost.placementPreview() === 'timespan') {
             this.paintTimeSpanGhost(ctx, ghost, proj);
         } else if (ghost instanceof Magnifier) {
             // Outline only while dragging — the finished shape fetches series data, and a
@@ -196,7 +196,7 @@ export class DrawingPainter {
 
     /** Placement preview for two time-anchor tools: a full-height dashed vertical guide at each
      *  anchor (the left/right time bounds) + a line from the first anchor to the cursor. */
-    private paintTimeSpanGhost(ctx: CanvasRenderingContext2D, d: RegressionChannel | FixedRangeVolumeProfile | FixedRangeTpoProfile, proj: Projector): void {
+    private paintTimeSpanGhost(ctx: CanvasRenderingContext2D, d: Drawing, proj: Projector): void {
         const a = d.anchors[0];
         const b = d.anchors[1];
         if (!a) return;
@@ -263,6 +263,8 @@ export class DrawingPainter {
     }
 
     private paintOne(ctx: CanvasRenderingContext2D, d: Drawing, proj: Projector, theme: VelaTheme): void {
+        // A host-registered type that paints its own body (Drawing.paintSelf): its look replaces the built-in one.
+        if (d.paintSelf(ctx, proj, theme)) return;
         if (d.type === 'highlighter' && d instanceof SegmentDrawing) {
             this.paintHighlighter(ctx, d, proj);
             this.paintLabel(ctx, d, proj, theme);

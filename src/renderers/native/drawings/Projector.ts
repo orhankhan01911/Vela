@@ -32,7 +32,7 @@ export function createProjector(
     paneIdAtY: (y: number) => string | null,
     barsInRange?: (from: number, to: number) => ReadonlyArray<ProjectorBar>,
     seriesInRange?: (timeframe: string, from: number, to: number) => DrawingSeriesState,
-    extra: Pick<Projector, 'barAt' | 'timeZone' | 'barAxis'> = {},
+    extra: Pick<Projector, 'barAt' | 'timeZone' | 'barAxis' | 'host' | 'requestRepaint'> = {},
 ): Projector {
     return {
         barAxis: extra.barAxis ?? null,
@@ -58,6 +58,8 @@ export function createProjector(
         seriesInRange,
         barAt: extra.barAt,
         timeZone: extra.timeZone,
+        host: extra.host,
+        requestRepaint: extra.requestRepaint,
         width: coords.width,
         height: coords.height,
     };

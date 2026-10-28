@@ -187,6 +187,11 @@ export class DrawingController {
         this.port?.setExternalGhost?.(doc);
     }
 
+    /** Attach the app object drawings read as `Projector.host` (the chart sets itself; an app may replace it). */
+    setHost(host: unknown): void {
+        this.port?.setHost?.(host);
+    }
+
     /** Push per-tool shortcut hints (pre-formatted display strings) to the toolbar flyouts. */
     setToolShortcuts(map: Readonly<Partial<Record<DrawingTypeKey, string>>>): void {
         this.port?.setToolShortcuts?.(map);

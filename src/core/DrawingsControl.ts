@@ -108,6 +108,13 @@ export class DrawingsControl {
         return this;
     }
 
+    /** The object an app-registered drawing type reads as `Projector.host` (its market and data). The chart
+     *  attaches itself by default; pass another object to give such drawings a different context. */
+    setHost(host: unknown): this {
+        this.ctrl.setHost(host);
+        return this;
+    }
+
     /** Create a drawing programmatically (no clicking). Returns it, or null if unsupported. */
     add(type: DrawingTypeKey, init: AddInit = {}): Drawing | null {
         if (!this.ok('add')) return null;

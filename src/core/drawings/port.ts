@@ -98,6 +98,8 @@ export interface IDrawingsRendererPort {
      *  of a finer timeframe (exposed to them as `Projector.seriesInRange`). Optional — a
      *  renderer without it simply never resolves lower-timeframe series. */
     setSeriesGateway?(gateway: DrawingSeriesGateway): void;
+    /** The app object drawings see as `Projector.host` (see `DrawingController.setHost`). Optional. */
+    setHost?(host: unknown): void;
     /** Open a drawing's settings popup (selecting it too) — the programmatic twin of a click on it. */
     openSettings(id: string): void;
     /** Display another chart's in-progress placement as a GHOST at reduced opacity
