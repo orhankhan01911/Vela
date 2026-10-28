@@ -8,6 +8,7 @@ import type { Vela } from '../Vela';
 import type { DataWindowReadout } from '../core/ports/IChartRenderer';
 import { injectStyles } from '../ui/styles';
 import { SidePanel } from './side-panel';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-datawindow';
 const CSS = `
@@ -76,10 +77,10 @@ export function dataWindowSections(readout: DataWindowReadout): DataWindowSectio
     if (ohlc) {
         const color = ohlc.up ? 'var(--vela-up)' : 'var(--vela-down)';
         const lines: DataWindowLine[] = [
-            { label: 'Open', value: ohlc.o, color },
-            { label: 'High', value: ohlc.h, color },
-            { label: 'Low', value: ohlc.l, color },
-            { label: 'Close', value: ohlc.c, color },
+            { label: vt('Open', 'price'), value: ohlc.o, color },
+            { label: vt('High', 'price'), value: ohlc.h, color },
+            { label: vt('Low', 'price'), value: ohlc.l, color },
+            { label: vt('Close', 'price'), value: ohlc.c, color },
         ];
         if (ohlc.vol !== undefined) lines.push({ label: 'Volume', value: ohlc.vol, color });
         sections.push({ title: 'Price', lines });
@@ -133,21 +134,21 @@ export class DataWindow extends SidePanel {
         if (sections.length === 0) {
             const empty = doc.createElement('div');
             empty.className = 'vela-dw-empty';
-            empty.textContent = readout ? 'No data' : 'This renderer provides no data readout.';
+            empty.textContent = readout ? vt("No data") : vt("This renderer provides no data readout.");
             this.body.appendChild(empty);
             return;
         }
         for (const section of sections) {
             const head = doc.createElement('div');
             head.className = 'vela-dw-group';
-            head.textContent = section.title;
+            head.textContent = vt(section.title);
             this.body.appendChild(head);
             for (const line of section.lines) {
                 const row = doc.createElement('div');
                 row.className = 'vela-dw-row';
                 const label = doc.createElement('span');
                 label.className = 'vela-dw-label';
-                label.textContent = line.label;
+                label.textContent = vt(line.label);
                 const value = doc.createElement('span');
                 value.className = 'vela-dw-value';
                 value.textContent = line.value;

@@ -12,6 +12,7 @@ import { injectStyles } from '../ui/styles';
 import { Tooltip } from '../ui/components/tooltip';
 import { announceSurface } from '../ui/surface-events';
 import { holdForExit, type SurfaceExit } from '../ui/surface-exit';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-layout-picker-v16';
 // One monochrome selection language across the panel: lit cells and sync ON
@@ -225,8 +226,8 @@ export function layoutCatalogView(
             b.className = 'vela-lp-cat-item';
             b.type = 'button';
             b.dataset.layout = item.id;
-            b.title = item.label;
-            b.setAttribute('aria-label', item.label);
+            b.title = vt(item.label);
+            b.setAttribute('aria-label', vt(item.label));
             if (item.checked) {
                 b.dataset.on = '1';
                 b.setAttribute('aria-pressed', 'true');
@@ -349,7 +350,7 @@ export class LayoutPicker {
         const layoutHeading = doc.createElement('div');
         layoutHeading.className = 'vela-lp-heading';
         const headingText = doc.createElement('span');
-        headingText.textContent = 'Layout';
+        headingText.textContent = vt("Layout");
         const badge = doc.createElement('span');
         badge.className = 'vela-lp-badge';
         badge.textContent = '?';
@@ -374,15 +375,15 @@ export class LayoutPicker {
             const sw = doc.createElement('div');
             sw.className = 'vela-lp-mode';
             sw.setAttribute('role', 'group');
-            sw.setAttribute('aria-label', 'Layout list');
+            sw.setAttribute('aria-label', vt("Layout list"));
             for (const [m, label, title] of [
                 ['grid', 'Free-form', 'Any rows × columns grid'],
                 ['catalog', 'Presets', 'Preset arrangements, grouped by chart count'],
             ] as const) {
                 const b = doc.createElement('button');
                 b.type = 'button';
-                b.textContent = label;
-                b.title = title;
+                b.textContent = vt(label);
+                b.title = vt(title);
                 b.dataset.mode = m;
                 b.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -412,7 +413,7 @@ export class LayoutPicker {
         const syncCol = doc.createElement('div');
         const syncHeading = doc.createElement('div');
         syncHeading.className = 'vela-lp-heading';
-        syncHeading.textContent = 'Sync';
+        syncHeading.textContent = vt("Sync");
         syncCol.appendChild(syncHeading);
         this.syncEl = doc.createElement('div');
         this.syncEl.className = 'vela-lp-sync';
@@ -538,8 +539,8 @@ export class LayoutPicker {
         tip.className = 'vela-lp-tip';
         tip.textContent =
             this.mode === 'catalog' && this.opts.catalog
-                ? 'Pick an arrangement. The number is how many charts it holds.'
-                : 'Click a square to apply that columns × rows layout.';
+                ? vt("Pick an arrangement. The number is how many charts it holds.")
+                : vt("Click a square to apply that columns × rows layout.");
         return tip;
     }
 
@@ -567,7 +568,7 @@ export class LayoutPicker {
         for (const p of presets) {
             const b = doc.createElement('button');
             b.className = 'vela-lp-preset';
-            b.textContent = p.label;
+            b.textContent = vt(p.label);
             if (p.checked) b.dataset.checked = '1';
             b.addEventListener('click', () => {
                 this.close();
@@ -585,7 +586,7 @@ export class LayoutPicker {
             row.className = 'vela-lp-sync-row';
             const label = doc.createElement('span');
             label.className = 'vela-lp-label';
-            label.textContent = s.label;
+            label.textContent = vt(s.label);
             const pill = doc.createElement('span');
             pill.className = 'vela-lp-switch' + (s.checked ? ' on' : '');
             pill.setAttribute('aria-hidden', 'true');

@@ -1,4 +1,5 @@
 import type { MoveTarget } from '../../core/options';
+import { vt } from '../../i18n';
 
 /**
  * Drag an indicator's legend row onto another pane to merge it there (TradingView's drag-to-merge), or onto the line
@@ -184,7 +185,7 @@ export class LegendDragMerge {
         d.row.style.opacity = '0.55';
         this.ghost = doc.createElement('div');
         this.ghost.className = 'vela-legend-drag-ghost';
-        this.ghost.textContent = this.host.title(d.id);
+        this.ghost.textContent = vt(this.host.title(d.id));
         Object.assign(this.ghost.style, {
             position: 'absolute', zIndex: '40', pointerEvents: 'none', whiteSpace: 'nowrap',
             padding: '3px 8px', borderRadius: '4px', font: '600 12px/16px var(--vela-font)',
@@ -242,11 +243,11 @@ export class LegendDragMerge {
                 top: `${t.top}px`, height: `${t.height}px`, border: '1px solid var(--vela-accent)',
                 background: 'color-mix(in srgb, var(--vela-accent) 12%, transparent)',
             });
-            this.pill!.textContent = `Merge into ${t.label}`;
+            this.pill!.textContent = vt("Merge into {label}", { label: vt(t.label) });
             Object.assign(p, { left: `${w / 2}px`, top: `${t.top + t.height / 2}px` });
         } else {
             Object.assign(o, { top: `${t.y - 1.5}px`, height: '3px', border: '0', background: 'var(--vela-accent)' });
-            this.pill!.textContent = 'New pane';
+            this.pill!.textContent = vt("New pane");
             Object.assign(p, { left: `${w / 2}px`, top: `${t.y}px` });
         }
     }

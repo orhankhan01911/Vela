@@ -17,6 +17,7 @@ import {
     writeLayoutMode,
     type LayoutCatalogGroup,
 } from './layout-picker';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-more-drawer';
 const CSS = `
@@ -186,7 +187,7 @@ export class MoreDrawer {
             const back = doc.createElement('button');
             back.className = 'vela-md-back';
             back.appendChild(iconEl('chevron-left', doc));
-            back.appendChild(doc.createTextNode(this.view === 'style' ? 'Chart type' : this.view === 'layout' ? 'Layout' : 'Alerts'));
+            back.appendChild(doc.createTextNode(this.view === 'style' ? vt("Chart type") : this.view === 'layout' ? vt("Layout") : vt("Alerts")));
             back.addEventListener('click', () => this.show('main'));
             this.drawer.body.appendChild(back);
         }
@@ -207,7 +208,7 @@ export class MoreDrawer {
         }
         const text = doc.createElement('span');
         text.className = 'vela-md-row-label';
-        text.textContent = label;
+        text.textContent = vt(label);
         el.appendChild(text);
         if (opts.value) {
             const value = doc.createElement('span');
@@ -229,7 +230,7 @@ export class MoreDrawer {
             b.className = 'vela-md-action';
             b.disabled = !enabled;
             b.appendChild(iconEl(icon, doc));
-            b.appendChild(doc.createTextNode(label));
+            b.appendChild(doc.createTextNode(vt(label)));
             b.addEventListener('click', () => {
                 run();
                 this.drawer.hide();
@@ -244,7 +245,7 @@ export class MoreDrawer {
         const list = doc.createElement('div');
         list.className = 'vela-md-list';
         const current = this.opts.priceStyles().find((s) => s.id === this.opts.priceStyle());
-        list.appendChild(this.row(doc, 'Chart type', { icon: 'style-line', value: current?.label, chevron: true, onClick: () => this.show('style') }));
+        list.appendChild(this.row(doc, 'Chart type', { icon: 'style-line', value: current ? vt(current.label) : undefined, chevron: true, onClick: () => this.show('style') }));
         if (this.opts.layout) {
             const shape = this.opts.layout.shape();
             const value = shape ? `${shape.cols} × ${shape.rows}` : this.opts.layout.presets().find((p) => p.checked)?.label;
@@ -313,14 +314,14 @@ export class MoreDrawer {
             const sw = doc.createElement('div');
             sw.className = 'vela-lp-mode';
             sw.setAttribute('role', 'group');
-            sw.setAttribute('aria-label', 'Layout list');
+            sw.setAttribute('aria-label', vt("Layout list"));
             for (const [m, label] of [
                 ['grid', 'Free-form'],
                 ['catalog', 'Presets'],
             ] as const) {
                 const b = doc.createElement('button');
                 b.type = 'button';
-                b.textContent = label;
+                b.textContent = vt(label);
                 b.dataset.mode = m;
                 b.setAttribute('aria-pressed', String(m === mode));
                 b.addEventListener('click', () => {
@@ -376,7 +377,7 @@ export class MoreDrawer {
         if (syncs.length > 0) {
             const heading = doc.createElement('div');
             heading.className = 'vela-md-section';
-            heading.textContent = 'Sync';
+            heading.textContent = vt("Sync");
             list.appendChild(heading);
             for (const s of syncs) {
                 // An on/off switch like the desktop dropdown's (a lit row read as a selection, not a toggle).
@@ -403,7 +404,7 @@ export class MoreDrawer {
         if (alerts.length === 0) {
             const empty = doc.createElement('div');
             empty.className = 'vela-md-empty';
-            empty.textContent = 'No alerts yet.';
+            empty.textContent = vt("No alerts yet.");
             this.drawer.body.appendChild(empty);
             return;
         }

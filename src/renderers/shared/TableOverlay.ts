@@ -1,6 +1,7 @@
 import type { DrawingTable, TableCell, BoxTextSize, TablePosition } from '../../core/model/drawings';
 import type { VelaTheme } from '../../core/options';
 import { CHART_MONO_FONT_FAMILY } from '../../core/theme';
+import { vt } from '../../i18n';
 
 const SIZE_PX: Record<BoxTextSize, number> = {
     auto: 13,
@@ -177,8 +178,8 @@ export class TableOverlay {
                 } satisfies Partial<CSSStyleDeclaration>);
                 if (cell.width) td.style.width = `${(cell.width / 100) * plotW}px`;
                 if (cell.height) td.style.height = `${(cell.height / 100) * paneH}px`;
-                if (cell.tooltip) td.title = cell.tooltip;
-                td.textContent = cell.text ?? '';
+                if (cell.tooltip) td.title = vt(cell.tooltip);
+                td.textContent = vt(cell.text ?? '');
                 tr.appendChild(td);
             }
             table.appendChild(tr);

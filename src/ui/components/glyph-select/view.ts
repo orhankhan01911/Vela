@@ -10,6 +10,7 @@ import {
     type GlyphSelectControllerOptions,
 } from './controller';
 import { GLYPH_SELECT_CSS, GLYPH_SELECT_STYLE_ID } from './styles';
+import { vt } from '../../../i18n';
 
 export interface GlyphSelectOptions<T extends string | number = string | number> extends GlyphSelectControllerOptions<T> {
     theme: VelaTheme;
@@ -32,7 +33,7 @@ export class GlyphSelect<T extends string | number = string | number> {
         const trigger = document.createElement('button');
         trigger.type = 'button';
         trigger.className = 'vela-glyph-select';
-        if (opts.title) trigger.title = opts.title;
+        if (opts.title) trigger.title = vt(opts.title);
         this.el = trigger;
         this.paint();
 

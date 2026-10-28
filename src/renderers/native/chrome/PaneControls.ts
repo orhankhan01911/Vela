@@ -1,5 +1,6 @@
 import { icon } from '../../../core/icons';
 import type { VelaTheme } from '../../../core/options';
+import { vt } from '../../../i18n';
 
 /** A pane as seen by the hover controls (a thin projection of the renderer's PaneNode). */
 export interface PaneControlView {
@@ -178,7 +179,7 @@ export class PaneControls {
     ): HTMLButtonElement {
         const b = document.createElement('button');
         b.type = 'button';
-        b.title = title;
+        b.title = vt(title);
         b.innerHTML = svg;
         b.disabled = disabled;
         b.dataset.role = opts.role;

@@ -8,6 +8,7 @@ import { iconEl } from '../ui/icons';
 import { tickerIconEl, baseOf } from './symbol-icon';
 import { symbolRanking } from './contributions';
 import { isGroupRow, groupKeyOf, groupMembers, defaultMemberOf } from '../data/symbol-groups';
+import { vt } from '../i18n';
 
 /** First occurrence wins, keyed by venue+ticker — a ranking hook may inject an entry
  *  that also exists later in the pool; the injected one keeps position AND data. */
@@ -290,7 +291,7 @@ export class SymbolPicker {
 
         this.input = doc.createElement('input');
         this.input.className = 'vela-sp-input';
-        this.input.placeholder = 'Search symbol…';
+        this.input.placeholder = vt("Search symbol…");
         this.input.setAttribute('spellcheck', 'false');
         const searchRow = doc.createElement('div');
         searchRow.className = 'vela-sp-searchrow';
@@ -302,7 +303,7 @@ export class SymbolPicker {
         for (const t of ['All', 'Stocks', 'ETFs', 'Crypto', 'Aggregated', 'Futures', 'Forex', 'Indices', 'Commodities', 'Bonds']) {
             const b = doc.createElement('button');
             b.className = 'vela-sp-tab';
-            b.textContent = t;
+            b.textContent = vt(t);
             if (t === this.activeTab) b.dataset.active = '1';
             b.addEventListener('click', () => {
                 this.activeTab = t;
@@ -540,7 +541,7 @@ export class SymbolPicker {
         if (!this.rows.length) {
             const empty = doc.createElement('div');
             empty.className = 'vela-sp-empty';
-            empty.textContent = this.input.value ? 'No symbols match.' : 'No symbols indexed (provider still loading?).';
+            empty.textContent = this.input.value ? vt("No symbols match.") : vt("No symbols indexed (provider still loading?).");
             this.list.appendChild(empty);
             return;
         }
@@ -574,7 +575,7 @@ export class SymbolPicker {
         t.textContent = s.ticker;
         const d = doc.createElement('span');
         d.className = 'vela-sp-desc';
-        d.textContent = s.description ?? (s.type ?? '');
+        d.textContent = vt(s.description ?? s.type ?? '');
         main.append(t, d);
         row.append(av, main);
         if (isGroupRow(s)) {
@@ -583,7 +584,7 @@ export class SymbolPicker {
             row.dataset.group = '1';
             const expander = doc.createElement('button');
             expander.className = 'vela-sp-expander';
-            expander.setAttribute('aria-label', 'Show contracts');
+            expander.setAttribute('aria-label', vt("Show contracts"));
             expander.appendChild(iconEl(this.expanded.has(groupKeyOf(s)) ? 'chevron-down' : 'chevron-right', doc));
             row.appendChild(expander);
         } else if (s.group != null && this.expanded.has(groupKeyOf(s))) row.dataset.member = '1';

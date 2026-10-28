@@ -43,6 +43,7 @@ import {
 import type { MarkGroup } from '../../../core/marks/types';
 import type { SettingsTemplateMenuView } from '../../../core/ports/IChartRenderer';
 import { markGroupRows } from '../../../core/marks/visibility';
+import { vt } from '../../../i18n';
 
 /** A nested partial of `ChartConfig` — what a single control edit emits. */
 type ConfigPatch = Record<string, unknown>;
@@ -380,7 +381,7 @@ export class SettingsDialog {
             burger.type = 'button';
             burger.className = 'vela-sd-burger';
             burger.innerHTML = iconAt('burger', 16);
-            burger.title = 'Sections';
+            burger.title = vt("Sections");
             burger.addEventListener('click', () => this.toggleRail?.());
         }
         const ui = new Dialog({
@@ -406,7 +407,7 @@ export class SettingsDialog {
                 }
                 const resetBtn = document.createElement('button');
                 resetBtn.type = 'button';
-                resetBtn.textContent = 'Reset defaults';
+                resetBtn.textContent = vt("Reset defaults");
                 resetBtn.className = 'vela-sd-btn';
                 resetBtn.addEventListener('click', () => this.onReset?.());
                 foot.appendChild(resetBtn);
@@ -831,7 +832,7 @@ export class SettingsDialog {
                 el.style.display = 'none';
                 const tab = document.createElement('button');
                 tab.type = 'button';
-                tab.textContent = title;
+                tab.textContent = vt(title);
                 tab.className = 'vela-sd-tab' + (child.dataset.sdSub !== undefined ? ' vela-sd-tab-sub' : '');
                 panes.push({ title, el, tab, style: child.dataset.sdStyle, visibility: child.dataset.sdVisibility });
                 current = el;
@@ -865,7 +866,7 @@ export class SettingsDialog {
             });
             this.activeSection = panes[idx]?.title ?? null;
             if (mobile) {
-                ui.titleEl.textContent = panes[idx]?.title ?? 'Chart settings';
+                ui.titleEl.textContent = vt(panes[idx]?.title ?? "Chart settings");
                 this.toggleRail?.(false);
             }
         };
@@ -924,8 +925,8 @@ export class SettingsDialog {
         const trigger = document.createElement('button');
         trigger.type = 'button';
         trigger.className = 'vela-sd-btn';
-        trigger.textContent = 'Template \u25BE';
-        trigger.setAttribute('aria-label', 'Chart template');
+        trigger.textContent = vt("Template ▾");
+        trigger.setAttribute('aria-label', vt("Chart template"));
         this.footerMenu?.destroy(); // a rebuilt footer must not leave the previous menu's list floating
         const menu = new Menu({
             host: this.container,
@@ -1124,7 +1125,7 @@ export class SettingsDialog {
     ): HTMLElement {
         if (c.kind === 'hint') {
             const s = document.createElement('span');
-            s.textContent = c.text;
+            s.textContent = vt(c.text);
             s.style.cssText = 'color:var(--vela-fg-muted);';
             return s;
         }
@@ -1223,13 +1224,13 @@ export class SettingsDialog {
                 tab.type = 'button';
                 tab.className = 'vela-sd-itab' + (i === active ? ' on' : '');
                 const lbl = document.createElement('span');
-                lbl.textContent = inst.label;
+                lbl.textContent = vt(inst.label);
                 tab.append(lbl);
                 if (i === active && inst.enableKey) {
                     const x = document.createElement('span');
                     x.className = 'vela-sd-ix';
                     x.textContent = '✕';
-                    x.title = `Remove ${inst.label}`;
+                    x.title = vt("Remove {label}", { label: vt(inst.label) });
                     x.addEventListener('click', (e) => {
                         e.stopPropagation();
                         this.typeActiveInstance.set(typeId, 0);
@@ -1249,7 +1250,7 @@ export class SettingsDialog {
                 add.type = 'button';
                 add.className = 'vela-sd-itab vela-sd-itab-add';
                 add.textContent = '+';
-                add.title = `Add ${instances[absent]!.label}`;
+                add.title = vt("Add {label}", { label: vt(instances[absent]!.label) });
                 add.addEventListener('click', () => {
                     this.typeActiveInstance.set(typeId, absent);
                     put(instances[absent]!.enableKey!, true);
@@ -1332,7 +1333,7 @@ export class SettingsDialog {
                 const b = document.createElement('button');
                 b.type = 'button';
                 b.className = 'vela-sd-toc-btn' + (gi === activeIdx ? ' on' : '');
-                b.textContent = label;
+                b.textContent = vt(label);
                 b.addEventListener('click', () => {
                     this.typeActiveGroup.set(paneKey, label);
                     refresh();
@@ -1436,9 +1437,9 @@ export class SettingsDialog {
         const solid = this.swatch(layout.background, (v) => this.emit({ layout: { background: v } }), () => live().background);
         const top = this.swatch(layout.backgroundTop, (v) => this.emit({ layout: { backgroundTop: v } }), () => live().backgroundTop);
         const bottom = this.swatch(layout.backgroundBottom, (v) => this.emit({ layout: { backgroundBottom: v } }), () => live().backgroundBottom);
-        solid.title = 'Background color';
-        top.title = 'Top color';
-        bottom.title = 'Bottom color';
+        solid.title = vt("Background color");
+        top.title = vt("Top color");
+        bottom.title = vt("Bottom color");
         const show = (): void => {
             const gradient = type === 'gradient';
             solid.style.display = gradient ? 'none' : '';
@@ -1580,7 +1581,7 @@ function hugSelect(el: HTMLElement, labels: readonly string[]): HTMLElement {
     sizer.setAttribute('aria-hidden', 'true');
     for (const label of labels) {
         const span = document.createElement('span');
-        span.textContent = label;
+        span.textContent = vt(label);
         sizer.appendChild(span);
     }
     el.appendChild(sizer);

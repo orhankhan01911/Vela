@@ -4,6 +4,7 @@
 import { Dialog } from '../ui/components/dialog';
 import { injectStyles } from '../ui/styles';
 import { parseTimeframe } from './timeframe';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-tfquick';
 const CSS = `
@@ -111,10 +112,10 @@ export class TimeframeQuick {
             this.hint.textContent = 'e.g. 15, 4H, D, 3M';
             delete this.hint.dataset.invalid;
         } else if (parsed.valid) {
-            this.hint.textContent = parsed.label ?? '';
+            this.hint.textContent = vt(parsed.label ?? '');
             delete this.hint.dataset.invalid;
         } else {
-            this.hint.textContent = 'Not a timeframe';
+            this.hint.textContent = vt("Not a timeframe");
             this.hint.dataset.invalid = '1';
         }
     }

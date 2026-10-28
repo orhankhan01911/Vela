@@ -46,6 +46,7 @@ import { prefixedSymbol, type CellState } from '../state/document';
 import { parseSymbol } from '../data/ProviderRegistry';
 import { isExchangeTimezone, normalizeTimezone, resolveTimezone, timezoneMenuRows } from '../core/timezones';
 import { applyPlotOverlayTokens } from '../ui';
+import { vt } from '../i18n';
 
 /** The seed/mutable market state of one cell (all optional — an empty cell parks).
  *  The SAME vocabulary as the widget's chart options: the workspace's top-level chart
@@ -486,7 +487,7 @@ export class ChartCell {
             if (this.unresolvedToasted === symbol) return;
             this.unresolvedToasted = symbol;
             const list = providers.length > 0 ? providers.join(', ') : 'none';
-            this.deps.toast(`No registered provider serves "${symbol}" (registered: ${list})`, 'error', 6000);
+            this.deps.toast(vt("No registered provider serves \"{symbol}\" (registered: {list})", { symbol: symbol, list: list }), 'error', 6000);
         });
         // The loading affordance and the watermark never share the canvas.
         this.inner.on('load:start', ({ symbol }) => {

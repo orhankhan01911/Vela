@@ -35,6 +35,7 @@ import { closeOpenPopovers, eventDismissedPopover, isPopoverOpen } from '../../.
 import { fieldGrid, fieldRow, fieldSection, buildFieldControl } from '../../../ui/components/field';
 import type { SelectOption } from '../../../ui/components/select';
 import type { SettingsActions } from './DrawingSettingsPopup';
+import { vt } from '../../../i18n';
 
 /** Which builder fills the dialog: `settings` is the generic tabbed dialog every drawing has; the others are
  *  the older single-purpose names, kept so callers still work (they open the same dialog on the right tab). */
@@ -189,7 +190,7 @@ export class DrawingSettingsDialog {
             el.setAttribute('role', 'tab');
             el.dataset.tab = t;
             el.className = 'vela-drawing-tab';
-            el.textContent = TAB_LABEL[t];
+            el.textContent = vt(TAB_LABEL[t]);
             el.style.cssText =
                 'background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;padding:10px 0 8px;font:inherit;font-weight:600;font-size:13px;line-height:20px;cursor:pointer;white-space:nowrap;color:inherit;';
             el.addEventListener('click', () => activate(t));
@@ -487,7 +488,7 @@ export class DrawingSettingsDialog {
         const wrap = document.createElement('div');
         wrap.style.cssText = 'margin-right:auto;display:flex;align-items:center;gap:8px;min-width:0;';
         const trigger = btn('Template \u25BE', false, () => {});
-        trigger.setAttribute('aria-label', 'Drawing template');
+        trigger.setAttribute('aria-label', vt("Drawing template"));
         const type = drawing.type;
         const live = (): Drawing => actions.resolve() ?? drawing;
         const repaint = (): void => this.open(live(), actions, kind, snapshot);
@@ -500,7 +501,7 @@ export class DrawingSettingsDialog {
             trigger.style.display = 'none';
             const input = document.createElement('input');
             input.type = 'text';
-            input.placeholder = 'Template name';
+            input.placeholder = vt("Template name");
             input.maxLength = 40;
             input.style.cssText =
                 'min-width:0;width:130px;padding:6px 10px;border-radius:8px;border:1px solid var(--vela-border);background:transparent;color:inherit;font:inherit;';
@@ -758,7 +759,7 @@ export class DrawingSettingsDialog {
             const lbl = document.createElement('span');
             lbl.className = 'vela-field-label';
             lbl.style.flex = '1';
-            lbl.textContent = label;
+            lbl.textContent = vt(label);
             let cur = (s[colorPath] as string | undefined) ?? contrastColor(this.theme.background);
             const col = buildFieldControl({
                 kind: 'color',
@@ -861,7 +862,7 @@ export class DrawingSettingsDialog {
             const lbl = document.createElement('span');
             lbl.className = 'vela-field-label';
             lbl.style.flex = '1';
-            lbl.textContent = label;
+            lbl.textContent = vt(label);
             let cur = (s[colorPath] as string | undefined) ?? contrastColor(this.theme.background);
             const col = buildFieldControl({
                 kind: 'color',
@@ -1160,7 +1161,7 @@ export function parseLocal(s: string): number | null {
 function btn(label: string, primary: boolean, onClick: () => void): HTMLButtonElement {
     const b = document.createElement('button');
     b.type = 'button';
-    b.textContent = label;
+    b.textContent = vt(label);
     b.className = primary ? 'vela-dialog-btn vela-dialog-btn-primary' : 'vela-dialog-btn';
     b.addEventListener('click', onClick);
     return b;

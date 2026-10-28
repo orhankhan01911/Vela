@@ -11,6 +11,7 @@ import { Dialog } from '../../ui/components/dialog';
 import { DatePicker, normalizeDateInput } from '../../ui/components/date-picker';
 import { fieldRow, fieldSection, buildFieldControl, fieldGridColumns, FIELD_GAP_PX } from '../../ui/components/field';
 import { overlayScrollbarCss, FIELD_FOCUS_CSS, FIELD_FOCUS_RING } from '../../ui/styles';
+import { vt } from '../../i18n';
 
 /** Emitted when the user edits an input in the in-chart settings dialog. */
 export interface InputsUIChange {
@@ -180,7 +181,7 @@ export class IndicatorInputsDialog {
         };
         for (const [idx, def] of tabDefs.entries()) {
             const tab = document.createElement('div');
-            tab.textContent = def.name;
+            tab.textContent = vt(def.name);
             tab.className = 'vela-ind-tab';
             tab.style.cssText = `padding:0 0 8px;margin-bottom:-1px;border-bottom:2px solid transparent;${tabDefs.length > 1 ? 'cursor:pointer;' : ''}`;
             tab.addEventListener('click', () => activate(idx));
@@ -570,7 +571,7 @@ export class IndicatorInputsDialog {
         // always there (empty without a unit) so every slider in the dialog is the same length
         const u = document.createElement('span');
         u.className = 'vela-ind-slider-unit';
-        u.textContent = opts.unit ?? '';
+        u.textContent = vt(opts.unit ?? '');
         line.append(u);
         wrap.append(line);
         if (opts.ends) {
@@ -710,7 +711,7 @@ export class IndicatorInputsDialog {
         chevron.type = 'button';
         chevron.tabIndex = -1;
         chevron.className = 'vela-ind-combo-chevron';
-        chevron.setAttribute('aria-label', 'Open time list');
+        chevron.setAttribute('aria-label', vt("Open time list"));
         chevron.innerHTML = CLOCK_SVG;
         let value = current;
         const commitTyped = (): void => {
@@ -771,7 +772,7 @@ export class IndicatorInputsDialog {
         chevron.type = 'button';
         chevron.tabIndex = -1;
         chevron.className = 'vela-ind-combo-chevron';
-        chevron.setAttribute('aria-label', 'Open calendar');
+        chevron.setAttribute('aria-label', vt("Open calendar"));
         chevron.innerHTML = CALENDAR_SVG;
         let value = current;
         const commitTyped = (): void => {
@@ -867,7 +868,7 @@ export class IndicatorInputsDialog {
         btn.id = id;
         btn.style.cssText = `${this.ctrlStyle()}display:flex;align-items:center;cursor:pointer;text-align:left;`;
         const label = document.createElement('span');
-        label.textContent = value || 'Select symbol…';
+        label.textContent = vt(value || vt("Select symbol…"));
         label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
         btn.append(label);
         btn.addEventListener('click', () => picker(value, (picked) => {
@@ -892,7 +893,7 @@ export class IndicatorInputsDialog {
     private dialogButton(label: string, primary: boolean, onClick: () => void): HTMLButtonElement {
         const b = document.createElement('button');
         b.type = 'button';
-        b.textContent = label;
+        b.textContent = vt(label);
         // Primary = filled inverse chip; Cancel = outlined. Both hover states are in the
         // scoped stylesheet.
         b.className = primary ? 'vela-dialog-btn vela-dialog-btn-primary' : 'vela-dialog-btn';

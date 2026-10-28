@@ -8,6 +8,7 @@ import { icon } from '../core/icons';
 import { injectStyles } from '../ui/styles';
 import { Glider, ZOOM_IN, ZOOM_OUT } from './glide';
 import type { Vela } from '../Vela';
+import { vt } from '../i18n';
 
 /** Cursor distance (px, from the cluster center) that reveals the cluster —
  *  mirrors the scroll-to-realtime button's proximity radius. */
@@ -163,8 +164,8 @@ export class CellControls {
     private button(iconId: string, title: string, onClick: () => void, opts: { selected?: boolean } = {}): HTMLButtonElement {
         const b = this.host.ownerDocument.createElement('button');
         b.type = 'button';
-        b.title = title;
-        b.setAttribute('aria-label', title);
+        b.title = vt(title);
+        b.setAttribute('aria-label', vt(title));
         b.className = opts.selected === true ? 'vela-cc-btn vela-cc-on' : 'vela-cc-btn';
         b.innerHTML = icon(iconId);
         b.addEventListener('click', (e) => {
@@ -180,8 +181,8 @@ export class CellControls {
     private makeGrip(): HTMLButtonElement {
         const b = this.host.ownerDocument.createElement('button');
         b.type = 'button';
-        b.title = 'Drag to move chart';
-        b.setAttribute('aria-label', 'Drag to move chart');
+        b.title = vt("Drag to move chart");
+        b.setAttribute('aria-label', vt("Drag to move chart"));
         b.className = 'vela-cc-btn vela-cc-grip';
         b.innerHTML = icon('grip');
         b.addEventListener('pointerdown', (e) => this.onGripDown(b, e));

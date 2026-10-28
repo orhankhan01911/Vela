@@ -12,6 +12,7 @@ import { holdForExit, type SurfaceExit } from '../../surface-exit';
 import { menuController, type MenuControllerOptions, type MenuItemDescriptor } from './controller';
 import { MENU_CSS, MENU_STYLE_ID } from './styles';
 import * as zagMenu from '@zag-js/menu';
+import { vt } from '../../../i18n';
 
 export interface MenuOptions extends MenuControllerOptions {
     /** Element that opens the menu on click (gets the machine's trigger props). */
@@ -271,12 +272,12 @@ class Surface {
             }
             const label = doc.createElement('span');
             label.className = 'vela-menu-label';
-            label.textContent = item.label;
+            label.textContent = vt(item.label);
             li.appendChild(label);
             if (item.hint) {
                 const hint = doc.createElement('span');
                 hint.className = 'vela-menu-hint';
-                hint.textContent = item.hint;
+                hint.textContent = vt(item.hint);
                 li.appendChild(hint);
             }
             if (item.favorite !== undefined && this.onFavorite) {
@@ -286,7 +287,7 @@ class Surface {
                 if (on) star.classList.add('vela-fav');
                 star.removeAttribute('aria-hidden'); // iconEl hides decorative icons; this one is a control
                 star.setAttribute('role', 'button');
-                star.setAttribute('aria-label', on ? 'Remove from favorites' : 'Add to favorites');
+                star.setAttribute('aria-label', vt(on ? 'Remove from favorites' : 'Add to favorites'));
                 star.setAttribute('aria-pressed', on ? 'true' : 'false');
                 // Swallow the whole pointer sequence: the machine selects rows on click,
                 // and a press that starts on the star must never reach the row.

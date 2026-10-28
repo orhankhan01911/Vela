@@ -8,6 +8,7 @@ import { DRAWER_CSS, DRAWER_STYLE_ID } from './styles';
 import * as zagDialog from '@zag-js/dialog';
 import { announceSurface } from '../../surface-events';
 import { holdForExit, type SurfaceExit } from '../../surface-exit';
+import { vt } from '../../../i18n';
 
 /** Drag past this fraction of the sheet's height (or this many px, whichever is
  *  smaller) and the release dismisses; anything less springs back. */
@@ -87,7 +88,7 @@ export class Drawer {
         grab.className = 'vela-drawer-grab';
         this.titleEl = doc.createElement('div');
         this.titleEl.className = 'vela-drawer-title';
-        this.titleEl.textContent = opts.title ?? '';
+        this.titleEl.textContent = vt(opts.title ?? '');
 
         this.body = doc.createElement('div');
         this.body.className = 'vela-drawer-body';
@@ -247,7 +248,7 @@ export class Drawer {
     }
 
     setTitle(title: string): void {
-        this.titleEl.textContent = title;
+        this.titleEl.textContent = vt(title);
     }
 
     private opener: HTMLElement | null = null;

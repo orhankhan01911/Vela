@@ -5,6 +5,7 @@
 // its own tokens (like the rest of the in-chart chrome) so it works on a bare chart.
 import type { VelaTheme } from '../../../core/options';
 import { applyChromeTokens } from '../../shared/theme-tokens';
+import { vt } from '../../../i18n';
 
 export interface LabelTooltipDeps {
     /** Live theme — read at open time, so a theme switch never shows a stale tip. */
@@ -60,7 +61,7 @@ export class LabelTooltip {
     private show(text: string, x: number, y: number): void {
         const doc = this.plot.ownerDocument;
         const tip = doc.createElement('div');
-        tip.textContent = text;
+        tip.textContent = vt(text);
         tip.style.cssText =
             'position:absolute;z-index:var(--vela-z-tooltip);pointer-events:none;' +
             'background:var(--vela-bg);border:1px solid var(--vela-border);color:var(--vela-fg);' +

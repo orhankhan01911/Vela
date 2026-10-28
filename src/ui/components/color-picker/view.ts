@@ -14,6 +14,7 @@ import {
     type ColorFieldShape,
 } from './controller';
 import { COLOR_CSS, COLOR_STYLE_ID } from './styles';
+import { vt } from '../../../i18n';
 
 const PALETTE = buildPalette();
 const CHECKER = transparencyChecker(10);
@@ -91,8 +92,8 @@ export function buildColorPicker(color: string, theme: VelaTheme, onChange: (v: 
     // own chooser, which opens on RGB numbers.
     const add = document.createElement('button');
     add.type = 'button';
-    add.title = 'Custom color';
-    add.setAttribute('aria-label', 'Custom color');
+    add.title = vt('Custom color');
+    add.setAttribute('aria-label', vt('Custom color'));
     add.dataset.testid = 'color-custom';
     add.style.cssText = `width:17px;height:17px;border-radius:var(--vela-radius-sm);border:1px dashed var(--vela-border-strong);cursor:pointer;display:flex;align-items:center;justify-content:center;color:${theme.textColor};font:14px ${theme.fontFamily};background:transparent;padding:0;`;
     add.textContent = '+';
@@ -112,7 +113,7 @@ export function buildColorPicker(color: string, theme: VelaTheme, onChange: (v: 
     };
 
     const opLabel = document.createElement('div');
-    opLabel.textContent = 'Opacity';
+    opLabel.textContent = vt('Opacity');
     opLabel.style.cssText = `font:11px ${theme.fontFamily};color:var(--vela-fg-muted);`;
     const opRow = document.createElement('div');
     opRow.style.cssText = 'display:flex;align-items:center;gap:10px;';
@@ -124,7 +125,7 @@ export function buildColorPicker(color: string, theme: VelaTheme, onChange: (v: 
     const pctBox = document.createElement('input');
     pctBox.type = 'text';
     pctBox.inputMode = 'numeric';
-    pctBox.title = 'Opacity (%)';
+    pctBox.title = vt('Opacity (%)');
     pctBox.style.cssText = `width:46px;box-sizing:border-box;text-align:center;font:var(--vela-font-size-md) ${theme.fontFamily};color:var(--vela-fg);background:transparent;border:1px solid var(--vela-border);border-radius:5px;padding:3px 4px;outline:none;`;
     pctBox.addEventListener('focus', () => {
         pctBox.style.borderColor = 'var(--vela-border-strong)';
@@ -255,12 +256,12 @@ function buildCustomPanel(start: string, theme: VelaTheme, preview: (hex: string
     field.type = 'text';
     field.spellcheck = false;
     field.maxLength = 7;
-    field.setAttribute('aria-label', 'Hex color');
+    field.setAttribute('aria-label', vt('Hex color'));
     field.dataset.testid = 'color-hex';
     field.style.cssText = `flex:1;min-width:0;box-sizing:border-box;height:28px;font:var(--vela-font-size-md) ${theme.fontFamily};color:var(--vela-fg);background:transparent;border:1px solid var(--vela-border);border-radius:5px;padding:0 8px;outline:none;`;
     const ok = document.createElement('button');
     ok.type = 'button';
-    ok.textContent = 'Add';
+    ok.textContent = vt('Add');
     ok.dataset.testid = 'color-add';
     ok.style.cssText = `flex:none;height:28px;padding:0 12px;border-radius:6px;border:none;cursor:pointer;font:600 var(--vela-font-size-md) ${theme.fontFamily};color:var(--vela-selected-fg, var(--vela-bg));background:var(--vela-selected-bg, var(--vela-fg));`;
     top.append(chip, field, ok);

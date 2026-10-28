@@ -27,6 +27,7 @@ import { buildColorPicker } from '../../../ui/components/color-picker';
 import { Popover, closeOpenPopovers } from '../../../ui/components/popover';
 import { DrawingSettingsDialog, type DrawingDialogKind, type DrawingDialogTab } from './DrawingSettingsDialog';
 import { ALONG_LINE_TEXT_TYPES } from '../../../core/drawings/schema';
+import { vt } from '../../../i18n';
 
 /** A `{ path: value }` patch emitted as the user edits a control. */
 export type SettingsPatch = Record<string, unknown>;
@@ -711,7 +712,7 @@ export class DrawingSettingsPopup {
                     // presenting an empty (or lying) list.
                     const note = document.createElement('div');
                     note.style.cssText = 'padding:6px 10px;opacity:0.65;white-space:nowrap;';
-                    note.textContent = 'No lower timeframe available';
+                    note.textContent = vt("No lower timeframe available");
                     menu.appendChild(note);
                     return;
                 }
@@ -721,7 +722,7 @@ export class DrawingSettingsPopup {
                     item.className = 'vela-dpop-item';
                     item.dataset.active = o.value === current ? '1' : '0';
                     item.style.cssText = 'display:flex;align-items:center;min-width:88px;padding:5px 10px;border:none;border-radius:5px;color:inherit;cursor:pointer;text-align:left;font:inherit;font-variant-numeric:tabular-nums;';
-                    item.textContent = o.label;
+                    item.textContent = vt(o.label);
                     item.addEventListener('click', (e) => {
                         e.stopPropagation();
                         pop.hide();
@@ -750,7 +751,7 @@ export class DrawingSettingsPopup {
                     ic.style.cssText = 'display:flex;flex:none;width:20px;justify-content:center;';
                     ic.innerHTML = sized(row.icon, 18);
                     const tx = document.createElement('span');
-                    tx.textContent = row.label;
+                    tx.textContent = vt(row.label);
                     tx.style.cssText = 'flex:1;';
                     item.append(ic, tx);
                     item.addEventListener('click', (e) => {
@@ -781,7 +782,7 @@ export class DrawingSettingsPopup {
             this.tipEl = tp;
         }
         const tip = this.tipEl;
-        tip.textContent = text;
+        tip.textContent = vt(text);
         const hr = this.host.getBoundingClientRect();
         const br = target.getBoundingClientRect();
         const tw = tip.offsetWidth;
@@ -884,7 +885,7 @@ export class DrawingSettingsPopup {
             }
             if (opts.label && opts.labelInTrigger && v !== MIXED) {
                 const tx = document.createElement('span');
-                tx.textContent = opts.label(v);
+                tx.textContent = vt(opts.label(v));
                 tx.style.cssText = 'font-size:11px;opacity:0.85;font-variant-numeric:tabular-nums;';
                 b.appendChild(tx);
             }
@@ -942,7 +943,7 @@ export class DrawingSettingsPopup {
                     }
                     if (label) {
                         const tx = document.createElement('span');
-                        tx.textContent = label(v);
+                        tx.textContent = vt(label(v));
                         tx.style.cssText = 'flex:1;font-variant-numeric:tabular-nums;';
                         item.appendChild(tx);
                     }
@@ -1017,7 +1018,7 @@ export class DrawingSettingsPopup {
                     const row = document.createElement('div');
                     row.style.cssText = 'display:flex;align-items:center;gap:6px;padding-bottom:9px;border-bottom:1px solid var(--vela-border);';
                     const lbl = document.createElement('span');
-                    lbl.textContent = 'In use';
+                    lbl.textContent = vt("In use");
                     lbl.style.cssText = 'font:var(--vela-font-size-sm) inherit;opacity:0.7;margin-right:2px;';
                     row.appendChild(lbl);
                     for (const c of used) {

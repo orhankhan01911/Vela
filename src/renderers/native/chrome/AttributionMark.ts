@@ -6,6 +6,7 @@
 
 import { isDarkColor } from '../../../core/color';
 import { VELA_LETTERS_SVG, VELA_MARK_SVG } from './vela-logos';
+import { vt } from '../../../i18n';
 
 /** Where the mark links — the canonical project page. */
 export const ATTRIBUTION_URL = 'https://velacharts.dev/?utm_source=vela&utm_medium=attribution';
@@ -129,8 +130,8 @@ export function createAttributionMark(doc: Document, background: string): HTMLAn
     a.href = ATTRIBUTION_URL;
     a.target = '_blank';
     a.rel = 'noopener';
-    a.title = 'Charting by Vela';
-    a.setAttribute('aria-label', 'Charting by Vela');
+    a.title = vt("Charting by Vela");
+    a.setAttribute('aria-label', vt("Charting by Vela"));
     Object.assign(a.style, {
         position: 'absolute',
         zIndex: '6',

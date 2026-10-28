@@ -100,6 +100,7 @@ import { isDarkColor } from '../../core/color';
 import { iconAt } from '../../core/icons';
 import { BEARISH, BULLISH } from '../../core/palette';
 import { applyChromeTokens } from '../shared/theme-tokens';
+import { vt } from '../../i18n';
 
 /** A vertically-scalable window: a pane's master scale or a merged indicator's own scale.
  *  Both expose the same four fields, so axis-drag / reset work uniformly on either. */
@@ -1141,7 +1142,7 @@ export class NativeRenderer implements IChartRenderer {
     private makeSettingsButton(): HTMLButtonElement {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.title = 'Chart settings';
+        btn.title = vt("Chart settings");
         btn.innerHTML = iconAt('gear', 14);
         Object.assign(btn.style, {
             position: 'absolute',
@@ -1246,8 +1247,8 @@ export class NativeRenderer implements IChartRenderer {
     private makeScrollToRealtimeButton(): HTMLButtonElement {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.title = 'Scroll to most recent bar (Alt+Shift+→)';
-        btn.setAttribute('aria-label', 'Scroll to most recent bar');
+        btn.title = vt("Scroll to most recent bar (Alt+Shift+→)");
+        btn.setAttribute('aria-label', vt("Scroll to most recent bar"));
         btn.innerHTML = this.scrollButtonIcon();
         Object.assign(btn.style, {
             position: 'absolute',
@@ -3407,7 +3408,7 @@ export class NativeRenderer implements IChartRenderer {
         if (enabled) {
             this.dataCanvas.tabIndex = 0;
             this.dataCanvas.setAttribute('role', 'application');
-            this.dataCanvas.setAttribute('aria-label', 'Interactive price chart. Use Left/Right arrows to move between bars, Shift+Arrow to pan, plus/minus to zoom, Home/End to jump, 0 to reset.');
+            this.dataCanvas.setAttribute('aria-label', vt("Interactive price chart. Use Left/Right arrows to move between bars, Shift+Arrow to pan, plus/minus to zoom, Home/End to jump, 0 to reset."));
             if (!this.liveRegion && this.wrapper) {
                 this.liveRegion = document.createElement('div');
                 this.liveRegion.setAttribute('aria-live', 'polite');

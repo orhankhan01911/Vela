@@ -7,6 +7,7 @@ import { attachChromeTooltip } from '../../shared/chrome-tooltip';
 import { announceSurface } from '../../../ui/surface-events';
 import { holdForExit, type SurfaceExit } from '../../../ui/surface-exit';
 import { FavoritesBar } from './FavoritesBar';
+import { vt } from '../../../i18n';
 
 /** Expanded bar width in px — a docked host's left-gutter reservation must match it. */
 export const TOOLBAR_WIDTH = 44;
@@ -198,7 +199,7 @@ export class DrawingToolbar {
     private paintStar(el: HTMLElement, type: DrawingTypeKey): void {
         const on = this.favorites.has(type);
         el.classList.toggle('vela-fav', on);
-        el.setAttribute('aria-label', on ? 'Remove from favorites' : 'Add to favorites');
+        el.setAttribute('aria-label', on ? vt("Remove from favorites") : vt("Add to favorites"));
         el.setAttribute('aria-pressed', on ? 'true' : 'false');
         el.innerHTML = sizedIcon(on ? STAR_FILLED_ICON : STAR_ICON);
     }
@@ -294,7 +295,7 @@ export class DrawingToolbar {
         b.dataset.active = on ? '1' : '';
         b.setAttribute('aria-pressed', on ? 'true' : 'false');
         const label = on ? 'Hide Favorites Toolbar' : 'Show Favorites Toolbar';
-        b.setAttribute('aria-label', label);
+        b.setAttribute('aria-label', vt(label));
         this.tipText.set(b, label);
     }
 
@@ -313,7 +314,7 @@ export class DrawingToolbar {
         if (!b) return;
         const label = this.collapsed ? 'Expand toolbar' : 'Collapse toolbar';
         b.innerHTML = hitHtml(this.collapsed ? EXPAND_ICON : COLLAPSE_ICON, 12);
-        b.setAttribute('aria-label', label);
+        b.setAttribute('aria-label', vt(label));
         this.tipText.set(b, label);
     }
 
@@ -331,7 +332,7 @@ export class DrawingToolbar {
         const icon = document.createElement('button');
         icon.type = 'button';
         icon.className = 'vela-dtb-icon';
-        icon.setAttribute('aria-label', label);
+        icon.setAttribute('aria-label', vt(label));
         if (opts.iconSvg) icon.innerHTML = hitHtml(opts.iconSvg);
         icon.addEventListener('click', opts.onIcon);
         cell.appendChild(icon);
@@ -341,7 +342,7 @@ export class DrawingToolbar {
             arrow = document.createElement('button'); // its own hover target, hidden until the cell is hovered (CSS)
             arrow.type = 'button';
             arrow.className = 'vela-dtb-arrow';
-            arrow.setAttribute('aria-label', `${label} — more`);
+            arrow.setAttribute('aria-label', vt("{label} — more", { label: label }));
             arrow.innerHTML = arrowHitHtml(ARROW_ICON);
             arrow.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -607,7 +608,7 @@ export class DrawingToolbar {
     private flyoutHeader(text: string): HTMLElement {
         const t = this.theme;
         const header = document.createElement('div');
-        header.textContent = text.toUpperCase();
+        header.textContent = vt(text).toLocaleUpperCase(document.documentElement.lang || 'en');
         header.style.cssText =
             `padding:6px 12px 2px 8px;font:var(--vela-font-size-sm) ${t.fontFamily};font-weight:600;letter-spacing:0.04em;` +
             `color:var(--vela-fg-muted);user-select:none;`;
@@ -640,7 +641,7 @@ export class DrawingToolbar {
         const item = document.createElement('button');
         item.type = 'button';
         item.className = 'vela-dtb-item';
-        item.setAttribute('aria-label', opts.label);
+        item.setAttribute('aria-label', vt(opts.label));
         const badged = opts.badge === true || !!opts.icon;
         // A badged row grows to the 24px badge, so it trims its own vertical padding.
         const box = badged ? 'gap:10px;padding:4px 10px 4px 6px;' : 'gap:8px;padding:5px 10px 5px 8px;';
@@ -653,7 +654,7 @@ export class DrawingToolbar {
             item.appendChild(badge);
         }
         const label = document.createElement('span');
-        label.textContent = opts.label;
+        label.textContent = vt(opts.label);
         label.style.cssText = 'flex:1 1 auto;text-align:left;';
         item.appendChild(label);
         const check = document.createElement('span');
@@ -751,7 +752,7 @@ export class DrawingToolbar {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'vela-dtb-btn';
-        btn.setAttribute('aria-label', title); // not `title` — we render our own 2s-dwell tooltip
+        btn.setAttribute('aria-label', vt(title)); // not `title` — we render our own 2s-dwell tooltip
         this.tipText.set(btn, title);
         if (icon) btn.innerHTML = hitHtml(icon);
         this.tipDisposers.push(

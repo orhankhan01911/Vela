@@ -9,6 +9,7 @@ import { Tooltip } from '../ui/components/tooltip';
 import { iconEl } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
 import { timezoneMenuRows, tzButtonLabel, resolveTimezone } from './timezones';
+import { vt } from '../i18n';
 
 export interface RangePreset {
     /** Button label. */
@@ -170,11 +171,11 @@ export class Bottombar {
         // zone dropdown as clicking the zone label (one affordance, reference behavior).
         this.tzButton = doc.createElement('button');
         this.tzButton.className = 'vela-bb-tz';
-        this.tzButton.setAttribute('aria-label', 'Time zone');
+        this.tzButton.setAttribute('aria-label', vt("Time zone"));
         this.clockEl = doc.createElement('span');
         this.clockEl.className = 'vela-bb-clock';
         this.tzLabelEl = doc.createElement('span');
-        this.tzLabelEl.textContent = tzButtonLabel(this.displayZone);
+        this.tzLabelEl.textContent = vt(tzButtonLabel(this.displayZone));
         this.tzButton.append(this.clockEl, this.tzLabelEl);
         const session = doc.createElement('span');
         session.className = 'vela-bb-session';
@@ -182,11 +183,11 @@ export class Bottombar {
         // Boots HIDDEN (sessions only apply to markets that have them); the host reveals
         // it per active chart via `setSession` once symbol metadata declares sessions.
         session.style.display = 'none';
-        session.title = 'Session — regular (RTH) vs extended (ETH) hours';
+        session.title = vt("Session — regular (RTH) vs extended (ETH) hours");
         for (const [key, label] of [['regular', 'RTH'], ['extended', 'ETH']] as const) {
             const b = doc.createElement('button');
             b.className = 'vela-bb-session-btn' + (key === 'regular' ? ' is-active' : '');
-            b.textContent = label;
+            b.textContent = vt(label);
             b.disabled = true;
             b.addEventListener('click', () => {
                 if (b.disabled) return;
@@ -199,9 +200,9 @@ export class Bottombar {
         const settingsBtn = doc.createElement('button');
         settingsBtn.className = 'vela-bb-settings';
         settingsBtn.appendChild(iconEl('gear', doc));
-        settingsBtn.setAttribute('aria-label', 'Chart settings');
+        settingsBtn.setAttribute('aria-label', vt("Chart settings"));
         if (opts.onSettingsClick) settingsBtn.addEventListener('click', opts.onSettingsClick);
-        this.settingsTip = new Tooltip(settingsBtn, { content: 'Chart settings', triggerId: 'vela-bb-settings', host });
+        this.settingsTip = new Tooltip(settingsBtn, { content: vt("Chart settings"), triggerId: 'vela-bb-settings', host });
         this.el.append(spacer, this.tzButton, session, settingsBtn);
         host.appendChild(this.el);
 
@@ -232,7 +233,7 @@ export class Bottombar {
         const choiceChanged = zone !== this.timezone;
         this.timezone = zone;
         this.exchangeTimezone = exchangeTimezone;
-        this.tzLabelEl.textContent = tzButtonLabel(this.displayZone);
+        this.tzLabelEl.textContent = vt(tzButtonLabel(this.displayZone));
         if (choiceChanged) this.tzMenu.setItems(this.tzItems()); // the rows only depend on the choice
         this.tick();
     }

@@ -8,6 +8,7 @@ import type { RangePreset } from './bottombar';
 import { timeframeLabel } from './timeframe';
 import type { WidgetContext } from './contributions';
 import { activeIntervalSection, intervalSections, type IntervalChoice, type IntervalSection } from './interval-sections';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-tf-drawer';
 const CSS = `
@@ -91,7 +92,7 @@ export class TimeframeDrawer {
 
         const rangeHeading = doc.createElement('div');
         rangeHeading.className = 'vela-tfd-heading';
-        rangeHeading.textContent = 'Date Range';
+        rangeHeading.textContent = vt("Date Range");
 
         const ranges = doc.createElement('div');
         ranges.className = 'vela-tfd-ranges';
@@ -109,14 +110,14 @@ export class TimeframeDrawer {
 
         const tfHeading = doc.createElement('div');
         tfHeading.className = 'vela-tfd-heading';
-        tfHeading.textContent = 'Timeframes';
+        tfHeading.textContent = vt("Timeframes");
 
         const grid = doc.createElement('div');
         grid.className = 'vela-tfd-grid';
         for (const tf of opts.timeframes) {
             const chip = doc.createElement('button');
             chip.className = 'vela-tfd-chip';
-            chip.textContent = timeframeLabel(tf);
+            chip.textContent = vt(timeframeLabel(tf));
             chip.addEventListener('click', () => {
                 // Leaving tick/range… bars for a time interval.
                 const ctx = opts.getContext?.();
@@ -142,7 +143,7 @@ export class TimeframeDrawer {
         for (const s of intervalSections(ctx)) {
             const heading = doc.createElement('div');
             heading.className = 'vela-tfd-heading';
-            heading.textContent = s.title;
+            heading.textContent = vt(s.title);
             const grid = doc.createElement('div');
             grid.className = 'vela-tfd-grid';
             grid.dataset.section = s.id;
@@ -157,7 +158,7 @@ export class TimeframeDrawer {
                     const chip = doc.createElement('button');
                     chip.className = 'vela-tfd-chip';
                     chip.textContent = s.short(c.value);
-                    chip.title = c.hint ? `${c.label} (${c.hint})` : c.label;
+                    chip.title = c.hint ? `${c.label} (${c.hint})` : vt(c.label);
                     if (active?.section.id === s.id && active.value === c.value) chip.dataset.active = '1';
                     chip.addEventListener('click', () => {
                         if (active && active.section.id !== s.id) active.section.leave(ctx);
@@ -166,18 +167,18 @@ export class TimeframeDrawer {
                     });
                     grid.appendChild(chip);
                 }
-                if (!values.length) grid.textContent = 'No suggested sizes for this market.';
+                if (!values.length) grid.textContent = vt("No suggested sizes for this market.");
             };
             const got = s.choices(ctx);
             if (Array.isArray(got)) paint(got);
             else {
-                grid.textContent = 'Sizing for this market…';
+                grid.textContent = vt("Sizing for this market…");
                 void Promise.resolve(got)
                     .then((c) => {
                         if (gen === this.gen) paint(c);
                     })
                     .catch(() => {
-                        if (gen === this.gen) grid.textContent = 'Could not size these bars for this market.';
+                        if (gen === this.gen) grid.textContent = vt("Could not size these bars for this market.");
                     });
             }
             this.sectionsHost.append(heading, grid);

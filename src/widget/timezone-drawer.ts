@@ -5,6 +5,7 @@ import { Drawer } from '../ui/components/drawer';
 import { iconEl } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
 import { timezoneMenuRows } from './timezones';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-timezone-drawer';
 const CSS = `
@@ -63,7 +64,7 @@ export class TimezoneDrawer {
             row.className = 'vela-tzd-row';
             const label = doc.createElement('span');
             label.className = 'vela-tzd-row-label';
-            label.textContent = tz.label;
+            label.textContent = vt(tz.label);
             row.appendChild(label);
             if (tz.checked) row.appendChild(iconEl('check', doc));
             row.addEventListener('click', () => {

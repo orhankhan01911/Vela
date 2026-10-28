@@ -47,6 +47,7 @@ import {
     type TreeSnapshot,
 } from './object-tree-model';
 import { SidePanel } from './side-panel';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-objtree';
 const CSS = `
@@ -492,7 +493,7 @@ export class ObjectTree extends SidePanel {
         if (treeIsEmpty(panes)) {
             const empty = doc.createElement('div');
             empty.className = 'vela-ot-empty';
-            empty.textContent = 'Add an indicator or a drawing to populate the tree';
+            empty.textContent = vt("Add an indicator or a drawing to populate the tree");
             this.body.appendChild(empty);
         }
     }
@@ -526,7 +527,7 @@ export class ObjectTree extends SidePanel {
         );
         const count = doc.createElement('span');
         count.className = 'vela-ot-selcount';
-        count.textContent = ids.length > 1 ? `${ids.length} selected` : '';
+        count.textContent = ids.length > 1 ? vt("{n} selected", { n: ids.length }) : '';
         bar.appendChild(count);
         return bar;
     }
@@ -594,8 +595,8 @@ export class ObjectTree extends SidePanel {
         head.className = 'vela-ot-panehead';
         const name = doc.createElement('span');
         name.className = 'vela-ot-panename';
-        name.textContent = pane.label;
-        name.title = pane.label;
+        name.textContent = vt(pane.label);
+        name.title = vt(pane.label);
         head.appendChild(name);
         if (!chart.panes.supported) return head;
         const acts = doc.createElement('span');
@@ -635,7 +636,7 @@ export class ObjectTree extends SidePanel {
             // The candles can only be restacked — they never leave the main pane.
             if (pass.stackable) {
                 el.dataset.drag = '1';
-                el.title = 'Drag to change what draws in front';
+                el.title = vt("Drag to change what draws in front");
             }
             return el;
         }
@@ -670,7 +671,7 @@ export class ObjectTree extends SidePanel {
         el.dataset.pane = pane.id;
         if (pass.repanable || pass.stackable) {
             el.dataset.drag = '1';
-            el.title = pass.repanable ? 'Drag to another pane, or between panes for a new one' : 'Drag to change what draws in front';
+            el.title = pass.repanable ? vt("Drag to another pane, or between panes for a new one") : vt("Drag to change what draws in front");
         }
         return el;
     }
@@ -705,7 +706,7 @@ export class ObjectTree extends SidePanel {
         el.dataset.rowKind = 'group';
         el.dataset.id = g.id;
         el.dataset.pane = pane.id;
-        el.title = `${members.length} drawing${members.length === 1 ? '' : 's'} — drag to move them together`;
+        el.title = vt(members.length === 1 ? "{n} drawing — drag to move them together" : "{n} drawings — drag to move them together", { n: members.length });
         if (this.renaming === g.id) {
             // A row being renamed is a text field, not a handle: dragging it would leave the
             // rename open with the tree frozen behind it.
@@ -786,7 +787,7 @@ export class ObjectTree extends SidePanel {
         el.dataset.id = d.id;
         el.dataset.pane = d.paneId;
         el.dataset.drag = '1';
-        el.title = 'Drag to restack, or onto another pane to move it there';
+        el.title = vt("Drag to restack, or onto another pane to move it there");
         if (inGroup) el.classList.add('vela-ot-subrow');
         if (this.selectedDrawings.has(d.id)) el.dataset.selected = '1';
         if (this.picked.has(d.id)) el.dataset.picked = '1';
@@ -830,14 +831,14 @@ export class ObjectTree extends SidePanel {
         if (!visible) el.dataset.hidden = '1';
         const name = doc.createElement('span');
         name.className = 'vela-ot-name';
-        name.textContent = label;
-        name.title = label;
+        name.textContent = vt(label);
+        name.title = vt(label);
         el.append(icon, name);
         if (tag) {
             const t = doc.createElement('span');
             t.className = 'vela-ot-tag';
             t.textContent = tag;
-            t.title = 'Draws against its own price scale';
+            t.title = vt("Draws against its own price scale");
             el.appendChild(t);
         }
         const acts = doc.createElement('span');
@@ -854,7 +855,7 @@ export class ObjectTree extends SidePanel {
         b.dataset.icon = a.icon;
         if (a.engaged) b.dataset.engaged = '1';
         if (a.disabled) b.disabled = true;
-        b.title = a.title;
+        b.title = vt(a.title);
         b.appendChild(iconEl(a.icon, doc));
         b.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -977,7 +978,7 @@ export class ObjectTree extends SidePanel {
         if (src) src.dataset.source = '1';
         const ghost = this.el.ownerDocument.createElement('div');
         ghost.className = 'vela-ot-ghost';
-        ghost.textContent = drag.label;
+        ghost.textContent = vt(drag.label);
         // Inside the theme host: a ghost parked on <body> resolves its tokens to nothing.
         this.uiHost().appendChild(ghost);
         drag.ghost = ghost;

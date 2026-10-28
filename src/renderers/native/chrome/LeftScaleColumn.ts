@@ -7,6 +7,7 @@ import { paneAxisTicks, formatAxisValue } from './ticks';
 import { LEFT_SCALE_COL_W, PANE_SEPARATOR_PX } from './axisLayout';
 import { tagTextColor } from './contrast';
 import { BEARISH, BULLISH } from '../../../core/palette';
+import { vt } from '../../../i18n';
 
 /**
  * The left price scale (TradingView's "new left scale"): an indicator merged into another pane keeps its own values,
@@ -93,7 +94,7 @@ export class LeftScaleColumn {
                 for (const t of paneAxisTicks(sc, pane.bounds.height, undefined, scene.priceMintick)) {
                     const y = coords.priceToY(t.price, sc, pane.bounds);
                     if (y < top + 6 || y > bottom - 4) continue;
-                    ctx.fillText(format === 'volume' ? formatAxisValue(sc, pane.bounds.height, t.price, undefined, undefined, 'volume') : t.label, right - 6, this.snap(y));
+                    ctx.fillText(format === 'volume' ? formatAxisValue(sc, pane.bounds.height, t.price, undefined, undefined, 'volume') : vt(t.label), right - 6, this.snap(y));
                 }
                 ctx.font = `500 ${fs}px ${theme.fontFamily}`;
                 // latest-value tags: one per line that asks for a tag (CVD by Exchange: one per venue, pushed apart),
@@ -130,7 +131,7 @@ export class LeftScaleColumn {
         ctx.fillStyle = color;
         ctx.fillRect(this.snap(right - w - 1), top, w, bottom - top);
         ctx.fillStyle = tagTextColor(color, over);
-        ctx.fillText(text, this.snap(right - 5), (top + bottom) / 2);
+        ctx.fillText(vt(text), this.snap(right - 5), (top + bottom) / 2);
     }
 
     private snap(v: number): number {

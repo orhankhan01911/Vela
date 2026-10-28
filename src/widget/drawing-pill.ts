@@ -9,6 +9,7 @@ import type { Vela } from '../Vela';
 import { iconEl, iconMarkup } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
 import { getDrawingType, type SnapMode } from '../core/drawings';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-drawing-pill';
 const CSS = `
@@ -89,7 +90,7 @@ export class DrawingPill {
         const btn = (icon: string, label: string, onClick: () => void): HTMLButtonElement => {
             const b = doc.createElement('button');
             b.className = 'vela-drawpill-btn';
-            b.setAttribute('aria-label', label);
+            b.setAttribute('aria-label', vt(label));
             b.appendChild(iconEl(icon, doc));
             b.addEventListener('click', onClick);
             return b;

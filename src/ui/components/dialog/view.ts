@@ -9,6 +9,7 @@ import { DIALOG_CSS, DIALOG_STYLE_ID } from './styles';
 import * as zagDialog from '@zag-js/dialog';
 import { announceSurface } from '../../surface-events';
 import { holdForExit, type SurfaceExit } from '../../surface-exit';
+import { vt } from '../../../i18n';
 
 export interface DialogOptions extends DialogControllerOptions {
     title?: string;
@@ -97,7 +98,7 @@ export class Dialog {
         if (opts.headerStart) header.appendChild(opts.headerStart);
         const title = doc.createElement('div');
         title.className = 'vela-dialog-title';
-        title.textContent = opts.title ?? '';
+        title.textContent = vt(opts.title ?? '');
         this.titleEl = title;
         const close = doc.createElement('button');
         close.className = 'vela-dialog-close';

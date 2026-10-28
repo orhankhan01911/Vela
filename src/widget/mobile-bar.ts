@@ -10,6 +10,7 @@ import { parseSymbol } from '../data/ProviderRegistry';
 import { timeframeLabel } from './timeframe';
 import { mobilePlacement, widgetActions, type WidgetContext } from './contributions';
 import { TOPBAR_BUILTIN_IDS } from './topbar-composition';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-mobilebar';
 const CSS = `
@@ -105,7 +106,7 @@ export class MobileBar {
         const item = (cls: string, label: string, onClick: () => void, icon?: string): HTMLButtonElement => {
             const b = doc.createElement('button');
             b.className = `vela-mb-item ${cls}`;
-            b.setAttribute('aria-label', label);
+            b.setAttribute('aria-label', vt(label));
             if (icon) b.appendChild(iconEl(icon, doc));
             b.addEventListener('click', onClick);
             return b;
@@ -114,7 +115,7 @@ export class MobileBar {
         this.symbolEl = item('vela-mb-symbol', 'Symbol search', opts.onSymbolClick);
         this.symbolEl.textContent = parseSymbol(opts.symbol).ticker;
         this.tfEl = item('vela-mb-tf', 'Timeframe', opts.onTimeframeClick);
-        this.tfEl.textContent = timeframeLabel(opts.timeframe);
+        this.tfEl.textContent = vt(timeframeLabel(opts.timeframe));
         const onIndicators = opts.onIndicatorsClick;
         const indicators = onIndicators ? item('vela-mb-indicators', 'Indicators', onIndicators, 'indicators') : null;
         this.actionsHost = doc.createElement('span');
@@ -145,9 +146,9 @@ export class MobileBar {
         for (const action of widgetActions('topbar', ctx).filter((a) => mobilePlacement(a) === 'bar' && !builtin.has(a.id))) {
             const b = doc.createElement('button');
             b.className = 'vela-mb-item';
-            b.setAttribute('aria-label', action.label);
+            b.setAttribute('aria-label', vt(action.label));
             if (action.icon) b.appendChild(iconEl(action.icon, doc));
-            else b.appendChild(doc.createTextNode(action.label));
+            else b.appendChild(doc.createTextNode(vt(action.label)));
             b.addEventListener('click', () => {
                 const c = this.opts.getContext?.();
                 if (c) action.run(c);
@@ -162,7 +163,7 @@ export class MobileBar {
 
     /** `label` overrides the timeframe's own (tick/range… bars on: `'100T'`). */
     setTimeframe(tf: string, label?: string): void {
-        this.tfEl.textContent = label ?? timeframeLabel(tf);
+        this.tfEl.textContent = vt(label ?? timeframeLabel(tf));
     }
 
     /** Light the maximize stop while something is isolated (a chart over the grid,
@@ -170,7 +171,7 @@ export class MobileBar {
     setMaximizeActive(on: boolean): void {
         if (!this.maxEl) return;
         this.maxEl.classList.toggle('vela-mb-on', on);
-        this.maxEl.setAttribute('aria-label', on ? 'Restore layout' : 'Maximize chart');
+        this.maxEl.setAttribute('aria-label', on ? vt("Restore layout") : vt("Maximize chart"));
         this.maxEl.replaceChildren(iconEl(on ? 'restore' : 'maximize', this.el.ownerDocument));
     }
 

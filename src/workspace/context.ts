@@ -6,6 +6,7 @@ import type { Vela } from '../Vela';
 import type { WidgetContext } from '../widget/contributions';
 import type { ChartCell } from './ChartCell';
 import type { WorkspaceReplay } from './WorkspaceReplay';
+import { vt } from '../i18n';
 
 /** The extended context a workspace hands to contributed actions/attachments. */
 export interface WorkspaceWidgetContext extends WidgetContext {
@@ -68,7 +69,7 @@ export function buildContext(host: ContextHost): WorkspaceWidgetContext {
         togglePanel: (id, open) => host.togglePanel(id, open),
         dockStrip: (el) => host.dockStrip(el),
         host: host.root,
-        toast: (message, kind) => host.toast(message, kind),
+        toast: (message, kind) => host.toast(vt(message), kind),
         addIndicator: (entry) => host.active()?.addExternalIndicator(entry),
         addNativeIndicator: (type) => host.active()?.addNative(type),
         stateChanged: () => host.stateDirty(),

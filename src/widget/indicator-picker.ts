@@ -3,6 +3,7 @@
 import { Dialog } from '../ui/components/dialog';
 import { injectStyles } from '../ui/styles';
 import { iconEl } from '../ui/icons';
+import { vt } from '../i18n';
 
 export interface IndicatorRow {
     name: string;
@@ -114,7 +115,7 @@ export class IndicatorPicker {
         injectStyles(STYLE_ID, CSS, doc);
         this.search = doc.createElement('input');
         this.search.className = 'vela-ip-search';
-        this.search.placeholder = 'Search…';
+        this.search.placeholder = vt("Search…");
         this.search.spellcheck = false;
         this.search.addEventListener('input', () => this.refresh());
         const searchRow = doc.createElement('div');
@@ -177,7 +178,7 @@ export class IndicatorPicker {
         const library = this.opts.library();
         const instances = this.opts.onChart();
         this.list.replaceChildren();
-        const match = (r: IndicatorRow): boolean => !q || r.name.toLowerCase().includes(q);
+        const match = (r: IndicatorRow): boolean => !q || r.name.toLowerCase().includes(q) || vt(r.name).toLowerCase().includes(q);
 
         const rowEl = (r: IndicatorRow, opts: { library?: number; instance?: number }): HTMLElement => {
             const row = doc.createElement('div');
@@ -187,12 +188,13 @@ export class IndicatorPicker {
             if (r.native) row.dataset.native = '1';
             const name = doc.createElement('span');
             name.className = 'vela-ip-name';
-            name.textContent = r.name;
+            name.textContent = vt(r.name);
+            name.dataset.name = r.name; // the registered name: hosts key on it, the text is translated
             row.appendChild(name);
             if (r.beta) {
                 const beta = doc.createElement('span');
                 beta.className = 'vela-ip-badge';
-                beta.textContent = 'beta';
+                beta.textContent = vt("beta");
                 row.appendChild(beta);
             }
             if (opts.instance !== undefined) {
@@ -206,7 +208,7 @@ export class IndicatorPicker {
                 const trash = doc.createElement('button');
                 trash.className = 'vela-ip-trash';
                 trash.appendChild(iconEl('trash', doc));
-                trash.title = 'Remove from chart';
+                trash.title = vt("Remove from chart");
                 row.appendChild(trash);
             }
             return row;
@@ -219,7 +221,7 @@ export class IndicatorPicker {
             card.className = 'vela-ip-oncard';
             const title = doc.createElement('div');
             title.className = 'vela-ip-group';
-            title.textContent = `On chart · ${onChart.length}`;
+            title.textContent = vt("On chart · {n}", { n: onChart.length });
             card.appendChild(title);
             for (const [r, i] of onChart) card.appendChild(rowEl(r, { instance: i }));
             this.list.appendChild(card);
@@ -237,14 +239,14 @@ export class IndicatorPicker {
         for (const [cat, bucket] of byCat) {
             const title = doc.createElement('div');
             title.className = 'vela-ip-group';
-            title.textContent = cat;
+            title.textContent = vt(cat);
             this.list.appendChild(title);
             for (const [r, i] of bucket) this.list.appendChild(rowEl(r, { library: i }));
         }
         if (!onChart.length && byCat.size === 0) {
             const empty = doc.createElement('div');
             empty.className = 'vela-ip-empty';
-            empty.textContent = library.length ? 'No indicators match.' : 'No indicators in the manifest.';
+            empty.textContent = library.length ? vt("No indicators match.") : vt("No indicators in the manifest.");
             this.list.appendChild(empty);
         }
     }

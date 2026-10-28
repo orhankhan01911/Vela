@@ -16,6 +16,7 @@ import { timeframeLabel } from './timeframe';
 import { tickerIconEl } from './symbol-icon';
 import { parseSymbol } from '../data/ProviderRegistry';
 import { LEGEND_AT_TOP_ATTR } from '../renderers/shared/InputsUI';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-statusline';
 const CSS = `
@@ -380,7 +381,7 @@ export class Statusline {
         this.eyeEl.type = 'button';
         this.eyeEl.className = 'vela-sl-eye';
         this.eyeEl.innerHTML = iconAt('eye-off', 14);
-        this.eyeEl.setAttribute('aria-label', 'Show chart');
+        this.eyeEl.setAttribute('aria-label', vt("Show chart"));
         this.eyeEl.style.display = 'none';
         this.eyeEl.addEventListener('click', (e) => {
             e.stopPropagation(); // never bubbles into the chip's own handlers
@@ -415,7 +416,7 @@ export class Statusline {
         // The tooltips portal to the nearest `.vela-ui` ancestor for theme tokens — resolve
         // them AFTER the statusline is in the DOM. The badge's content follows setMarketStatus.
         this.marketTip = new Tooltip(this.marketEl, { content: MARKET_LABELS.open, placement: 'bottom' });
-        this.eyeTip = new Tooltip(this.eyeEl, { content: 'Show chart', placement: 'bottom' });
+        this.eyeTip = new Tooltip(this.eyeEl, { content: vt("Show chart"), placement: 'bottom' });
         this.setMarketStatus('open'); // crypto trades continuously (no session model yet)
         this.render();
     }
@@ -758,7 +759,7 @@ export class Statusline {
             const node = b.firstChild;
             if (node && node.nodeType === 3) {
                 if (node.nodeValue !== text) node.nodeValue = text;
-            } else b.textContent = text;
+            } else b.textContent = vt(text);
             if (b.dataset.ink !== ink) {
                 b.style.color = ink;
                 b.dataset.ink = ink;

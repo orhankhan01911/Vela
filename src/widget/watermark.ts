@@ -4,6 +4,7 @@ import { injectStyles } from '../ui/styles';
 import { iconEl } from '../ui/icons';
 import { timeframeLabel } from './timeframe';
 import { parseSymbol } from '../data/ProviderRegistry';
+import { vt } from '../i18n';
 
 /** The watermark's largest type size — a lone full-size chart renders at this cap. */
 const MAX_FONT_PX = 36;
@@ -86,7 +87,7 @@ export class Watermark {
         this.text = host.ownerDocument.createElement('span');
         this.replayLine = host.ownerDocument.createElement('span');
         this.replayLine.className = 'vela-watermark-replay';
-        this.replayLine.append(iconEl('replay', host.ownerDocument), host.ownerDocument.createTextNode('Replay'));
+        this.replayLine.append(iconEl('replay', host.ownerDocument), host.ownerDocument.createTextNode(vt("Replay")));
         this.el.append(this.text, this.replayLine);
         host.appendChild(this.el);
         // The el tracks the price pane (CSS insets on the host), so observing it

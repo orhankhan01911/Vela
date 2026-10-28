@@ -81,6 +81,7 @@ import {
 import { SplitterLayer, evenTracks } from './splitters';
 import { compositeLayoutCanvas, tilesFromCellRects, triggerPngDownload, type LayoutShotTile } from './screenshot';
 import type { ScreenshotOptions } from '../core/ports/IChartRenderer';
+import { vt } from '../i18n';
 
 /**
  * The workspace options: the widget's chart vocabulary + the shared shell surface + the
@@ -977,7 +978,7 @@ export class VelaWorkspace {
                 };
             },
             root: this.root,
-            toast: (message, kind) => this.toastHost.show(message, kind),
+            toast: (message, kind) => this.toastHost.show(vt(message), kind),
             stateDirty: () => this.markStateDirty(),
             replay: this.replay,
         });
@@ -1355,7 +1356,7 @@ export class VelaWorkspace {
      *  (alerts, script errors) and the one contributions reach via `ctx.toast`. */
     toast(message: string, kind: 'info' | 'success' | 'error' = 'info', durationMs = 3000): void {
         if (this.destroyed) return;
-        this.toastHost.show(message, kind, durationMs);
+        this.toastHost.show(vt(message), kind, durationMs);
     }
 
     destroy(): void {
@@ -1707,7 +1708,7 @@ export class VelaWorkspace {
                 onStatusPrefsChanged: (id) => this.propagateStylePrefs(id),
                 onStateDirty: () => this.markStateDirty(),
                 manifestSettled: () => this.manifestSettled,
-                toast: (message, kind, durationMs) => this.toastHost.show(message, kind, durationMs),
+                toast: (message, kind, durationMs) => this.toastHost.show(vt(message), kind, durationMs),
             });
             cell.host.style.gridArea = perCell[slot.id]?.gridArea ?? '';
             this.cellsById.set(id, cell);

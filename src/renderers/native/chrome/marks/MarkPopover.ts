@@ -12,6 +12,7 @@ import { CALLOUT_CSS, CALLOUT_STYLE_ID } from '../../../../ui/components/callout
 import { injectStyles } from '../../../../ui/styles';
 import { sanitizeHtml } from '../../../../ui/sanitize-html';
 import type { MarkCluster } from './layout';
+import { vt } from '../../../../i18n';
 
 const MARKS_STYLE_ID = 'vela-marks-popover';
 const MARKS_CSS = `
@@ -164,14 +165,14 @@ export class MarkPopover {
             if (mark.title) {
                 const title = doc.createElement('div');
                 title.className = 'vela-callout-title';
-                title.textContent = mark.title;
+                title.textContent = vt(mark.title);
                 section.appendChild(title);
             }
             const content = mark.content;
             if (typeof content === 'function') {
                 const slot = doc.createElement('div');
                 slot.className = 'vela-marks-loading';
-                slot.textContent = 'Loading…';
+                slot.textContent = vt("Loading…");
                 section.appendChild(slot);
                 pending.push({ el: section, resolve: () => this.resolveLazy(content, slot, gen) });
             } else if (content !== undefined) {
@@ -202,7 +203,7 @@ export class MarkPopover {
             () => {
                 if (gen !== this.generation) return;
                 slot.className = 'vela-marks-error';
-                slot.textContent = 'Couldn’t load this entry.';
+                slot.textContent = vt("Couldn’t load this entry.");
             },
         );
     }
@@ -237,7 +238,7 @@ export class MarkPopover {
                     const btn = doc.createElement('button');
                     btn.type = 'button';
                     btn.className = 'vela-callout-btn' + (item.primary ? ' vela-callout-btn-primary' : '');
-                    btn.textContent = item.label;
+                    btn.textContent = vt(item.label);
                     btn.addEventListener('click', () => {
                         item.run();
                         if (item.close !== false) this.close();
@@ -249,14 +250,14 @@ export class MarkPopover {
                 if (item.type === 'text') {
                     const text = doc.createElement('div');
                     text.className = 'vela-callout-text';
-                    text.textContent = item.text;
+                    text.textContent = vt(item.text);
                     section.appendChild(text);
                 } else if (item.type === 'field') {
                     const row = doc.createElement('div');
                     row.className = 'vela-marks-field';
                     const label = doc.createElement('span');
                     label.className = 'vela-marks-field-label';
-                    label.textContent = item.label;
+                    label.textContent = vt(item.label);
                     const value = doc.createElement('span');
                     value.className = 'vela-marks-field-value';
                     value.textContent = item.value;

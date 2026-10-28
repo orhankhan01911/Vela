@@ -4,6 +4,7 @@
 import type { KeymapManager } from '../ui/keymap';
 import { Dialog } from '../ui/components/dialog';
 import { injectStyles } from '../ui/styles';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-shortcuts';
 const CSS = `
@@ -68,7 +69,7 @@ export class ShortcutsHelp {
         const addCategory = (text: string): void => {
             const cat = doc.createElement('div');
             cat.className = 'vela-sh-cat';
-            cat.textContent = text;
+            cat.textContent = vt(text);
             this.list.appendChild(cat);
         };
         const addRow = (label: string, keys: readonly string[]): void => {
@@ -76,7 +77,7 @@ export class ShortcutsHelp {
             row.className = 'vela-sh-row';
             const l = doc.createElement('span');
             l.className = 'vela-sh-label';
-            l.textContent = label;
+            l.textContent = vt(label);
             const ks = doc.createElement('span');
             ks.className = 'vela-sh-keys';
             for (const key of keys) {
@@ -107,7 +108,7 @@ export class ShortcutsHelp {
         // The two type-to-act routes live outside the keymap (any-printable routing).
         const s = doc.createElement('div');
         s.className = 'vela-sh-static';
-        s.textContent = 'Typing a letter or 0 opens the symbol search; typing a digit from 1 to 9 opens the timeframe entry.';
+        s.textContent = vt("Typing a letter or 0 opens the symbol search; typing a digit from 1 to 9 opens the timeframe entry.");
         this.list.appendChild(s);
     }
 }

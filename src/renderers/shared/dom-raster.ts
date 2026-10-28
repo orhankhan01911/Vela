@@ -1,3 +1,4 @@
+import { vt } from '../../i18n';
 // Best-effort SYNCHRONOUS rasterization of DOM chrome overlays for the PNG export —
 // the indicator legend, a host status line, the symbol watermark. Screenshot export is
 // a synchronous port (`screenshot(): string | null`), so a full HTML renderer is out of
@@ -96,7 +97,7 @@ export function rasterizeOverlay(ctx: CanvasRenderingContext2D, root: Element, f
         ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'left';
-        ctx.fillText(text, r.left - frame.left, r.top - frame.top + r.height / 2);
+        ctx.fillText(vt(text), r.left - frame.left, r.top - frame.top + r.height / 2);
     };
 
     const drawImg = (img: HTMLImageElement, cs: CSSStyleDeclaration, alpha: number): void => {

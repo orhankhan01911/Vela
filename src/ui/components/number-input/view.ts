@@ -3,6 +3,7 @@ import { injectStyles } from '../../styles';
 import { iconEl } from '../../icons';
 import { numberInputController, snapToStep, type NumberInputControllerOptions } from './controller';
 import { NUMBER_CSS, NUMBER_STYLE_ID } from './styles';
+import { vt } from '../../../i18n';
 
 export interface NumberInputOptions extends NumberInputControllerOptions {
     id?: string;
@@ -42,7 +43,7 @@ export class NumberInput {
         const ni = doc.createElement('input');
         ni.type = 'number';
         if (opts.id) ni.id = opts.id;
-        if (opts.title) ni.title = opts.title;
+        if (opts.title) ni.title = vt(opts.title);
         if (opts.min !== undefined) ni.min = String(opts.min);
         if (opts.max !== undefined) ni.max = String(opts.max);
         ni.step = String(this.ctrl.step);
@@ -113,7 +114,7 @@ export class NumberInput {
             const b = doc.createElement('button');
             b.type = 'button';
             b.tabIndex = -1;
-            b.setAttribute('aria-label', label);
+            b.setAttribute('aria-label', vt(label));
             b.appendChild(iconEl(icon, doc));
             let timer = 0;
             const apply = (): void => applyDir(dir);

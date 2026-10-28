@@ -1,6 +1,7 @@
 // Bottom-center status toast — the reference's small pill over the chart (loading /
 // info / error states, auto-hide). One instance per widget.
 import { injectStyles } from '../ui/styles';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-toast';
 const CSS = `
@@ -44,7 +45,7 @@ export class Toast {
 
     /** Show a message; auto-hides after `ms` (0 = sticky until `hide()`). */
     show(message: string, type: 'info' | 'success' | 'error' = 'info', ms = 3000): void {
-        this.el.textContent = message;
+        this.el.textContent = vt(message); // callers pass English or an already translated text
         this.el.dataset.type = type;
         this.el.dataset.open = '1';
         if (this.timer) clearTimeout(this.timer);

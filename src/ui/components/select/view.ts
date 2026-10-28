@@ -5,6 +5,7 @@ import { iconEl } from '../../icons';
 import { Popover, closeOpenPopovers, openPopoverTrigger, type PopoverBoundary, type PopoverOptions } from '../popover';
 import { selectController, type SelectControllerOptions, type SelectOption, type SelectSize } from './controller';
 import { SELECT_CSS, SELECT_STYLE_ID } from './styles';
+import { vt } from '../../../i18n';
 
 export interface SelectListPopoverOpts {
     theme?: VelaTheme;
@@ -57,7 +58,7 @@ export function fillSelectList(
         const item = menu.ownerDocument.createElement('button');
         item.type = 'button';
         item.className = 'vela-select-item';
-        item.textContent = p.label;
+        item.textContent = vt(p.label);
         if (p.value === current) item.dataset.checked = '1';
         item.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -164,7 +165,7 @@ export class Select {
         if (this.ctrl.disabled) btn.disabled = true;
         const label = doc.createElement('span');
         label.className = 'vela-select-label';
-        label.textContent = this.ctrl.labelOf(this.ctrl.value);
+        label.textContent = vt(this.ctrl.labelOf(this.ctrl.value));
         const chevron = doc.createElement('span');
         chevron.className = 'vela-select-chevron';
         chevron.appendChild(iconEl('chevron-down', doc));
@@ -178,7 +179,7 @@ export class Select {
             sizer.setAttribute('aria-hidden', 'true');
             for (const o of this.ctrl.options) {
                 const s = doc.createElement('span');
-                s.textContent = o.label;
+                s.textContent = vt(o.label);
                 sizer.appendChild(s);
             }
             wrap.appendChild(sizer);
@@ -207,12 +208,12 @@ export class Select {
 
     setValue(v: string): void {
         this.ctrl.setValue(v);
-        this.labelEl.textContent = this.ctrl.labelOf(v);
+        this.labelEl.textContent = vt(this.ctrl.labelOf(v));
     }
 
     /** Show `text` on the trigger without changing the value (a host menu's own label). */
     setText(text: string): void {
-        this.labelEl.textContent = text;
+        this.labelEl.textContent = vt(text);
     }
 
     toggle(): void {
@@ -222,7 +223,7 @@ export class Select {
             this.ctrl.value,
             (value, label) => {
                 this.ctrl.pick(value);
-                this.labelEl.textContent = label;
+                this.labelEl.textContent = vt(label);
                 this.list = null;
             },
             { ...this.listOpts, onClose: () => { this.list = null; this.listOpts.onClose?.(); } },

@@ -10,6 +10,7 @@ import { injectStyles } from '../../styles';
 import { Popover, type PopoverBoundary } from '../popover';
 import { calloutPanelRows, closesPanel, type CalloutBubbleSpec, type CalloutPanel } from './controller';
 import { CALLOUT_CSS, CALLOUT_STYLE_ID } from './styles';
+import { vt } from '../../../i18n';
 
 export interface CalloutBubbleOptions extends CalloutBubbleSpec {
     /** Bubble diameter in px (default 16; the icon renders 4px smaller). */
@@ -95,7 +96,7 @@ export class CalloutBubble {
         this.el.style.background = this.spec.background;
         this.el.style.color = this.spec.color ?? '';
         this.el.innerHTML = iconAt(this.spec.icon, this.size - 4);
-        this.el.setAttribute('aria-label', this.spec.label);
+        this.el.setAttribute('aria-label', vt(this.spec.label));
         if (clickable) {
             this.el.setAttribute('role', 'button');
             this.el.tabIndex = 0;
@@ -133,14 +134,14 @@ export class CalloutBubble {
         if (panel.title) {
             const title = doc.createElement('div');
             title.className = 'vela-callout-title';
-            title.textContent = panel.title;
+            title.textContent = vt(panel.title);
             root.appendChild(title);
         }
         for (const row of calloutPanelRows(panel.items)) {
             if (row.type === 'text') {
                 const text = doc.createElement('div');
                 text.className = 'vela-callout-text';
-                text.textContent = row.text;
+                text.textContent = vt(row.text);
                 root.appendChild(text);
                 continue;
             }
@@ -150,7 +151,7 @@ export class CalloutBubble {
                 const btn = doc.createElement('button');
                 btn.type = 'button';
                 btn.className = 'vela-callout-btn' + (item.primary ? ' vela-callout-btn-primary' : '');
-                btn.textContent = item.label;
+                btn.textContent = vt(item.label);
                 btn.addEventListener('click', () => {
                     item.run();
                     if (closesPanel(item)) this.pop?.hide();

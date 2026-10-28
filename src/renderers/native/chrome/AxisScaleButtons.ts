@@ -1,6 +1,7 @@
 import type { VelaTheme } from '../../../core/options';
 import { attachChromeTooltip } from '../../shared/chrome-tooltip';
 import { AXIS_MASTER_W } from './axisLayout';
+import { vt } from '../../../i18n';
 
 /** A pane as seen by the axis scale buttons (its pixel band + current scale state). */
 export interface AxisScaleView {
@@ -95,8 +96,8 @@ export class AxisScaleButtons {
     private button(label: string, title: string, onClick: () => void): HTMLButtonElement {
         const b = document.createElement('button');
         b.type = 'button';
-        b.setAttribute('aria-label', title); // not `title` — native tooltips are banned on renderer chrome
-        b.textContent = label;
+        b.setAttribute('aria-label', vt(title)); // not `title` — native tooltips are banned on renderer chrome
+        b.textContent = vt(label);
         b.className = 'vela-axis-btn';
         Object.assign(b.style, { width: `${BTN_PX}px`, height: `${BTN_PX}px` });
         this.tipDisposers.push(attachChromeTooltip(b, {

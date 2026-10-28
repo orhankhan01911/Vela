@@ -13,6 +13,7 @@ import {
     ensureDialogStyles,
     type InputsUIChange,
 } from './IndicatorInputsDialog';
+import { vt } from '../../i18n';
 export type { InputsUIChange } from './IndicatorInputsDialog';
 export {
     nameOf,
@@ -387,7 +388,7 @@ export class InputsUI {
         for (const action of this.legendActions?.(id) ?? []) {
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.setAttribute('aria-label', action.tooltip);
+            btn.setAttribute('aria-label', vt(action.tooltip));
             this.tip(this.extrasTips, id, btn, action.tooltip);
             btn.innerHTML = iconAt(action.icon, LEGEND_ICON_PX);
             btn.className = 'vela-ind-ctl';
@@ -728,7 +729,7 @@ export class InputsUI {
             this.foldToggle = btn;
         }
         const folded = this.legendFolded;
-        btn.setAttribute('aria-label', this.overviewAction !== null ? 'Indicators' : folded ? 'Show indicator legend' : 'Hide indicator legend');
+        btn.setAttribute('aria-label', this.overviewAction !== null ? vt("Indicators") : folded ? vt("Show indicator legend") : vt("Hide indicator legend"));
         // Bordered chip in both states; folded shows chevron then the count to its right
         // (reference: "˅ 12"), expanded is just the up chevron that folds the list away.
         // Fill AND ink follow the LIVE plot theme (same as legend rows) — chrome tokens
@@ -768,7 +769,7 @@ export class InputsUI {
     ): void {
         const existing = this.rows.get(id);
         if (existing) {
-            existing.title = title;
+            existing.title = vt(title);
             existing.inputs = inputs;
             existing.values = { ...values };
             existing.props = opts.props ?? [];
@@ -776,7 +777,7 @@ export class InputsUI {
             existing.style = opts.style ?? [];
             existing.styleValues = { ...(opts.styleValues ?? {}) };
             existing.gearEl.style.display = hasSettings(inputs, opts) ? 'inline-flex' : 'none';
-            existing.titleEl.textContent = title;
+            existing.titleEl.textContent = vt(title);
             if (existing.paneId !== paneId) { // re-routed to a different pane
                 existing.paneId = paneId;
                 this.attach(this.legendFor(paneId), existing.el, existing.native);
@@ -857,14 +858,14 @@ export class InputsUI {
         const titleWrap = document.createElement('span');
         titleWrap.style.cssText = 'white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis;';
         const titleEl = document.createElement('span');
-        titleEl.textContent = title;
+        titleEl.textContent = vt(title);
         // Every indicator title reads in the chrome text color: where a study is computed
         // (core vs script) is an implementation detail, not something to color-code.
         titleEl.style.cssText = 'font-weight:600;';
         titleWrap.appendChild(titleEl);
         if (opts.beta) {
             const beta = document.createElement('sup');
-            beta.textContent = 'beta';
+            beta.textContent = vt("beta");
             beta.style.cssText = 'font-size:8px;font-weight:700;opacity:0.7;margin-left:1px;letter-spacing:0.2px;';
             titleWrap.appendChild(beta);
         }
@@ -892,7 +893,7 @@ export class InputsUI {
         if (this.onToggleVisible) {
             const eye = document.createElement('button');
             eye.type = 'button';
-            eye.setAttribute('aria-label', 'Hide');
+            eye.setAttribute('aria-label', vt("Hide"));
             this.tip(this.rowTips, id, eye, () => (this.rows.get(id)?.hidden ? 'Show' : 'Hide'));
             eye.innerHTML = EYE_SVG;
             eye.className = 'vela-ind-ctl';
@@ -906,7 +907,7 @@ export class InputsUI {
         }
         const gear = document.createElement('button');
         gear.type = 'button';
-        gear.setAttribute('aria-label', 'Settings');
+        gear.setAttribute('aria-label', vt("Settings"));
         this.tip(this.rowTips, id, gear, 'Settings');
         gear.innerHTML = GEAR_SVG;
         gear.className = 'vela-ind-ctl';
@@ -919,7 +920,7 @@ export class InputsUI {
         if (this.moveApi) {
             const mv = document.createElement('button');
             mv.type = 'button';
-            mv.setAttribute('aria-label', 'Move to pane');
+            mv.setAttribute('aria-label', vt("Move to pane"));
             this.tip(this.rowTips, id, mv, 'Move to pane');
             mv.innerHTML = iconAt('move', LEGEND_ICON_PX);
             mv.className = 'vela-ind-ctl';
@@ -935,7 +936,7 @@ export class InputsUI {
         // Remove (✕) — a built-in control to drop the indicator from the chart.
         const close = document.createElement('button');
         close.type = 'button';
-        close.setAttribute('aria-label', 'Remove indicator');
+        close.setAttribute('aria-label', vt("Remove indicator"));
         this.tip(this.rowTips, id, close, 'Remove indicator');
         close.innerHTML = CLOSE_SVG;
         close.className = 'vela-ind-close';
@@ -1010,7 +1011,7 @@ export class InputsUI {
             el.removeAttribute('aria-label');
             return;
         }
-        el.setAttribute('aria-label', LEGEND_STATUS_TIPS[status]);
+        el.setAttribute('aria-label', vt(LEGEND_STATUS_TIPS[status]));
         if (status === 'loading') {
             // A 9px ring with one bright quarter, spinning: a compact loader on the title's own line.
             el.style.cssText =
@@ -1039,7 +1040,7 @@ export class InputsUI {
         row.el.style.opacity = visible ? '1' : '0.5';
         if (row.eyeEl) {
             row.eyeEl.innerHTML = visible ? EYE_SVG : EYE_OFF_SVG;
-            row.eyeEl.setAttribute('aria-label', visible ? 'Hide' : 'Show'); // the tooltip reads live state itself
+            row.eyeEl.setAttribute('aria-label', visible ? vt("Hide") : vt("Show")); // the tooltip reads live state itself
         }
         this.syncRowActions(row);
     }

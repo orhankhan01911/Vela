@@ -7,6 +7,7 @@
 import type { VelaTheme } from '../../core/options';
 import { iconAt } from '../../core/icons';
 import { applyChromeTokens } from './theme-tokens';
+import { vt } from '../../i18n';
 
 export interface ChromeTooltipOptions {
     /** Positioned container the tip mounts into (the chart plot, the toolbar host…). */
@@ -53,7 +54,7 @@ export function attachChromeTooltip(anchor: HTMLElement, opts: ChromeTooltipOpti
         if (!text) return;
         const doc = anchor.ownerDocument;
         tip = doc.createElement('div');
-        tip.textContent = text;
+        tip.textContent = vt(text);
         // On the page's top layer, positioned on the viewport. Mounted in `host` (the chart),
         // the tip shared the chart's stacking context and opened BEHIND any dialog that lives
         // in its own positioner (every settings dialog in the app, 2026-10-26): hovering an ⓘ
@@ -170,7 +171,7 @@ export function chromeHint(text: string, opts: ChromeHintOptions): { el: HTMLEle
     const el = document.createElement('span');
     el.className = 'vela-hint';
     el.setAttribute('role', 'img');
-    el.setAttribute('aria-label', text);
+    el.setAttribute('aria-label', vt(text));
     el.innerHTML = iconAt('info', px);
     el.style.cssText =
         `flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:${px}px;height:${px}px;` +

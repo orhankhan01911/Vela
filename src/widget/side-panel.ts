@@ -15,6 +15,7 @@ import { injectStyles } from '../ui/styles';
 import { iconEl } from '../ui/icons';
 import { announceSurface } from '../ui/surface-events';
 import { holdForExit, type SurfaceExit } from '../ui/surface-exit';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-sidepanel';
 
@@ -251,7 +252,7 @@ export class SidePanel {
         header.className = 'vela-panel-header';
         this.heading = doc.createElement('span');
         this.heading.className = 'vela-panel-title';
-        this.heading.textContent = title;
+        this.heading.textContent = vt(title);
         // The header SLOT — the space between the title and the close button, handed to a
         // contributed panel's `mount` so it can dock its own compact controls there
         // (script name, action icons) instead of spending a toolbar row on them.
@@ -260,7 +261,7 @@ export class SidePanel {
         const close = doc.createElement('button');
         close.className = 'vela-panel-close';
         close.appendChild(iconEl('close', doc));
-        close.title = 'Close';
+        close.title = vt("Close");
         close.addEventListener('click', () => this.toggle(false));
         // The pin exists only on a panel that can float: pressed, it docks the panel as a
         // column (the chart makes room); released, the panel floats again.
@@ -351,8 +352,8 @@ export class SidePanel {
         if (!this.maxButton) return;
         const doc = this.maxButton.ownerDocument;
         this.maxButton.replaceChildren(iconEl(this.maximizedOn ? 'restore' : 'maximize', doc));
-        this.maxButton.title = this.maximizedOn ? 'Restore' : 'Maximize';
-        this.maxButton.setAttribute('aria-label', this.maxButton.title);
+        this.maxButton.title = this.maximizedOn ? vt("Restore") : vt("Maximize");
+        this.maxButton.setAttribute('aria-label', vt(this.maxButton.title));
         this.maxButton.setAttribute('aria-pressed', this.maximizedOn ? 'true' : 'false');
     }
 
@@ -371,7 +372,7 @@ export class SidePanel {
     /** Replace the header title. The topbar toggle keeps the DECLARED title as its
      *  tooltip — this only changes what the open column says about itself. */
     setTitle(title: string): void {
-        this.heading.textContent = title;
+        this.heading.textContent = vt(title);
     }
 
     /** Current width in px. */
@@ -408,8 +409,8 @@ export class SidePanel {
         const doc = this.pin.ownerDocument;
         this.pin.replaceChildren(iconEl(pinned ? 'pin-filled' : 'pin', doc));
         this.pin.dataset.on = pinned ? '1' : '0';
-        this.pin.title = pinned ? 'Unpin — float over the chart' : 'Pin beside the chart';
-        this.pin.setAttribute('aria-label', this.pin.title);
+        this.pin.title = pinned ? vt("Unpin — float over the chart") : vt("Pin beside the chart");
+        this.pin.setAttribute('aria-label', vt(this.pin.title));
         this.pin.setAttribute('aria-pressed', pinned ? 'true' : 'false');
     }
 

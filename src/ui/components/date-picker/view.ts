@@ -3,6 +3,7 @@ import { injectStyles } from '../../styles';
 import { iconEl } from '../../icons';
 import { datePickerController, WEEKDAY_LABELS, type DatePickerCell, type DatePickerControllerOptions } from './controller';
 import { DATE_PICKER_CSS, DATE_PICKER_STYLE_ID } from './styles';
+import { vt } from '../../../i18n';
 
 export interface DatePickerOptions extends DatePickerControllerOptions {
     /** A day was picked (`YYYY-MM-DD`). */
@@ -34,9 +35,9 @@ export class DatePicker {
         this.next = button('vela-date-picker-nav');
         this.next.append(iconEl('chevron-right', doc));
         this.monthBtn = button('vela-date-picker-switch');
-        this.monthBtn.setAttribute('aria-label', 'Choose month');
+        this.monthBtn.setAttribute('aria-label', vt('Choose month'));
         this.yearBtn = button('vela-date-picker-switch');
-        this.yearBtn.setAttribute('aria-label', 'Choose year');
+        this.yearBtn.setAttribute('aria-label', vt('Choose year'));
         const title = doc.createElement('div');
         title.className = 'vela-date-picker-title';
         title.append(this.monthBtn, this.yearBtn);
@@ -90,8 +91,8 @@ export class DatePicker {
         this.yearBtn.textContent = h.year;
         this.yearBtn.disabled = h.yearDisabled;
         const nav = this.ctrl.navLabels();
-        this.prev.setAttribute('aria-label', nav.prev);
-        this.next.setAttribute('aria-label', nav.next);
+        this.prev.setAttribute('aria-label', vt(nav.prev));
+        this.next.setAttribute('aria-label', vt(nav.next));
         const dates = this.ctrl.panel === 'date';
         this.week.hidden = !dates;
         this.grid.className = dates ? 'vela-date-picker-grid' : 'vela-date-picker-cells';
@@ -107,7 +108,7 @@ export class DatePicker {
         const b = doc.createElement('button');
         b.type = 'button';
         b.className = dates ? 'vela-date-picker-day' : 'vela-date-picker-cell';
-        b.textContent = cell.label;
+        b.textContent = vt(cell.label);
         if (cell.checked) b.dataset.checked = '1';
         if (cell.today) b.dataset.today = '1';
         if (cell.outside) b.dataset.outside = '1';

@@ -2,6 +2,7 @@
 import { injectStyles } from '../../styles';
 import { textAreaController, type TextAreaControllerOptions } from './controller';
 import { TEXTAREA_CSS, TEXTAREA_STYLE_ID } from './styles';
+import { vt } from '../../../i18n';
 
 export interface TextAreaOptions extends TextAreaControllerOptions {
     id?: string;
@@ -33,7 +34,7 @@ export class TextArea {
         const ta = doc.createElement('textarea');
         ta.className = 'vela-textarea-field';
         if (opts.id) ta.id = opts.id;
-        if (opts.placeholder) ta.placeholder = opts.placeholder;
+        if (opts.placeholder) ta.placeholder = vt(opts.placeholder);
         ta.rows = this.ctrl.rows;
         ta.value = this.ctrl.value;
         if (this.ctrl.disabled) ta.disabled = true;

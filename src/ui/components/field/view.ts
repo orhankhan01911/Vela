@@ -10,6 +10,7 @@ import { colorField, type ColorFieldOpts } from '../color-picker';
 import { widthField } from '../glyph-select';
 import { fieldGridColumns, type FieldGridVariant, type FieldLabelSize } from './controller';
 import { FIELD_CSS, FIELD_STYLE_ID } from './styles';
+import { vt } from '../../../i18n';
 
 function ensureFieldStyles(doc: Document = document): void {
     injectStyles(FIELD_STYLE_ID, FIELD_CSS, doc);
@@ -44,7 +45,7 @@ export function fieldSection(title: string, opts: FieldSectionOptions = {}): HTM
     el.className = 'vela-field-section';
     if (opts.variant) el.dataset.variant = opts.variant;
     if (opts.first) el.dataset.first = '';
-    el.textContent = title;
+    el.textContent = vt(title);
     return el;
 }
 
@@ -100,7 +101,7 @@ function labelEl(text: string, opts: { id?: string; size?: FieldLabelSize }): HT
     const el = document.createElement('span');
     el.className = 'vela-field-label';
     if (opts.size) el.dataset.size = opts.size;
-    el.textContent = text;
+    el.textContent = vt(text);
     const id = opts.id;
     if (id) {
         el.id = `${id}--title`;
@@ -360,7 +361,7 @@ export function buildFieldControl(desc: FieldControlDesc): FieldControlHandle {
             list: desc.list,
             onChange: desc.onChange,
         });
-        if (desc.title) sel.el.title = desc.title;
+        if (desc.title) sel.el.title = vt(desc.title);
         if (desc.sync) {
             const sync = desc.sync;
             sel.el.addEventListener('vela-sync', () => { sel.setValue(sync()); });
@@ -388,7 +389,7 @@ export function buildFieldControl(desc: FieldControlDesc): FieldControlHandle {
             popover: desc.popover,
             commit: desc.commit,
         });
-        if (desc.title) el.title = desc.title;
+        if (desc.title) el.title = vt(desc.title);
         return { el };
     }
     if (desc.kind === 'text') {
@@ -399,7 +400,7 @@ export function buildFieldControl(desc: FieldControlDesc): FieldControlHandle {
             fill: desc.fill,
             onChange: desc.onChange,
         });
-        if (desc.placeholder) tf.input.placeholder = desc.placeholder;
+        if (desc.placeholder) tf.input.placeholder = vt(desc.placeholder);
         if (desc.sync) {
             const sync = desc.sync;
             tf.el.addEventListener('vela-sync', () => { tf.setValue(sync()); });
@@ -423,6 +424,6 @@ export function buildFieldControl(desc: FieldControlDesc): FieldControlHandle {
         return { el: ta.el, setValue: (v) => ta.setValue(String(v)) };
     }
     const el = widthField(desc.theme, desc.get, desc.onChange);
-    if (desc.title) el.title = desc.title;
+    if (desc.title) el.title = vt(desc.title);
     return { el };
 }

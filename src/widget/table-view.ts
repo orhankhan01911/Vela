@@ -4,6 +4,7 @@ import type { Vela } from '../Vela';
 import { Dialog } from '../ui/components/dialog';
 import { injectStyles } from '../ui/styles';
 import { fmtPrice, priceDecimals } from './format';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-table-view';
 const CSS = `
@@ -95,7 +96,7 @@ export function openTableView(chart: Vela, host: HTMLElement): void {
     for (const r of rows) {
         const tr = body.insertRow();
         const cells = [time.format(r.time), fmtPrice(r.open, dp), fmtPrice(r.high, dp), fmtPrice(r.low, dp), fmtPrice(r.close, dp)];
-        for (const text of cells) tr.insertCell().textContent = text;
+        for (const text of cells) tr.insertCell().textContent = vt(text);
         const ch = tr.insertCell();
         if (r.change == null) ch.textContent = '—';
         else {
@@ -115,8 +116,8 @@ export function openTableView(chart: Vela, host: HTMLElement): void {
             const note = doc.createElement('div');
             note.className = 'vela-tv-note';
             note.textContent = rows.length
-                ? `${rows.length} bar${rows.length === 1 ? '' : 's'} on screen, newest first.`
-                : 'No bars on screen.';
+                ? vt(rows.length === 1 ? "{n} bar on screen, newest first." : "{n} bars on screen, newest first.", { n: rows.length })
+                : vt("No bars on screen.");
             el.appendChild(note);
         },
         onOpenChange: (open) => {

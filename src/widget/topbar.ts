@@ -13,6 +13,7 @@ import { favoriteTimeframeChips, timeframeLabel } from './timeframe';
 import { currentIntervalLabel, IntervalMenu } from './interval-menu';
 import { activeIntervalSection, onIntervalSectionsChanged, parseSectionFavorite, sectionFavorite } from './interval-sections';
 import { parseSymbol } from '../data/ProviderRegistry';
+import { vt } from '../i18n';
 
 // The component owns its stylesheet (id-guarded, injected at construction) so EVERY
 // host that mounts a Topbar — the widget, a multi-chart workspace — gets the same look.
@@ -435,7 +436,7 @@ export class Topbar {
         this.tfCaret = doc.createElement('button');
         this.tfCaret.className = 'vela-widget-tf-caret';
         this.tfCaret.appendChild(iconEl('chevron-down', doc));
-        this.tfCaret.setAttribute('aria-label', 'Timeframes');
+        this.tfCaret.setAttribute('aria-label', vt("Timeframes"));
         const tfGroup = doc.createElement('span');
         tfGroup.className = 'vela-widget-tf-group';
         tfGroup.append(this.tfChipsHost, this.tfCaret);
@@ -453,7 +454,7 @@ export class Topbar {
         if (opts.onIndicatorsClick && !topbarActionOverride('indicators')) {
             indicatorsBtn = doc.createElement('button');
             indicatorsBtn.className = 'vela-widget-indicators';
-            indicatorsBtn.append(iconEl('indicators', doc), doc.createTextNode('Indicators'));
+            indicatorsBtn.append(iconEl('indicators', doc), doc.createTextNode(vt("Indicators")));
             indicatorsBtn.addEventListener('click', opts.onIndicatorsClick);
         }
 
@@ -577,7 +578,7 @@ export class Topbar {
             slot.dataset.dir = dir;
             const b = doc.createElement('button');
             b.type = 'button';
-            b.setAttribute('aria-label', dir === 'l' ? 'Scroll toolbar left' : 'Scroll toolbar right');
+            b.setAttribute('aria-label', dir === 'l' ? vt("Scroll toolbar left") : vt("Scroll toolbar right"));
             b.appendChild(iconEl(dir === 'l' ? 'chevron-left' : 'chevron-right', doc));
             b.addEventListener('click', () => {
                 const step = Math.max(120, this.el.clientWidth * 0.6);
@@ -610,10 +611,10 @@ export class Topbar {
         this.renderActions();
         this.observeItems();
 
-        this.tooltips.push(new Tooltip(this.tfCaret, { content: 'Timeframe', triggerId: 'vela-topbar-tf', host }));
-        this.tooltips.push(new Tooltip(this.styleButton, { content: 'Chart style', triggerId: 'vela-topbar-style', host }));
+        this.tooltips.push(new Tooltip(this.tfCaret, { content: vt("Timeframe"), triggerId: 'vela-topbar-tf', host }));
+        this.tooltips.push(new Tooltip(this.styleButton, { content: vt("Chart style"), triggerId: 'vela-topbar-style', host }));
         if (this.layoutButton && opts.layout) {
-            this.tooltips.push(new Tooltip(this.layoutButton, { content: 'Layout', triggerId: 'vela-topbar-layout', host }));
+            this.tooltips.push(new Tooltip(this.layoutButton, { content: vt("Layout"), triggerId: 'vela-topbar-layout', host }));
             const layout = opts.layout;
             this.layoutPicker = new LayoutPicker({
                 trigger: this.layoutButton,
@@ -720,13 +721,13 @@ export class Topbar {
             const b = doc.createElement('button');
             b.className = 'vela-widget-tf';
             const label = e.label;
-            b.textContent = label;
+            b.textContent = vt(label);
             if (e.current) {
                 b.dataset.current = '1';
                 b.setAttribute('aria-current', 'true');
             } else {
                 const tf = e.tf!;
-                b.setAttribute('aria-label', `Switch timeframe to ${label}`);
+                b.setAttribute('aria-label', vt("Switch timeframe to {label}", { label: label }));
                 const pick = e.pick;
                 b.addEventListener('click', () => {
                     if (pick) return pick();
@@ -743,12 +744,12 @@ export class Topbar {
         if (chips.length === 0) {
             this.tfCaret.dataset.solo = '1';
             const label = currentIntervalLabel(this.timeframe, ctx);
-            this.tfCaret.append(doc.createTextNode(label), iconEl('chevron-down', doc));
-            this.tfCaret.setAttribute('aria-label', `Interval — ${label}`);
+            this.tfCaret.append(doc.createTextNode(vt(label)), iconEl('chevron-down', doc));
+            this.tfCaret.setAttribute('aria-label', vt("Interval — {label}", { label: label }));
         } else {
             delete this.tfCaret.dataset.solo;
             this.tfCaret.appendChild(iconEl('chevron-down', doc));
-            this.tfCaret.setAttribute('aria-label', 'Timeframes');
+            this.tfCaret.setAttribute('aria-label', vt("Timeframes"));
         }
         this.onHairlineSync(); // the cluster width changed
     }
@@ -773,14 +774,14 @@ export class Topbar {
             const label = priceStyleLabel(id);
             const icon = priceStyleIcon(id);
             if (icon) b.appendChild(iconEl(icon, doc));
-            else b.textContent = label;
-            b.title = label;
+            else b.textContent = vt(label);
+            b.title = vt(label);
             if (id === this.priceStyle) {
                 b.dataset.current = '1';
                 b.setAttribute('aria-current', 'true');
-                b.setAttribute('aria-label', `${label} (current chart type)`);
+                b.setAttribute('aria-label', vt("{label} (current chart type)", { label: label }));
             } else {
-                b.setAttribute('aria-label', `Switch chart type to ${label}`);
+                b.setAttribute('aria-label', vt("Switch chart type to {label}", { label: label }));
             }
             b.addEventListener('click', () => this.opts.onPriceStyle(id));
             this.styleChipsHost.appendChild(b);
@@ -833,9 +834,9 @@ export class Topbar {
             if (glyph) icon.innerHTML = glyph;
             this.layoutButton.appendChild(icon);
         } else {
-            this.layoutButton.appendChild(doc.createTextNode(this.layoutId ?? ''));
+            this.layoutButton.appendChild(doc.createTextNode(vt(this.layoutId ?? '')));
         }
-        this.layoutButton.setAttribute('aria-label', `Layout — ${this.layoutId ?? ''}`);
+        this.layoutButton.setAttribute('aria-label', vt("Layout — {v}", { v: this.layoutId ?? '' }));
     }
 
     private renderStyleButton(doc: Document): void {
@@ -854,10 +855,10 @@ export class Topbar {
             // Icon entry (like the reference app); the label lives in the tooltip and the dropdown
             // rows. Unknown plugin styles without an icon fall back to their label.
             if (icon) this.styleButton.appendChild(iconEl(icon, doc));
-            else this.styleButton.appendChild(doc.createTextNode(priceStyleLabel(this.priceStyle)));
+            else this.styleButton.appendChild(doc.createTextNode(vt(priceStyleLabel(this.priceStyle))));
         }
         this.styleButton.appendChild(iconEl('chevron-down', doc));
-        this.styleButton.setAttribute('aria-label', `Chart style — ${priceStyleLabel(this.priceStyle)}`);
+        this.styleButton.setAttribute('aria-label', vt("Chart style — {priceStyleLabel}", { priceStyleLabel: priceStyleLabel(this.priceStyle) }));
     }
 
     /** Re-project the contributed topbar actions (call after registrations change).
@@ -899,10 +900,10 @@ export class Topbar {
             if (action.icon) b.appendChild(iconEl(action.icon, doc));
             if (iconOnly) {
                 // The label still speaks — as the accessible name and the hover tooltip.
-                b.setAttribute('aria-label', action.label);
-                this.actionTooltips.push(new Tooltip(b, { content: action.label, triggerId: `vela-action-${action.id}`, host: this.host }));
+                b.setAttribute('aria-label', vt(action.label));
+                this.actionTooltips.push(new Tooltip(b, { content: vt(action.label), triggerId: `vela-action-${action.id}`, host: this.host }));
             } else {
-                b.appendChild(doc.createTextNode(action.label));
+                b.appendChild(doc.createTextNode(vt(action.label)));
             }
             b.addEventListener('click', () => {
                 const c = this.opts.getContext?.();
@@ -976,11 +977,11 @@ export class Topbar {
         const b = doc.createElement('button');
         b.className = `vela-widget-tool ${cls}`;
         b.appendChild(iconEl(icon, doc));
-        b.setAttribute('aria-label', tip);
+        b.setAttribute('aria-label', vt(tip));
         // Kit tooltip only — a native `title` on top of it double-tooltips. Explicit host: at
         // construction the topbar is NOT in the DOM yet, so the closest('.vela-ui') fallback
         // would portal to <body> — outside the theme vars.
-        sink.push(new Tooltip(b, { content: tip, triggerId: `vela-tool-${cls}`, host: this.host }));
+        sink.push(new Tooltip(b, { content: vt(tip), triggerId: `vela-tool-${cls}`, host: this.host }));
         if (onClick) b.addEventListener('click', onClick);
         return b;
     }

@@ -2,6 +2,7 @@ import type { VelaTheme } from '../../../core/options';
 import type { DrawingTypeKey, ToolbarDefinition } from '../../../core/drawings';
 import { applyChromeTokens } from '../../shared/theme-tokens';
 import { attachChromeTooltip } from '../../shared/chrome-tooltip';
+import { vt } from '../../../i18n';
 
 /** Below this host width the bar is hidden (TradingView hides it on phones too): on a narrow
  *  chart it would cover the chart controls. */
@@ -67,11 +68,11 @@ export class FavoritesBar {
         this.root = doc.createElement('div');
         this.root.className = 'vela-favbar';
         this.root.setAttribute('role', 'toolbar');
-        this.root.setAttribute('aria-label', 'Favorite drawing tools');
+        this.root.setAttribute('aria-label', vt("Favorite drawing tools"));
         this.root.dataset.velaScreenshot = '0';
         this.grip = doc.createElement('div');
         this.grip.className = 'vela-favbar-grip';
-        this.grip.setAttribute('aria-label', 'Drag to move');
+        this.grip.setAttribute('aria-label', vt("Drag to move"));
         this.grip.innerHTML = GRIP_SVG;
         this.items = doc.createElement('div');
         this.items.className = 'vela-favbar-items';
@@ -166,7 +167,7 @@ export class FavoritesBar {
             b.type = 'button';
             b.className = 'vela-favbar-btn';
             b.dataset.tool = type;
-            b.setAttribute('aria-label', tool.label);
+            b.setAttribute('aria-label', vt(tool.label));
             b.dataset.active = type === this.active ? '1' : '';
             b.innerHTML = `<span class="vela-favbar-hit">${sized(tool.icon ?? '')}</span>`;
             b.addEventListener('click', (e) => {

@@ -6,6 +6,7 @@ import { injectStyles } from '../../styles';
 import { tooltipController, type TooltipControllerOptions } from './controller';
 import { TOOLTIP_CSS, TOOLTIP_STYLE_ID } from './styles';
 import * as zagTooltip from '@zag-js/tooltip';
+import { vt } from '../../../i18n';
 
 export interface TooltipOptions extends TooltipControllerOptions {
     content: string | Node | (() => Node);
@@ -49,7 +50,7 @@ export class Tooltip {
     }
 
     setContent(content: string | Node | (() => Node)): void {
-        this.content.replaceChildren(typeof content === 'function' ? content() : content);
+        this.content.replaceChildren(typeof content === 'function' ? content() : typeof content === 'string' ? vt(content) : content);
     }
 
     destroy(): void {

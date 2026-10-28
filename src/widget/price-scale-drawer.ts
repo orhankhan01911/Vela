@@ -16,6 +16,7 @@ import {
     type ScaleChoice,
 } from './context-menu-model';
 import type { Vela } from '../Vela';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-price-scale-drawer';
 const CSS = `
@@ -109,7 +110,7 @@ export class PriceScaleDrawer {
             if (opts.sep) el.dataset.sep = '1';
             const text = doc.createElement('span');
             text.className = 'vela-psd-row-label';
-            text.textContent = label;
+            text.textContent = vt(label);
             el.appendChild(text);
             if (opts.checked) el.appendChild(iconEl('check', doc));
             el.addEventListener('click', opts.onClick);
@@ -118,7 +119,7 @@ export class PriceScaleDrawer {
         const section = (label: string): void => {
             const el = doc.createElement('div');
             el.className = 'vela-psd-section';
-            el.textContent = label;
+            el.textContent = vt(label);
             list.appendChild(el);
         };
 

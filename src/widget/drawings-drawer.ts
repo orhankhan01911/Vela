@@ -9,6 +9,7 @@ import { iconEl } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
 import type { ToolbarDefinition, ToolDefinition } from '../core/drawings/toolbar';
 import type { DrawingTypeKey } from '../core/drawings/Drawing';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-drawings-drawer';
 const CSS = `
@@ -148,7 +149,7 @@ export class DrawingsDrawer {
         search.appendChild(iconEl('search', doc));
         this.input = doc.createElement('input');
         this.input.type = 'text';
-        this.input.placeholder = 'Search tools…';
+        this.input.placeholder = vt("Search tools…");
         this.input.addEventListener('input', () => this.renderList());
         search.appendChild(this.input);
 
@@ -201,7 +202,7 @@ export class DrawingsDrawer {
         for (const group of all) {
             const tab = doc.createElement('button');
             tab.className = 'vela-dd-tab';
-            tab.textContent = group.label;
+            tab.textContent = vt(group.label);
             if (group.id === this.activeGroup) tab.dataset.active = '1';
             tab.addEventListener('click', () => {
                 this.activeGroup = group.id;
@@ -222,7 +223,7 @@ export class DrawingsDrawer {
         const section = (label: string): void => {
             const el = doc.createElement('div');
             el.className = 'vela-dd-section';
-            el.textContent = label;
+            el.textContent = vt(label);
             this.list.appendChild(el);
         };
         const row = (tool: ToolDefinition): void => {
@@ -234,7 +235,7 @@ export class DrawingsDrawer {
             glyph.innerHTML = tool.icon;
             const label = doc.createElement('span');
             label.className = 'vela-dd-label';
-            label.textContent = tool.label;
+            label.textContent = vt(tool.label);
             const star = doc.createElement('button');
             star.className = 'vela-dd-star';
             const paintStar = (on: boolean): void => {
@@ -243,7 +244,7 @@ export class DrawingsDrawer {
                 else delete star.dataset.on;
             };
             paintStar(this.opts.isFavorite(tool.type));
-            star.setAttribute('aria-label', `Favorite ${tool.label}`);
+            star.setAttribute('aria-label', vt("Favorite {label}", { label: vt(tool.label) }));
             star.addEventListener('click', (e) => {
                 e.stopPropagation(); // the row underneath arms the tool — a star tap must not
                 const on = !this.opts.isFavorite(tool.type);
@@ -272,7 +273,7 @@ export class DrawingsDrawer {
             if (!any) {
                 const empty = doc.createElement('div');
                 empty.className = 'vela-dd-empty';
-                empty.textContent = 'No tools match.';
+                empty.textContent = vt("No tools match.");
                 this.list.appendChild(empty);
             }
             return;
@@ -290,7 +291,7 @@ export class DrawingsDrawer {
             if (seen.size === 0) {
                 const empty = doc.createElement('div');
                 empty.className = 'vela-dd-empty';
-                empty.textContent = 'No favorites yet. Tap a tool\u2019s star to pin it here.';
+                empty.textContent = vt("No favorites yet. Tap a tool’s star to pin it here.");
                 this.list.appendChild(empty);
             }
             return;

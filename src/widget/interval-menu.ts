@@ -17,6 +17,7 @@ import {
     type IntervalSection,
 } from './interval-sections';
 import { parseTimeframe, timeframeLabel, timeframeMs } from './timeframe';
+import { vt } from '../i18n';
 
 const STYLE_ID = 'vela-widget-interval-menu';
 const CSS = `
@@ -231,12 +232,12 @@ export class IntervalMenu {
         if (checked) b.dataset.checked = '';
         const l = this.doc.createElement('span');
         l.className = 'vela-menu-label';
-        l.textContent = label;
+        l.textContent = vt(label);
         b.appendChild(l);
         if (extra?.hint) {
             const h = this.doc.createElement('span');
             h.className = 'vela-menu-hint';
-            h.textContent = extra.hint;
+            h.textContent = vt(extra.hint);
             b.appendChild(h);
         }
         if (extra?.star) {
@@ -246,7 +247,7 @@ export class IntervalMenu {
             if (on) star.classList.add('vela-fav');
             star.removeAttribute('aria-hidden');
             star.setAttribute('role', 'button');
-            star.setAttribute('aria-label', on ? 'Remove from favorites' : 'Add to favorites');
+            star.setAttribute('aria-label', on ? vt("Remove from favorites") : vt("Add to favorites"));
             star.addEventListener('click', (e) => {
                 e.stopPropagation();
                 toggle();
@@ -269,7 +270,7 @@ export class IntervalMenu {
         head.className = 'vela-ivm-head';
         head.setAttribute('aria-expanded', String(open));
         const t = this.doc.createElement('span');
-        t.textContent = title;
+        t.textContent = vt(title);
         head.append(t, iconEl(open ? 'chevron-up' : 'chevron-down', this.doc));
         head.addEventListener('click', () => {
             const next = !('open' in sec.dataset);
@@ -308,9 +309,9 @@ export class IntervalMenu {
         input.min = '0';
         input.step = 'any';
         input.placeholder = '1';
-        input.setAttribute('aria-label', 'Interval size');
+        input.setAttribute('aria-label', vt("Interval size"));
         const unit = this.doc.createElement('select');
-        unit.setAttribute('aria-label', 'Interval unit');
+        unit.setAttribute('aria-label', vt("Interval unit"));
         for (const g of ['seconds', 'minutes', 'hours', 'days'] as TimeGroup[]) {
             const o = this.doc.createElement('option');
             o.value = `time:${g}`;
@@ -326,7 +327,7 @@ export class IntervalMenu {
         unit.value = 'time:minutes';
         const go = this.doc.createElement('button');
         go.type = 'submit';
-        go.textContent = 'Add';
+        go.textContent = vt("Add");
         form.append(input, unit, go);
         form.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -388,7 +389,7 @@ export class IntervalMenu {
                     if (!values.length) {
                         const n = this.doc.createElement('div');
                         n.className = 'vela-ivm-note';
-                        n.textContent = `No suggested sizes for this market. Use "Add custom interval…".`;
+                        n.textContent = vt("No suggested sizes for this market. Use \"Add custom interval…\".");
                         rows.appendChild(n);
                     }
                 };
@@ -399,7 +400,7 @@ export class IntervalMenu {
                 }
                 const wait = this.doc.createElement('div');
                 wait.className = 'vela-ivm-note';
-                wait.textContent = 'Sizing for this market…';
+                wait.textContent = vt("Sizing for this market…");
                 rows.appendChild(wait);
                 void Promise.resolve(got)
                     .then((choices) => {
@@ -408,7 +409,7 @@ export class IntervalMenu {
                         this.popover.reposition();
                     })
                     .catch(() => {
-                        if (gen === this.gen) wait.textContent = 'Could not size these bars for this market.';
+                        if (gen === this.gen) wait.textContent = vt("Could not size these bars for this market.");
                     });
             });
         };
