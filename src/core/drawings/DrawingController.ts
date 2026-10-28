@@ -1,3 +1,4 @@
+import { rememberToolSettings, toolSettings } from './toolMemory';
 import type { Unsubscribe } from '../util/types';
 import type { IChartRenderer } from '../ports/IChartRenderer';
 import type { TypedEventBus } from '../events/EventBus';
@@ -52,7 +53,8 @@ export class DrawingController {
     private favs = new Set<DrawingTypeKey>();
     private selectedIds: string[] = []; // ordered; [0] is the primary (settings-popup) selection
     private clipboard: SerializedDrawing[] = []; // in-memory copy buffer (per chart)
-    private readonly lastStyle = new Map<DrawingTypeKey, DrawingStyle>(); // per-tool "last used" style
+    /** The last-used style per tool, read through the shared, persisted tool memory (./toolMemory.ts). */
+    private readonly lastStyle = { get: (type: DrawingTypeKey): DrawingStyle | undefined => toolSettings(type)?.style };
     private readonly subs: Unsubscribe[] = [];
 
     constructor(
@@ -200,15 +202,15 @@ export class DrawingController {
     // ── programmatic CRUD (facade-facing) ── each is one undo step
     add(type: DrawingTypeKey, init: AddInit = {}): Drawing | null {
         if (!this.enabled) return null;
-        const last = this.lastStyle.get(type);
-        const style = { ...(last ?? {}), ...(init.style ?? {}) } as SerializedDrawing['style'] | undefined;
+        const mem = toolSettings(type);
+        const style = { ...(mem?.style ?? {}), ...(init.style ?? {}) } as SerializedDrawing['style'] | undefined;
         const d = createDrawing(type, {
             id: this.store.nextId(),
             paneId: init.paneId ?? 'price',
             anchors: init.anchors,
             style,
-            text: init.text,
-            props: init.props,
+            text: init.text ? { ...(mem?.text ?? {}), ...init.text } : undefined,
+            props: mem?.props || init.props ? { ...(mem?.props ?? {}), ...(init.props ?? {}) } : undefined,
             zIndex: init.zIndex ?? this.startZ(type, init.paneId ?? 'price'),
         });
         if (!d) return null;
@@ -466,7 +468,7 @@ export class DrawingController {
     /** Remember a drawing's style as the "last used" for its type (seeds the next one). */
     private captureStyle(id: string): void {
         const d = this.store.get(id);
-        if (d) this.lastStyle.set(d.type, { ...d.style });
+        if (d) rememberToolSettings(d.serialize());
     }
 
     private sync(): void {
@@ -486,9 +488,12 @@ export class DrawingController {
                 break;
             case 'create': {
                 const before = this.store.serialize();
-                const last = this.lastStyle.get(i.doc.type); // a freshly drawn shape inherits the last-used style
-                const style = last ? { ...i.doc.style, ...last } : i.doc.style;
-                const d = deserializeDrawing({ ...i.doc, id: this.store.nextId(), style });
+                // A freshly drawn shape inherits its tool's last-used settings: style, extras and text look.
+                const mem = toolSettings(i.doc.type);
+                const style = mem ? { ...i.doc.style, ...mem.style } : i.doc.style;
+                const props = mem?.props ? { ...(i.doc.props ?? {}), ...mem.props } : i.doc.props;
+                const text = mem?.text && i.doc.text ? { ...i.doc.text, ...mem.text, value: i.doc.text.value } : i.doc.text;
+                const d = deserializeDrawing({ ...i.doc, id: this.store.nextId(), style, props, text });
                 if (!d) return;
                 if (!d.zIndex) d.zIndex = this.startZ(d.type, d.paneId) ?? 0; // a freshly placed drawing starts under the price (or over the stack when it covers the series)
                 this.history.record(before);

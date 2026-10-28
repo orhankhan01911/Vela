@@ -48,12 +48,17 @@ export {
     IMAGE_MAX_SIDE,
     IMAGE_TYPES,
     toXPostCard,
+    toolSettings,
+    clearToolSettings,
     XPOST_W,
     XPOST_POSITION,
 } from './core/drawings';
 export type {
     DrawingTypeKey,
     SerializedDrawing,
+    DrawingInputsDialog,
+    DrawingToolbarAction,
+    ToolSettings,
     DrawingPoint,
     DrawingStyle,
     DrawingText,

@@ -46,6 +46,8 @@ export interface SettingsActions {
     remove(): void;
     /** Restore a serialized snapshot (Cancel in the settings dialog). */
     restore?(doc: SerializedDrawing): void;
+    /** Open the drawing's indicator-style dialog ({@link Drawing.inputsDialog}); false when it has none. */
+    openInputs?(): boolean;
 }
 
 /** The value of a control whose drawings disagree — the bar shows it as "mixed" and the first
@@ -376,12 +378,25 @@ export class DrawingSettingsPopup {
         // Every drawing has the settings dialog (TradingView: Style / Text / Coordinates / Visibility); it opens on
         // the tab that matters most for the tool (sizing, profile rows, levels).
         const dialogKind: DrawingDialogKind = isFrvp ? 'frvp' : isFrtpo ? 'frtpo' : isPosition ? 'position' : editableLevels ? 'levels' : 'settings';
-        if (!multi) bar.appendChild(this.iconBtn('Settings', GEAR_ICON, () => this.settingsDialog.open(drawing, actions, dialogKind)));
+        // A host type's own buttons (e.g. Templates) sit just left of the settings wheel.
+        if (!multi) {
+            for (const a of drawing.toolbarActions()) {
+                const btn = this.iconBtn(a.label, a.icon, () => a.run(btn));
+                btn.dataset.action = a.id;
+                bar.appendChild(btn);
+            }
+        }
+        // An indicator-style drawing opens the indicator inputs dialog instead (Drawing.inputsDialog).
+        const openSettings = (tab?: DrawingDialogTab): void => {
+            if (tab === undefined && actions.openInputs?.()) return;
+            this.settingsDialog.open(drawing, actions, dialogKind, undefined, tab);
+        };
+        if (!multi) bar.appendChild(this.iconBtn('Settings', GEAR_ICON, () => openSettings()));
         bar.appendChild(this.toggle('Lock', LOCK_ICON, common((d) => d.locked), (v) => actions.setLocked(v), UNLOCK_ICON));
         const del = this.iconBtn('Delete', TRASH_ICON, () => actions.remove());
         del.style.color = 'var(--vela-danger)';
         bar.appendChild(del);
-        bar.appendChild(this.kebabButton(actions, multi ? null : (tab) => this.settingsDialog.open(drawing, actions, dialogKind, undefined, tab)));
+        bar.appendChild(this.kebabButton(actions, multi ? null : openSettings));
 
         el.append(bar);
         this.host.appendChild(el);

@@ -10,6 +10,7 @@ import { Menu, type MenuItemDescriptor } from '../../ui/components/menu';
 import { CalloutBubble } from '../../ui/components/callout-bubble';
 import {
     IndicatorInputsDialog,
+    type IndicatorDialogRow,
     ensureDialogStyles,
     type InputsUIChange,
 } from './IndicatorInputsDialog';
@@ -275,7 +276,8 @@ export class InputsUI {
             mobile: () => this.mobileLayout,
             dialogHost: () => this.dialogHost,
             symbolPicker: () => this.symbolPicker,
-            onChange: (c) => this.onChange?.(c),
+            // A drawing's indicator-style dialog (openCustomDialog) routes its edits to its own handler.
+            onChange: (c) => (this.customDialog?.id === c.indicatorId ? this.customDialog.onChange(c) : this.onChange?.(c)),
             onBackdropClose: () => this.clearSelection(),
         });
     }
@@ -1177,6 +1179,17 @@ export class InputsUI {
      */
     closeOpenDialog(): void {
         this.inputsDialog.close();
+    }
+
+    /** The dialog open for a non-indicator row (a drawing's inputs), and where its edits go. */
+    private customDialog: { id: string; onChange: (c: InputsUIChange) => void } | null = null;
+
+    /** Open the indicator inputs dialog on a row that is not an indicator (a drawing whose settings are an
+     *  indicator's inputs, `Drawing.inputsDialog`): same dialog, phone sheet and `when` gates; edits go to
+     *  `onChange`, not to the indicator change handler. */
+    openCustomDialog(row: IndicatorDialogRow, onChange: (c: InputsUIChange) => void): void {
+        this.customDialog = { id: row.id, onChange };
+        this.inputsDialog.open(row);
     }
 
 

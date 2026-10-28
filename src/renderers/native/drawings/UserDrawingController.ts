@@ -25,6 +25,7 @@ import { MeasureOverlay } from './MeasureOverlay';
 import { topDrawingAt, deletableSelection, deleteTargets, HIT_TOLERANCE } from './DrawingHitTester';
 import { keyToDrawingAction, isEditingText } from './DrawingKeys';
 import type { DrawingSlice } from '../core/SceneGraph';
+import type { IndicatorDialogRow, InputsUIChange } from '../../shared/IndicatorInputsDialog';
 
 /** How far up a pasted copy lands (TradingView's paste, px). */
 const PASTE_SHIFT = 40;
@@ -66,6 +67,8 @@ export interface UserDrawingDeps {
     chartBarMs(): number;
     /** The chart's timezone — axis time labels on vertical lines match the crosshair's time chip. */
     timeZone?(): string;
+    /** Open the renderer's indicator inputs dialog on a drawing's inputs (Drawing.inputsDialog). Optional. */
+    openInputsDialog?(row: IndicatorDialogRow, onChange: (c: InputsUIChange) => void): void;
     /** Snap a data point to the nearest candle (time + OHLC), per magnet `mode` + the cursor pixel. */
     snap(point: DrawingPoint, paneId: string, mode: SnapMode, cursorPx?: { x: number; y: number }): DrawingPoint;
     /** Set the sticky magnet mode (driven by the toolbar's 3-state button). */
@@ -953,6 +956,11 @@ export class UserDrawingController implements IDrawingsRendererPort {
             this.editTextInline(hit.id); // double-click a callout / text label → edit its text in place
             return true;
         }
+        if (hit && hit.inputsDialog()) {
+            this.openSettingsById(hit.id, x, y); // select it, as a click does
+            this.openInputsFor(hit.id); // double-click an indicator-style drawing → its settings dialog
+            return true;
+        }
         return hit != null;
     }
 
@@ -1374,7 +1382,26 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 this.popup.close();
                 this.emit({ kind: 'delete', ids: [id] });
             },
+            openInputs: () => this.openInputsFor(id),
         }, this.onPopupDismissed);
+    }
+
+    /** Open drawing `id`'s indicator-style dialog (Drawing.inputsDialog); false when it has none. */
+    private openInputsFor(id: string): boolean {
+        const d = this.drawings.find((x) => x.id === id);
+        const spec = d?.inputsDialog();
+        if (!d || !spec || !this.deps.openInputsDialog) return false;
+        this.deps.openInputsDialog(
+            { id: `drawing:${id}`, title: spec.title, inputs: spec.inputs, values: { ...spec.values }, props: [], propValues: {} },
+            (c) => {
+                const live = this.drawings.find((x) => x.id === id);
+                if (!live) return;
+                live.applySettings({ [`${spec.path}.${c.key}`]: c.value });
+                this.render();
+                this.emit({ kind: 'edit', doc: live.serialize() });
+            },
+        );
+        return true;
     }
 
     /** A plain click on the empty plot: drop the selection. The popup's dismiss-on-outside-press

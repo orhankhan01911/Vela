@@ -1789,6 +1789,7 @@ export class NativeRenderer implements IChartRenderer {
         this.userDrawings = new UserDrawingController(this.wrapper, this.plot, this.drawingsCanvas, {
             projector: () => this.drawingProjector(),
             dpr: () => this.coords.dpr,
+            openInputsDialog: (row, onChange) => this.inputsUI?.openCustomDialog(row, onChange),
             theme: () => this.theme,
             requestScaleUpdate: () => this.scheduler.invalidate(InvalidateLevel.Light),
             seriesBoundaries: (paneId) => this.scene.seriesBoundaries(paneId),

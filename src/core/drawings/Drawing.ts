@@ -6,6 +6,31 @@ import type { SettingsSchema } from './schema';
 import { compactIntervals, type IntervalVisibility } from './intervals';
 import { readAnchor, writeAnchor, type BarAxis } from './futureAnchors';
 import type { VelaTheme } from '../options';
+import type { InputSchema, InputValue } from '../model/inputs';
+
+/**
+ * An indicator-style settings dialog for a drawing ({@link Drawing.inputsDialog}): the renderer opens its indicator
+ * inputs dialog (tabs, groups, inline rows, `when` gates, phone sheet) on these inputs, and every edit lands on the
+ * drawing as the settings patch `{ '<path>.<key>': value }`.
+ */
+export interface DrawingInputsDialog {
+    title: string;
+    inputs: InputSchema[];
+    values: Record<string, InputValue>;
+    /** Settings path the values live under on the drawing, e.g. `'of'` for `drawing.of.<key>`. */
+    path: string;
+}
+
+/** An extra button on a drawing's floating toolbar ({@link Drawing.toolbarActions}). */
+export interface DrawingToolbarAction {
+    id: string;
+    /** Tooltip / accessible name. */
+    label: string;
+    /** Inline SVG markup. */
+    icon: string;
+    /** Run on press; `anchor` is the button (a menu opens from it). */
+    run(anchor: HTMLElement): void;
+}
 
 /**
  * The interactive user-drawing types. The lean-core set ships first; new types
@@ -260,6 +285,19 @@ export abstract class Drawing {
      */
     paintSelf(_ctx: CanvasRenderingContext2D, _proj: Projector, _theme: VelaTheme): boolean {
         return false;
+    }
+
+    /**
+     * Settings shown in the renderer's INDICATOR inputs dialog instead of the drawing settings dialog: for a
+     * host-registered type whose settings are an indicator's inputs. Null (default) keeps the drawing dialog.
+     */
+    inputsDialog(): DrawingInputsDialog | null {
+        return null;
+    }
+
+    /** Extra buttons on the drawing's floating toolbar (e.g. a host's Templates menu). Default none. */
+    toolbarActions(): DrawingToolbarAction[] {
+        return [];
     }
 
     /**
