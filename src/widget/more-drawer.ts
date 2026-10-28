@@ -90,6 +90,25 @@ const CSS = `
     color: var(--vela-fg-muted);
 }
 .vela-md-empty { padding: 18px 2px; color: var(--vela-fg-muted); font-size: 13px; }
+/* The finder at the top of the main view: the list keeps growing, so typing a word beats scrolling for it. */
+.vela-md-search {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 40px;
+    margin: 0 0 8px;
+    padding: 0 12px;
+    border: 1px solid var(--vela-border);
+    border-radius: 10px;
+    background: var(--vela-surface-elev);
+    color: var(--vela-fg-bright);
+    font: inherit;
+    font-size: 16px; /* under 16px iOS zooms the page in on focus */
+    outline: none;
+}
+.vela-md-search:focus { border-color: var(--vela-accent, var(--vela-fg-muted)); }
+.vela-md-search::placeholder { color: var(--vela-fg-muted); }
+.vela-md-search::-webkit-search-cancel-button { filter: grayscale(1); }
 /* The desktop picker's Free-form / Presets switch and sync pills, touch-sized. */
 .vela-md-list .vela-lp-mode { margin: 12px 0 0; padding: 3px; }
 .vela-md-list .vela-lp-mode button { padding: 9px 8px; font-size: 13px; }
@@ -182,6 +201,7 @@ export class MoreDrawer {
     private render(): void {
         const doc = this.drawer.body.ownerDocument;
         this.drawer.body.replaceChildren();
+        this.drawer.body.style.minHeight = ''; // set by the finder while a search is on
 
         if (this.view !== 'main') {
             const back = doc.createElement('button');
@@ -210,6 +230,7 @@ export class MoreDrawer {
         text.className = 'vela-md-row-label';
         text.textContent = vt(label);
         el.appendChild(text);
+        el.dataset.find = label; // the English name: the finder matches it as well as the shown one
         if (opts.value) {
             const value = doc.createElement('span');
             value.className = 'vela-md-row-value';
@@ -231,6 +252,7 @@ export class MoreDrawer {
             b.disabled = !enabled;
             b.appendChild(iconEl(icon, doc));
             b.appendChild(doc.createTextNode(vt(label)));
+            b.dataset.find = label;
             b.addEventListener('click', () => {
                 run();
                 this.drawer.hide();
@@ -268,7 +290,68 @@ export class MoreDrawer {
             list.appendChild(this.row(doc, 'Alerts', { icon: 'bell', value: alertCount > 0 ? String(alertCount) : undefined, chevron: true, onClick: () => this.show('alerts') }));
         }
         for (const act of this.opts.actions()) list.appendChild(this.actionRow(doc, act));
-        this.drawer.body.appendChild(list);
+        const extra = doc.createElement('div'); // the finder's chart-type hits and its "no matches" line
+        this.drawer.body.prepend(this.finder(doc, actions, list, extra));
+        this.drawer.body.append(list, extra);
+    }
+
+    /** The search field over the main view: filters the action buttons and rows by their shown or English name, and
+     *  offers the chart types as rows of their own (one tap applies, like the Chart type sub-view). */
+    private finder(doc: Document, actions: HTMLElement, list: HTMLElement, extra: HTMLElement): HTMLElement {
+        const input = doc.createElement('input');
+        input.type = 'search';
+        input.className = 'vela-md-search';
+        input.placeholder = vt('Search the menu');
+        input.setAttribute('aria-label', vt('Search the menu'));
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        const body = this.drawer.body;
+        const filter = (): void => {
+            const q = norm(input.value);
+            // Keep the sheet as tall as it opened: a sheet that shrank with the results would drag the field (and the
+            // keyboard's target) down the screen while typing.
+            if (q && !body.style.minHeight) body.style.minHeight = `${body.offsetHeight}px`;
+            const hit = (el: HTMLElement): boolean => !q || matches(q, el.textContent ?? '') || matches(q, el.dataset.find ?? '');
+            let shown = 0;
+            let buttons = 0;
+            for (const el of Array.from(actions.children) as HTMLElement[]) {
+                const on = hit(el);
+                el.style.display = on ? '' : 'none';
+                if (on) buttons++;
+            }
+            actions.style.display = buttons ? '' : 'none';
+            shown += buttons;
+            for (const el of Array.from(list.querySelectorAll<HTMLElement>(':scope > .vela-md-row'))) {
+                const on = hit(el);
+                el.style.display = on ? '' : 'none';
+                if (on) shown++;
+            }
+            extra.replaceChildren();
+            if (!q) return;
+            const current = this.opts.priceStyle();
+            for (const style of this.opts.priceStyles()) {
+                if (!matches(q, vt(style.label)) && !matches(q, style.label)) continue;
+                const row = this.row(doc, style.label, {
+                    icon: style.icon,
+                    value: vt('Chart type'),
+                    checked: style.id === current,
+                    onClick: () => {
+                        this.opts.onPriceStyle(style.id);
+                        this.drawer.hide();
+                    },
+                });
+                extra.appendChild(row);
+                shown++;
+            }
+            if (!shown) {
+                const none = doc.createElement('div');
+                none.className = 'vela-md-empty';
+                none.textContent = vt('No matches');
+                extra.appendChild(none);
+            }
+        };
+        input.addEventListener('input', filter);
+        return input;
     }
 
     /** A contributed action's row: runs it and closes the drawer. */
@@ -415,4 +498,19 @@ export class MoreDrawer {
         }
         this.drawer.body.appendChild(list);
     }
+}
+
+/** Lower case, no accents, single spaces. */
+function norm(s: string): string {
+    return s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** "temp" finds "Templates", "smoothness" finds "Smooth": a query word that starts a label word, or a label word
+ *  (4+ letters) that starts the query word. Every query word must land. */
+function matches(q: string, label: string): boolean {
+    const l = norm(label);
+    if (!l) return false;
+    if (l.includes(q)) return true;
+    const words = l.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    return q.split(' ').every((w) => words.some((lw) => lw.startsWith(w) || (lw.length >= 4 && w.startsWith(lw))));
 }
