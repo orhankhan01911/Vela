@@ -56,5 +56,5 @@ describe('registerBuiltinIndicators', () => {
         registerBuiltinIndicators();
         expect(getNativeIndicator('pivot-points')).toBeTruthy();
         expect(getNativeIndicator('volume')).toBeTruthy();
-    });
+    }, 60_000); // imports the whole plugin: over 5 s when the full suite runs in parallel
 });
