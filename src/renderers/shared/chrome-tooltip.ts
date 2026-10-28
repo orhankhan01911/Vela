@@ -23,8 +23,9 @@ export interface ChromeTooltipOptions {
     placement?: 'below' | 'right' | 'above';
     /** Allow wrapping (long texts, e.g. an input's docs). Default false — one line. */
     wrap?: boolean;
-    /** A finger tap opens the tip (and the next tap anywhere closes it). For ⓘ hints, which a
-     *  touch screen otherwise has no way to read. Default false. */
+    /** A tap or a click opens the tip and keeps it open until the next press anywhere. For ⓘ hints:
+     *  a touch screen has no other way to read them, and clicking an ⓘ is what people do with a mouse
+     *  too (it used to CLOSE the tip, user 2026-10-28: "the i icon is not working"). Default false. */
     tapToOpen?: boolean;
 }
 
@@ -96,7 +97,7 @@ export function attachChromeTooltip(anchor: HTMLElement, opts: ChromeTooltipOpti
     // tap and stick around forever. pointerenter carries the pointer type; mouseenter
     // does not — which is why the mouse events are not used here.
     const arm = (e: PointerEvent): void => {
-        if (e.pointerType !== 'mouse') return;
+        if (e.pointerType !== 'mouse' || pinned) return;
         clear();
         timer = window.setTimeout(show, opts.delayMs ?? 700);
     };
@@ -106,6 +107,8 @@ export function attachChromeTooltip(anchor: HTMLElement, opts: ChromeTooltipOpti
     // reaching the row (the ⓘ sits inside the checkbox's label: it must not tick the box).
     let touchDown = false;
     let wasOpen = false;
+    /** Opened by a click: stays when the pointer leaves, until the next press anywhere. */
+    let pinned = false;
     let docListening = false;
     const offDoc = (): void => {
         if (!docListening) return;
@@ -115,34 +118,48 @@ export function attachChromeTooltip(anchor: HTMLElement, opts: ChromeTooltipOpti
     const onDocDown = (e: PointerEvent): void => {
         if (e.target instanceof Node && anchor.contains(e.target)) return;
         offDoc();
+        pinned = false;
         clear();
     };
     const down = (e: PointerEvent): void => {
         touchDown = e.pointerType !== 'mouse';
         wasOpen = tip !== null;
-        clear(); // a click answers the question the tip poses
+        // A plain anchor (a button): its click answers the question the tip poses. An ⓘ: the click opens it (`tap`).
+        if (!opts.tapToOpen) clear();
     };
     const tap = (e: MouseEvent): void => {
-        if (!opts.tapToOpen || !touchDown) return;
+        if (!opts.tapToOpen) return;
         e.preventDefault();
         e.stopPropagation();
         offDoc();
-        if (wasOpen) return;
-        show();
+        // A second press on a pinned ⓘ closes it; a click on an ⓘ the hover just opened keeps it open.
+        if (wasOpen && (touchDown || pinned)) {
+            pinned = false;
+            clear();
+            return;
+        }
+        if (!tip) {
+            clear();
+            show();
+        }
         if (tip) {
+            pinned = true;
             anchor.ownerDocument.addEventListener('pointerdown', onDocDown, true);
             docListening = true;
         }
     };
+    const leave = (): void => {
+        if (!pinned) clear();
+    };
 
     anchor.addEventListener('pointerenter', arm);
-    anchor.addEventListener('pointerleave', clear);
+    anchor.addEventListener('pointerleave', leave);
     anchor.addEventListener('pointerdown', down);
     anchor.addEventListener('click', tap);
 
     return () => {
         anchor.removeEventListener('pointerenter', arm);
-        anchor.removeEventListener('pointerleave', clear);
+        anchor.removeEventListener('pointerleave', leave);
         anchor.removeEventListener('pointerdown', down);
         anchor.removeEventListener('click', tap);
         offDoc();

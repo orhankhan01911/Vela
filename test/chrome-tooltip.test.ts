@@ -74,15 +74,36 @@ describe('chromeHint', () => {
         expect(tipOf('What this does')).toBeUndefined();
     });
 
-    it('a mouse click still closes it and passes through', () => {
+    // 2026-10-28 (user: "the i icon is not working"): a mouse click on an ⓘ CLOSED the tip the hover had just opened,
+    // and a click before the hover delay cancelled it, so clicking the ⓘ showed nothing.
+    it('a mouse click opens it and keeps it open after the pointer leaves, without ticking the box', () => {
+        const { el, box } = setup();
+        el.dispatchEvent(pointer('pointerdown', 'mouse'));
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        expect(tipOf('What this does')).toBeDefined();
+        expect(box.checked).toBe(false);
+        el.dispatchEvent(pointer('pointerleave', 'mouse'));
+        expect(tipOf('What this does')).toBeDefined();
+        document.body.dispatchEvent(pointer('pointerdown', 'mouse'));
+        expect(tipOf('What this does')).toBeUndefined();
+    });
+
+    it('a click on the tip the hover opened keeps it; a second click closes it', () => {
         vi.useFakeTimers();
         const { el } = setup();
         el.dispatchEvent(pointer('pointerenter', 'mouse'));
         vi.advanceTimersByTime(300);
-        el.dispatchEvent(pointer('pointerdown', 'mouse'));
-        const click = new MouseEvent('click', { bubbles: true, cancelable: true });
-        el.dispatchEvent(click);
-        expect(click.defaultPrevented).toBe(false);
+        const click = () => {
+            el.dispatchEvent(pointer('pointerdown', 'mouse'));
+            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        };
+        click();
+        expect(tipOf('What this does')).toBeDefined();
+        el.dispatchEvent(pointer('pointerleave', 'mouse'));
+        el.dispatchEvent(pointer('pointerenter', 'mouse'));
+        vi.advanceTimersByTime(300);
+        expect([...document.body.querySelectorAll('div')].filter((d) => d.textContent === 'What this does').length).toBe(1);
+        click();
         expect(tipOf('What this does')).toBeUndefined();
     });
 
