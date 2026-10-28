@@ -13,6 +13,7 @@ import { menuController, type MenuControllerOptions, type MenuItemDescriptor } f
 import { MENU_CSS, MENU_STYLE_ID } from './styles';
 import * as zagMenu from '@zag-js/menu';
 import { vt } from '../../../i18n';
+import { Drawer } from '../drawer/view';
 
 export interface MenuOptions extends MenuControllerOptions {
     /** Element that opens the menu on click (gets the machine's trigger props). */
@@ -330,10 +331,44 @@ class Surface {
     }
 }
 
+/** The phone sheet's rows (a Menu opened on a phone with no visible button to hang from). */
+const SHEET_STYLE_ID = 'vela-menu-sheet';
+const SHEET_CSS = `
+.vela-msheet { padding: 2px 0 6px; }
+.vela-msheet-row { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 6px; border-radius: 8px; cursor: pointer; color: var(--vela-fg-bright); font-size: 15px; -webkit-tap-highlight-color: transparent; }
+.vela-msheet-row:active { background: var(--vela-hover); }
+.vela-msheet-row[aria-checked='true']:not([data-toggle]) { background: var(--vela-hover-strong); font-weight: 600; }
+.vela-msheet-row[aria-disabled='true'] { opacity: 0.4; cursor: default; }
+.vela-msheet-row[data-sep] { margin-top: 6px; border-top: 1px solid var(--vela-border); border-radius: 0 0 8px 8px; }
+.vela-msheet-row .vela-icon, .vela-msheet-row > svg { flex: none; width: 18px; height: 18px; font-size: 18px; color: var(--vela-fg-muted); }
+.vela-msheet-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vela-msheet-hint, .vela-msheet-tick { flex: none; color: var(--vela-fg-muted); font-size: 13px; }
+.vela-msheet-back { font-weight: 600; border-bottom: 1px solid var(--vela-border); border-radius: 0; margin-bottom: 4px; }
+.vela-msheet-row .vela-menu-switch { flex: none; }
+`;
+
+/** A phone (touch screen up to a foldable's width): menus without a visible button open as a bottom sheet. */
+function phoneLike(doc: Document): boolean {
+    const win = doc.defaultView;
+    if (!win) return false;
+    let coarse = false;
+    try {
+        coarse = win.matchMedia('(pointer: coarse)').matches;
+    } catch {
+        /* no matchMedia (tests): not a phone */
+    }
+    return coarse && win.innerWidth < 900;
+}
+
 export class Menu {
     private readonly root: Surface;
+    private readonly opts: MenuOptions;
+    private items: readonly MenuItemDescriptor[];
+    private sheet: Drawer | null = null;
 
     constructor(opts: MenuOptions) {
+        this.opts = opts;
+        this.items = opts.items;
         const anchor = opts.trigger ?? opts.host ?? document.body;
         const doc = anchor.ownerDocument;
         injectStyles(MENU_STYLE_ID, MENU_CSS, doc);
@@ -359,7 +394,115 @@ export class Menu {
     }
 
     open(): void {
-        this.api.setOpen(true);
+        if (this.sheetMode()) this.openSheet();
+        else this.api.setOpen(true);
+    }
+
+    /** On a phone a menu with no visible button to hang from opened as a small dropdown pinned in a corner, floating
+     *  over the chart (the language picker, Add widget and Templates from the More sheet; user report 2026-10-28,
+     *  "kind of slop", the third time). There it opens as a bottom sheet like the phone's other menus. */
+    private sheetMode(): boolean {
+        const anchor = this.opts.trigger ?? this.opts.host ?? document.body;
+        const t = this.opts.trigger;
+        const triggerShown = !!t && t.isConnected && t.getClientRects().length > 0;
+        return !triggerShown && phoneLike(anchor.ownerDocument);
+    }
+
+    private openSheet(): void {
+        const anchor = this.opts.host ?? this.opts.trigger ?? document.body;
+        const doc = anchor.ownerDocument;
+        injectStyles(SHEET_STYLE_ID, SHEET_CSS, doc);
+        this.sheet?.destroy();
+        const stack: Array<{ title: string; items: readonly MenuItemDescriptor[] }> = [];
+        const sheet: Drawer = new Drawer({
+            host: this.opts.host ?? doc.body,
+            onOpenChange: (open) => {
+                this.opts.onOpenChange?.(open);
+                if (open) return;
+                setTimeout(() => sheet.destroy(), 0);
+                if (this.sheet === sheet) this.sheet = null;
+            },
+        });
+        this.sheet = sheet;
+        const render = (items: readonly MenuItemDescriptor[]): void => {
+            sheet.body.replaceChildren();
+            const list = doc.createElement('div');
+            list.className = 'vela-msheet';
+            list.setAttribute('role', 'menu');
+            const top = stack[stack.length - 1];
+            if (top) {
+                const back = doc.createElement('button');
+                back.type = 'button';
+                back.className = 'vela-msheet-row vela-msheet-back';
+                back.appendChild(iconEl('chevron-left', doc));
+                const t = doc.createElement('span');
+                t.className = 'vela-msheet-label';
+                t.textContent = vt(top.title);
+                back.appendChild(t);
+                back.addEventListener('click', () => {
+                    stack.pop();
+                    render(stack[stack.length - 1]?.items ?? this.items);
+                });
+                list.appendChild(back);
+            }
+            for (const item of items) {
+                const row = doc.createElement('button');
+                row.type = 'button';
+                row.className = 'vela-msheet-row';
+                row.dataset.id = item.id;
+                row.setAttribute('role', item.toggle ? 'menuitemcheckbox' : item.checked !== undefined ? 'menuitemradio' : 'menuitem');
+                if (item.checked !== undefined) row.setAttribute('aria-checked', String(!!item.checked));
+                if (item.toggle) row.dataset.toggle = '1';
+                if (item.separatorBefore) row.dataset.sep = '1';
+                if (item.disabled) row.setAttribute('aria-disabled', 'true');
+                if (item.icon) row.appendChild(iconEl(item.icon, doc));
+                const label = doc.createElement('span');
+                label.className = 'vela-msheet-label';
+                label.textContent = vt(item.label);
+                row.appendChild(label);
+                if (item.hint) {
+                    const hint = doc.createElement('span');
+                    hint.className = 'vela-msheet-hint';
+                    hint.textContent = item.hint;
+                    row.appendChild(hint);
+                }
+                if (item.toggle) {
+                    const sw = doc.createElement('span');
+                    sw.className = 'vela-menu-switch' + (item.checked ? ' on' : '');
+                    sw.setAttribute('aria-hidden', 'true');
+                    row.appendChild(sw);
+                } else if (item.submenu) {
+                    row.appendChild(iconEl('chevron-right', doc));
+                } else if (item.checked) {
+                    const tick = doc.createElement('span');
+                    tick.className = 'vela-msheet-tick';
+                    tick.textContent = '✓';
+                    row.appendChild(tick);
+                }
+                row.addEventListener('click', () => {
+                    if (item.disabled) return;
+                    if (item.submenu) {
+                        stack.push({ title: item.label, items: item.submenu });
+                        render(item.submenu);
+                        return;
+                    }
+                    if (item.toggle) {
+                        // A switch keeps the sheet open, like the dropdown keeps itself open.
+                        this.opts.onSelect?.(item.id);
+                        const on = row.getAttribute('aria-checked') !== 'true';
+                        row.setAttribute('aria-checked', String(on));
+                        row.querySelector('.vela-menu-switch')?.classList.toggle('on', on);
+                        return;
+                    }
+                    sheet.hide();
+                    this.opts.onSelect?.(item.id);
+                });
+                list.appendChild(row);
+            }
+            sheet.body.appendChild(list);
+        };
+        render(this.items);
+        sheet.show();
     }
 
     /** Open anchored to a viewport point (context menus). */
@@ -372,15 +515,19 @@ export class Menu {
     }
 
     close(): void {
+        this.sheet?.hide();
         this.api.setOpen(false);
     }
 
     /** Swap the item descriptors (e.g. checked states) and re-project. */
     setItems(items: readonly MenuItemDescriptor[]): void {
+        this.items = items;
         this.root.setItems(items);
     }
 
     destroy(): void {
+        this.sheet?.destroy();
+        this.sheet = null;
         this.root.destroy();
     }
 }
