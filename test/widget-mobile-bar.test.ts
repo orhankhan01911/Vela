@@ -50,3 +50,60 @@ describe('MobileBar maximize stop', () => {
         expect(stop()!.hidden).toBe(true);
     });
 });
+
+describe('MobileBar swipe row', () => {
+    function full(): { host: HTMLElement; bar: MobileBar; hits: string[] } {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const hits: string[] = [];
+        const hit = (n: string) => () => hits.push(n);
+        const bar = new MobileBar(host, {
+            symbol: 'BINANCE:BTCUSDT',
+            timeframe: '60',
+            onSymbolClick: hit('symbol'),
+            onTimeframeClick: hit('tf'),
+            onIndicatorsClick: hit('indicators'),
+            onDrawingsClick: hit('drawings'),
+            onMoreClick: hit('more'),
+            onChartTypeClick: hit('charttype'),
+            onUndoClick: hit('undo'),
+            onRedoClick: hit('redo'),
+            onAlertsClick: hit('alerts'),
+            onScreenshotClick: hit('screenshot'),
+            onSettingsClick: hit('settings'),
+        });
+        return { host, bar, hits };
+    }
+
+    it('keeps every stop a direct child, symbol and timeframe first, the shortcuts after the three dots', () => {
+        const { host } = full();
+        const bar = host.querySelector('.vela-mobilebar')!;
+        const order = [...bar.children].filter((e) => e.tagName === 'BUTTON').map((e) => [...e.classList].find((c) => c !== 'vela-mb-item'));
+        expect(order).toEqual([
+            'vela-mb-symbol', 'vela-mb-tf', 'vela-mb-indicators', 'vela-mb-drawings', 'vela-mb-more',
+            'vela-mb-charttype', 'vela-mb-undo', 'vela-mb-redo', 'vela-mb-alerts', 'vela-mb-screenshot', 'vela-mb-settings',
+        ]);
+        // A host button placed before the three dots (Local's Ask) still finds it as a direct child.
+        expect(bar.querySelector(':scope > .vela-mb-more')).not.toBeNull();
+    });
+
+    it('routes each shortcut to its own handler', () => {
+        const { host, hits } = full();
+        for (const c of ['charttype', 'undo', 'redo', 'alerts', 'screenshot']) host.querySelector<HTMLButtonElement>(`.vela-mb-${c}`)!.click();
+        expect(hits).toEqual(['charttype', 'undo', 'redo', 'alerts', 'screenshot']);
+    });
+
+    it('omits a shortcut whose handler is not passed', () => {
+        mount(false); // passes none of the shortcuts
+        const host = document.body.lastElementChild!;
+        expect(host.querySelector('.vela-mb-undo')).toBeNull();
+        expect(host.querySelector('.vela-mb-charttype')).toBeNull();
+    });
+
+    it('dims undo and redo when history has nothing for them', () => {
+        const { host, bar } = full();
+        bar.setHistoryState(false, true);
+        expect(host.querySelector<HTMLButtonElement>('.vela-mb-undo')!.disabled).toBe(true);
+        expect(host.querySelector<HTMLButtonElement>('.vela-mb-redo')!.disabled).toBe(false);
+    });
+});

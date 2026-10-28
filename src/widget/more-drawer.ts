@@ -168,7 +168,7 @@ export interface MoreDrawerOptions {
     onOpenChange?: (open: boolean) => void;
 }
 
-type MoreView = 'main' | 'style' | 'layout' | 'alerts';
+export type MoreView = 'main' | 'style' | 'layout' | 'alerts';
 
 export class MoreDrawer {
     private readonly drawer: Drawer;
@@ -179,8 +179,10 @@ export class MoreDrawer {
         this.drawer = new Drawer({ host: opts.host, onOpenChange: opts.onOpenChange });
     }
 
-    open(): void {
-        this.view = 'main';
+    /** `view` opens straight on a sub-view (the phone bar's chart type and alerts stops); its back row still
+     *  leads to the main list. */
+    open(view: MoreView = 'main'): void {
+        this.view = view;
         this.render();
         this.drawer.show();
     }

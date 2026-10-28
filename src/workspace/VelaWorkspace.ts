@@ -42,7 +42,7 @@ import { chartType } from '../chart-types/registry';
 import { currentIntervalLabel } from '../widget/interval-menu';
 import { onIntervalSectionsChanged } from '../widget/interval-sections';
 import { DrawingsDrawer } from '../widget/drawings-drawer';
-import { MoreDrawer } from '../widget/more-drawer';
+import { MoreDrawer, type MoreView } from '../widget/more-drawer';
 import { TimezoneDrawer } from '../widget/timezone-drawer';
 import { PriceScaleDrawer } from '../widget/price-scale-drawer';
 import { DrawingPill } from '../widget/drawing-pill';
@@ -765,6 +765,15 @@ export class VelaWorkspace {
                       // per-cell hover cluster has no cursor to reveal it on mobile).
                       ...(this.monoLayout ? {} : { onMaximizeClick: () => this.toggleMobileMaximize() }),
                       onMoreClick: () => this.openMoreDrawer(),
+                      // Swipe-row shortcuts to what the three dots also list (same composition gates).
+                      onChartTypeClick: () => this.openMoreDrawer('style'),
+                      ...(topbarHas(this.topbarComp, 'undo-redo')
+                          ? { onUndoClick: () => this.active.history.undo(), onRedoClick: () => this.active.history.redo() }
+                          : {}),
+                      ...(topbarHas(this.topbarComp, 'alerts') ? { onAlertsClick: () => this.openMoreDrawer('alerts') } : {}),
+                      ...(topbarHas(this.topbarComp, 'screenshot')
+                          ? { onScreenshotClick: () => (this.screenshotOverride ? this.runOverride(this.screenshotOverride) : this.downloadScreenshot()) }
+                          : {}),
                       onSettingsClick: () => this.active.chart.renderer.openSettings(),
                   })
                 : null;
@@ -1439,7 +1448,10 @@ export class VelaWorkspace {
         this.mobileBar?.setTimeframe(cell.timeframe, currentIntervalLabel(cell.timeframe, this.context()));
         this.syncMobileMaximize(); // the new active cell may hold a maximized pane
         this.drawingPill?.onChart(cell.chart); // the pill mirrors the ACTIVE cell's tool state
-        const pushHistory = (): void => this.topbar.setHistoryState(cell.history.canUndo, cell.history.canRedo);
+        const pushHistory = (): void => {
+            this.topbar.setHistoryState(cell.history.canUndo, cell.history.canRedo);
+            this.mobileBar?.setHistoryState(cell.history.canUndo, cell.history.canRedo);
+        };
         this.historyUnsub?.();
         this.historyUnsub = cell.history.onChange(pushHistory);
         pushHistory();
@@ -2309,7 +2321,7 @@ export class VelaWorkspace {
         this.drawingsDrawer.open();
     }
 
-    private openMoreDrawer(): void {
+    private openMoreDrawer(view: MoreView = 'main'): void {
         // The drawer is the mobile counterpart of the topbar's tools — composition-
         // hidden entries lose their drawer rows too (handlers omitted ⇒ rows omitted).
         const has = (id: string): boolean => topbarHas(this.topbarComp, id);
@@ -2364,7 +2376,7 @@ export class VelaWorkspace {
             },
             onOpenChange: (open) => this.trackDialog(open),
         });
-        this.moreDrawer.open();
+        this.moreDrawer.open(view);
     }
 
     /** The catalog the layout menu lists: arrangements by chart count, the current one lit. */

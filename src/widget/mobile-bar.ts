@@ -1,9 +1,14 @@
-// Mobile bottom bar — the ONE navigation surface of the mobile chrome. Six stops, left
-// to right: symbol (fullscreen search), timeframe (drawer), indicators (fullscreen
-// picker), drawings (drawer), the three-dots drawer (everything else), and chart
-// settings. It replaces BOTH desktop bars: this stylesheet also carries the mobile
-// visibility flips for the topbar and the desktop bottombar, so the whole swap lives
-// in one place and follows the root's `data-layout` attribute with no JS.
+// Mobile bottom bar — the ONE navigation surface of the mobile chrome, a row you swipe
+// sideways like TradingView's. The symbol and timeframe stay pinned on the left
+// (position: sticky); every other stop has a fixed width and scrolls, so a new stop never
+// squeezes the others or forces things into the three dots. Left to right: symbol
+// (fullscreen search), timeframe (drawer), indicators (fullscreen picker), contributed
+// actions, drawings, maximize, the three-dots drawer, then chart type, undo, redo,
+// alerts, screenshot and chart settings. Every stop is a direct child of the bar, so a
+// host that places its own button `before()` the three dots keeps working. This
+// stylesheet also carries the mobile visibility flips for the topbar and the desktop
+// bottombar, so the whole swap lives in one place and follows the root's `data-layout`
+// attribute with no JS.
 import { iconEl } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
 import { parseSymbol } from '../data/ProviderRegistry';
@@ -18,19 +23,36 @@ const CSS = `
     display: none;
     align-items: stretch;
     gap: 2px;
-    padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px));
+    padding: 2px 6px calc(2px + env(safe-area-inset-bottom, 0px)) 0;
     border-top: 1px solid var(--vela-border);
     color: var(--vela-fg-muted);
+    background: var(--vela-bg);
     flex: none;
+    /* The swipe: a native horizontal scroller (momentum and rubber band come from the
+       browser), no scrollbar, and a sideways swipe never drags the page or the chart. */
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+}
+.vela-mobilebar::-webkit-scrollbar { display: none; }
+/* More stops past the right edge: fade that edge so the row reads as swipeable. */
+.vela-mobilebar[data-more-right] {
+    -webkit-mask-image: linear-gradient(to left, transparent 0, #000 28px);
+    mask-image: linear-gradient(to left, transparent 0, #000 28px);
 }
 [data-layout='mobile'] .vela-mobilebar { display: flex; }
 [data-layout='mobile'] .vela-widget-topbar { display: none; }
 [data-layout='mobile'] .vela-widget-bottombar { display: none; }
 .vela-mb-item {
     all: unset;
-    flex: 1 1 0;
-    min-width: 0;
+    flex: none;
+    box-sizing: border-box;
+    min-width: 46px;
     min-height: 44px;
+    padding: 0 4px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -44,6 +66,8 @@ const CSS = `
 }
 .vela-mb-item[hidden] { display: none !important; }
 .vela-mb-item:active { background: var(--vela-hover); }
+.vela-mb-item:disabled { opacity: 0.35; cursor: default; }
+.vela-mb-item:disabled:active { background: none; }
 .vela-mb-item .vela-icon { font-size: 18px; width: 18px; height: 18px; }
 /* A lit stop (the maximize toggle while something is isolated): the inverse
    "selected" chip — white on the dark theme, dark on the light one. */
@@ -51,8 +75,19 @@ const CSS = `
 /* Left-aligned contributed actions get their own stops (the built-in indicators
    slot) — the wrapper is layout-transparent so each stop flexes like a sibling. */
 .vela-mb-actions { display: contents; }
+/* Symbol and timeframe stay put while the rest scrolls under them (fixed widths, so
+   the timeframe knows where the symbol ends; the bar has no left padding, so nothing
+   shows through on the left). */
+.vela-mb-symbol, .vela-mb-tf {
+    position: sticky;
+    z-index: 1;
+    background: var(--vela-bg);
+    border-radius: 0;
+}
 .vela-mb-symbol {
-    flex: 1.6 1 0;
+    left: 0;
+    width: 98px;
+    padding-left: 10px;
     font-size: 14px;
     letter-spacing: 0.3px;
     white-space: nowrap;
@@ -60,8 +95,9 @@ const CSS = `
     text-overflow: ellipsis;
     display: block;
     line-height: 44px;
-    text-align: center;
+    text-align: left;
 }
+.vela-mb-tf { left: 98px; min-width: 50px; white-space: nowrap; box-shadow: 6px 0 6px -6px rgba(0, 0, 0, 0.35); }
 `;
 
 export interface MobileBarOptions {
@@ -80,6 +116,12 @@ export interface MobileBarOptions {
      *  {@link setMaximizeActive} lights the stop while something is isolated. */
     onMaximizeClick?: () => void;
     onMoreClick: () => void;
+    /** Each omitted ⇒ no stop. Shortcuts for what the three dots also list, in the swipe row after it. */
+    onChartTypeClick?: () => void;
+    onUndoClick?: () => void;
+    onRedoClick?: () => void;
+    onAlertsClick?: () => void;
+    onScreenshotClick?: () => void;
     onSettingsClick: () => void;
     /** Live widget context — left-aligned contributed actions (`align: 'left'`)
      *  project as icon-only stops in the indicators slot. */
@@ -95,6 +137,9 @@ export class MobileBar {
     /** Left-aligned contributed actions — filled by {@link renderActions}. */
     private readonly actionsHost: HTMLElement;
     private readonly opts: MobileBarOptions;
+    private readonly undoEl: HTMLButtonElement | null;
+    private readonly redoEl: HTMLButtonElement | null;
+    private readonly ro: ResizeObserver | null = null;
 
     constructor(host: HTMLElement, opts: MobileBarOptions) {
         this.opts = opts;
@@ -125,11 +170,55 @@ export class MobileBar {
         const onMaximize = opts.onMaximizeClick;
         this.maxEl = onMaximize ? item('vela-mb-maximize', 'Maximize chart', onMaximize, 'maximize') : null;
         const more = item('vela-mb-more', 'More', opts.onMoreClick, 'kebab');
+        const opt = (cls: string, label: string, onClick: (() => void) | undefined, icon: string): HTMLButtonElement[] => (onClick ? [item(cls, label, onClick, icon)] : []);
+        const chartType = opt('vela-mb-charttype', 'Chart type', opts.onChartTypeClick, 'style-line');
+        const [undo] = opt('vela-mb-undo', 'Undo', opts.onUndoClick, 'undo');
+        const [redo] = opt('vela-mb-redo', 'Redo', opts.onRedoClick, 'redo');
+        this.undoEl = undo ?? null;
+        this.redoEl = redo ?? null;
+        const alerts = opt('vela-mb-alerts', 'Alerts', opts.onAlertsClick, 'bell');
+        const shot = opt('vela-mb-screenshot', 'Screenshot', opts.onScreenshotClick, 'camera');
         const settings = item('vela-mb-settings', 'Chart settings', opts.onSettingsClick, 'gear');
 
-        this.el.append(this.symbolEl, this.tfEl, ...(indicators ? [indicators] : []), this.actionsHost, ...(drawings ? [drawings] : []), ...(this.maxEl ? [this.maxEl] : []), more, settings);
+        this.el.append(
+            this.symbolEl,
+            this.tfEl,
+            ...(indicators ? [indicators] : []),
+            this.actionsHost,
+            ...(drawings ? [drawings] : []),
+            ...(this.maxEl ? [this.maxEl] : []),
+            more,
+            ...chartType,
+            ...(undo ? [undo] : []),
+            ...(redo ? [redo] : []),
+            ...alerts,
+            ...shot,
+            settings,
+        );
         host.appendChild(this.el);
         this.renderActions();
+
+        // The fade on the right edge follows whether anything is still off screen there.
+        this.el.addEventListener('scroll', this.updateEdge, { passive: true });
+        const win = doc.defaultView;
+        if (win && typeof win.ResizeObserver === 'function') {
+            this.ro = new win.ResizeObserver(this.updateEdge);
+            this.ro.observe(this.el);
+        }
+        this.updateEdge();
+    }
+
+    private readonly updateEdge = (): void => {
+        const el = this.el;
+        const more = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+        if (more) el.dataset.moreRight = '';
+        else delete el.dataset.moreRight;
+    };
+
+    /** Dim undo / redo when there is nothing to undo / redo (the topbar does the same). */
+    setHistoryState(canUndo: boolean, canRedo: boolean): void {
+        if (this.undoEl) this.undoEl.disabled = !canUndo;
+        if (this.redoEl) this.redoEl.disabled = !canRedo;
     }
 
     /** Re-project the contributed actions placed on the bar (left-aligned by default —
@@ -155,6 +244,7 @@ export class MobileBar {
             });
             this.actionsHost.appendChild(b);
         }
+        this.updateEdge();
     }
 
     setSymbol(symbol: string): void {
@@ -183,6 +273,8 @@ export class MobileBar {
     }
 
     destroy(): void {
+        this.ro?.disconnect();
+        this.el.removeEventListener('scroll', this.updateEdge);
         this.el.remove();
     }
 }

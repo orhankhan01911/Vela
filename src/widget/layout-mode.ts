@@ -13,17 +13,23 @@ export const MOBILE_BREAKPOINT_PX = 640;
 /** With a coarse pointer (touch-first device) the mobile chrome applies wider —
  *  desktop affordances assume hover, which a coarse pointer does not have. */
 export const COARSE_BREAKPOINT_PX = 920;
+/** A touch screen whose SHORT side is under this is a phone: it keeps the mobile chrome at any width, so a phone
+ *  turned to landscape (iPhone Pro Max: 932 x 430) gets the phone layout, not the desktop one. The screen's size,
+ *  not the container's: an on-screen keyboard shrinks the container but never the screen, so a tablet does not
+ *  flip to mobile while someone types. */
+export const PHONE_SHORT_SIDE_PX = 520;
 
 /**
  * Resolve the effective layout mode. Pure — the controller feeds it measurements.
  * An unmeasured container (width 0: display:none, not yet attached) stays desktop
  * until a real measurement arrives, so nothing flashes mobile during construction.
  */
-export function resolveLayoutMode(option: LayoutModeOption, width: number, coarsePointer: boolean): LayoutMode {
+export function resolveLayoutMode(option: LayoutModeOption, width: number, coarsePointer: boolean, screenShortSide = Infinity): LayoutMode {
     if (option !== 'auto') return option;
     if (width <= 0) return 'desktop';
     if (width < MOBILE_BREAKPOINT_PX) return 'mobile';
     if (coarsePointer && width < COARSE_BREAKPOINT_PX) return 'mobile';
+    if (coarsePointer && screenShortSide < PHONE_SHORT_SIDE_PX) return 'mobile';
     return 'desktop';
 }
 
@@ -49,7 +55,7 @@ export class LayoutModeController {
             // Older WebViews only ship addListener — fall back rather than throw.
             if (typeof this.mql.addEventListener === 'function') this.mql.addEventListener('change', this.onMediaChange);
         }
-        this.mode = resolveLayoutMode(option, el.getBoundingClientRect().width, this.mql?.matches ?? false);
+        this.mode = resolveLayoutMode(option, el.getBoundingClientRect().width, this.mql?.matches ?? false, this.shortSide());
         el.dataset.layout = this.mode;
         if (option === 'auto' && win && typeof win.ResizeObserver === 'function') {
             this.ro = new win.ResizeObserver(() => this.evaluate());
@@ -75,8 +81,14 @@ export class LayoutModeController {
         this.listeners.clear();
     }
 
+    /** The screen's short side in CSS px (Infinity when unknown). */
+    private shortSide(): number {
+        const sc = this.el.ownerDocument.defaultView?.screen;
+        return sc && sc.width > 0 && sc.height > 0 ? Math.min(sc.width, sc.height) : Infinity;
+    }
+
     private evaluate(): void {
-        const next = resolveLayoutMode(this.option, this.el.getBoundingClientRect().width, this.mql?.matches ?? false);
+        const next = resolveLayoutMode(this.option, this.el.getBoundingClientRect().width, this.mql?.matches ?? false, this.shortSide());
         if (next === this.mode) return;
         this.mode = next;
         this.el.dataset.layout = next;
