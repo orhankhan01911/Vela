@@ -141,6 +141,20 @@ describe('drag-release fling', () => {
     });
 });
 
+describe('time axis drag (TradingView: zooms horizontally, finger and mouse alike)', () => {
+    it('a finger dragging the time axis changes the bar spacing, keeps the right edge, and never flings', () => {
+        const { deps, touchDrag } = touchHarness();
+        touchDrag(400, 210, 0, -100); // drag left along the time axis
+        const last = deps.apply.mock.calls[deps.apply.mock.calls.length - 1]![0] as { barSpacing: number; rightOffset: number };
+        expect(last.barSpacing).toBeGreaterThan(50); // drag left = wider bars (zoom in)
+        expect(last.rightOffset).toBe(2); // right edge pinned
+        expect(deps.fling).not.toHaveBeenCalled();
+        touchDrag(400, 210, 1000, 100); // drag right = narrower bars (zoom out)
+        const out = deps.apply.mock.calls[deps.apply.mock.calls.length - 1]![0] as { barSpacing: number };
+        expect(out.barSpacing).toBeLessThan(50);
+    });
+});
+
 describe('touch double-tap (the touch dblclick)', () => {
     it('data area: a quick tap pair toggles pane maximize (dataDblClick), one tap does not', () => {
         const { deps, tap } = touchHarness();
