@@ -99,9 +99,26 @@ if (!ONLY.length || ONLY.includes("ruler")) {
     await p.locator('[aria-label="Measure"]').first().click();
     await p.mouse.click(500, 500); await p.mouse.move(800, 300, { steps: 8 }); await p.waitForTimeout(300);
     await p.screenshot({ path: `${OUT}/ruler.png` });
+    // Read the page's pixels: is there TradingView's blue at the label, on the price scale and on the time axis?
+    r.pixels = await p.evaluate(() => {
+      const blueAt = (x, y) => {
+        for (const c of document.querySelectorAll("canvas")) {
+          const b = c.getBoundingClientRect();
+          if (x < b.left || x > b.right || y < b.top || y > b.bottom) continue;
+          const g = c.getContext("2d", { willReadFrequently: true });
+          if (!g) continue;
+          const k = c.width / b.width;
+          const d = g.getImageData(Math.round((x - b.left) * k), Math.round((y - b.top) * k), 1, 1).data;
+          if (d[3] > 0 && d[2] > 150 && d[2] > d[0] + 60) return true; // blue
+        }
+        return false;
+      };
+      const plot = [...document.querySelectorAll("canvas")].map((c) => c.getBoundingClientRect()).sort((a, b) => b.width * b.height - a.width * a.height)[0];
+      return { label: blueAt(650, 275), priceScale: blueAt(plot.right - 30, 400), timeAxis: blueAt(650, plot.bottom - 10) };
+    });
     await p.mouse.click(800, 300); await p.waitForTimeout(300);
-    r.note = "look at ruler.png: blue box, arrows, label (change (pct) ticks / bars, span / Vol), span shaded on both scales with blue end chips";
-    r.look = true; // a picture to check by eye: no automatic verdict
+    r.ok = r.pixels.label && r.pixels.priceScale && r.pixels.timeAxis;
+    r.note = "ruler.png shows it: blue box, arrows, label, span shaded on both scales with blue end chips";
   } catch (e) { r.err = String(e).slice(0, 160); }
   console.log(JSON.stringify(r));
 }

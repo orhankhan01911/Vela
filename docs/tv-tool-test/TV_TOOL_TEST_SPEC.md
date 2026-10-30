@@ -91,7 +91,7 @@ point on the placed shape (a click there selects it); `DPR` is the device pixel 
 The audit has 26 tools: 24 are placed on the chart; Zoom and the Ruler are modes. TradingView has no shape or dialog
 for those two (it refuses to create them: "Cannot create \"measure\" shape"), so the sweep checks their behaviour against
 the facts read from TradingView (table at the end): Zoom in narrows the view, Zoom out shows, restores the view and hides;
-the Ruler's picture (`DIR/ruler.png`) shows the box, arrows, label and the shaded scales with blue end chips.
+the Ruler draws its blue label and shades both scales (read from the pixels; `DIR/ruler.png` shows the box, arrows, label and blue end chips).
 
 1. `node e2e/zz-sweep.mjs DIR > DIR/run2.txt` (a copy of `sweep-probe.mjs`; `DIR` must exist; add `tool,tool` after
    `DIR` to run only some, e.g. `zoom,ruler`): places the 24 placed tools fresh on Local, runs Zoom and the Ruler, and prints, per tool, the saved
@@ -100,7 +100,7 @@ the Ruler's picture (`DIR/ruler.png`) shows the box, arrows, label and the shade
    own shapes, removed after. It returns `'started'` and takes about a minute. Then call `ui_evaluate` with
    `JSON.stringify(window.__wkDone && window.__wkRes)` until it is not `false`. Save it as `DIR/tv.json` with
    `~/.nvm/versions/node/v22.22.3/bin/node <probes>/tv-save-result.mjs DIR/tv.json` (reads it over CDP, no copying; it refuses and exits 1 if step 2 has not finished: wait and run it again).
-3. `python3 ~/Desktop/claude_folder/worktrees/vela-alert-pin/docs/tv-tool-test/probes/sweep-compare.py DIR`. It puts the two side by side and prints `OK`, the real differences, or `REDO` when one side failed to read a tool (TradingView's: run step 2 again; ours: rerun step 1 for that tool). Zoom prints its own `OK`; the Ruler prints `LOOK`: open `DIR/ruler.png` and check it against the Ruler facts (known, expected ones
+3. `python3 ~/Desktop/claude_folder/worktrees/vela-alert-pin/docs/tv-tool-test/probes/sweep-compare.py DIR`. It puts the two side by side and prints `OK`, the real differences, or `REDO` when one side failed to read a tool (TradingView's: run step 2 again; ours: rerun step 1 for that tool). Zoom and the Ruler print their own `OK` (the Ruler reads the page's pixels for TradingView's blue at its label, on the price scale and on the time axis; `DIR/ruler.png` shows it) (known, expected ones
    are skipped: bold/italic icons, "time" for "bar", values from TradingView's saved templates).
 4. `bash ~/Desktop/claude_folder/worktrees/vela-alert-pin/docs/tv-tool-test/probes/tile.sh DIR` puts the screenshots into one numbered sheet (`DIR/sheet.png`, numbers listed in the
    output). Look at it.
