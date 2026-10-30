@@ -24,10 +24,15 @@ def words(t):
     return out
 for l in open(S+'/run2.txt'):
     if not l.startswith('{'): continue
-    d=json.loads(l); t=tv.get(M[d['tool']])
+    d=json.loads(l)
+    if d['tool'] in ('zoom', 'ruler'):  # modes: no TradingView dialog; the sweep checks their behaviour itself
+        print(('OK  ' if d.get('ok') else 'FAIL'), d['tool'], d.get('err', '')); continue
+    t=tv.get(M[d['tool']])
     if not t or 'tabs' not in t:
         print('REDO', d['tool'], '(TradingView entry missing or an error: rerun tv-read-dialogs.js for it)'); continue
     out=[]
+    if not d.get('tabs'):
+        print('REDO', d['tool'], '(our dialog did not open in this run: run the sweep for this tool again)'); continue
     if d.get('tabs')!=t['tabs']: out.append(f"TABS ours {d.get('tabs')} tv {t['tabs']}")
     for tab in t['tabs']:
         o=words((d.get('rows') or {}).get(tab,'')); v=words(t['rows'].get(tab,''))

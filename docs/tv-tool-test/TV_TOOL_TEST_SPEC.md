@@ -100,7 +100,7 @@ the Ruler's picture (`DIR/ruler.png`) shows the box, arrows, label and the shade
    own shapes, removed after. It returns `'started'` and takes about a minute. Then call `ui_evaluate` with
    `JSON.stringify(window.__wkDone && window.__wkRes)` until it is not `false`. Save it as `DIR/tv.json` with
    `~/.nvm/versions/node/v22.22.3/bin/node <probes>/tv-save-result.mjs DIR/tv.json` (reads it over CDP, no copying).
-3. `python3 ~/Desktop/claude_folder/worktrees/vela-alert-pin/docs/tv-tool-test/probes/sweep-compare.py DIR`. It puts the two side by side and prints `OK`, the real differences, or `REDO` when TradingView's entry for a tool failed (run step 2 again) (known, expected ones
+3. `python3 ~/Desktop/claude_folder/worktrees/vela-alert-pin/docs/tv-tool-test/probes/sweep-compare.py DIR`. It puts the two side by side and prints `OK`, the real differences, or `REDO` when one side failed to read a tool (TradingView's: run step 2 again; ours: rerun step 1 for that tool). Zoom and the Ruler print their own `OK` (known, expected ones
    are skipped: bold/italic icons, "time" for "bar", values from TradingView's saved templates).
 4. `bash ~/Desktop/claude_folder/worktrees/vela-alert-pin/docs/tv-tool-test/probes/tile.sh DIR` puts the screenshots into one numbered sheet (`DIR/sheet.png`, numbers listed in the
    output). Look at it.
