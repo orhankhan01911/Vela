@@ -8,6 +8,7 @@ import {
     GannFan,
     GannSquare,
     PitchforkBase,
+    PITCHFORK_STYLES,
     FixedRangeVolumeProfile,
     FixedRangeTpoProfile,
     INTERVAL_UNITS,
@@ -31,6 +32,7 @@ import {
     type IntervalUnit,
     type IntervalVisibility,
 } from '../../../core/drawings';
+import { BEARISH, BULLISH } from '../../../core/palette';
 import { ALONG_LINE_TEXT_TYPES, type SettingsField } from '../../../core/drawings/schema';
 import { Menu } from '../../../ui/components/menu';
 import { contrastColor } from '../../shared/drawing-geometry';
@@ -260,6 +262,10 @@ export class DrawingSettingsDialog {
             this.buildChannelStyle(grid, drawing, actions);
             return;
         }
+        if (drawing instanceof PitchforkBase) {
+            this.buildPitchforkStyle(grid, drawing, actions);
+            return;
+        }
         const fields = styleFields(drawing);
         const has = (p: string): boolean => fields.some((f) => f.path === p);
         const done = new Set<string>();
@@ -348,15 +354,32 @@ export class DrawingSettingsDialog {
     /** A channel level's line button: its color (the drawing's when unset), thickness and dash. */
     private levelLineButton(ch: ParallelChannel, i: number, actions: SettingsActions): HTMLElement {
         const lv = ch.levels[i]!;
-        let color = lv.color || ch.style.lineColor || DEFAULT_DRAWING_COLOR;
-        let w = lv.lineWidth;
-        let ls: string = lv.lineStyle;
+        const el = this.pathLineButton(
+            { color: lv.color || ch.style.lineColor || DEFAULT_DRAWING_COLOR, width: lv.lineWidth, style: lv.lineStyle },
+            { color: `levels.${i}.color`, width: `levels.${i}.lineWidth`, style: `levels.${i}.lineStyle` },
+            actions,
+        );
+        el.dataset.role = `level-${i}-line`;
+        return el;
+    }
+
+    /** A line button over three settings paths (color, thickness, dash): a channel level, a pitchfork level or median.
+     *  `onSetter` hands back a setter so another control (Use one color) can repaint its swatch. */
+    private pathLineButton(
+        init: { color: string; width: number; style: string },
+        paths: { color: string; width: string; style: string },
+        actions: SettingsActions,
+        onSetter?: (set: (color: string) => void) => void,
+    ): HTMLElement {
+        let color = init.color;
+        let w = init.width;
+        let ls = init.style;
         const field: ColorField = new ColorField({
             theme: this.theme,
             getVal: () => color,
             onVal: (v) => {
                 color = v;
-                actions.patch({ [`levels.${i}.color`]: v });
+                actions.patch({ [paths.color]: v });
             },
             line: () => ({ width: w, style: ls }),
             popover: { align: 'start' },
@@ -367,20 +390,23 @@ export class DrawingSettingsDialog {
                     caption('Thickness'),
                     segmented([1, 2, 3, 4].map((n) => ({ value: String(n), sample: { width: n, style: 'solid' } })), String(w), (v) => {
                         w = Number(v);
-                        actions.patch({ [`levels.${i}.lineWidth`]: w });
+                        actions.patch({ [paths.width]: w });
                         field.paint();
                     }),
                     caption('Line style'),
                     segmented(LINE_STYLE_OPTIONS.map((o) => ({ value: o.value, sample: { width: 2, style: o.value } })), ls, (v) => {
                         ls = v;
-                        actions.patch({ [`levels.${i}.lineStyle`]: v });
+                        actions.patch({ [paths.style]: v });
                         field.paint();
                     }),
                 );
                 return box;
             },
         });
-        field.el.dataset.role = `level-${i}-line`;
+        onSetter?.((c) => {
+            color = c;
+            field.paint();
+        });
         return field.el;
     }
 
@@ -1301,34 +1327,76 @@ export class DrawingSettingsDialog {
         grid.appendChild(fieldSection('Levels', { variant: 'inputs' }));
     }
 
-    /** TradingView's pitchfork settings: the median's color, the band fills and extending the lines back. */
+    /** TradingView's pitchfork Style tab: Extend lines, the median's line button, the nine level rows (a switch, the
+     *  level's value, its line button), Use one color, Background (a switch and its opacity) and the Style dropdown. */
     private buildPitchforkStyle(grid: HTMLElement, pf: PitchforkBase, actions: SettingsActions): void {
-        grid.appendChild(fieldSection('Style', { variant: 'inputs', first: true }));
-        let cur = pf.medianColor || pf.style.lineColor;
-        const median = buildFieldControl({
-            kind: 'color',
+        const extend = fieldRow({ label: 'Extend lines', bool: true, toggle: { id: uid(), checked: pf.extendLines, onChange: (v) => actions.patch({ extendLines: v }) } });
+        extend.dataset.role = 'extend-lines';
+        grid.appendChild(extend);
+        const median = this.pathLineButton(
+            { color: pf.medianColor || pf.style.lineColor || DEFAULT_DRAWING_COLOR, width: pf.medianWidth ?? pf.style.lineWidth ?? 1, style: pf.medianStyle ?? pf.style.lineStyle ?? 'solid' },
+            { color: 'medianColor', width: 'medianWidth', style: 'medianStyle' },
+            actions,
+        );
+        median.dataset.role = 'median-line';
+        grid.appendChild(fieldRow({ label: 'Median', control: [median], fit: true }));
+        const levelColors: Array<(c: string) => void> = [];
+        pf.levels.forEach((lv, i) => {
+            const coeff = buildFieldControl({
+                kind: 'number',
+                value: lv.ratio,
+                step: 0.1,
+                fill: false,
+                commit: 'blur',
+                onChange: (v) => { if (Number.isFinite(v)) actions.patch({ [`levels.${i}.ratio`]: v }); },
+            });
+            coeff.el.style.width = '96px';
+            coeff.el.style.flex = 'none';
+            coeff.el.dataset.role = `level-${i}-coeff`;
+            const line = this.pathLineButton(
+                { color: lv.color, width: lv.lineWidth ?? pf.style.lineWidth ?? 1, style: lv.lineStyle ?? pf.style.lineStyle ?? 'solid' },
+                { color: `levels.${i}.color`, width: `levels.${i}.lineWidth`, style: `levels.${i}.lineStyle` },
+                actions,
+                (set) => levelColors.push(set),
+            );
+            line.dataset.role = `level-${i}-line`;
+            const row = fieldRow({ label: '', toggle: { id: uid(), checked: lv.enabled, onChange: (v) => actions.patch({ [`levels.${i}.enabled`]: v }) }, control: [coeff.el, line], fit: true });
+            row.dataset.role = `level-${i}`;
+            grid.appendChild(row);
+        });
+        // Use one color: one pick recolors every level (the swatches above follow). Like TradingView's, its swatch is
+        // split in two while the levels differ.
+        const colors = pf.levels.map((l) => l.color);
+        const oneColor: ColorField = new ColorField({
             theme: this.theme,
-            get: () => cur,
-            onChange: (v) => {
-                cur = v;
-                actions.patch({ medianColor: v });
+            getVal: () => colors[0] ?? DEFAULT_DRAWING_COLOR,
+            onVal: (v) => {
+                colors.fill(v);
+                actions.patch(Object.fromEntries(pf.levels.map((_, i) => [`levels.${i}.color`, v])));
+                for (const set of levelColors) set(v);
+                paintOne();
             },
+            popover: { align: 'start' },
         });
-        grid.appendChild(fieldRow({ label: 'Median', control: [median.el] }));
-        grid.appendChild(fieldRow({ label: 'Extend lines', bool: true, toggle: { checked: pf.extendLines, onChange: (v) => actions.patch({ extendLines: v }) } }));
-        grid.appendChild(fieldRow({ label: 'Background', bool: true, toggle: { checked: pf.background, onChange: (v) => actions.patch({ background: v }) } }));
-        const op = buildFieldControl({
-            kind: 'number',
-            value: Math.round(pf.fillOpacity * 100),
-            min: 0,
-            max: 100,
-            step: 1,
-            fill: false,
-            commit: 'blur',
-            onChange: (n) => actions.patch({ fillOpacity: Math.min(100, Math.max(0, n)) / 100 }),
+        const paintOne = (): void => {
+            oneColor.paint();
+            const sw = oneColor.el.querySelector<HTMLElement>('.vela-color-field-swatch');
+            if (sw && new Set(colors.map((c) => c.toLowerCase())).size > 1) sw.style.background = `linear-gradient(135deg, ${BULLISH} 50%, ${BEARISH} 50%)`;
+        };
+        paintOne();
+        oneColor.el.dataset.role = 'one-color';
+        grid.appendChild(fieldRow({ label: 'Use one color', control: [oneColor.el], fit: true }));
+        const bg = fieldRow({
+            label: 'Background',
+            toggle: { id: uid(), checked: pf.background, onChange: (v) => actions.patch({ background: v }) },
+            control: [opacitySlider(Math.round(pf.fillOpacity * 100), (n) => actions.patch({ fillOpacity: n / 100 }), [...pf.levels].reverse().find((l) => l.enabled)?.color)],
+            fit: true,
         });
-        grid.appendChild(fieldRow({ label: 'Background opacity %', control: [op.el] }));
-        grid.appendChild(fieldSection('Levels', { variant: 'inputs' }));
+        bg.dataset.role = 'background';
+        grid.appendChild(bg);
+        const style = this.selectControl('forkStyle', PITCHFORK_STYLES, pf.currentForkStyle(), actions);
+        style.dataset.role = 'fork-style';
+        grid.appendChild(fieldRow({ label: 'Style', control: [style], fit: true }));
     }
 
     private buildLevels(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
@@ -1348,7 +1416,6 @@ export class DrawingSettingsDialog {
         }
         if (drawing instanceof FibLevels) this.buildFibStyle(grid, drawing, actions);
         if (drawing instanceof GannFan || drawing instanceof GannSquare || drawing instanceof GannBox) this.buildGannStyle(grid, drawing, actions);
-        if (drawing instanceof PitchforkBase) this.buildPitchforkStyle(grid, drawing, actions);
         if (drawing instanceof FibRetracement) {
             const fib = drawing;
             grid.appendChild(fieldRow({
@@ -1660,6 +1727,38 @@ function rangeSlider(min: number, max: number, get: () => { from: number; to: nu
     return wrap;
 }
 
+/** A one-thumb 0-100 slider (TradingView's background opacity), in the range slider's look. */
+function opacitySlider(value: number, onChange: (n: number) => void, color?: string): HTMLElement {
+    ensureRangeStyles();
+    const wrap = document.createElement('div');
+    wrap.className = 'vela-range2';
+    // TradingView's track fades from clear to the fill's color.
+    if (color) {
+        wrap.classList.add('vela-range-fade');
+        wrap.style.setProperty('--vela-range-track', `linear-gradient(to right, transparent, ${color})`);
+    }
+    const fill = document.createElement('div');
+    fill.className = 'vela-range2-fill';
+    const i = document.createElement('input');
+    i.type = 'range';
+    i.min = '0';
+    i.max = '100';
+    i.step = '1';
+    i.value = String(value);
+    i.setAttribute('aria-label', vt('Opacity'));
+    const paint = (): void => {
+        fill.style.left = '0';
+        fill.style.right = `${100 - Number(i.value)}%`;
+    };
+    i.addEventListener('input', () => {
+        onChange(Number(i.value));
+        paint();
+    });
+    wrap.append(fill, i);
+    paint();
+    return wrap;
+}
+
 let rangeStyled = false;
 function ensureRangeStyles(): void {
     if (rangeStyled || typeof document === 'undefined') return;
@@ -1668,6 +1767,8 @@ function ensureRangeStyles(): void {
     st.textContent = `
 .vela-range2{position:relative;width:96px;height:20px;flex:none;}
 .vela-range2::before{content:'';position:absolute;left:6px;right:6px;top:9px;height:2px;border-radius:1px;background:var(--vela-border-strong);}
+.vela-range2.vela-range-fade::before{top:7px;height:6px;border-radius:3px;background:var(--vela-range-track);}
+.vela-range2.vela-range-fade .vela-range2-fill{display:none;}
 .vela-range2-fill{position:absolute;top:9px;height:2px;background:var(--vela-fg);margin:0 6px;}
 .vela-range2 input{position:absolute;left:0;top:0;width:100%;height:20px;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none;}
 .vela-range2 input::-webkit-slider-thumb{pointer-events:auto;-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--vela-surface-overlay,#000);border:2px solid var(--vela-fg);cursor:pointer;}

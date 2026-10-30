@@ -451,7 +451,7 @@ registerDrawingType({
     group: 'pitchforks',
     label: 'Pitchfork',
     icon: PITCHFORK_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' }, // TradingView: the toolbar's color is Use one color
     create: (init) => new Pitchfork(init),
 });
 
@@ -467,7 +467,7 @@ registerDrawingType({
     group: 'pitchforks',
     label: 'Schiff Pitchfork',
     icon: SCHIFF_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' }, // TradingView: the toolbar's color is Use one color
     create: (init) => new SchiffPitchfork(init),
 });
 
@@ -476,7 +476,7 @@ registerDrawingType({
     group: 'pitchforks',
     label: 'Modified Schiff Pitchfork',
     icon: MODSCHIFF_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' }, // TradingView: the toolbar's color is Use one color
     create: (init) => new ModifiedSchiffPitchfork(init),
 });
 
@@ -485,7 +485,7 @@ registerDrawingType({
     group: 'pitchforks',
     label: 'Inside Pitchfork',
     icon: INSIDE_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' }, // TradingView: the toolbar's color is Use one color
     create: (init) => new InsidePitchfork(init),
 });
 

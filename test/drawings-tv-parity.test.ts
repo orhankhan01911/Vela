@@ -158,20 +158,23 @@ describe('drawing settings TradingView has', () => {
 
     it('pitchforks: TradingView levels (0.5 + 1 on), band fills and a red median; old saved ones draw as before', () => {
         const three = [{ time: 40, price: 50 }, { time: 80, price: 70 }, { time: 80, price: 30 }];
+        // Construction lines per style: none for Andrews, p1-p2 for the Schiffs, B-p3 and p1-p2 for inside.
+        const extra = { pitchfork: 0, schiffpitchfork: 1, modifiedschiffpitchfork: 1, insidepitchfork: 2 } as const;
         for (const type of ['pitchfork', 'schiffpitchfork', 'modifiedschiffpitchfork', 'insidepitchfork'] as const) {
             const pf = createDrawing(type, { paneId: 'price', anchors: three })! as PitchforkBase;
             const g = pf.geometry(proj())!;
-            expect(g.colored!.length).toBe(1 + 2 * 2); // median + levels 0.5 and 1 on both sides
+            expect(g.colored!.length).toBe(1 + 2 * 2 + 1 + extra[type]); // median, levels 0.5 and 1 on both sides, base line
             expect(g.fills!.length).toBe(4); // 0→0.5 and 0.5→1, each side
             expect(pf.editableLevels()!.map((l) => l.ratio)).toEqual([0.25, 0.382, 0.5, 0.618, 0.75, 1, 1.5, 1.75, 2]);
             const old = deserializeDrawing({ id: 'p', type, paneId: 'price', anchors: three, style: { lineColor: '#123456', lineWidth: 1, lineStyle: 'solid' } } as never)! as PitchforkBase;
             const og = old.geometry(proj())!;
             expect(og.fills).toEqual([]);
-            expect(og.colored!.map((c) => c.color)).toEqual(['#123456', '#123456', '#123456']); // median + the two tines
+            expect(new Set(og.colored!.map((c) => c.color))).toEqual(new Set(['#123456'])); // median, tines, base: the line color
+            expect(og.colored!.every((c) => c.lineWidth === undefined || c.lineWidth === 1)).toBe(true);
         }
         // Andrews: the tines are the level-1 lines through p2 / p3; the 0.5 lines run halfway to the median.
         const pf = createDrawing('pitchfork', { paneId: 'price', anchors: three })! as PitchforkBase;
-        const starts = pf.geometry(proj())!.colored!.slice(1).map((c) => c.seg[1]);
+        const starts = pf.geometry(proj())!.colored!.slice(1, 5).map((c) => c.seg[1]);
         expect(starts.map((y) => Math.round(y))).toEqual([40, 60, 30, 70]); // y 50 ± 10 (0.5) and ± 20 (1)
     });
 
