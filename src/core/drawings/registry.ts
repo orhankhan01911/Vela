@@ -636,7 +636,8 @@ registerDrawingType({
     group: 'shapes',
     label: 'Arrow Mark Down',
     icon: ARROW_DOWN_ICON,
-    defaultStyle: { lineColor: BEARISH, lineWidth: 1, lineStyle: 'solid' },
+    // TradingView's arrow mark down: its ripe red 600 (the up mark is its minty green, our BULLISH).
+    defaultStyle: { lineColor: '#cc2f3c', lineWidth: 1, lineStyle: 'solid' }, // palette-exempt: TradingView's red 600
     create: (init) => new ArrowMarkDown(init),
 });
 

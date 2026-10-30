@@ -4,10 +4,12 @@ import type { SettingsSchema } from '../schema';
 import { TEXT_FIELDS } from '../schema';
 import { handleAt, pointInPolygon } from '../hittest';
 
-/** Pixel glyph dimensions (constant on-screen size — the marker never scales with zoom). */
-const GLYPH = { head: 11, headW: 9, stemW: 3.5, len: 22 };
+/** Pixel glyph dimensions (constant on-screen size — the marker never scales with zoom): TradingView's arrow mark, a
+ *  12 px head 19.5 px wide on a 10 px shaft 10 px wide (its renderer, read 2026-10-30). */
+const GLYPH = { head: 12, headW: 9.75, stemW: 5, len: 22 };
 
-type Dir = 'up' | 'down' | 'left' | 'right';
+export type ArrowMarkDir = 'up' | 'down' | 'left' | 'right';
+type Dir = ArrowMarkDir;
 
 /**
  * A fixed-size directional arrow marker stamped at a single anchor, with the tip ON the anchor
@@ -63,11 +65,28 @@ export abstract class ArrowMark extends Drawing {
         return g != null && pointInPolygon(px, py, g);
     }
 
-    handlePoints(proj: Projector): Array<[number, number]> {
+    /** The tip, where the marker points. */
+    tip(proj: Projector): [number, number] | null {
         const a = this.anchors[0];
-        if (!a) return [];
+        if (!a) return null;
         const y = proj.yOf(a.price, this.paneId);
-        return y == null ? [] : [[proj.xOf(a.time), y]];
+        return y == null ? null : [proj.xOf(a.time), y];
+    }
+
+    /** TradingView's: no handle ring; the whole arrow drags its point. */
+    handlePoints(_proj: Projector): Array<[number, number]> {
+        return [];
+    }
+
+    /** TradingView marks the selected arrow's point with its small marker. */
+    override selectionMarkers(proj: Projector): Array<[number, number]> {
+        const t = this.tip(proj);
+        return t ? [t] : [];
+    }
+
+    /** Which way it points (the painter places the text past its tail). */
+    direction(): Dir {
+        return this.dir();
     }
 
     hitHandle(px: number, py: number, proj: Projector, tol: number): number {

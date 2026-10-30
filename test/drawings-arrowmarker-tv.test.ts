@@ -11,7 +11,7 @@ import { describe, it, expect, beforeAll, afterEach } from 'vitest';
     disconnect() {}
 };
 
-import { createDrawing, deserializeDrawing, ArrowMarker, arrowMarkerStroke, type Drawing, type Projector } from '../src/core/drawings';
+import { createDrawing, deserializeDrawing, ArrowMarker, ArrowMark, arrowMarkerStroke, type Drawing, type Projector } from '../src/core/drawings';
 import { DARK_THEME } from '../src/core/theme';
 import { DrawingSettingsPopup, type SettingsActions } from '../src/renderers/native/drawings/DrawingSettingsPopup';
 
@@ -98,5 +98,45 @@ describe('arrow marker (TradingView, read from its code)', () => {
         expect(s.body('style').querySelector('[data-role="color"]')!.textContent).toContain('Color');
         expect(s.body('style').textContent).not.toContain('Border');
         expect(document.querySelector('.vela-drawing-dialog')!.textContent).toContain('Arrow marker');
+    });
+});
+
+describe('arrow mark up / down (TradingView, read from its code)', () => {
+    const mark = (type: 'arrowmarkup' | 'arrowmarkdown'): ArrowMark => createDrawing(type, { id: 'k', paneId: 'price', anchors: [{ time: 100, price: 500 }] })! as ArrowMark;
+
+    it('up is TradingView green, down its red; text 14 px in the arrow color', () => {
+        expect(mark('arrowmarkup').style.lineColor).toBe('#089981');
+        expect(mark('arrowmarkdown').style.lineColor).toBe('#cc2f3c');
+        const d = mark('arrowmarkdown');
+        d.applySettings({ 'text.value': 'x' });
+        expect(d.text).toMatchObject({ size: 14, color: '#cc2f3c' });
+    });
+
+    it('the glyph: tip on the point, a 12 px head 19.5 px wide, a 10 px shaft 10 px wide', () => {
+        const g = mark('arrowmarkup').glyphPoints(proj)!;
+        expect(g[0]).toEqual([100, 500]);
+        const xs = g.map((p) => p[0]);
+        const ys = g.map((p) => p[1]);
+        expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(19.5);
+        expect(Math.max(...ys) - Math.min(...ys)).toBe(22);
+        expect(g.some(([x, y]) => x === 105 && y === 512)).toBe(true); // the shaft's corner under the head
+        const down = mark('arrowmarkdown').glyphPoints(proj)!;
+        expect(Math.min(...down.map((p) => p[1]))).toBe(478); // a down mark rises above its point
+    });
+
+    it('no handle ring: a small marker on the point; the body drags it', () => {
+        const d = mark('arrowmarkup');
+        expect(d.handlePoints(proj)).toEqual([]);
+        expect(d.selectionMarkers(proj)).toEqual([[100, 500]]);
+        expect(d.hitTest(100, 510, proj, 2)).toBe(true);
+    });
+
+    it('dialog: one Color row, title "Arrow mark up"', async () => {
+        const s = setup(mark('arrowmarkup'));
+        s.gear().click();
+        await settled();
+        s.tab('Style').click();
+        expect(s.body('style').querySelector('[data-role="color"]')).not.toBeNull();
+        expect(document.querySelector('.vela-drawing-dialog')!.textContent).toContain('Arrow mark up');
     });
 });

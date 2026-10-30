@@ -323,7 +323,7 @@ export class DrawingPainter {
         }
         if (d instanceof ArrowMark) {
             this.paintArrowMark(ctx, d, proj);
-            this.paintLabel(ctx, d, proj, theme);
+            this.paintArrowMarkText(ctx, d, proj, theme);
             return;
         }
         if (d instanceof GlyphStamp) {
@@ -3085,6 +3085,38 @@ export class DrawingPainter {
         for (let i = 1; i < g.length; i += 1) ctx.lineTo(g[i]![0], g[i]![1]);
         ctx.closePath();
         ctx.fill();
+        ctx.restore();
+    }
+
+    /** TradingView's arrow mark text: past the arrow's tail, 20 px from the tip (up: under it, centered; down: over it),
+     *  22 px beside a left / right mark and 3 px down; the text keeps TradingView's box padding of a third of its size. */
+    private paintArrowMarkText(ctx: CanvasRenderingContext2D, d: ArrowMark, proj: Projector, theme: VelaTheme): void {
+        const value = d.text?.value?.trim() ?? '';
+        const tip = d.tip(proj);
+        if (!value || !tip) return;
+        const t = d.text!;
+        const fs = textPx(t.size ?? 14);
+        const pad = fs / 3;
+        const lines = value.split('\n');
+        const lh = Math.round(fs * 1.2);
+        const h = lines.length * lh;
+        const dir = d.direction();
+        const [x, y] = tip;
+        let tx = x;
+        let top = y + 20 + pad;
+        let align: CanvasTextAlign = 'center';
+        if (dir === 'down') top = y - 20 - pad - h;
+        else if (dir === 'left' || dir === 'right') {
+            align = dir === 'left' ? 'left' : 'right';
+            tx = dir === 'left' ? x + 22 + pad : x - 22 - pad;
+            top = y + 3 - h / 2;
+        }
+        ctx.save();
+        ctx.font = `${t.italic ? 'italic ' : ''}${t.bold ? '700 ' : ''}${fs}px ${theme.fontFamily}`;
+        ctx.fillStyle = t.color || d.style.lineColor;
+        ctx.textAlign = align;
+        ctx.textBaseline = 'middle';
+        lines.forEach((l, i) => ctx.fillText(l, tx, top + lh / 2 + i * lh));
         ctx.restore();
     }
 

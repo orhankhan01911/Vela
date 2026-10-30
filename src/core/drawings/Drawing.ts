@@ -28,6 +28,8 @@ export const TV_TEXT_DEFAULTS: Readonly<Record<string, Partial<DrawingText>>> = 
     datepricerange: { color: TV_LINE_COLOR, size: 12 },
     daterange: { color: TV_LINE_COLOR, size: 12 },
     arrowmarker: { color: '#1e53e5', size: 16, bold: true }, // palette-exempt: TradingView's blue 600
+    arrowmarkup: { color: '#089981', size: 14 }, // palette-exempt: TradingView's minty green 500
+    arrowmarkdown: { color: '#cc2f3c', size: 14 }, // palette-exempt: TradingView's ripe red 600
 };
 
 export interface DrawingInputsDialog {
