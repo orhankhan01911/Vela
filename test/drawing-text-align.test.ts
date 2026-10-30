@@ -75,7 +75,7 @@ describe('drawing text alignment (TradingView: left / center / right, top / midd
         }
     });
 
-    it('text added to a sloped line starts in the middle (as before); a horizontal ray starts at the left', () => {
+    it('text added to a sloped line starts in the middle (as before); a horizontal ray starts centered under it (TradingView factory)', () => {
         for (const type of ALONG_LINE_TEXT_TYPES as ReadonlySet<DrawingTypeKey>) {
             const d = createDrawing(type, { id: type, paneId: 'price', anchors: [{ time: 20, price: 50 }, { time: 120, price: 60 }] })!;
             d.applySettings({ 'text.value': 'x' });
@@ -83,6 +83,6 @@ describe('drawing text alignment (TradingView: left / center / right, top / midd
         }
         const r = createDrawing('hray', { id: 'r', paneId: 'price', anchors: [{ time: 20, price: 50 }] })!;
         r.applySettings({ 'text.value': 'x' });
-        expect(r.text?.hAlign).toBe('left');
+        expect(r.text).toMatchObject({ hAlign: 'center', vAlign: 'bottom' });
     });
 });

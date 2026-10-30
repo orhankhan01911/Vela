@@ -159,3 +159,26 @@ describe('vertical line (TradingView)', () => {
         expect(s.body('coordinates').textContent).toContain('#1 (time)');
     });
 });
+
+describe('horizontal ray (TradingView)', () => {
+    const hr = (): Drawing => createDrawing('hray', { id: 'r', paneId: 'price', anchors: [{ time: Date.UTC(2026, 9, 1), price: 100 }] })!;
+    it('starts blue 2 px with its price label; text 12 px under the line, centered along it', () => {
+        const d = hr();
+        expect(d.style).toMatchObject({ lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' });
+        expect(d.serialize().props).toMatchObject({ showPrice: true });
+        d.applySettings({ 'text.value': 'x' });
+        expect(d.text).toMatchObject({ size: 12, color: TV_LINE_COLOR, hAlign: 'center', vAlign: 'bottom' });
+    });
+    it('dialog: Horizontal ray, Price label, a price and a time for its start; no price switch on the bar', async () => {
+        const s = setup(hr());
+        expect(s.tips()).not.toContain('Show price');
+        s.gear().click();
+        await settled();
+        expect(document.querySelector('.vela-drawing-dialog')!.textContent).toContain('Horizontal ray');
+        s.tab('Coordinates').click();
+        const co = s.body('coordinates');
+        expect(co.textContent).toContain('#1');
+        expect(co.querySelectorAll('[data-role="anchor-price"]').length).toBe(1);
+        expect(co.querySelectorAll('[data-role="anchor-time"]').length).toBe(1);
+    });
+});

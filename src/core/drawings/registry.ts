@@ -274,7 +274,8 @@ registerDrawingType({
     group: 'lines',
     label: 'Horizontal Ray',
     icon: HRAY_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    // TradingView's horizontal ray: 2 px solid, TradingView blue, price label on.
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new HorizontalRay(init),
 });
 

@@ -353,8 +353,8 @@ export class DrawingSettingsPopup {
         }
         // Range toggles + computed-label text styling (drawings whose label is computed, not typed).
         const flags = (d: Drawing): { showPrice?: boolean; showDate?: boolean } => d as unknown as { showPrice?: boolean; showDate?: boolean };
-        // TradingView keeps the horizontal line's price label in its settings only, not on the bar.
-        if (paths.has('showPrice') && !drawings.every((d) => d.type === 'hline')) bar.appendChild(this.toggle('Show price', PRICE_DELTA_ICON, common((d) => flags(d).showPrice !== false), (v) => actions.patch({ showPrice: v })));
+        // TradingView keeps the horizontal line's and ray's price label in their settings only, not on the bar.
+        if (paths.has('showPrice') && !drawings.every((d) => d.type === 'hline' || d.type === 'hray')) bar.appendChild(this.toggle('Show price', PRICE_DELTA_ICON, common((d) => flags(d).showPrice !== false), (v) => actions.patch({ showPrice: v })));
         if (paths.has('showDate')) bar.appendChild(this.toggle('Show date', DATE_DELTA_ICON, common((d) => flags(d).showDate !== false), (v) => actions.patch({ showDate: v })));
         if (paths.has('text.color') && textOnBar) bar.appendChild(swatch('Text color', TYPE_ICON, (d) => d.text?.color || t.textColor, 'text.color'));
         if (paths.has('text.size') && textOnBar) bar.appendChild(this.dropdown('Text size', TEXT_SIZE_OPTIONS.map((o) => o.value), common((d) => d.text?.size ?? 'normal'), (s) => labelSizeIcon(s), (v) => actions.patch({ 'text.size': v }), { label: sizeLabel }));

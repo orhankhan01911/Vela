@@ -867,7 +867,8 @@ export class DrawingPainter {
             if (rect.height <= 0) continue;
             const ys = d.anchors.map((a) => proj.yOf(a.price, d.paneId)).filter((y): y is number => y != null);
             const xs = d.anchors.map((a) => proj.xOf(a.time)).filter((x) => Number.isFinite(x));
-            const priceOnly = d.type === 'hline' || d.type === 'hray';
+            // A horizontal ray has a start time: TradingView shows its time chip too.
+            const priceOnly = d.type === 'hline';
             const timeOnly = d.type === 'vline';
             ctx.save();
             ctx.setLineDash([]);

@@ -70,7 +70,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line' };
+const DIALOG_TITLE: Record<string, string> = { trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -88,7 +88,8 @@ function joinChoices(labels: readonly string[]): string {
 /** Schema paths the dialog never shows: the toolbar owns them (lock) or they are per-tool icons. */
 const SKIP_PATHS = new Set(['locked', 'visible', 'glyph', 'size']);
 /** Drawings whose one anchor only carries a price (or only a time): the Coordinates tab shows that one value. */
-const PRICE_ONLY = new Set(['hline', 'hray']);
+// A horizontal ray's start has a time too (TradingView: "#1 (price, bar)").
+const PRICE_ONLY = new Set(['hline']);
 const TIME_ONLY = new Set(['vline']);
 
 /**
@@ -569,7 +570,7 @@ export class DrawingSettingsDialog {
                 controls.push(t.el);
             }
             // TradingView's "#1 (price)" for a price-only point; the time stays a date (the user's call, 2026-10-30).
-            const label = priceOnly ? `#${i + 1} (price)` : timeOnly ? `#${i + 1} (time)` : drawing.anchors.length === 1 ? 'Point' : `#${i + 1}`;
+            const label = priceOnly ? `#${i + 1} (price)` : timeOnly ? `#${i + 1} (time)` : `#${i + 1}`;
             grid.appendChild(fieldRow({ label, control: controls, fit: true }));
         });
     }
