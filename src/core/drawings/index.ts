@@ -11,7 +11,7 @@ export { LINE_FIELDS, FILL_FIELDS, LINE_STYLE_OPTIONS, TEXT_FIELDS, TEXT_SIZE_OP
 export { Drawing, setByPath, TV_TEXT_DEFAULTS, drawingTitle, DRAWING_TITLE_MAX } from './Drawing';
 export { INTERVAL_UNITS, BAR_KIND_UNITS, barUnit, compactIntervals, defaultRange, shownOnBarMs, type BarKind, type IntervalRange, type IntervalUnit, type IntervalVisibility } from './intervals';
 export type { DrawingTypeKey, AnchorSlot, SerializedDrawing, DrawingInputsDialog, DrawingToolbarAction } from './Drawing';
-export { toolSettings, toolSettingsForNew, rememberToolSettings, clearToolSettings, type ToolSettings } from './toolMemory';
+export { toolSettings, rememberToolSettings, clearToolSettings, type ToolSettings } from './toolMemory';
 export { effectiveFillColor, VALID_FILL, INVALID_FILL, type EffectiveColorTheme } from './effectiveColor';
 export { TrendLine } from './types/TrendLine';
 export { HorizontalLine } from './types/HorizontalLine';

@@ -62,17 +62,6 @@ export function toolSettings(type: DrawingTypeKey): ToolSettings | undefined {
     return load().get(type);
 }
 
-/**
- * The last-used settings a newly placed drawing should start from. A drawing that starts in TradingView's look
- * (`props.tv`) skips settings remembered from that tool's older look (props without `tv`): its old levels, widths and
- * switches would otherwise replace TradingView's defaults the moment it is placed (Fib retracement, 2026-10-31).
- */
-export function toolSettingsForNew(type: DrawingTypeKey, draftProps: Record<string, unknown> | undefined): ToolSettings | undefined {
-    const mem = toolSettings(type);
-    if (mem?.props && draftProps?.tv === true && mem.props.tv !== true) return undefined;
-    return mem;
-}
-
 /** Remember `doc`'s cosmetics as its type's last-used settings. */
 export function rememberToolSettings(doc: SerializedDrawing): void {
     const entry: ToolSettings = { style: { ...doc.style } };
