@@ -65,6 +65,11 @@ export class AnchoredText extends TextLabel {
         return null; // on screen whatever the time range
     }
 
+    /** TradingView marks nothing on the axes for a text pinned to the screen (it has no bar or price). */
+    override axisPoints(): DrawingPoint[] {
+        return [];
+    }
+
     protected override writeProps(): Record<string, unknown> | undefined {
         return { ...(super.writeProps() ?? {}), ...this.pin.write() };
     }

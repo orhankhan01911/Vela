@@ -143,3 +143,18 @@ describe('text dialog (TradingView: Text + Visibility)', () => {
         expect((s.live() as TextLabel).wordWrap).toBe(true);
     });
 });
+
+describe('anchored text (TradingView: the same text, pinned to the screen)', () => {
+    it("takes the text's TradingView look, marks nothing on the axes, and titles its dialog 'Anchored text'", async () => {
+        const d = createDrawing('anchoredtext', { id: 'a', paneId: 'price', anchors: [{ time: 100, price: 500 }] })! as TextLabel;
+        expect(d.tv).toBe(true);
+        expect(d.text).toMatchObject({ color: '#2962ff', size: 14 });
+        expect(d.axisPoints()).toEqual([]);
+        d.applySettings({ 'text.value': 'Pinned' });
+        const s = setup(d);
+        s.gear().click();
+        await settled();
+        expect(s.tabs()).toEqual(['Text', 'Visibility']);
+        expect(document.querySelector('.vela-drawing-dialog')!.textContent).toContain('Anchored text');
+    });
+});
