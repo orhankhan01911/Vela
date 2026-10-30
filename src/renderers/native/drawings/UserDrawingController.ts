@@ -366,6 +366,11 @@ export class UserDrawingController implements IDrawingsRendererPort {
         this.render();
     }
 
+    /** Core push: the armed tool's remembered style changed; the next placement preview draws in it. */
+    setActiveToolStyle(lastStyle: SerializedDrawing['style'] | undefined): void {
+        this.activeToolStyle = lastStyle;
+    }
+
     /** Core push: the favorite tool set changed — reflect the flyout stars. */
     setFavorites(types: readonly DrawingTypeKey[]): void {
         this.toolbar.setFavorites(types);

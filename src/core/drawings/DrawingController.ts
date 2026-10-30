@@ -468,7 +468,11 @@ export class DrawingController {
     /** Remember a drawing's style as the "last used" for its type (seeds the next one). */
     private captureStyle(id: string): void {
         const d = this.store.get(id);
-        if (d) rememberToolSettings(d.serialize());
+        if (!d) return;
+        rememberToolSettings(d.serialize());
+        // The armed tool's preview must draw in the style just remembered, not the one it was armed with (a brush
+        // stroke showed its old color until release, 2026-10-30).
+        if (d.type === this.activeTool) this.port?.setActiveToolStyle?.(this.lastStyle.get(d.type));
     }
 
     private sync(): void {

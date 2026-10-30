@@ -29,6 +29,9 @@ class FakePort implements IDrawingsRendererPort {
         this.activeTool = t;
         this.activeToolStyle = lastStyle;
     }
+    setActiveToolStyle(lastStyle: SerializedDrawing['style'] | undefined): void {
+        this.activeToolStyle = lastStyle;
+    }
     setSelection(ids: readonly string[]): void {
         this.selectionIds = [...ids];
         this.selection = ids[0] ?? null;
@@ -389,6 +392,16 @@ describe('DrawingController — editing foundation', () => {
         expect(port.activeToolStyle).toEqual({ lineColor: '#ff0000', lineWidth: 3, lineStyle: 'dashed' });
         ctrl.setTool(null); // disarming carries no style
         expect(port.activeToolStyle).toBeUndefined();
+    });
+
+    it('a style picked while the tool stays armed reaches the placement preview at once (no stale brush color)', () => {
+        const { port, ctrl } = setup();
+        ctrl.setTool('hline');
+        port.fire({ kind: 'create', doc: HLINE_DOC });
+        const id = ctrl.all()[0]!.id;
+        port.fire({ kind: 'edit', doc: { ...HLINE_DOC, id, style: { lineColor: '#ffeb3b', lineWidth: 2, lineStyle: 'solid' } } });
+        expect(port.activeTool).toBe('hline'); // not re-armed
+        expect(port.activeToolStyle).toMatchObject({ lineColor: '#ffeb3b' });
     });
 
     it('setLocked / setVisible emit drawing:edited — hosts persist and mirror off that event', () => {

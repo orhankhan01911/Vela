@@ -72,6 +72,9 @@ export interface IDrawingsRendererPort {
      *  tool's last-used style (if any) so the placement preview matches what will be
      *  committed, rather than falling back to the type default. */
     setActiveTool(type: DrawingTypeKey | null, lastStyle?: SerializedDrawing['style']): void;
+    /** The armed tool's remembered style changed (a color picked while it is armed): the next placement preview uses
+     *  it, without re-arming the tool. */
+    setActiveToolStyle?(lastStyle: SerializedDrawing['style'] | undefined): void;
     /** Reflect which drawings are selected (drives handle painting); `[]` = none. */
     setSelection(ids: readonly string[]): void;
     /** Where pasted copies land: TradingView puts them 40 px above their source, so the copy is seen. Optional —
