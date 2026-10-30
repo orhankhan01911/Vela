@@ -23,7 +23,9 @@ def words(t):
     return out
 for l in open(S+'/run2.txt'):
     if not l.startswith('{'): continue
-    d=json.loads(l); t=tv[M[d['tool']]]
+    d=json.loads(l); t=tv.get(M[d['tool']])
+    if not t or 'tabs' not in t:
+        print('REDO', d['tool'], '(TradingView entry missing or an error: rerun tv-read-dialogs.js for it)'); continue
     out=[]
     if d.get('tabs')!=t['tabs']: out.append(f"TABS ours {d.get('tabs')} tv {t['tabs']}")
     for tab in t['tabs']:

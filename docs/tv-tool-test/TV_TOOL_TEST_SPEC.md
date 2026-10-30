@@ -74,13 +74,15 @@ In `ui_evaluate`, `chart` is `window.TradingViewApi.activeChart()`.
 **One tool:**
 
 Arguments: `OUT` is an existing folder for screenshots; `TOOL` is Vela's id (`trendline`, `box`, `freehand`), not
-TradingView's name (`trend_line`, `rectangle`); points are CSS pixels in the probe's 1400 × 900 window; `SELX,SELY` is a
+TradingView's name (`trend_line`, `rectangle`). The full list of ids with TradingView's names is the `M` map in
+`probes/sweep-compare.py`; working click points for every tool are the `TOOLS` list in `probes/sweep-probe.mjs`; points are CSS pixels in the probe's 1400 × 900 window; `SELX,SELY` is a
 point on the placed shape (a click there selects it); `DPR` is the device pixel ratio (default 1).
 
 - `gen-probe.mjs OUT TOOL "x,y;x,y" SELX,SELY [TEXT] [DPR]`: places a click tool with tool memory cleared, dumps
   every dialog tab, screenshots each tab and the canvas, prints the saved JSON and page errors.
-- `text-probe.mjs OUT TOOL "x,y" SELX,SELY [TEXT] [DPR]`: the same for tools that open an editor on placement; it
-  types `$TYPE` (default "Hello world").
+- `text-probe.mjs OUT TOOL "x,y" SELX,SELY [TEXT] [DPR]`: the same for tools that open an editor on placement. What it
+  types comes from the environment variable `TYPE` (`TYPE='Hi' node e2e/zz-text.mjs ...`; default "Hello world");
+  `TEXT` fills the dialog's Text tab. To give `DPR` without `TEXT`, pass `""` for `TEXT`.
 - `brush-probe.mjs OUT TOOL "x,y;x,y;..." SELX,SELY [TEXT] [DPR]`: press-drag tools; the points are the drag path.
 - `layout-probe.mjs OUT`: the layout chip and menu (an example of a whole-feature probe).
 
@@ -88,14 +90,17 @@ point on the placed shape (a click there selects it); `DPR` is the device pixel 
 
 The audit has 26 tools: 24 are placed on the chart, the other two (Zoom and the Ruler) are modes, checked by hand.
 
-1. `sweep-probe.mjs OUT [tool,tool]`: places the 24 placed tools fresh on Local and prints, per tool, the saved
+1. `node e2e/zz-sweep.mjs DIR > DIR/run2.txt` (a copy of `sweep-probe.mjs`; `DIR` must exist; add `tool,tool` after
+   `DIR` to run only some): places the 24 placed tools fresh on Local and prints, per tool, the saved
    style, the floating-toolbar buttons, every dialog tab with its rows, and page errors. Screenshots go to `OUT`.
-2. `tv-read-dialogs.js` in `ui_evaluate`: the same from TradingView (toolbar `data-name`s, tabs, rows), on your own
-   shapes, removed after.
-3. Save the sweep's output as `DIR/run2.txt` and the result of step 2 (`JSON.stringify(window.__wkRes)`) as
-   `DIR/tv.json`, then run `python3 sweep-compare.py DIR`. It puts the two side by side and prints `OK` or the real differences (known, expected ones
+2. Paste `tv-read-dialogs.js` into `ui_evaluate`: the same from TradingView (toolbar `data-name`s, tabs, rows), on your
+   own shapes, removed after. It returns `'started'` and takes about a minute. Then call `ui_evaluate` with
+   `JSON.stringify(window.__wkDone && window.__wkRes)` until it is not `false`, and save that bare JSON object as
+   `DIR/tv.json`.
+3. `python3 ~/Desktop/claude_folder/worktrees/vela-alert-pin/docs/tv-tool-test/probes/sweep-compare.py DIR`. It puts the two side by side and prints `OK`, the real differences, or `REDO` when TradingView's entry for a tool failed (run step 2 again) (known, expected ones
    are skipped: bold/italic icons, "time" for "bar", values from TradingView's saved templates).
-4. Tile the screenshots into one sheet (`ffmpeg ... tile=6x4`) and look at it.
+4. `bash probes/tile.sh DIR` puts the screenshots into one numbered sheet (`DIR/sheet.png`, numbers listed in the
+   output). Look at it.
 
 **Alerts on drawings:** `alerts-probe.mjs OUT [type,type]` adds an alert to every drawing type that takes one, feeds
 prices across it (`window.__ofAlerts.feed`) and reports whether it fired. Programmatic drawings show their toolbar
