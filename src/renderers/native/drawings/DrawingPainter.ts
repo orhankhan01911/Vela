@@ -863,9 +863,10 @@ export class DrawingPainter {
             if (!selected.has(d.id) || !d.visible || d.anchors.length === 0 || !shownOnBarMs(d.intervals, this.barMs)) continue;
             const rect = proj.paneRect?.(d.paneId) ?? { top: 0, height: proj.height };
             if (rect.height <= 0) continue;
-            const ys = d.anchors.map((a) => proj.yOf(a.price, d.paneId)).filter((y): y is number => y != null);
-            const xs = d.anchors.map((a) => proj.xOf(a.time)).filter((x) => Number.isFinite(x));
-            // A horizontal ray has a start time: TradingView shows its time chip too.
+            // The marked points (a channel's four corners, else the anchors), each with its exact price and time.
+            const pts = d.axisPoints();
+            const ys = pts.map((p) => proj.yOf(p.price, d.paneId) ?? NaN).filter((y) => Number.isFinite(y));
+            const xs = pts.map((p) => proj.xOf(p.time)).filter((x) => Number.isFinite(x));
             const priceOnly = d.type === 'hline';
             const timeOnly = d.type === 'vline';
             ctx.save();
@@ -881,22 +882,22 @@ export class DrawingPainter {
                 const r = Math.min(proj.width, Math.max(...xs));
                 if (r > l) ctx.fillRect(l, proj.height, r - l, AXIS_HIGHLIGHT_H);
             }
-            if (d.anchors.length <= 4) {
+            if (pts.length <= 6) {
                 if (!timeOnly && !showsAxisPrice(d) && !(d as { showPriceLabels?: boolean }).showPriceLabels) {
-                    for (const a of d.anchors) {
-                        const y = proj.yOf(a.price, d.paneId);
+                    for (const price of new Set(pts.map((p) => p.price))) {
+                        const y = proj.yOf(price, d.paneId);
                         if (y == null || y < rect.top || y > rect.top + rect.height) continue;
-                        this.paintAxisChip(ctx, d, y, proj, theme, TV_HANDLE_RING, a.price);
+                        this.paintAxisChip(ctx, d, y, proj, theme, TV_HANDLE_RING, price);
                     }
                 }
                 if (!priceOnly && !showsAxisTime(d)) {
                     ctx.font = `11px ${theme.fontFamily}`;
                     ctx.textBaseline = 'middle';
                     ctx.textAlign = 'center';
-                    for (const a of d.anchors) {
-                        const x = proj.xOf(a.time);
+                    for (const time of new Set(pts.map((p) => p.time))) {
+                        const x = proj.xOf(time);
                         if (!Number.isFinite(x) || x < 0 || x > proj.width) continue;
-                        const label = formatTimeStamp(a.time, this.timeZone, this.barMs || 60_000);
+                        const label = formatTimeStamp(time, this.timeZone, this.barMs || 60_000);
                         const w = Math.ceil(ctx.measureText(label).width + 14);
                         const cx = Math.max(w / 2 + 1, Math.min(proj.width - w / 2 - 1, x));
                         roundRect(ctx, Math.round(cx - w / 2), proj.height + 2, w, 18, 4);

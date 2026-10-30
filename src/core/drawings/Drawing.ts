@@ -286,6 +286,12 @@ export abstract class Drawing {
         return [];
     }
 
+    /** The points TradingView marks on the axes while the drawing is selected (a price chip and a time chip each, the
+     *  shaded spans between them): its anchors by default; a channel marks its four corners. */
+    axisPoints(): DrawingPoint[] {
+        return this.anchors;
+    }
+
     handleCursor(_index: number): string | null {
         return null;
     }

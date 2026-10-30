@@ -1,5 +1,5 @@
 import { type AnchorSlot } from '../Drawing';
-import type { Projector, SegmentGeometry } from '../geometry';
+import type { DrawingPoint, Projector, SegmentGeometry } from '../geometry';
 import type { SettingsSchema } from '../schema';
 import { LINE_FIELDS, FILL_FIELDS, TEXT_FIELDS } from '../schema';
 import { SegmentDrawing } from './SegmentDrawing';
@@ -137,6 +137,15 @@ export class ParallelChannel extends SegmentDrawing {
             }
         }
         return pts;
+    }
+
+    /** TradingView marks the channel's four corners on the axes (both lines' ends), not the middle squares. */
+    override axisPoints(): DrawingPoint[] {
+        const a = this.anchors[0];
+        const b = this.anchors[1];
+        if (!a || !b) return this.anchors;
+        const d = this.anchors[2] ? this.offset() : 0;
+        return [a, b, { time: a.time, price: a.price + d }, { time: b.time, price: b.price + d }];
     }
 
     override handleShapes(): ReadonlyArray<'circle' | 'square'> {

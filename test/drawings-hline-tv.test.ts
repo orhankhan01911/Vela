@@ -210,6 +210,12 @@ describe('parallel channel (TradingView)', () => {
         expect(off.geometry(proj)!.fill).toBeNull();
     });
 
+    it('marks its four corners on the axes when selected (TradingView), not the width anchor', () => {
+        const d = ch();
+        const off = d.offset();
+        expect(d.axisPoints().map((p) => p.price).sort((a, b) => a - b)).toEqual([500, 600, 500 + off, 600 + off].sort((a, b) => a - b));
+    });
+
     it('has four round corners and a square in the middle of each line', () => {
         const d = ch();
         expect(d.handlePoints(proj)).toHaveLength(6);
