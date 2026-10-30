@@ -37,10 +37,10 @@ describe('drawings/ParallelChannel', () => {
         expect(d.hitTest(25, 20, proj, 4)).toBe(false); // outside both lines + fill
     });
 
-    it('keeps the offset handle ON the channel at the baseline midpoint, whatever the 3rd anchor time', () => {
-        expect(make(25).handlePoints(proj)[2]).toEqual([25, 55]); // mid x, parallel-line price
-        expect(make(500).handlePoints(proj)[2]).toEqual([25, 55]); // far-in-time 3rd anchor → still at the midpoint
-        expect(make(500).hitHandle(25, 55, proj, 4)).toBe(2); // …and it's grabbable
+    it('keeps the width handle (the square, TradingView) ON the parallel line at the baseline midpoint, whatever the 3rd anchor time', () => {
+        expect(make(25).handlePoints(proj)[5]).toEqual([25, 55]); // mid x, parallel-line price
+        expect(make(500).handlePoints(proj)[5]).toEqual([25, 55]); // far-in-time 3rd anchor → still at the midpoint
+        expect(make(500).hitHandle(25, 55, proj, 4)).toBe(5); // …and it's grabbable
     });
 
     it('reports a price range spanning both lines + the offset anchor', () => {

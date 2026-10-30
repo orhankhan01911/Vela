@@ -41,14 +41,15 @@ describe('drawing settings TradingView has', () => {
         }
     });
 
-    it('parallel channel: dashed middle line (on by default) and extend left / right', () => {
+    it('parallel channel: dashed middle level (on by default) and extend left / right', () => {
         const mk = (props?: Record<string, unknown>) =>
             createDrawing('parallelchannel', { paneId: 'price', anchors: [{ time: 40, price: 60 }, { time: 80, price: 60 }, { time: 60, price: 40 }], ...(props ? { props } : {}) })! as SegmentDrawing;
-        expect(mk().geometry(proj())!.dashed).toEqual([[40, 50, 80, 50]]); // halfway between y 40 and y 60
-        expect(mk({ middleLine: false }).geometry(proj())!.dashed).toBeUndefined();
+        const dashed = (g: ReturnType<SegmentDrawing['geometry']>) => g!.colored!.filter((c) => c.lineStyle === 'dashed').map((c) => c.seg);
+        expect(dashed(mk().geometry(proj()))).toEqual([[40, 50, 80, 50]]); // halfway between y 40 and y 60
+        expect(dashed(mk({ middleLine: false }).geometry(proj()))).toEqual([]);
         const ext = mk({ extendLeft: true, extendRight: true }).geometry(proj())!;
-        expect(ext.segments).toEqual([[0, 40, 200, 40], [0, 60, 200, 60]]);
-        for (const p of ['middleLine', 'extendLeft', 'extendRight']) expect(paths('parallelchannel', 3)).toContain(p);
+        expect(ext.colored!.filter((c) => c.lineStyle === 'solid').map((c) => c.seg)).toEqual([[0, 40, 200, 40], [0, 60, 200, 60]]);
+        for (const p of ['extendLeft', 'extendRight', 'fillBackground']) expect(paths('parallelchannel', 3)).toContain(p);
     });
 
     it('arc: the curve passes through the third point wherever it sits beside the chord', () => {

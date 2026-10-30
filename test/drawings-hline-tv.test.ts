@@ -11,7 +11,7 @@ import { describe, it, expect, beforeAll, afterEach } from 'vitest';
     disconnect() {}
 };
 
-import { createDrawing, deserializeDrawing, TV_LINE_COLOR, type Drawing } from '../src/core/drawings';
+import { createDrawing, deserializeDrawing, ParallelChannel, TV_LINE_COLOR, type Drawing, type Projector } from '../src/core/drawings';
 import { DARK_THEME } from '../src/core/theme';
 import { DrawingSettingsPopup, type SettingsActions } from '../src/renderers/native/drawings/DrawingSettingsPopup';
 
@@ -180,5 +180,75 @@ describe('horizontal ray (TradingView)', () => {
         expect(co.textContent).toContain('#1');
         expect(co.querySelectorAll('[data-role="anchor-price"]').length).toBe(1);
         expect(co.querySelectorAll('[data-role="anchor-time"]').length).toBe(1);
+    });
+});
+
+describe('parallel channel (TradingView)', () => {
+    const proj: Projector = { xOf: (t) => t, yOf: (p) => 1000 - p, pxToPoint: (x, y) => ({ time: x, price: 1000 - y }), paneIdAtY: () => 'price', width: 800, height: 600 };
+    const ch = (props?: Record<string, unknown>): ParallelChannel =>
+        createDrawing('parallelchannel', { id: 'c', paneId: 'price', anchors: [{ time: 100, price: 500 }, { time: 300, price: 600 }, { time: 200, price: 450 }], ...(props ? { props } : {}) })! as ParallelChannel;
+
+    it("starts with TradingView's seven levels: 0 and 1 solid 2 px, 0.5 dashed, the rest hidden; blue, 20 % fill", () => {
+        const d = ch();
+        expect(d.levels.map((l) => [l.coeff, l.visible, l.lineStyle, l.lineWidth])).toEqual([
+            [-0.25, false, 'solid', 1], [0, true, 'solid', 2], [0.25, false, 'solid', 1], [0.5, true, 'dashed', 1],
+            [0.75, false, 'solid', 1], [1, true, 'solid', 2], [1.25, false, 'solid', 1],
+        ]);
+        expect(d.style.lineColor).toBe(TV_LINE_COLOR);
+        expect(d.style.fillColor).toBe(`${TV_LINE_COLOR}33`);
+        expect(d.fillBackground !== false).toBe(true);
+    });
+
+    it('a channel saved with its middle line off keeps it off (the 0.5 level)', () => {
+        expect(ch({ middleLine: false }).levels[3]!.visible).toBe(false);
+    });
+
+    it('draws each visible level in its own dash and width, and no fill with Background off', () => {
+        const g = ch().geometry(proj)!;
+        expect(g.colored!.map((c) => [c.lineStyle, c.lineWidth])).toEqual([['solid', 2], ['dashed', 1], ['solid', 2]]);
+        const off = ch({ fillBackground: false });
+        expect(off.geometry(proj)!.fill).toBeNull();
+    });
+
+    it('has four round corners and a square in the middle of each line', () => {
+        const d = ch();
+        expect(d.handlePoints(proj)).toHaveLength(6);
+        expect(d.handleShapes()).toEqual(['circle', 'circle', 'circle', 'circle', 'square', 'square']);
+    });
+
+    it('baseline ends keep the width; the baseline square moves the baseline alone; the other square sets the width', () => {
+        const d = ch();
+        const w0 = d.offset();
+        d.dragHandlePx(0, 120, 1000 - 520, proj);
+        expect(d.offset()).toBeCloseTo(w0);
+        const upper = d.anchors[2]!.price;
+        d.dragHandlePx(4, 200, 1000 - 600, proj); // baseline middle to 600
+        expect((d.anchors[0]!.price + d.anchors[1]!.price) / 2).toBeCloseTo(600);
+        expect(d.anchors[2]!.price).toBeCloseTo(upper); // the parallel line stayed
+        d.dragHandlePx(5, 200, 1000 - 700, proj);
+        expect(d.anchors[2]!.price).toBeCloseTo(700);
+    });
+
+    it('the toolbar color recolors every level; its width and dash restyle the two lines', () => {
+        const d = ch();
+        d.applySettings({ 'levels.3.color': '#ff0000' });
+        d.applySettings({ 'style.lineColor': '#00ff00', 'style.lineWidth': 3, 'style.lineStyle': 'dotted' });
+        expect(d.levels.every((l) => !l.color)).toBe(true);
+        expect(d.levels.filter((l) => l.coeff === 0 || l.coeff === 1).map((l) => [l.lineWidth, l.lineStyle])).toEqual([[3, 'dotted'], [3, 'dotted']]);
+        expect(d.levels[3]!.lineStyle).toBe('dashed');
+    });
+
+    it('dialog: seven level rows, Extend, Background; Coordinates has the price offset', async () => {
+        const s = setup(ch());
+        s.gear().click();
+        await settled();
+        s.tab('Style').click();
+        const st = s.body('style');
+        for (let i = 0; i < 7; i += 1) expect(st.querySelector(`[data-role="level-${i}"]`), String(i)).not.toBeNull();
+        expect(st.textContent).toContain('Extend');
+        expect(st.textContent).toContain('Background');
+        s.tab('Coordinates').click();
+        expect(s.body('coordinates').textContent).toContain('Price offset');
+        expect(s.body('coordinates').querySelector('[data-role="channel-offset"]')).not.toBeNull();
     });
 });

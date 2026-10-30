@@ -20,6 +20,7 @@ import {
     textPx,
     MachFigure,
     PositionTool,
+    ParallelChannel,
     clonePlain,
     compactIntervals,
     createDrawing,
@@ -70,7 +71,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line' };
+const DIALOG_TITLE: Record<string, string> = { trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -255,6 +256,10 @@ export class DrawingSettingsDialog {
      *  line-end buttons), Background, Extend, the tool's switches, then the INFO section (stats) and the tool's own
      *  sections (Fib, levels). */
     private buildStyle(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
+        if (drawing instanceof ParallelChannel) {
+            this.buildChannelStyle(grid, drawing, actions);
+            return;
+        }
         const fields = styleFields(drawing);
         const has = (p: string): boolean => fields.some((f) => f.path === p);
         const done = new Set<string>();
@@ -303,6 +308,80 @@ export class DrawingSettingsDialog {
             }
             this.buildLevels(grid, drawing, actions);
         }
+    }
+
+    /** TradingView's parallel channel Style tab: its seven level rows (a switch, except on the two lines themselves; the
+     *  level's value; its line button), then Extend and Background (a switch and its color). */
+    private buildChannelStyle(grid: HTMLElement, ch: ParallelChannel, actions: SettingsActions): void {
+        ch.levels.forEach((lv, i) => {
+            const fixed = lv.coeff === 0 || lv.coeff === 1;
+            const coeff = buildFieldControl({
+                kind: 'number',
+                value: lv.coeff,
+                step: 0.25,
+                fill: false,
+                commit: 'blur',
+                onChange: (v) => { if (Number.isFinite(v)) actions.patch({ [`levels.${i}.coeff`]: v }); },
+            });
+            coeff.el.style.width = '96px';
+            coeff.el.style.flex = 'none';
+            coeff.el.dataset.role = `level-${i}-coeff`;
+            const line = this.levelLineButton(ch, i, actions);
+            const row = fixed
+                ? fieldRow({ label: '', control: [coeff.el, line], fit: true })
+                : fieldRow({ label: '', toggle: { id: uid(), checked: lv.visible, onChange: (v) => actions.patch({ [`levels.${i}.visible`]: v }) }, control: [coeff.el, line], fit: true });
+            row.dataset.role = `level-${i}`;
+            grid.appendChild(row);
+        });
+        grid.appendChild(fieldRow({ label: 'Extend', control: [this.extendDropdown(ch, actions)], fit: true }));
+        const fill = effectiveFillColor(ch, this.theme) ?? ch.style.fillColor ?? DEFAULT_DRAWING_COLOR;
+        grid.appendChild(
+            fieldRow({
+                label: 'Background',
+                toggle: { id: uid(), checked: ch.fillBackground !== false, onChange: (v) => actions.patch({ fillBackground: v }) },
+                control: [this.colorControl(ch, 'style.fillColor', actions, fill)],
+                fit: true,
+            }),
+        );
+    }
+
+    /** A channel level's line button: its color (the drawing's when unset), thickness and dash. */
+    private levelLineButton(ch: ParallelChannel, i: number, actions: SettingsActions): HTMLElement {
+        const lv = ch.levels[i]!;
+        let color = lv.color || ch.style.lineColor || DEFAULT_DRAWING_COLOR;
+        let w = lv.lineWidth;
+        let ls: string = lv.lineStyle;
+        const field: ColorField = new ColorField({
+            theme: this.theme,
+            getVal: () => color,
+            onVal: (v) => {
+                color = v;
+                actions.patch({ [`levels.${i}.color`]: v });
+            },
+            line: () => ({ width: w, style: ls }),
+            popover: { align: 'start' },
+            extra: () => {
+                const box = document.createElement('div');
+                box.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+                box.append(
+                    caption('Thickness'),
+                    segmented([1, 2, 3, 4].map((n) => ({ value: String(n), sample: { width: n, style: 'solid' } })), String(w), (v) => {
+                        w = Number(v);
+                        actions.patch({ [`levels.${i}.lineWidth`]: w });
+                        field.paint();
+                    }),
+                    caption('Line style'),
+                    segmented(LINE_STYLE_OPTIONS.map((o) => ({ value: o.value, sample: { width: 2, style: o.value } })), ls, (v) => {
+                        ls = v;
+                        actions.patch({ [`levels.${i}.lineStyle`]: v });
+                        field.paint();
+                    }),
+                );
+                return box;
+            },
+        });
+        field.el.dataset.role = `level-${i}-line`;
+        return field.el;
     }
 
     /** TradingView's Line button: the color swatch and a sample of the line; it opens the color grid and opacity with
@@ -529,6 +608,28 @@ export class DrawingSettingsDialog {
         const priceOnly = PRICE_ONLY.has(drawing.type);
         const timeOnly = TIME_ONLY.has(drawing.type);
         drawing.anchors.forEach((a, i) => {
+            if (drawing instanceof ParallelChannel && i === 2) {
+                // TradingView's "Price offset": the parallel line's distance from the baseline, in price
+                const off = buildFieldControl({
+                    kind: 'number',
+                    value: roundPrice(drawing.offset()),
+                    step: priceStep(a.price),
+                    fill: false,
+                    commit: 'blur',
+                    onChange: (v) => {
+                        if (!Number.isFinite(v)) return;
+                        const live = (actions.resolve() ?? drawing) as ParallelChannel;
+                        const p0 = live.anchors[0];
+                        const p1 = live.anchors[1];
+                        if (p0 && p1) actions.patch({ 'anchors.2.price': (p0.price + p1.price) / 2 + v });
+                    },
+                });
+                off.el.dataset.role = 'channel-offset';
+                off.el.style.width = '120px';
+                off.el.style.flex = 'none';
+                grid.appendChild(fieldRow({ label: 'Price offset', control: [off.el], fit: true }));
+                return;
+            }
             const controls: HTMLElement[] = [];
             if (!timeOnly) {
                 let cur = a.price;

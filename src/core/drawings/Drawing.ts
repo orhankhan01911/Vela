@@ -22,6 +22,7 @@ export const TV_TEXT_DEFAULTS: Readonly<Record<string, Partial<DrawingText>>> = 
     infoline: { color: TV_LINE_COLOR, size: 14, hAlign: 'center', vAlign: 'top' },
     hline: { color: TV_LINE_COLOR, size: 12, hAlign: 'center', vAlign: 'center' },
     hray: { color: TV_LINE_COLOR, size: 12, hAlign: 'center', vAlign: 'bottom' },
+    parallelchannel: { color: TV_LINE_COLOR, size: 14, hAlign: 'left', vAlign: 'top' },
     vline: { color: TV_LINE_COLOR, size: 14, hAlign: 'center', vAlign: 'center' },
 };
 

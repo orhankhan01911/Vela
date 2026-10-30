@@ -408,7 +408,8 @@ registerDrawingType({
     group: 'channels',
     label: 'Parallel Channel',
     icon: PARALLEL_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}1a` },
+    // TradingView's parallel channel: TradingView blue lines, its blue at 20 % behind.
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid', fillColor: `${TV_LINE_COLOR}33` },
     create: (init) => new ParallelChannel(init),
 });
 

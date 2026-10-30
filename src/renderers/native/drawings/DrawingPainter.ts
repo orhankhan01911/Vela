@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, Box, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine } from '../../../core/drawings';
-import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP, XPOST_DARK, XPOST_LIGHT } from '../../../core/palette';
@@ -2797,8 +2797,8 @@ export class DrawingPainter {
             ctx.fill();
             ctx.restore();
         }
-        for (const { seg: s, color } of g.colored ?? []) {
-            this.stroke(ctx, { ...d.style, lineColor: color }, () => {
+        for (const { seg: s, color, lineStyle, lineWidth } of g.colored ?? []) {
+            this.stroke(ctx, { ...d.style, lineColor: color, ...(lineStyle ? { lineStyle } : {}), ...(lineWidth ? { lineWidth } : {}) }, () => {
                 ctx.moveTo(s[0], s[1]);
                 ctx.lineTo(s[2], s[3]);
             });
@@ -3263,6 +3263,31 @@ export function labelLayout(d: Drawing, proj: Projector): {
             return {
                 x: ha === 'left' ? -half : ha === 'right' ? half : 0,
                 top: text.vAlign === 'bottom' ? 3 - slack : text.vAlign === 'center' ? -h / 2 + slack : -1 - h + slack,
+                align: ha,
+                rotate: { angle: uprightLineAngle(x1, y1, x2, y2), cx: (x1 + x2) / 2, cy: (y1 + y2) / 2 },
+            };
+        }
+        case 'parallelchannel': {
+            // TradingView's channel text: along the lines, at their left / middle / right, over the upper line (Top),
+            // just under it inside the channel (Inside) or under the lower line (Bottom).
+            const l = (d as ParallelChannel).lines(proj);
+            if (!l) return null;
+            const h = lh * lines;
+            const slack = (lh - namedFontSize(text.size)) / 2;
+            const midGap = (l.gapA + l.gapB) / 2;
+            // the upper of the two lines on screen (y grows down): the baseline when the gap is positive
+            const upperK = midGap >= 0 ? 0 : 1;
+            const lowerK = 1 - upperK;
+            const k = text.vAlign === 'bottom' ? lowerK : upperK;
+            const x1 = l.xa;
+            const y1 = l.ya + l.gapA * k;
+            const x2 = l.xb;
+            const y2 = l.yb + l.gapB * k;
+            const half = Math.hypot(x2 - x1, y2 - y1) / 2;
+            const ha = text.hAlign ?? 'left';
+            return {
+                x: ha === 'left' ? -half : ha === 'right' ? half : 0,
+                top: text.vAlign === 'bottom' ? 3 - slack : text.vAlign === 'center' ? 3 - slack : -1 - h + slack,
                 align: ha,
                 rotate: { angle: uprightLineAngle(x1, y1, x2, y2), cx: (x1 + x2) / 2, cy: (y1 + y2) / 2 },
             };
