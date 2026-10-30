@@ -154,4 +154,6 @@ asks the user). Ship only the approved commits, never a whole line that carries 
 | Callout | 583711 | white text on #0097A7 at 70 %, 2 px border; radius 8 + margin 2; wedge tail |
 | Note ("Pin") | 229151 | 24 × 30 pin; 236 px tooltip, caret 12 × 10, shadow; Label row |
 | Emoji / icon | 275496, 820690, 637188, 528863 | Twemoji SVG; FA4 glyph paths; size 72, angle π/2; 4 resize corners + rotate zones |
+| Zoom in / out | 649873 | box between bar centres, zoomToViewport (bars + prices, autoscale off), zoom stack + Zoom out button; box blue 30 %/80 % |
+| Ruler (Measure) | 649873, 516130, 847997 | 20 % blue/red box, blue-600 lines, arrows ≥ 50 px, label 12 px gap 8 pad 9, 10 px past the end; change (pct) ticks / bars, span / Vol |
 | Layout menu | (UI) | Save layout, Autosave, Share, Make a copy, Rename, Download data, Create, Recently used, Open (".") |
