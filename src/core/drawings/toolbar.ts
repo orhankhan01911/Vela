@@ -77,13 +77,15 @@ const VOLUME_TYPES: DrawingTypeKey[] = ['anchoredvwap', 'fixedrangevp', 'anchore
 const TIME_PRICE_TYPES: DrawingTypeKey[] = ['fixedrangetpo'];
 
 const BRUSH_TYPES: DrawingTypeKey[] = ['freehand', 'highlighter'];
-const ARROW_TYPES: DrawingTypeKey[] = ['arrow', 'arrowmarker', 'arrowmarkup', 'arrowmarkdown'];
+const ARROW_TYPES: DrawingTypeKey[] = ['arrow', 'arrowmarker', 'arrowmarkup', 'arrowmarkdown', 'flagmark'];
 const SHAPE_TYPES: DrawingTypeKey[] = ['box', 'ellipse', 'triangle', 'polyline', 'circle', 'rotatedrect', 'path', 'arc', 'curve', 'doublecurve'];
 
 const TEXT_TYPES: DrawingTypeKey[] = ['text', 'anchoredtext', 'callout', 'note', 'anchorednote', 'pricenote', 'comment', 'pricelabel', 'signpost', 'table'];
 /** TradingView's "Content" section under the text tools: pictures and posts a host places (dialog, paste, drop). */
 const CONTENT_TYPES: DrawingTypeKey[] = ['image', 'xpost'];
-const ICON_TYPES: DrawingTypeKey[] = ['iconstamp', 'flagmark'];
+// TradingView's Icons button opens its emoji / icon panel (the renderer builds it); the old glyph stamp only stays so
+// saved stamps still draw. The flag mark sits with the arrows, as in TradingView.
+const ICON_TYPES: DrawingTypeKey[] = ['emoji', 'icon'];
 
 type SectionSource = { label: string; registryGroup: string } | { label: string; types: readonly DrawingTypeKey[] };
 

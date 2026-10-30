@@ -26,3 +26,9 @@ equivalent notice described above is not permitted.
 This file constitutes the NOTICE file described in Section 4(d) of the Apache
 License, Version 2.0: redistributions of this software, in source or binary
 form, must include a readable copy of these attribution notices.
+
+Third-party art bundled with the drawing tools (src/core/drawings/assets, see THIRD_PARTY.md there):
+- Twemoji 15 graphics, Copyright 2019 Twitter, Inc. and other contributors, licensed under CC-BY 4.0
+  (https://creativecommons.org/licenses/by/4.0/), https://github.com/jdecked/twemoji
+- Font Awesome 4.7 glyph outlines by Dave Gandy, licensed under the SIL Open Font License 1.1
+  (https://scripts.sil.org/OFL)

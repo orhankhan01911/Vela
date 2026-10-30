@@ -19,6 +19,7 @@ export interface ToolSettings {
 }
 
 const STORAGE_KEY = 'vela.drawings.toolSettings.v1';
+const NOT_REMEMBERED: Partial<Record<DrawingTypeKey, readonly string[]>> = { emoji: ['angle', 'emoji'], icon: ['angle', 'icon'] };
 const CONTENT_PROPS = new Set<DrawingTypeKey>(['image', 'xpost', 'table', 'pricealert', 'anchoredtext', 'anchorednote', 'ghostfeed']);
 
 let memory: Map<string, ToolSettings> | null = null;
@@ -64,7 +65,12 @@ export function toolSettings(type: DrawingTypeKey): ToolSettings | undefined {
 /** Remember `doc`'s cosmetics as its type's last-used settings. */
 export function rememberToolSettings(doc: SerializedDrawing): void {
     const entry: ToolSettings = { style: { ...doc.style } };
-    if (doc.props && !CONTENT_PROPS.has(doc.type)) entry.props = JSON.parse(JSON.stringify(doc.props)) as Record<string, unknown>;
+    if (doc.props && !CONTENT_PROPS.has(doc.type)) {
+        entry.props = JSON.parse(JSON.stringify(doc.props)) as Record<string, unknown>;
+        // TradingView's emoji / icon remember their size (and color), not the turn or the picture: those come from the
+        // picker and start upright.
+        for (const k of NOT_REMEMBERED[doc.type] ?? []) delete entry.props[k];
+    }
     if (doc.text) {
         const { value: _value, ...look } = doc.text;
         entry.text = look;

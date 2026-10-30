@@ -1,4 +1,5 @@
 import { rememberToolSettings, toolSettings } from './toolMemory';
+import { toolChoice } from './toolChoice';
 import type { Unsubscribe } from '../util/types';
 import type { IChartRenderer } from '../ports/IChartRenderer';
 import type { TypedEventBus } from '../events/EventBus';
@@ -495,7 +496,8 @@ export class DrawingController {
                 // A freshly drawn shape inherits its tool's last-used settings: style, extras and text look.
                 const mem = toolSettings(i.doc.type);
                 const style = mem ? { ...i.doc.style, ...mem.style } : i.doc.style;
-                const props = mem?.props ? { ...(i.doc.props ?? {}), ...mem.props } : i.doc.props;
+                const choice = toolChoice(i.doc.type); // the emoji / icon picked in the Icons panel
+                const props = mem?.props || choice ? { ...(i.doc.props ?? {}), ...(mem?.props ?? {}), ...(choice ?? {}) } : i.doc.props;
                 const text = mem?.text && i.doc.text ? { ...i.doc.text, ...mem.text, value: i.doc.text.value } : i.doc.text;
                 const d = deserializeDrawing({ ...i.doc, id: this.store.nextId(), style, props, text });
                 if (!d) return;

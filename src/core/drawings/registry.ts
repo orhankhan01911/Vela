@@ -60,6 +60,7 @@ import { Arc } from './types/Arc';
 import { Curve } from './types/Curve';
 import { ArrowMarkUp, ArrowMarkDown } from './types/ArrowMark';
 import { FlagMark, IconStamp } from './types/GlyphStamp';
+import { EmojiDrawing, IconDrawing } from './types/SvgIcon';
 import { FibRetracement } from './types/FibRetracement';
 import { FibExtension } from './types/FibExtension';
 import { FibExtensionTrend } from './types/FibExtensionTrend';
@@ -675,6 +676,28 @@ registerDrawingType({
     icon: ICON_STAMP_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new IconStamp(init),
+});
+
+// TradingView's emoji and icon tools (picked in the Icons panel; see types/SvgIcon).
+registerDrawingType({
+    type: 'emoji',
+    group: 'stamps',
+    label: 'Emoji',
+    icon: ICON_STAMP_ICON,
+    coversSeries: true,
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    create: (init) => new EmojiDrawing(init),
+});
+
+registerDrawingType({
+    type: 'icon',
+    group: 'stamps',
+    label: 'Icon',
+    icon: ICON_STAMP_ICON,
+    coversSeries: true,
+    // TradingView's icon: its blue.
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    create: (init) => new IconDrawing(init),
 });
 
 // ── fibonacci ──

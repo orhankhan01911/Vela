@@ -102,6 +102,8 @@ export type DrawingTypeKey =
     | 'polyline'
     | 'freehand'
     | 'highlighter'
+    | 'emoji'
+    | 'icon'
     | 'circle'
     | 'rotatedrect'
     | 'path'
@@ -282,7 +284,7 @@ export abstract class Drawing {
      * A handle drag in screen pixels, for a type whose geometry is partly in pixels (an image's size). Return true
      * when handled: the interaction then skips the anchor move. Default: not handled.
      */
-    dragHandlePx(_index: number, _x: number, _y: number, _proj: Projector): boolean {
+    dragHandlePx(_index: number, _x: number, _y: number, _proj: Projector, _start?: { x: number; y: number; doc: SerializedDrawing }): boolean {
         return false;
     }
 
@@ -298,7 +300,7 @@ export abstract class Drawing {
         return this.anchors;
     }
 
-    handleCursor(_index: number): string | null {
+    handleCursor(_index: number, _proj?: Projector): string | null {
         return null;
     }
 

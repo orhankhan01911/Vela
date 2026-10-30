@@ -1,4 +1,4 @@
-import type { Drawing, DrawingIntent, DrawingPoint, DrawingStyle, DrawingTypeKey, FreeAxis, Projector, SnapMode } from '../../../core/drawings';
+import type { Drawing, DrawingIntent, DrawingPoint, DrawingStyle, DrawingTypeKey, FreeAxis, Projector, SerializedDrawing, SnapMode } from '../../../core/drawings';
 import { createDrawing, deserializeDrawing, resolveAnchors, translateInBars } from '../../../core/drawings';
 import { topDrawingAt, HIT_TOLERANCE } from './DrawingHitTester';
 
@@ -74,6 +74,8 @@ type State =
           mod: boolean;
           /** The transient copies a Ctrl-drag moves (built at drag start); the sources stay put. */
           clones: DragTarget[] | null;
+          /** The drawing as it was at the press, for a handle drag (an emoji's size/angle). */
+          pressDoc?: SerializedDrawing | null;
       }
     /** Ctrl/Cmd-drag on the empty plot: a rubber-band box from the press to the cursor. */
     | { kind: 'marquee'; x0: number; y0: number; x1: number; y1: number };
@@ -194,7 +196,7 @@ export class DrawingInteraction {
         for (const d of this.handleDrawings()) {
             const i = d.hitHandle(x, y, proj, HIT_TOLERANCE);
             // TradingView: a handle shows the arrow unless it names a resize cursor; the body shows the pointer.
-            if (i >= 0) return d.handleCursor(i) ?? 'default';
+            if (i >= 0) return d.handleCursor(i, proj) ?? 'default';
         }
         return this.hitAt(x, y) ? 'pointer' : null;
     }
@@ -302,7 +304,9 @@ export class DrawingInteraction {
                     if (d && !d.locked && d.visible) riders.push({ id, orig: cloneAnchors(d) });
                 }
             }
-            this.state = { kind: 'pressed', id: hit.id, handle, orig: cloneAnchors(hit), px: x, py: y, moved: false, riders, mod, clones: null };
+            // A handle drag keeps the drawing as pressed: a size/angle drag (an emoji's corner) works from it.
+            const pressDoc = handle >= 0 ? hit.serialize() : null;
+            this.state = { kind: 'pressed', id: hit.id, handle, orig: cloneAnchors(hit), px: x, py: y, moved: false, riders, mod, clones: null, pressDoc };
         }
         // empty space → nothing here: the popup self-dismisses + hover already cleared handles.
     }
@@ -392,7 +396,7 @@ export class DrawingInteraction {
         this.state.moved = true;
         if (this.state.handle < 0) {
             this.dragBody(d, x, y);
-        } else if (d.dragHandlePx(this.state.handle, x, y, this.deps.projector())) {
+        } else if (d.dragHandlePx(this.state.handle, x, y, this.deps.projector(), this.state.pressDoc ? { x: this.state.px, y: this.state.py, doc: this.state.pressDoc } : undefined)) {
             // a size in pixels (an image's corner): the type took it
         } else {
             const a = d.anchors[this.state.handle]; // a handle snaps to the candle

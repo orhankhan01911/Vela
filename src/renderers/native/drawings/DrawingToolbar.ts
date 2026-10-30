@@ -2,6 +2,8 @@ import type { VelaTheme } from '../../../core/options';
 import type { DrawingTypeKey, SnapMode } from '../../../core/drawings';
 import type { ToolbarDefinition, ToolGroup, ToolSection } from '../../../core/drawings';
 import { icon } from '../../../core/icons';
+import { buildIconsPanel } from './IconsPanel';
+import { setToolChoice } from '../../../core/drawings/toolChoice';
 import { applyChromeTokens } from '../../shared/theme-tokens';
 import { attachChromeTooltip } from '../../shared/chrome-tooltip';
 import { announceSurface } from '../../../ui/surface-events';
@@ -13,6 +15,8 @@ import { vt } from '../../../i18n';
 export const TOOLBAR_WIDTH = 44;
 /** Collapsed-strip width in px — just the expand chevron. */
 export const TOOLBAR_COLLAPSED_WIDTH = 16;
+/** The toolbar group whose button opens TradingView's Icons panel. */
+const ICONS_GROUP = 'icons';
 /** Space between the bar's edge and an open flyout: the clearance the topbar dropdowns
  *  keep below the topbar. */
 const FLYOUT_GAP = 3;
@@ -391,6 +395,10 @@ export class DrawingToolbar {
 
     /** Clicking the icon arms the group's last-used tool (it does NOT open the flyout). */
     private onGroupIconClick(group: ToolGroup): void {
+        if (group.id === ICONS_GROUP) {
+            this.onArrowClick(group); // TradingView's Icons button opens its picker
+            return;
+        }
         const type = this.lastUsed.get(group.id) ?? group.tools[0]?.type;
         if (type) this.onArm(type);
     }
@@ -399,7 +407,32 @@ export class DrawingToolbar {
     private onArrowClick(group: ToolGroup): void {
         const wasOpen = this.flyoutOwnerId === group.id;
         this.closeFlyout();
-        if (!wasOpen) this.openGroupFlyout(group);
+        if (wasOpen) return;
+        if (group.id === ICONS_GROUP) this.openIconsPanel(group);
+        else this.openGroupFlyout(group);
+    }
+
+    /** TradingView's Icons panel: pick an emoji or an icon, and the tool is armed with it. */
+    private openIconsPanel(group: ToolGroup): void {
+        const cell = this.groupCells.get(group.id);
+        if (!cell) return;
+        const fly = this.beginFlyout(group.id, cell);
+        fly.style.overflow = 'hidden';
+        const last = this.lastUsed.get(group.id) === 'icon' ? 'icon' : 'emoji';
+        fly.append(
+            buildIconsPanel((p) => {
+                setToolChoice(p.kind, p.kind === 'emoji' ? { emoji: p.value } : { icon: p.value });
+                this.lastUsed.set(group.id, p.kind);
+                this.closeFlyout();
+                this.onArm(p.kind);
+            }, last),
+        );
+        // Kept whole inside the chart: moved up when it would run past the bottom.
+        const hostH = this.host.getBoundingClientRect().height;
+        const h = fly.getBoundingClientRect().height;
+        const top = parseFloat(fly.style.top) || 0;
+        fly.style.maxHeight = `${Math.max(160, hostH - 8)}px`;
+        if (top + h > hostH - 4) fly.style.top = `${Math.max(4, hostH - h - 4)}px`;
     }
 
     /** The magnet icon toggles the last-used strength on/off; the chevron opens the strength menu. */

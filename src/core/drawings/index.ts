@@ -183,3 +183,7 @@ export {
     type DrawingsOption,
 } from './toolbar';
 export { DrawingController, type AddInit } from './DrawingController';
+export { SvgIcon, EmojiDrawing, IconDrawing, SVG_ICON_SIZE, SVG_ICON_MIN, ROTATE_ZONE_PX, SVG_ICON_FRAME, type HandleDragStart } from './types/SvgIcon';
+export { EMOJI_GROUPS } from './assets/emojiGroups';
+export { ICON_GROUPS, FA_GLYPHS } from './assets/faIcons';
+export { setToolChoice, toolChoice } from './toolChoice';

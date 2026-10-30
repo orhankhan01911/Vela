@@ -581,6 +581,7 @@ describe('buildToolbar grouping', () => {
             'arrowmarker',
             'arrowmarkup',
             'arrowmarkdown',
+            'flagmark', // with the arrows, as in TradingView
         ]);
 
         const textGroup = definition.groups.find((g) => g.id === 'text');
@@ -601,7 +602,8 @@ describe('buildToolbar grouping', () => {
         expect(textGroup?.sections?.[1]?.tools.map((t) => t.type)).toEqual(['image', 'xpost']);
 
         const iconsGroup = definition.groups.find((g) => g.id === 'icons');
-        expect(iconsGroup?.sections?.[0]?.tools.map((t) => t.type)).toEqual(['iconstamp', 'flagmark']);
+        // TradingView's Icons button: its emoji / icon picker (the old glyph stamp stays for saved drawings only).
+        expect(iconsGroup?.sections?.[0]?.tools.map((t) => t.type)).toEqual(['emoji', 'icon']);
 
         const measureGroup = definition.groups.find((g) => g.id === 'measurements');
         expect(measureGroup?.label).toBe('Measurements');

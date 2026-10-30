@@ -10,6 +10,8 @@ import { injectStyles } from '../ui/styles';
 import type { ToolbarDefinition, ToolDefinition } from '../core/drawings/toolbar';
 import type { DrawingTypeKey } from '../core/drawings/Drawing';
 import { vt } from '../i18n';
+import { buildIconsPanel } from '../renderers/native/drawings/IconsPanel';
+import { setToolChoice } from '../core/drawings/toolChoice';
 
 const STYLE_ID = 'vela-widget-drawings-drawer';
 const CSS = `
@@ -298,6 +300,18 @@ export class DrawingsDrawer {
         }
         const group = this.definition.groups.find((g) => g.id === this.activeGroup);
         if (!group) return;
+        if (group.id === 'icons') {
+            // TradingView's Icons picker in the sheet: pick an emoji or icon, and the tool is armed with it.
+            const panel = buildIconsPanel((pick) => {
+                setToolChoice(pick.kind, pick.kind === 'emoji' ? { emoji: pick.value } : { icon: pick.value });
+                this.opts.onSelect(pick.kind);
+                this.drawer.hide();
+            });
+            panel.style.width = '100%';
+            panel.style.maxWidth = '100%';
+            this.list.appendChild(panel);
+            return;
+        }
         if (group.sections && group.sections.length > 0) {
             for (const s of group.sections) {
                 section(s.label);

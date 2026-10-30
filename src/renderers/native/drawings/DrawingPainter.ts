@@ -1,8 +1,9 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
+import { emojiImage } from './emojiArt';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP, XPOST_DARK, XPOST_LIGHT } from '../../../core/palette';
 import { withAlpha } from '../../../core/color';
 import { barTransformFor } from '../../../core/price-styles/BarTransform';
@@ -327,6 +328,10 @@ export class DrawingPainter {
                 if (ends && d.style.arrowRight) this.paintChevron(ctx, ends.end[0], ends.end[1], d.style);
             }
             this.paintLabel(ctx, d, proj, theme);
+            return;
+        }
+        if (d instanceof SvgIcon) {
+            this.paintSvgIcon(ctx, d, proj, theme);
             return;
         }
         if (d instanceof ArrowMark) {
@@ -2735,6 +2740,45 @@ export class DrawingPainter {
         this.paintTextPlate(ctx, d, theme, ax - w / 2, ay - h - 6 - bh, w, bh, lines, lh, padX, padY);
     }
 
+    /** TradingView's emoji / icon (its SvgIconPaneView): selected or hovered, a square frame in the chart background at
+     *  40 % with a 1.5 px border (its blue; at 40 % when hovered), turned with the picture; then the picture: a Twemoji
+     *  image, or a Font Awesome 4 glyph in the icon's color. */
+    private paintSvgIcon(ctx: CanvasRenderingContext2D, d: SvgIcon, proj: Projector, theme: VelaTheme): void {
+        const c = d.center(proj);
+        if (!c) return;
+        const selected = this.targets.selected?.has(d.id) === true;
+        const hovered = this.targets.hovered === d.id;
+        ctx.save();
+        ctx.translate(c[0], c[1]);
+        ctx.rotate(d.angle - Math.PI / 2);
+        if (selected || (hovered && !d.locked)) {
+            const r = d.frameSide();
+            ctx.fillStyle = withAlpha(theme.background, 0.4);
+            ctx.fillRect(-r / 2, -r / 2, r, r);
+            ctx.lineWidth = SVG_ICON_FRAME;
+            ctx.strokeStyle = selected ? TV_TEXT_OUTLINE : TV_TEXT_OUTLINE_HOVER;
+            ctx.setLineDash([]);
+            const lw = SVG_ICON_FRAME;
+            ctx.strokeRect(-r / 2 - lw / 2, -r / 2 - lw / 2, r + lw, r + lw);
+        }
+        const s = d.size;
+        if (d instanceof EmojiDrawing) {
+            const img = emojiImage(d.emoji, () => proj.requestRepaint?.());
+            if (img) ctx.drawImage(img, -s / 2, -s / 2, s, s);
+        } else if (d instanceof IconDrawing && typeof Path2D === 'function') {
+            const g = FA_GLYPHS[d.icon];
+            if (g) {
+                // Font units: 1792 per em, y up, the em box centred on the point (its baseline 256 above the bottom).
+                const k = s / 1792;
+                ctx.scale(k, -k);
+                ctx.translate(-g.w / 2, -640);
+                ctx.fillStyle = d.style.lineColor || TV_TEXT_OUTLINE;
+                ctx.fill(glyphPath(d.icon, g.d));
+            }
+        }
+        ctx.restore();
+    }
+
     /** TradingView's note (its pin renderer): the 24 x 30 pin icon in the Label color, tip on the point; while hovered
      *  or selected, the text in a 236 px tooltip above it (below when there is no room), a caret toward the pin. */
     private paintTvNote(ctx: CanvasRenderingContext2D, d: Note, proj: Projector, theme: VelaTheme): void {
@@ -3666,6 +3710,15 @@ const NOTE_TIP = { width: 236, padH: 12, padV: 12, lineGap: 5, margin: 13, radiu
 const TV_NOTE_LABEL = '#2962ff'; // palette-exempt: TradingView's blue 500
 const TV_NOTE_DARK = { back: '#1a1a1a', border: '#464646', text: '#dbdbdb' } as const; // palette-exempt: TradingView's cold grays 800 / 700 / 200
 const TV_NOTE_LIGHT = { back: '#ffffff', border: '#ebebeb', text: '#000000' } as const; // palette-exempt: TradingView's white, cold grays 150 / 900
+const glyphPaths = new Map<number, Path2D>();
+function glyphPath(code: number, d: string): Path2D {
+    let p = glyphPaths.get(code);
+    if (!p) {
+        p = new Path2D(d);
+        glyphPaths.set(code, p);
+    }
+    return p;
+}
 let pinPath: Path2D | null = null;
 /** TradingView's pin icon (24 x 30), its own path. */
 function tvPinPath(): Path2D {
