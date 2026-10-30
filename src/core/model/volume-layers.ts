@@ -16,14 +16,28 @@ export interface VolumeLayerData {
 
 /** `setNativeData('vpvr', …)`: right-anchored visible-range volume-by-price profile. */
 export interface VpvrLayerData {
-    /** Number of price rows the visible range is bucketed into. */
+    /** "Number Of Rows": the row count the visible range is bucketed into. */
     rows: number;
+    /** "Ticks Per Row": the price height of one row (ticks times the symbol's tick); absent = `rows` rows. */
+    rowSize?: number;
+    /** What a row's length shows: up and down volume side by side, the total, or up minus down. */
+    volumeMode?: 'updown' | 'total' | 'delta';
     /** Pane-width fraction (0..1) of the largest row (the profile's horizontal scale). */
     widthFrac: number;
+    /** The edge the rows grow from. */
+    placement?: 'right' | 'left';
     upColor: string;
     downColor: string;
-    /** Outline the point-of-control (highest-volume) row. */
+    /** Row colours inside the value area (default: `upColor` / `downColor`). */
+    vaUpColor?: string;
+    vaDownColor?: string;
+    /** Draw the rows at all (TradingView's "Volume profile" switch; the levels are separate). */
+    showProfile?: boolean;
+    /** Write each row's volume on it, in `valuesColor`. */
+    showValues?: boolean;
+    valuesColor?: string;
+    /** Outline the point-of-control (highest-volume) row (the pre-TradingView look; its POC is a line now). */
     showPoc: boolean;
-    /** Volume fraction (0..1) the highlighted value area covers (rows outside it draw dimmer). */
+    /** Volume fraction (0..1) the highlighted value area covers. */
     valueAreaFrac: number;
 }

@@ -2565,6 +2565,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                     // with no owner in the scene paints on the price pane (Bar Stats over the candles).
                     if (record.model) this.applyModel(id, record.model);
                     record.native.instance.resume();
+                    this.sendViewport(record); // the window may have moved while it was hidden
                 }
             } else {
                 this.setLoading(record, true); // spinner on the kept legend row while re-executing
@@ -2851,9 +2852,17 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             };
             record.native.instance.start(ctx, record.inputValues);
             record.native.started = true;
+            this.sendViewport(record);
         } catch (err) {
             this.fail(id, handle, err);
         }
+    }
+
+    /** Hand a range-aware native (`reactsToViewport`) the current window: viewport changes only reach it after it
+     *  started, so without this it would know no window until the user next scrolls. */
+    private sendViewport(record: IndicatorRecord): void {
+        const w = this.visibleRange;
+        if (w && record.native?.descriptor.reactsToViewport) record.native.instance.onViewport({ from: w.left, to: w.right });
     }
 
     /** The renderer-layer channel a native instance's `pushData` lands on: the type itself

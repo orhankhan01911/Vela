@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Vela } from '../src/index';
-import { ACCENT, BEARISH, BULLISH } from '../src/core/palette';
+import { BEARISH, BULLISH } from '../src/core/palette';
 import type {
     IChartRenderer,
     RendererCapabilities,
@@ -1971,9 +1971,22 @@ describe('EngineOrchestrator — built-in volume native indicators', () => {
         expect(model!.shorttitle).toBe('VRVP');
         expect(model!.series).toHaveLength(0);
         expect(model!.paneId).toBe('price');
-        expect(renderer.vpvrPushes).toEqual([
-            { rows: 24, widthFrac: 0.3, upColor: ACCENT, downColor: BEARISH, showPoc: true, valueAreaFrac: 0.7 },
-        ]);
+        // TradingView's factory defaults (its VRVP metainfo): blue / yellow at 75 % transparency, 30 % in the value area.
+        expect(renderer.vpvrPushes[0]).toEqual({
+            rows: 24,
+            volumeMode: 'updown',
+            widthFrac: 0.3,
+            placement: 'right',
+            upColor: '#2962ff40',
+            downColor: '#fbc02d40',
+            vaUpColor: '#2962ffb3',
+            vaDownColor: '#fbc02db3',
+            showProfile: true,
+            showValues: false,
+            valuesColor: '#787b86',
+            showPoc: false,
+            valueAreaFrac: 0.7,
+        });
         expect(chart.inspect().indicators.some((s) => s.nativeType === 'vpvr')).toBe(true);
     });
 

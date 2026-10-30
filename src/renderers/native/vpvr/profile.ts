@@ -41,6 +41,7 @@ export function buildVpvrProfile(
     i1: number,
     rowCount: number,
     valueAreaFrac: number,
+    rowSize?: number,
 ): VpvrProfile | null {
     const from = Math.max(0, i0);
     const to = Math.min(bars.length - 1, i1);
@@ -56,32 +57,12 @@ export function buildVpvrProfile(
     }
     if (!Number.isFinite(min)) return null; // no visible volume at all
 
-    // A flat window (every volumed bar at one price) still profiles — as a single row.
-    const n = max > min ? Math.max(1, Math.round(rowCount)) : 1;
-    const rowH = max > min ? (max - min) / n : 1;
+    const grid = vpvrGrid(min, max, rowCount, rowSize);
+    min = grid.min;
+    const { n, rowH } = grid;
     const rows: VpvrRow[] = Array.from({ length: n }, (_, k) => ({ price: min + k * rowH, up: 0, down: 0 }));
 
-    for (let i = from; i <= to; i += 1) {
-        const b = bars[i]!;
-        const v = b.volume;
-        if (!(v != null && v > 0)) continue;
-        const side = b.close >= b.open ? 'up' : 'down';
-        const span = b.high - b.low;
-        if (span <= 0) {
-            // Point bar: all volume in the row containing its price.
-            const k = clampIndex(Math.floor((b.low - min) / rowH), n);
-            rows[k]![side] += v;
-            continue;
-        }
-        // Distribute over overlapped rows, proportional to overlap.
-        const kFirst = clampIndex(Math.floor((b.low - min) / rowH), n);
-        const kLast = clampIndex(Math.floor((b.high - min) / rowH - 1e-9), n);
-        for (let k = kFirst; k <= kLast; k += 1) {
-            const rowBot = min + k * rowH;
-            const overlap = Math.min(b.high, rowBot + rowH) - Math.max(b.low, rowBot);
-            if (overlap > 0) rows[k]![side] += (v * overlap) / span;
-        }
-    }
+    for (let i = from; i <= to; i += 1) addBar(rows, bars[i]!, min, rowH);
 
     let total = 0;
     let maxTotal = 0;
@@ -96,15 +77,67 @@ export function buildVpvrProfile(
     }
     if (maxTotal <= 0) return null;
 
-    // Grow the value area from the POC: absorb whichever adjacent row is larger until
-    // the area covers the target volume fraction.
+    const [vaFrom, vaTo] = growValueArea((k) => rows[k]!.up + rows[k]!.down, n, poc, total, valueAreaFrac);
+    return { rows, rowH, min, maxTotal, poc, vaFrom, vaTo };
+}
+
+/** Most rows a profile is bucketed into (TradingView allows a row size up to 1 000 000; past this many rows a
+ *  "Ticks Per Row" grid widens its rows instead, so a tiny tick on a wide range cannot stall the frame). */
+export const VPVR_MAX_ROWS = 2000;
+
+/**
+ * The price grid of a profile over `[min, max]`. With no `rowSize` ("Number Of Rows") the range splits into
+ * `rowCount` equal rows. With a `rowSize` ("Ticks Per Row": ticks times the symbol's tick) rows are that tall and
+ * sit on multiples of it, as TradingView's do. A flat range (every volumed bar at one price) is a single row.
+ */
+export function vpvrGrid(min: number, max: number, rowCount: number, rowSize?: number): { min: number; rowH: number; n: number } {
+    if (rowSize != null && rowSize > 0 && Number.isFinite(rowSize)) {
+        let rowH = rowSize;
+        let lo = Math.floor(min / rowH) * rowH;
+        let n = Math.max(1, Math.floor((max - lo) / rowH) + 1);
+        if (n > VPVR_MAX_ROWS) {
+            rowH *= Math.ceil(n / VPVR_MAX_ROWS);
+            lo = Math.floor(min / rowH) * rowH;
+            n = Math.max(1, Math.floor((max - lo) / rowH) + 1);
+        }
+        return { min: lo, rowH, n };
+    }
+    if (!(max > min)) return { min, rowH: 1, n: 1 };
+    const n = Math.min(VPVR_MAX_ROWS, Math.max(1, Math.round(rowCount)));
+    return { min, rowH: (max - min) / n, n };
+}
+
+/** Add one bar's volume to the rows its high-low range overlaps, in proportion to the overlap, on its close side. */
+function addBar(rows: VpvrRow[], b: OHLCV, min: number, rowH: number): void {
+    const v = b.volume;
+    if (!(v != null && v > 0)) return;
+    const n = rows.length;
+    const side = b.close >= b.open ? 'up' : 'down';
+    const span = b.high - b.low;
+    if (span <= 0) {
+        // Point bar: all volume in the row containing its price.
+        rows[clampIndex(Math.floor((b.low - min) / rowH), n)]![side] += v;
+        return;
+    }
+    const kFirst = clampIndex(Math.floor((b.low - min) / rowH), n);
+    const kLast = clampIndex(Math.floor((b.high - min) / rowH - 1e-9), n);
+    for (let k = kFirst; k <= kLast; k += 1) {
+        const rowBot = min + k * rowH;
+        const overlap = Math.min(b.high, rowBot + rowH) - Math.max(b.low, rowBot);
+        if (overlap > 0) rows[k]![side] += (v * overlap) / span;
+    }
+}
+
+/** Grow the value area from the POC: absorb whichever adjacent row is larger until the area covers the target
+ *  fraction of the total volume. Returns the inclusive row span. */
+function growValueArea(totalOf: (k: number) => number, n: number, poc: number, total: number, valueAreaFrac: number): [number, number] {
     const target = total * Math.min(1, Math.max(0, valueAreaFrac));
     let vaFrom = poc;
     let vaTo = poc;
-    let acc = maxTotal;
+    let acc = totalOf(poc);
     while (acc < target && (vaFrom > 0 || vaTo < n - 1)) {
-        const below = vaFrom > 0 ? rows[vaFrom - 1]!.up + rows[vaFrom - 1]!.down : -1;
-        const above = vaTo < n - 1 ? rows[vaTo + 1]!.up + rows[vaTo + 1]!.down : -1;
+        const below = vaFrom > 0 ? totalOf(vaFrom - 1) : -1;
+        const above = vaTo < n - 1 ? totalOf(vaTo + 1) : -1;
         if (above > below) {
             vaTo += 1;
             acc += above;
@@ -113,8 +146,72 @@ export function buildVpvrProfile(
             acc += below;
         }
     }
+    return [vaFrom, vaTo];
+}
 
-    return { rows, rowH, min, maxTotal, poc, vaFrom, vaTo };
+/** The profile's levels, as TradingView places them: the POC at the middle of its row, the value area high at the
+ *  top of the highest value-area row and the low at the bottom of the lowest. */
+export interface VpvrLevels {
+    poc: number;
+    vah: number;
+    val: number;
+}
+
+export function vpvrLevels(p: VpvrProfile): VpvrLevels {
+    return {
+        poc: p.min + (p.poc + 0.5) * p.rowH,
+        vah: p.min + (p.vaTo + 1) * p.rowH,
+        val: p.min + p.vaFrom * p.rowH,
+    };
+}
+
+/**
+ * The developing levels: for every bar of the window, the POC / value area of the profile built from the window's
+ * first bar up to that bar (TradingView's "Developing POC" / "Developing VA"), on the full window's grid. Index `j`
+ * holds bar `i0 + j`; null until the first bar with volume.
+ */
+export function buildVpvrDeveloping(
+    bars: readonly OHLCV[],
+    i0: number,
+    i1: number,
+    profile: VpvrProfile,
+    valueAreaFrac: number,
+): Array<VpvrLevels | null> {
+    const from = Math.max(0, i0);
+    const to = Math.min(bars.length - 1, i1);
+    const { rowH, min } = profile;
+    const n = profile.rows.length;
+    const rows: VpvrRow[] = Array.from({ length: n }, (_, k) => ({ price: min + k * rowH, up: 0, down: 0 }));
+    const totalOf = (k: number): number => rows[k]!.up + rows[k]!.down;
+    const out: Array<VpvrLevels | null> = [];
+    let total = 0;
+    let poc = -1;
+    let pocTotal = 0;
+    for (let i = from; i <= to; i += 1) {
+        const b = bars[i]!;
+        addBar(rows, b, min, rowH);
+        const v = b.volume;
+        if (v != null && v > 0) {
+            total += v;
+            // Rows only ever grow, so the new POC is the old one or a row this bar touched.
+            const k0 = clampIndex(Math.floor((b.low - min) / rowH), n);
+            const k1 = clampIndex(Math.floor((b.high - min) / rowH - 1e-9), n);
+            for (let k = Math.min(k0, k1); k <= Math.max(k0, k1); k += 1) {
+                const t = totalOf(k);
+                if (t > pocTotal) {
+                    pocTotal = t;
+                    poc = k;
+                }
+            }
+        }
+        if (poc < 0) {
+            out.push(null);
+            continue;
+        }
+        const [vaFrom, vaTo] = growValueArea(totalOf, n, poc, total, valueAreaFrac);
+        out.push({ poc: min + (poc + 0.5) * rowH, vah: min + (vaTo + 1) * rowH, val: min + vaFrom * rowH });
+    }
+    return out;
 }
 
 function clampIndex(k: number, n: number): number {

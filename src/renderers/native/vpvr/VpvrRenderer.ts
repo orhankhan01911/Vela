@@ -72,10 +72,10 @@ export class VpvrRenderer {
         // in place on live ticks) + the shape inputs; pans/zooms hit the cache mid-gesture
         // only when the window is unchanged, which is exactly when recompute is waste.
         const last = bars[i1]!;
-        const key = `${i0}:${i1}:${bars.length}:${last.high}:${last.low}:${last.close}:${last.volume ?? 0}:${data.rows}:${data.valueAreaFrac}`;
+        const key = `${i0}:${i1}:${bars.length}:${last.high}:${last.low}:${last.close}:${last.volume ?? 0}:${data.rows}:${data.rowSize ?? ''}:${data.valueAreaFrac}`;
         if (key !== this.memoKey) {
             this.memoKey = key;
-            this.memo = buildVpvrProfile(bars, i0, i1, data.rows, data.valueAreaFrac);
+            this.memo = buildVpvrProfile(bars, i0, i1, data.rows, data.valueAreaFrac, data.rowSize);
         }
         const profile = this.memo;
         if (!profile) return;
@@ -89,9 +89,23 @@ export class VpvrRenderer {
         const rightX = coords.width - inset;
         paintVpvr(ctx, profile, {
             rightX,
+            leftX: 0,
             maxW: Math.min(coords.width * data.widthFrac, rightX * 0.9),
             yOf: (p) => coords.priceToY(p, scale, bounds),
-        }, { upColor: data.upColor, downColor: data.downColor, showPoc: data.showPoc, pocColor: theme.textColor });
+        }, {
+            upColor: data.upColor,
+            downColor: data.downColor,
+            vaUpColor: data.vaUpColor,
+            vaDownColor: data.vaDownColor,
+            showPoc: data.showPoc,
+            pocColor: theme.textColor,
+            volumeMode: data.volumeMode,
+            placement: data.placement,
+            showProfile: data.showProfile,
+            showValues: data.showValues,
+            valuesColor: data.valuesColor,
+            fontFamily: theme.fontFamily,
+        });
         ctx.restore();
     }
 }
