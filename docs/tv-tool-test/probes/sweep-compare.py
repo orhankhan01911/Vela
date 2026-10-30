@@ -26,6 +26,7 @@ for l in open(S+'/run2.txt'):
     if not l.startswith('{'): continue
     d=json.loads(l)
     if d['tool'] in ('zoom', 'ruler'):  # modes: no TradingView dialog; the sweep checks their behaviour itself
+        if d.get('look') and not d.get('err'): print('LOOK', d['tool'], '(open DIR/ruler.png and compare with the Ruler facts)'); continue
         print(('OK  ' if d.get('ok') else 'FAIL'), d['tool'], d.get('err', '')); continue
     t=tv.get(M[d['tool']])
     if not t or 'tabs' not in t:

@@ -101,7 +101,7 @@ if (!ONLY.length || ONLY.includes("ruler")) {
     await p.screenshot({ path: `${OUT}/ruler.png` });
     await p.mouse.click(800, 300); await p.waitForTimeout(300);
     r.note = "look at ruler.png: blue box, arrows, label (change (pct) ticks / bars, span / Vol), span shaded on both scales with blue end chips";
-    r.ok = true;
+    r.look = true; // a picture to check by eye: no automatic verdict
   } catch (e) { r.err = String(e).slice(0, 160); }
   console.log(JSON.stringify(r));
 }

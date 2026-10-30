@@ -6,6 +6,12 @@ const ws = new WebSocket(t.webSocketDebuggerUrl);
 await new Promise((r) => ws.addEventListener('open', r));
 ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: 'JSON.stringify(window.__wkDone && window.__wkRes)', returnByValue: true } }));
 const msg = await new Promise((r) => ws.addEventListener('message', (e) => r(JSON.parse(e.data))));
-writeFileSync(process.argv[2], msg.result.result.value);
+const value = msg.result.result.value;
+if (!value || value === 'false') {
+  console.error('not ready: tv-read-dialogs.js has not finished (window.__wkDone is false). Wait and run this again.');
+  ws.close();
+  process.exit(1);
+}
+writeFileSync(process.argv[2], value);
 ws.close();
-console.log('saved', msg.result.result.value.length);
+console.log('saved', value.length);
