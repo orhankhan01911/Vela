@@ -4,11 +4,12 @@ import type { PriceLine } from '../../model/scene';
 import type { SeriesDisplay, SeriesSpec } from '../../model/series';
 import type { VpvrLayerData } from '../../model/volume-layers';
 import type { VisibleRange } from '../../ports/IChartRenderer';
-import type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor } from '../NativeIndicator';
+import type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor, NativeIndicatorOutput } from '../NativeIndicator';
 import { getNativeIndicator, registerNativeIndicator } from '../NativeIndicator';
 import { stableSeriesId } from '../../model/identity';
 import { transp } from '../classics/shared';
-import { buildVpvrDeveloping, buildVpvrProfile, vpvrLevels } from '../../../renderers/native/vpvr/profile';
+import { buildVpvrDevelopingAt, buildVpvrProfile, vpvrLevels, type VpvrProfile } from '../../../renderers/native/vpvr/profile';
+import { timeframeToMs } from '../../../data/timeframe';
 
 // TradingView's factory defaults for its VRVP (VbPVisible@tv-volumebyprice metainfo, read 2026-10-30).
 const TV_BLUE = '#2962ff'; // palette-exempt: TradingView's VRVP up volume, VAH / VAL and developing VA colour
@@ -29,8 +30,6 @@ const VOLUME_MODES = ['Up/Down', 'Total', 'Delta'] as const;
 const PLACEMENTS = ['Right', 'Left'] as const;
 const WIDTHS = ['1', '2', '3', '4'] as const;
 const STYLE = 'Style';
-/** Live ticks recompute the levels at most this often. */
-const LIVE_RECOMPUTE_MS = 250;
 
 function num(v: InputValue | undefined, fallback: number): number {
     return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
@@ -118,14 +117,38 @@ function lineRow(row: LineRow, title: string, show: boolean, color: string, widt
 type Levels = { poc: number; vah: number; val: number };
 
 /**
- * The built-in VPVR (visible-range volume profile) indicator, with TradingView's settings: rows by count or by
- * ticks, Up/Down / Total / Delta volume, value area, width, placement, value-area colours, row values, and the
- * POC / VAH / VAL and developing POC / VA lines with their price-scale labels and status-line values.
+ * TradingView's timeframe ladder for its volume profiles (help article 43000703076): the first of these that puts
+ * fewer than 5 000 candles in the window is the one the profile is built from.
+ */
+export const VPVR_INTRABAR_LADDER = ['1', '5', '15', '30', '60', '240', 'D'] as const;
+const MAX_INTRABARS = 5000;
+
+/** The finer timeframe TradingView builds a profile over `spanMs` from. */
+export function vpvrIntrabarTimeframe(spanMs: number): string {
+    for (const tf of VPVR_INTRABAR_LADDER) if (spanMs / timeframeToMs(tf) < MAX_INTRABARS) return tf;
+    return VPVR_INTRABAR_LADDER[VPVR_INTRABAR_LADDER.length - 1]!;
+}
+
+/** Live ticks refresh the finer candles and the levels at most this often. */
+const LIVE_REFRESH_MS = 1000;
+
+/** Finer candles loaded for a window: the timeframe, the span asked for (ms) and what came back. */
+interface Intrabars {
+    tf: string;
+    from: number;
+    to: number;
+    bars: readonly OHLCV[];
+}
+
+/**
+ * The built-in VPVR (visible-range volume profile) indicator, with TradingView's settings and TradingView's data:
+ * the rows are built from finer candles than the chart's (TradingView's ladder, `vpvrIntrabarTimeframe`), each
+ * candle's volume spread evenly over its high-low and counted up when it closed above its open. Measured on
+ * BYBIT:BTCUSDT.P 1h (39 bars, 24 rows) on 2026-10-30: built from the 1h candles, 33 % of the volume sat in a
+ * different row or side than TradingView's; from Bybit's 1m candles, 0.2 %.
  *
- * The rows are a bespoke renderer layer anchored to the pane edge, re-bucketed from the chart's bars each frame
- * (memoized on the visible range), so they track pan and zoom with no round trip; this instance pushes its
- * settings to that layer. The lines are ordinary chart parts this instance emits, computed with the same
- * bucketing over the visible window it receives (`reactsToViewport`) and on live ticks.
+ * This instance builds the rows and hands them to the renderer layer, and emits the POC / VAH / VAL and developing
+ * lines. A host without `loadBars` (or a chart already at the ladder's timeframe) builds from the chart's bars.
  */
 class VpvrIndicator implements NativeIndicator {
     /** Null until start() — pre-start setInputs/resume must record without pushing. */
@@ -135,36 +158,39 @@ class VpvrIndicator implements NativeIndicator {
     private range: VisibleRange | null = null;
     private timer: ReturnType<typeof setTimeout> | null = null;
     private suspended = false;
+    private intrabars: Intrabars | null = null;
+    /** Bumped per request: an answer for a window the user has scrolled away from is dropped. */
+    private request = 0;
+    private loadingKey = '';
 
     start(ctx: NativeIndicatorContext, inputs: Record<string, InputValue>): void {
         this.ctx = ctx;
         this.inputs = inputs;
         ctx.emit({}); // mount the legend row (the layer draws the rows outside the model)
-        this.push();
         this.recompute();
-        // "Ticks Per Row" needs the symbol's tick: resolve it, then push again with it.
+        // The tick: "Ticks Per Row" rows, and the row height TradingView rounds up to whole ticks.
         void ctx.data
             .symbolInfo(ctx.symbol)
             .then((info) => {
                 const t = info?.mintick;
                 if (this.ctx !== ctx || !(typeof t === 'number' && t > 0)) return;
                 this.tick = t;
-                this.push();
                 this.recompute();
             })
             .catch(() => undefined);
     }
 
-    /** Live ticks move the forming bar: recompute the levels, at most every {@link LIVE_RECOMPUTE_MS}. */
+    /** Live ticks move the forming bar: refresh, at most every {@link LIVE_REFRESH_MS}. */
     onBars(): void {
         if (this.timer != null || this.suspended || !this.ctx) return;
         this.timer = setTimeout(() => {
             this.timer = null;
+            this.refreshTail();
             this.recompute();
-        }, LIVE_RECOMPUTE_MS);
+        }, LIVE_REFRESH_MS);
     }
 
-    /** The window moved: the layer re-buckets itself per frame; the lines follow here. */
+    /** The window moved: rebuild for it (TradingView also recomputes after a scroll). */
     onViewport(range: VisibleRange): void {
         this.range = range;
         this.recompute();
@@ -175,7 +201,6 @@ class VpvrIndicator implements NativeIndicator {
         // Pre-start edits (a workspace restore applies stored inputs the moment the
         // handle exists) just record: start() pushes the orchestrator's replayed values.
         if (!this.ctx) return;
-        this.push();
         this.recompute();
     }
 
@@ -190,12 +215,12 @@ class VpvrIndicator implements NativeIndicator {
         // Pre-start resume (a restore un-hiding an indicator that never started) is a
         // no-op — start() pushes when the context lands.
         if (!this.ctx) return;
-        this.push();
         this.recompute();
     }
 
     stop(): void {
         this.clearTimer();
+        this.request += 1;
         this.ctx = null;
     }
 
@@ -209,27 +234,117 @@ class VpvrIndicator implements NativeIndicator {
         return vpvrLayerData(this.inputs, ticks ? (this.tick ?? fallbackTick(bars)) : undefined);
     }
 
-    private push(): void {
-        if (this.ctx) this.ctx.pushData(this.layerData(this.ctx.bars()));
+    /** The window as chart bars: the first bar opening at or after its left edge through the last opening in it. */
+    private window(bars: readonly OHLCV[]): { i0: number; i1: number; from: number; end: number; chartMs: number } | null {
+        const range = this.range;
+        if (!range || bars.length === 0) return null;
+        let i0 = barAtOrBefore(bars, range.from);
+        if (bars[i0]!.time < range.from && i0 < bars.length - 1) i0 += 1;
+        const i1 = Math.max(i0, barAtOrBefore(bars, range.to));
+        let chartMs = NaN;
+        try {
+            chartMs = timeframeToMs(this.ctx?.timeframe ?? '');
+        } catch {
+            chartMs = NaN;
+        }
+        const step = Number.isFinite(chartMs) && chartMs > 0 ? chartMs : i1 > i0 ? (bars[i1]!.time - bars[i0]!.time) / (i1 - i0) : 60_000;
+        const end = i1 + 1 < bars.length ? bars[i1 + 1]!.time : bars[i1]!.time + step;
+        return { i0, i1, from: bars[i0]!.time, end, chartMs: step };
     }
 
-    /** Emit the POC / VAH / VAL lines and the developing POC / VA over the current window. */
+    /** Load the finer candles for `[from, end)`; recompute when they land (if the window still wants them). */
+    private load(tf: string, from: number, end: number): void {
+        const ctx = this.ctx;
+        if (!ctx?.loadBars) return;
+        const key = `${tf}:${from}:${end}`;
+        if (key === this.loadingKey) return; // already asked
+        this.loadingKey = key;
+        const req = ++this.request;
+        ctx.setStatus('loading');
+        ctx.loadBars(tf, { from, to: end - 1 })
+            .then((bars) => {
+                if (req !== this.request || this.ctx !== ctx) return;
+                this.loadingKey = '';
+                this.intrabars = { tf, from, to: end, bars };
+                ctx.setStatus('idle');
+                this.recompute();
+            })
+            .catch(() => {
+                if (req !== this.request || this.ctx !== ctx) return;
+                this.loadingKey = '';
+                // No finer candles for this market: build from the chart's own bars for this window.
+                this.intrabars = { tf, from, to: end, bars: [] };
+                ctx.setStatus('idle');
+                this.recompute();
+            });
+    }
+
+    /** Live: re-read the newest finer candles when the window reaches the forming bar. */
+    private refreshTail(): void {
+        const ctx = this.ctx;
+        const ib = this.intrabars;
+        if (!ctx?.loadBars || !ib || ib.bars.length === 0) return;
+        const bars = ctx.bars();
+        const w = this.window(bars);
+        if (!w || w.i1 < bars.length - 1) return;
+        const step = timeframeToMs(ib.tf);
+        const from = ib.bars[ib.bars.length - 1]!.time;
+        const end = Math.max(w.end, from + step);
+        ctx.loadBars(ib.tf, { from, to: end - 1 })
+            .then((fresh) => {
+                if (this.intrabars !== ib || this.ctx !== ctx || fresh.length === 0) return;
+                const keep = ib.bars.filter((b) => b.time < fresh[0]!.time);
+                this.intrabars = { ...ib, to: Math.max(ib.to, end), bars: keep.concat(fresh) };
+                this.recompute();
+            })
+            .catch(() => undefined);
+    }
+
+    /** Build the rows and the lines for the current window, from the finer candles when the host gives them. */
     private recompute(): void {
         const ctx = this.ctx;
-        if (!ctx) return;
+        if (!ctx || this.suspended) return;
         const bars = ctx.bars();
-        const range = this.range;
-        const series: SeriesSpec[] = [];
-        const priceLines: PriceLine[] = [];
+        const w = this.window(bars);
         const data = this.layerData(bars);
-        const i0 = range ? barAtOrBefore(bars, range.from) : 0;
-        const i1 = range ? barAtOrBefore(bars, range.to) : -1;
-        const profile = range && bars.length > 0 ? buildVpvrProfile(bars, i0, i1, data.rows, data.valueAreaFrac, data.rowSize) : null;
-        if (!profile) {
-            ctx.emit({ series, priceLines });
+        if (!w) {
+            ctx.pushData(data);
+            ctx.emit({ series: [], priceLines: [] });
             return;
         }
+        // The source: TradingView's finer candles, or the chart's bars when the ladder lands at or above the chart's
+        // own timeframe (or the host cannot load other timeframes).
+        let src: readonly OHLCV[] = bars.slice(w.i0, w.i1 + 1);
+        if (ctx.loadBars) {
+            const tf = vpvrIntrabarTimeframe(w.end - w.from);
+            if (timeframeToMs(tf) < w.chartMs) {
+                const ib = this.intrabars;
+                if (!ib || ib.tf !== tf || ib.from > w.from || ib.to < w.end) {
+                    this.load(tf, w.from, w.end);
+                    // keep showing the last profile until the finer candles land (as TradingView does)
+                    if (ib && ib.tf === tf && ib.bars.length > 0) src = ib.bars.filter((b) => b.time >= w.from && b.time < w.end);
+                    else return;
+                } else if (ib.bars.length > 0) {
+                    src = ib.bars.filter((b) => b.time >= w.from && b.time < w.end);
+                }
+            }
+        }
+        const roundTick = data.rowSize == null ? this.tick : undefined;
+        const profile = src.length > 0 ? buildVpvrProfile(src, 0, src.length - 1, data.rows, data.valueAreaFrac, data.rowSize, roundTick) : null;
+        ctx.pushData(profile ? { ...data, profile } : data);
+        if (!profile) {
+            ctx.emit({ series: [], priceLines: [] });
+            return;
+        }
+        ctx.emit(this.lines(bars, w.i0, w.i1, src, profile, data.valueAreaFrac));
+    }
+
+    /** POC / VAH / VAL (full-width lines with a value-only series for the price-scale label and the status line),
+     *  and the developing POC / VA read at each chart bar of the window. */
+    private lines(bars: readonly OHLCV[], i0: number, i1: number, src: readonly OHLCV[], profile: VpvrProfile, vaFrac: number): NativeIndicatorOutput {
         const inputs = this.inputs;
+        const series: SeriesSpec[] = [];
+        const priceLines: PriceLine[] = [];
         const labels = bool(inputs.labelsOnScale, true);
         const values = bool(inputs.valuesInStatusLine, true);
         const style = (row: LineRow, color: string, width: number): { color: string; width: number; lineStyle: 'solid' } => ({
@@ -242,8 +357,6 @@ class VpvrIndicator implements NativeIndicator {
         const over = (value: (i: number) => number | null): Array<{ time: number; value: number | null }> =>
             bars.map((b, i) => ({ time: b.time, value: i >= i0 && i <= i1 ? value(i) : null }));
 
-        // POC / VAH / VAL: full-width lines (TradingView extends them both ways), plus a value-only series that
-        // carries the price-scale label and the status-line value.
         const lv = vpvrLevels(profile);
         const levels: Array<[LineRow, string, number, boolean, string]> = [
             [LINE_ROWS.poc, 'POC', lv.poc, true, TV_RED],
@@ -266,18 +379,23 @@ class VpvrIndicator implements NativeIndicator {
             });
         });
 
-        // Developing POC / VA: step lines over the window, the levels of the profile so far at each bar.
         const devPoc = bool(inputs[LINE_ROWS.devPoc.show], false);
         const devVa = bool(inputs[LINE_ROWS.devVa.show], false);
         if (devPoc || devVa) {
-            const dev = buildVpvrDeveloping(bars, i0, i1, profile, data.valueAreaFrac);
+            // read after each chart bar: at the next bar's open (the last one at the window's end)
+            const ends: number[] = [];
+            for (let i = i0; i <= i1; i += 1) ends.push(i + 1 < bars.length ? bars[i + 1]!.time : Infinity);
+            const dev = buildVpvrDevelopingAt(src, profile, vaFrac, ends);
             const line = (title: string, ordinal: number, row: LineRow, color: string, pick: (l: Levels) => number): void => {
                 series.push({
                     id: id(title, ordinal),
                     title,
                     paneId: '',
                     kind: 'step',
-                    points: over((i) => { const l = dev[i - i0]; return l ? pick(l) : null; }),
+                    points: over((i) => {
+                        const l = dev[i - i0];
+                        return l ? pick(l) : null;
+                    }),
                     style: style(row, color, 1),
                     display: { pane: true, priceScale: labels, legend: values, dataWindow: true },
                     axisTag: labels,
@@ -289,7 +407,7 @@ class VpvrIndicator implements NativeIndicator {
                 line('Developing VA Low', 5, LINE_ROWS.devVa, TV_BLUE, (l) => l.val);
             }
         }
-        ctx.emit({ series, priceLines });
+        return { series, priceLines };
     }
 }
 

@@ -41,7 +41,11 @@ describe('buildVpvrProfile', () => {
         const total = p.rows.reduce((s, r) => s + r.up + r.down, 0);
         let va = 0;
         for (let k = p.vaFrom; k <= p.vaTo; k += 1) va += p.rows[k]!.up + p.rows[k]!.down;
-        expect(va).toBeGreaterThanOrEqual(total * 0.7 - 1e-6);
+        // TradingView's rule: never past the target; the larger next neighbour would have carried it past
+        expect(va).toBeLessThanOrEqual(total * 0.7 + 1e-6);
+        const below = p.vaFrom > 0 ? p.rows[p.vaFrom - 1]!.up + p.rows[p.vaFrom - 1]!.down : 0;
+        const above = p.vaTo < p.rows.length - 1 ? p.rows[p.vaTo + 1]!.up + p.rows[p.vaTo + 1]!.down : 0;
+        expect(va + Math.max(below, above)).toBeGreaterThan(total * 0.7);
         expect(p.vaFrom).toBeLessThanOrEqual(p.poc);
         expect(p.vaTo).toBeGreaterThanOrEqual(p.poc);
         // Full-coverage request spans every row; zero-coverage collapses to the POC alone.
@@ -56,7 +60,7 @@ describe('buildVpvrProfile', () => {
         const noVol: OHLCV = { time: 1, open: 90, high: 120, low: 80, close: 95 }; // volume undefined
         const p = buildVpvrProfile([flat, noVol], 0, 1, 24, 0.7)!;
         expect(p.rows).toHaveLength(1);
-        expect(p.rows[0]!.up).toBeCloseTo(400, 6);
+        expect(p.rows[0]!.down).toBeCloseTo(400, 6); // closed where it opened: counted down, as TradingView fits best
         expect(p.maxTotal).toBeCloseTo(400, 6);
     });
 
@@ -72,6 +76,6 @@ describe('buildVpvrProfile', () => {
         const p = buildVpvrProfile(bars, 0, 1, 10, 0.7)!;
         const k = p.rows.findIndex((r) => 105 >= r.price && 105 < r.price + p.rowH);
         expect(p.poc).toBe(k);
-        expect(p.rows[k]!.up).toBeGreaterThanOrEqual(5000);
+        expect(p.rows[k]!.down).toBeGreaterThanOrEqual(5000); // open == close: down
     });
 });

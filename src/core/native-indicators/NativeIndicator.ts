@@ -69,6 +69,12 @@ export interface NativeIndicatorContext {
      * chart's own interval for its "Auto" period. Null / absent = the drawn bars, as on a time chart.
      */
     periodBars?(): PeriodBars | null;
+    /**
+     * Optional, host-provided: this chart's symbol at another timeframe over `[from, to]` (epoch ms, oldest first),
+     * for an indicator that works from finer candles than the chart's, as TradingView's volume profiles do. Absent
+     * during a bar replay (finer candles would show what the replay has not reached yet).
+     */
+    loadBars?(timeframe: string, range: { from: number; to: number }): Promise<readonly OHLCV[]>;
 }
 
 /** See {@link NativeIndicatorContext.periodBars}. */

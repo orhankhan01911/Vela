@@ -73,11 +73,12 @@ export class VpvrRenderer {
         // only when the window is unchanged, which is exactly when recompute is waste.
         const last = bars[i1]!;
         const key = `${i0}:${i1}:${bars.length}:${last.high}:${last.low}:${last.close}:${last.volume ?? 0}:${data.rows}:${data.rowSize ?? ''}:${data.valueAreaFrac}`;
-        if (key !== this.memoKey) {
+        if (!data.profile && key !== this.memoKey) {
             this.memoKey = key;
             this.memo = buildVpvrProfile(bars, i0, i1, data.rows, data.valueAreaFrac, data.rowSize);
         }
-        const profile = this.memo;
+        // A profile the indicator built (from finer candles) wins over the one from the chart's bars.
+        const profile = data.profile ?? this.memo;
         if (!profile) return;
 
         ctx.save();
@@ -92,6 +93,8 @@ export class VpvrRenderer {
             leftX: 0,
             maxW: Math.min(coords.width * data.widthFrac, rightX * 0.9),
             yOf: (p) => coords.priceToY(p, scale, bounds),
+            dpr,
+            boxW: rightX,
         }, {
             upColor: data.upColor,
             downColor: data.downColor,

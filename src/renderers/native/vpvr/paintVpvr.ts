@@ -18,6 +18,10 @@ export interface VpvrGeom {
     maxW: number;
     /** price → pixel y. */
     yOf(price: number): number;
+    /** Device pixel ratio: row edges snap to whole device pixels, as TradingView's do. */
+    dpr?: number;
+    /** Width of the box the values' font is sized against (the pane's data width). */
+    boxW?: number;
 }
 
 export interface VpvrPaintStyle {
@@ -36,6 +40,27 @@ export interface VpvrPaintStyle {
     valuesColor?: string;
     /** Font for the row values (the chart theme's family). */
     fontFamily?: string;
+}
+
+/** `color` with its opacity multiplied by `f` (hex #rgb / #rrggbb / #rrggbbaa, rgb() / rgba()); unknown forms as is. */
+export function fadeColor(color: string, f: number): string {
+    const c = color.trim();
+    let r: number, g: number, b: number, a = 1;
+    let m = /^#([0-9a-f]{3})$/i.exec(c);
+    if (m) {
+        [r, g, b] = [...m[1]!].map((x) => parseInt(x + x, 16)) as [number, number, number];
+    } else if ((m = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(c))) {
+        r = parseInt(m[1]!.slice(0, 2), 16);
+        g = parseInt(m[1]!.slice(2, 4), 16);
+        b = parseInt(m[1]!.slice(4, 6), 16);
+        if (m[2]) a = parseInt(m[2], 16) / 255;
+    } else if ((m = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(c))) {
+        [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])];
+        if (m[4] != null) a = Number(m[4]);
+    } else {
+        return color;
+    }
+    return `rgba(${r}, ${g}, ${b}, ${Math.round(a * f * 1000) / 1000})`;
 }
 
 /** A volume as the row values show it: 1.25K, 3.4M, 2B. */
@@ -72,70 +97,92 @@ export function paintVpvr(
     const left = style.placement === 'left';
     const vaColors = style.vaUpColor != null && style.vaDownColor != null;
     // Delta rows scale on the largest |delta|, the others on the largest total.
-    let maxLen = maxTotal;
-    if (mode === 'delta') {
-        maxLen = 0;
-        for (const r of rows) maxLen = Math.max(maxLen, Math.abs(r.up - r.down));
-    }
-    // The x of a segment `w` px long that starts `off` px in from the anchored edge.
-    const seg = (off: number, w: number): number => (left ? leftX + off : rightX - off - w);
+    // Every mode scales on the largest row total (TradingView: a Delta row still spans the row's whole volume).
+    const maxLen = maxTotal;
+    // TradingView's HHistRenderer (module 379435): edges on whole device pixels; a gap of one CSS pixel between rows
+    // only while rows are at least that tall; the longest row is the width less one pixel per segment; a segment
+    // under half a pixel is skipped.
+    const dpr = geom.dpr && geom.dpr > 0 ? geom.dpr : 1;
+    const snap = (v: number): number => Math.round(v * dpr);
+    const nSeg = mode === 'updown' ? 2 : mode === 'delta' ? 3 : 1;
+    const barMax = Math.max(maxW - nSeg, 0);
+    const rowPx = rows.length > 0 ? Math.abs(yOf(rows[0]!.price) - yOf(rows[0]!.price + rowH)) : 0;
+    const gapDev = Math.floor(rowPx * dpr) >= dpr ? Math.floor(dpr) : 0;
+    const edge = left ? leftX : rightX;
+    const sign = left ? 1 : -1;
 
-    const valueTexts: Array<{ text: string; y: number; x: number }> = [];
+    const valueTexts: Array<{ text: string; y: number; h: number }> = [];
+    const sums: [number, number] = [0, 0];
     if (style.showProfile !== false && maxLen > 0) {
         for (let k = 0; k < rows.length; k += 1) {
             const row = rows[k]!;
             const total = row.up + row.down;
             if (total <= 0) continue;
             const yTop = yOf(row.price + rowH);
-            const h = Math.max(1, yOf(row.price) - yTop - 1); // 1px inter-row gap
+            const yBot = yOf(row.price);
+            const top = snap(yTop);
+            const hDev = Math.max(snap(yBot) - top - gapDev, 1);
             const inVa = k >= vaFrom && k <= vaTo;
             const up = vaColors && inVa ? style.vaUpColor! : style.upColor;
             const down = vaColors && inVa ? style.vaDownColor! : style.downColor;
             ctx.globalAlpha = vaColors ? 1 : inVa ? VPVR_VA_ALPHA : VPVR_OUTSIDE_ALPHA;
-            let w: number;
-            if (mode === 'total') {
-                w = (total / maxLen) * maxW;
-                ctx.fillStyle = up;
-                ctx.fillRect(seg(0, w), yTop, w, h);
-            } else if (mode === 'delta') {
-                const d = row.up - row.down;
-                w = (Math.abs(d) / maxLen) * maxW;
-                if (w > 0) {
-                    ctx.fillStyle = d >= 0 ? up : down;
-                    ctx.fillRect(seg(0, w), yTop, w, h);
-                }
-            } else {
-                // TradingView: up volume against the anchored edge, down volume beyond it
-                w = (total / maxLen) * maxW;
-                const upW = (row.up / total) * w;
-                if (upW > 0) {
-                    ctx.fillStyle = up;
-                    ctx.fillRect(seg(0, upW), yTop, upW, h);
-                }
-                if (w - upW > 0) {
-                    ctx.fillStyle = down;
-                    ctx.fillRect(seg(upW, w - upW), yTop, w - upW, h);
-                }
+            // Segments out from the anchored edge (TradingView's HHistPaneView, module 217408):
+            // - Up/Down: up, then down;
+            // - Total: the total in the up colour;
+            // - Delta: the winning side's colour (a tie counts as down): the difference at full strength, then the
+            //   smaller side twice, at half and a quarter of that strength, so the row still spans its total.
+            const upWins = row.up > row.down;
+            const lo = Math.min(row.up, row.down);
+            const dom = upWins ? up : down;
+            const segs: Array<[number, string]> =
+                mode === 'total'
+                    ? [[total, up]]
+                    : mode === 'delta'
+                      ? [[Math.abs(row.up - row.down), dom], [lo, fadeColor(dom, 0.5)], [lo, fadeColor(dom, 0.25)]]
+                      : [[row.up, up], [row.down, down]];
+            let x = edge;
+            for (const [v, color] of segs) {
+                const x2 = x + sign * ((barMax * v) / maxLen);
+                if (Math.abs(x2 - x) < 0.5) continue;
+                const a = snap(Math.min(x, x2));
+                const w = snap(Math.max(x, x2)) - a;
+                x = x2;
+                ctx.fillStyle = color;
+                ctx.fillRect(a / dpr, top / dpr, w / dpr, hDev / dpr);
             }
-            if (style.showValues && h >= 7) {
-                const v = mode === 'delta' ? row.up - row.down : total;
-                // the text starts where the row ends, reading away from the anchored edge
-                valueTexts.push({ text: formatVpvrVolume(v), y: yTop + h / 2, x: left ? leftX + w + 3 : rightX - w - 3 });
+            if (style.showValues) {
+                // TradingView writes the sub-values in drawing order read from the left ("down × up" on the right),
+                // and Delta's difference unsigned (the colour says which side won).
+                const vals = mode === 'delta' ? [Math.abs(row.up - row.down)] : mode === 'total' ? [total] : left ? [row.up, row.down] : [row.down, row.up];
+                valueTexts.push({ text: vals.map(formatVpvrVolume).join(' × '), y: yTop + 0.7 * (yBot - yTop), h: yBot - yTop });
+                if (mode !== 'delta') {
+                    sums[0] += vals[0]!;
+                    if (vals[1] != null) sums[1] += vals[1];
+                }
             }
         }
     }
 
+    // Values: at the anchored edge, 3 px in, one font size for every row (the smallest that fits the longest text and
+    // 60 % of a row); hidden below 7.5 px, as TradingView hides them.
     if (valueTexts.length > 0) {
-        const rowPx = Math.abs(yOf(rows[0]!.price) - yOf(rows[0]!.price + rowH));
-        const size = Math.max(8, Math.min(11, Math.floor(rowPx - 2)));
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = style.valuesColor ?? style.pocColor;
-        ctx.font = `${size}px ${style.fontFamily ?? CHART_FONT_FAMILY}`;
-        ctx.textBaseline = 'middle';
-        ctx.textAlign = left ? 'left' : 'right';
-        for (const t of valueTexts) ctx.fillText(t.text, t.x, t.y);
-        ctx.textAlign = 'start';
-        ctx.textBaseline = 'alphabetic';
+        // Up/Down and Total also get a totals line under the lowest row (TradingView's addToTotalValue).
+        if (mode !== 'delta') {
+            const totalText = (mode === 'total' ? [sums[0]!] : sums).map(formatVpvrVolume).join(' × ');
+            valueTexts.push({ text: totalText, y: yOf(rows[0]!.price) + 0.7 * rowPx, h: rowPx });
+        }
+        const boxW = geom.boxW ?? maxW;
+        let size = Infinity;
+        for (const t of valueTexts) size = Math.min(size, Math.round((1.7 * boxW) / t.text.length), Math.round(0.6 * t.h));
+        if (size >= 7.5) {
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = style.valuesColor ?? style.pocColor;
+            ctx.font = `${size}px ${style.fontFamily ?? CHART_FONT_FAMILY}`;
+            ctx.textBaseline = 'alphabetic';
+            ctx.textAlign = left ? 'left' : 'right';
+            for (const t of valueTexts) ctx.fillText(t.text, edge + 3 * sign, t.y);
+            ctx.textAlign = 'start';
+        }
     }
 
     if (style.showPoc) {

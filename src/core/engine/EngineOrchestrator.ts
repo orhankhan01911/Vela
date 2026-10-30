@@ -2844,6 +2844,16 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 session: this.config.market.session,
                 bars: () => this.bars,
                 data: this.dataControl,
+                ...(this.replayQueue === null
+                    ? {
+                          loadBars: (timeframe: string, range: { from: number; to: number }) => {
+                              const step = timeframeToMs(timeframe);
+                              const limit = Math.min(20_000, Math.ceil((range.to - range.from) / step) + 2);
+                              return this.fetchSeries(this.config.market.symbol ?? '', timeframe, { from: range.from, to: range.to, limit, session: this.config.market.session })
+                                  .then((bars) => bars.filter((b) => b.time >= range.from && b.time <= range.to));
+                          },
+                      }
+                    : {}),
                 emit: (out) => this.applyModel(id, this.buildNativeModel(record, out)),
                 pushData: (data) => this.renderer.setNativeData?.(channel, data),
                 setStatus: (status) => {

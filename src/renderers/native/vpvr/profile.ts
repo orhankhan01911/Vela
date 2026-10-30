@@ -42,6 +42,7 @@ export function buildVpvrProfile(
     rowCount: number,
     valueAreaFrac: number,
     rowSize?: number,
+    tick?: number,
 ): VpvrProfile | null {
     const from = Math.max(0, i0);
     const to = Math.min(bars.length - 1, i1);
@@ -57,7 +58,7 @@ export function buildVpvrProfile(
     }
     if (!Number.isFinite(min)) return null; // no visible volume at all
 
-    const grid = vpvrGrid(min, max, rowCount, rowSize);
+    const grid = vpvrGrid(min, max, rowCount, rowSize, tick);
     min = grid.min;
     const { n, rowH } = grid;
     const rows: VpvrRow[] = Array.from({ length: n }, (_, k) => ({ price: min + k * rowH, up: 0, down: 0 }));
@@ -90,7 +91,7 @@ export const VPVR_MAX_ROWS = 2000;
  * `rowCount` equal rows. With a `rowSize` ("Ticks Per Row": ticks times the symbol's tick) rows are that tall and
  * sit on multiples of it, as TradingView's do. A flat range (every volumed bar at one price) is a single row.
  */
-export function vpvrGrid(min: number, max: number, rowCount: number, rowSize?: number): { min: number; rowH: number; n: number } {
+export function vpvrGrid(min: number, max: number, rowCount: number, rowSize?: number, tick?: number): { min: number; rowH: number; n: number } {
     if (rowSize != null && rowSize > 0 && Number.isFinite(rowSize)) {
         let rowH = rowSize;
         let lo = Math.floor(min / rowH) * rowH;
@@ -104,7 +105,11 @@ export function vpvrGrid(min: number, max: number, rowCount: number, rowSize?: n
     }
     if (!(max > min)) return { min, rowH: 1, n: 1 };
     const n = Math.min(VPVR_MAX_ROWS, Math.max(1, Math.round(rowCount)));
-    return { min, rowH: (max - min) / n, n };
+    let rowH = (max - min) / n;
+    // TradingView rounds the row height UP to a whole number of ticks (XAUUSD, 6 rows: 25.5717 -> 25.58; BTC, 24 rows:
+    // 229.667 -> 229.7), so its top row ends a little above the high.
+    if (tick != null && tick > 0 && Number.isFinite(tick)) rowH = Math.ceil(rowH / tick - 1e-9) * tick;
+    return { min, rowH, n };
 }
 
 /** Add one bar's volume to the rows its high-low range overlaps, in proportion to the overlap, on its close side. */
@@ -112,7 +117,8 @@ function addBar(rows: VpvrRow[], b: OHLCV, min: number, rowH: number): void {
     const v = b.volume;
     if (!(v != null && v > 0)) return;
     const n = rows.length;
-    const side = b.close >= b.open ? 'up' : 'down';
+    // a candle that closes where it opened counts as down (fits TradingView best: 0.22 % vs 0.25 % off on BTC 1m)
+    const side = b.close > b.open ? 'up' : 'down';
     const span = b.high - b.low;
     if (span <= 0) {
         // Point bar: all volume in the row containing its price.
@@ -128,9 +134,13 @@ function addBar(rows: VpvrRow[], b: OHLCV, min: number, rowH: number): void {
     }
 }
 
-/** Grow the value area from the POC: absorb whichever adjacent row is larger until the area covers the target
- *  fraction of the total volume. Returns the inclusive row span. */
-function growValueArea(totalOf: (k: number) => number, n: number, poc: number, total: number, valueAreaFrac: number): [number, number] {
+/**
+ * Grow the value area from the POC as TradingView does: take the larger neighbouring row each step, but STOP before
+ * the row that would carry the area past the target, so it covers at most the target (measured on TradingView
+ * 2026-10-30: 24 rows at 70 % -> 67.4 %, at 50 % -> 49.5 %; the same rule as the session profile's
+ * `computeVolumeValueArea`, ties to the row above). Returns the inclusive row span.
+ */
+export function growValueArea(totalOf: (k: number) => number, n: number, poc: number, total: number, valueAreaFrac: number): [number, number] {
     const target = total * Math.min(1, Math.max(0, valueAreaFrac));
     let vaFrom = poc;
     let vaTo = poc;
@@ -138,7 +148,8 @@ function growValueArea(totalOf: (k: number) => number, n: number, poc: number, t
     while (acc < target && (vaFrom > 0 || vaTo < n - 1)) {
         const below = vaFrom > 0 ? totalOf(vaFrom - 1) : -1;
         const above = vaTo < n - 1 ? totalOf(vaTo + 1) : -1;
-        if (above > below) {
+        if (acc + Math.max(above, below) > target) break;
+        if (above >= below) {
             vaTo += 1;
             acc += above;
         } else {
@@ -179,6 +190,23 @@ export function buildVpvrDeveloping(
 ): Array<VpvrLevels | null> {
     const from = Math.max(0, i0);
     const to = Math.min(bars.length - 1, i1);
+    return buildVpvrDevelopingAt(bars.slice(from, to + 1), profile, valueAreaFrac);
+}
+
+/**
+ * The developing levels from `src` (oldest first, e.g. the finer candles the profile was built from), read at each
+ * of `ends` (ascending): entry `j` is the profile of every `src` bar opening before `ends[j]`. Without `ends`, one
+ * entry per `src` bar.
+ */
+export function buildVpvrDevelopingAt(
+    src: readonly OHLCV[],
+    profile: VpvrProfile,
+    valueAreaFrac: number,
+    ends?: readonly number[],
+): Array<VpvrLevels | null> {
+    const from = 0;
+    const to = src.length - 1;
+    const bars = src;
     const { rowH, min } = profile;
     const n = profile.rows.length;
     const rows: VpvrRow[] = Array.from({ length: n }, (_, k) => ({ price: min + k * rowH, up: 0, down: 0 }));
@@ -187,8 +215,18 @@ export function buildVpvrDeveloping(
     let total = 0;
     let poc = -1;
     let pocTotal = 0;
+    const levelsNow = (): VpvrLevels | null => {
+        if (poc < 0) return null;
+        const [vaFrom, vaTo] = growValueArea(totalOf, n, poc, total, valueAreaFrac);
+        return { poc: min + (poc + 0.5) * rowH, vah: min + (vaTo + 1) * rowH, val: min + vaFrom * rowH };
+    };
+    let e = 0;
     for (let i = from; i <= to; i += 1) {
         const b = bars[i]!;
+        while (ends && e < ends.length && b.time >= ends[e]!) {
+            out.push(levelsNow());
+            e += 1;
+        }
         addBar(rows, b, min, rowH);
         const v = b.volume;
         if (v != null && v > 0) {
@@ -204,13 +242,9 @@ export function buildVpvrDeveloping(
                 }
             }
         }
-        if (poc < 0) {
-            out.push(null);
-            continue;
-        }
-        const [vaFrom, vaTo] = growValueArea(totalOf, n, poc, total, valueAreaFrac);
-        out.push({ poc: min + (poc + 0.5) * rowH, vah: min + (vaTo + 1) * rowH, val: min + vaFrom * rowH });
+        if (!ends) out.push(levelsNow());
     }
+    if (ends) while (out.length < ends.length) out.push(levelsNow());
     return out;
 }
 

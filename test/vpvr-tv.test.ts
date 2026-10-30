@@ -3,8 +3,8 @@ import type { OHLCV } from '../src/core/model/ohlcv';
 import type { NativeIndicatorContext, NativeIndicatorOutput } from '../src/core/native-indicators/NativeIndicator';
 import type { DataControl } from '../src/core/DataControl';
 import type { LineLikeSeries } from '../src/core/model/series';
-import { vpvrDescriptor, vpvrLayerData } from '../src/core/native-indicators/vpvr/VpvrIndicator';
-import { buildVpvrDeveloping, buildVpvrProfile, vpvrGrid, vpvrLevels, VPVR_MAX_ROWS } from '../src/renderers/native/vpvr/profile';
+import { vpvrDescriptor, vpvrIntrabarTimeframe, vpvrLayerData } from '../src/core/native-indicators/vpvr/VpvrIndicator';
+import { buildVpvrDeveloping, buildVpvrProfile, growValueArea, vpvrGrid, vpvrLevels, VPVR_MAX_ROWS } from '../src/renderers/native/vpvr/profile';
 import { formatVpvrVolume, paintVpvr } from '../src/renderers/native/vpvr/paintVpvr';
 
 /**
@@ -121,12 +121,17 @@ describe('VRVP painter', () => {
         expect(ops.map((o) => o.style).sort()).toEqual(['U', 'VU']);
     });
 
-    it('Delta: |up - down| in the winning side colour', () => {
+    it('Delta (TradingView): the difference in the winning colour, then the smaller side at half and a quarter', () => {
         const { ctx, ops } = rec();
-        paintVpvr(ctx, profile, geom, { ...base, volumeMode: 'delta' });
-        expect(ops.map((o) => o.style).sort()).toEqual(['D', 'VU']);
-        const sell = ops.find((o) => o.style === 'D')!;
-        expect(sell.w).toBeCloseTo((80 / 300) * 100, 6);
+        const hex = { ...base, upColor: '#2962ff40', downColor: '#fbc02d40', vaUpColor: '#2962ffb3', vaDownColor: '#fbc02db3' };
+        paintVpvr(ctx, profile, geom, { ...hex, volumeMode: 'delta' });
+        // low row: up 20, down 100 -> down wins: 80 strong, then 20 at half and 20 at a quarter strength
+        const low = ops.filter((o) => o.kind === 'fill' && /fbc02d|251, 192, 45/.test(o.style));
+        expect(low.map((o) => o.style)).toEqual(['#fbc02d40', 'rgba(251, 192, 45, 0.125)', 'rgba(251, 192, 45, 0.063)']);
+        const w = low.map((o) => o.w!);
+        expect(w[0]! / w[1]!).toBeCloseTo(4, 0); // 80 vs 20
+        // the row still spans its total (scaled on the largest total, like the other modes)
+        expect(w.reduce((a, b) => a + b, 0)).toBeCloseTo((120 / 300) * (100 - 3), 0);
     });
 
     it('Placement Left: rows grow right from the left edge', () => {
@@ -140,7 +145,8 @@ describe('VRVP painter', () => {
     it('Values writes each row volume; Volume profile off draws no rows', () => {
         const a = rec();
         paintVpvr(a.ctx, profile, { ...geom, yOf: (p: number) => 3000 - p * 20 }, { ...base, showValues: true, valuesColor: 'V' }); // 20 px rows
-        expect(a.ops.filter((o) => o.kind === 'text').map((o) => o.text).sort()).toEqual(['120', '300']);
+        // TradingView: "down × up" read from the left (right placement), plus a totals line
+        expect(a.ops.filter((o) => o.kind === 'text').map((o) => o.text).sort()).toEqual(['0 × 300', '100 × 20', '100 × 320']);
         const b = rec();
         paintVpvr(b.ctx, profile, geom, { ...base, showProfile: false, showValues: true });
         expect(b.ops).toHaveLength(0);
@@ -205,5 +211,70 @@ describe('VRVP lines (the indicator)', () => {
         const out = run({ showPoc: false });
         expect(out.priceLines).toHaveLength(0);
         expect(out.series).toHaveLength(0);
+    });
+});
+
+describe('VRVP against TradingView numbers (measured 2026-10-30)', () => {
+    it('value area: TradingView stops before the row that would pass the target (XAUUSD 1h, 24 rows)', () => {
+        // TradingView's own row totals and value area (rows 12..19 at 70 %, 15..19 at 50 %)
+        const rows = [4091, 3642, 4294, 3624, 10501, 2378, 7576, 19054, 13375, 17911, 36109, 57839, 43440, 38432, 63115, 51741, 94541, 138959, 59858, 57647, 22408, 38083, 14523, 9969];
+        const total = rows.reduce((a, b) => a + b, 0);
+        expect(growValueArea((k) => rows[k]!, rows.length, 17, total, 0.7)).toEqual([12, 19]);
+        expect(growValueArea((k) => rows[k]!, rows.length, 17, total, 0.5)).toEqual([15, 19]);
+    });
+
+    it('Number Of Rows: the row height rounds up to whole ticks (BTC 76455..81967, 24 rows, tick 0.1 -> 229.7)', () => {
+        const g = vpvrGrid(76455, 81967, 24, undefined, 0.1);
+        expect(g.rowH).toBeCloseTo(229.7, 9);
+        expect(g.min + 24 * g.rowH).toBeCloseTo(81967.8, 6); // TradingView's top edge
+        expect(vpvrGrid(3915.63, 4069.06, 6, undefined, 0.01).rowH).toBeCloseTo(25.58, 9); // XAUUSD 6 rows
+    });
+
+    it("TradingView's timeframe ladder: the first with fewer than 5 000 candles in the window", () => {
+        const H = 3_600_000;
+        expect(vpvrIntrabarTimeframe(40 * H)).toBe('1'); // 2 400 1m candles
+        expect(vpvrIntrabarTimeframe(100 * H)).toBe('5'); // 6 000 1m, 1 200 5m
+        expect(vpvrIntrabarTimeframe(3 * 24 * 30 * H)).toBe('30'); // 90 days: 4 320 30m candles
+        expect(vpvrIntrabarTimeframe(20 * 365 * 24 * H)).toBe('D');
+    });
+
+    it('builds from the finer candles the host loads, and the developing levels at each chart bar', async () => {
+        const H = 3_600_000;
+        // two 1h chart bars; their 1m candles: the first hour trades 100..101, the second 110..111 heavily
+        const chart = [bar(0, 100, 111, 600), bar(H, 100, 111, 6000)];
+        const fine: OHLCV[] = [];
+        for (let m = 0; m < 60; m += 1) fine.push(bar(m * 60_000, 100, 101, 10));
+        for (let m = 60; m < 120; m += 1) fine.push(bar(m * 60_000, 110, 111, 100));
+        const pushes: Array<{ profile?: { rows: Array<{ up: number; down: number }> } }> = [];
+        const outs: NativeIndicatorOutput[] = [];
+        const asked: string[] = [];
+        const ctx = {
+            id: 'native-1', symbol: 'X', timeframe: '60', live: false,
+            bars: () => chart,
+            data: { symbolInfo: () => Promise.resolve({ ticker: 'X', mintick: 0.5 }) } as unknown as DataControl,
+            emit: (o: NativeIndicatorOutput) => outs.push(o),
+            pushData: (d: unknown) => pushes.push(d as never),
+            setStatus: vi.fn(),
+            loadBars: (tf: string, r: { from: number; to: number }) => {
+                asked.push(`${tf}:${r.from}:${r.to}`);
+                return Promise.resolve(fine.filter((b) => b.time >= r.from && b.time <= r.to));
+            },
+        } as NativeIndicatorContext;
+        const ind = vpvrDescriptor.create();
+        ind.start(ctx, { ...vpvrDescriptor.defaultInputs(), rows: 22, showDevPoc: true } as never);
+        ind.onViewport({ from: 0, to: H });
+        await new Promise((r) => setTimeout(r, 0));
+        expect(asked).toEqual([`1:0:${2 * H - 1}`]);
+        const last = pushes[pushes.length - 1]!;
+        const rows = last.profile!.rows;
+        const total = rows.reduce((s, r) => s + r.up + r.down, 0);
+        expect(total).toBeCloseTo(60 * 10 + 60 * 100, 6); // the 1m volume, not the 1h bars'
+        // nothing in the empty middle (the 1h bars would have smeared 6 600 over it)
+        expect(rows.slice(4, 18).every((r) => r.up + r.down === 0)).toBe(true);
+        const out = outs[outs.length - 1]!;
+        const dev = out.series!.find((s) => s.title === 'Developing POC') as LineLikeSeries;
+        expect(dev.points[0]!.value!).toBeLessThan(102); // after the first hour: the 100..101 area
+        expect(dev.points[1]!.value!).toBeGreaterThan(109); // after the second: the heavier 110..111 area
+        ind.stop();
     });
 });

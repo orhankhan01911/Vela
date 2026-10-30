@@ -40,4 +40,20 @@ export interface VpvrLayerData {
     showPoc: boolean;
     /** Volume fraction (0..1) the highlighted value area covers. */
     valueAreaFrac: number;
+    /**
+     * The rows, already built (from finer candles than the chart's, as TradingView does), for the window they were
+     * built over. Absent = the layer builds them from the chart's own bars each frame.
+     */
+    profile?: VpvrProfileData;
+}
+
+/** A built profile: rows ascending by price (`price` = a row's lower bound), the value area as a row span. */
+export interface VpvrProfileData {
+    rows: Array<{ price: number; up: number; down: number }>;
+    rowH: number;
+    min: number;
+    maxTotal: number;
+    poc: number;
+    vaFrom: number;
+    vaTo: number;
 }
