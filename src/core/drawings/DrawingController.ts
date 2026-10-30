@@ -1,4 +1,4 @@
-import { rememberToolSettings, toolSettings } from './toolMemory';
+import { rememberToolSettings, toolSettings, toolSettingsForNew } from './toolMemory';
 import { toolChoice } from './toolChoice';
 import type { Unsubscribe } from '../util/types';
 import type { IChartRenderer } from '../ports/IChartRenderer';
@@ -508,7 +508,7 @@ export class DrawingController {
             case 'create': {
                 const before = this.store.serialize();
                 // A freshly drawn shape inherits its tool's last-used settings: style, extras and text look.
-                const mem = toolSettings(i.doc.type);
+                const mem = toolSettingsForNew(i.doc.type, i.doc.props);
                 const style = mem ? { ...i.doc.style, ...mem.style } : i.doc.style;
                 const choice = toolChoice(i.doc.type); // the emoji / icon picked in the Icons panel
                 const props = mem?.props || choice ? { ...(i.doc.props ?? {}), ...(mem?.props ?? {}), ...(choice ?? {}) } : i.doc.props;

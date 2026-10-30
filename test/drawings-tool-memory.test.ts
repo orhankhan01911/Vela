@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { TypedEventBus } from '../src/core/events/EventBus';
 import type { VelaEventMap } from '../src/core/events/types';
 import { DrawingController } from '../src/core/drawings/DrawingController';
-import { clearToolSettings, toolSettings } from '../src/core/drawings';
+import { clearToolSettings, createDrawing, toolSettings } from '../src/core/drawings';
 import { reloadToolSettingsForTest } from '../src/core/drawings/toolMemory';
 import type { IDrawingsRendererPort, DrawingIntent, SerializedDrawing } from '../src/core/drawings';
 import type { IChartRenderer } from '../src/core/ports/IChartRenderer';
@@ -68,6 +68,29 @@ describe('per-tool last-used settings (TradingView: the next drawing starts from
         expect(next.text?.color).toBe('#00ff00');
         expect(next.text?.value).toBe('');
         expect(toolSettings('trendline')?.text).not.toHaveProperty('value');
+    });
+
+    it('settings remembered from a Fib\'s old look do not replace TradingView\'s on a new one; its own do (2026-10-31)', () => {
+        // The user's recording: a Fib placed after editing an old-look one came out with the old levels, no trend line
+        // and 1 px, while the drag preview showed TradingView's look.
+        localStorage.setItem('vela.drawings.toolSettings.v1', JSON.stringify({
+            fibretracement: {
+                style: { lineColor: '#38c0fd', lineWidth: 1, lineStyle: 'solid' },
+                props: { levels: [{ ratio: 0, color: '#787b86', enabled: true }, { ratio: 1.272, color: '#5b9cf6', enabled: true }], trendline: false, fillOpacity: 0.06 },
+            },
+        }));
+        reloadToolSettingsForTest();
+        const preview = createDrawing('fibretracement', { id: 'tmp', paneId: 'price', anchors: [{ time: 1000, price: 100 }, { time: 2000, price: 110 }] })!.serialize();
+        const a = harness();
+        a.fire({ kind: 'create', doc: preview });
+        const placed = a.ctrl.all()[0]! as unknown as { props: { tv?: boolean; trendline?: boolean; levels: unknown[] }; style: { lineWidth?: number } };
+        expect([placed.props.tv, placed.props.trendline, placed.props.levels.length, placed.style.lineWidth]).toEqual([true, true, 24, 2]);
+        // Its own edits (now TradingView-look memory) carry to the next one, like every tool's.
+        const d = a.ctrl.all()[0]!;
+        a.fire({ kind: 'edit', doc: { ...d, style: { ...d.style, lineWidth: 3 }, props: { ...(d.props ?? {}), fontSize: 16 } } });
+        a.fire({ kind: 'create', doc: preview });
+        const next = a.ctrl.all()[1]!;
+        expect([next.style.lineWidth, (next.props as { fontSize?: number }).fontSize]).toEqual([3, 16]);
     });
 
     it('each tool keeps its own settings', () => {
