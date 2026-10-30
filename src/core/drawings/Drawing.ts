@@ -19,6 +19,7 @@ import type { InputSchema, InputValue } from '../model/inputs';
 export const TV_TEXT_DEFAULTS: Readonly<Record<string, Partial<DrawingText>>> = {
     trendline: { color: TV_LINE_COLOR, size: 14, hAlign: 'center', vAlign: 'top' },
     ray: { color: TV_LINE_COLOR, size: 14, hAlign: 'center', vAlign: 'top' },
+    infoline: { color: TV_LINE_COLOR, size: 14, hAlign: 'center', vAlign: 'top' },
     hline: { color: TV_LINE_COLOR, size: 12, hAlign: 'center', vAlign: 'center' },
     hray: { color: TV_LINE_COLOR, size: 12, hAlign: 'center', vAlign: 'bottom' },
     vline: { color: TV_LINE_COLOR, size: 14, hAlign: 'center', vAlign: 'center' },

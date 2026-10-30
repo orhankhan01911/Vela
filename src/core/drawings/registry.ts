@@ -293,7 +293,8 @@ registerDrawingType({
     group: 'lines',
     label: 'Info Line',
     icon: INFOLINE_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    // TradingView's info line: its trend line, 2 px solid TradingView blue, every stat shown.
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new InfoLine(init),
 });
 

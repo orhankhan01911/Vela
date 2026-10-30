@@ -444,6 +444,7 @@ export class DrawingPainter {
             }
             case 'trendline':
             case 'ray':
+            case 'infoline':
             case 'arrow': {
                 const pts = d.handlePoints(proj);
                 if (pts.length < 2) return;
@@ -520,9 +521,6 @@ export class DrawingPainter {
                 });
                 break;
             }
-            case 'infoline':
-                this.paintInfoLine(ctx, d, proj);
-                break;
             case 'trendangle':
                 this.paintTrendAngle(ctx, d, proj, theme);
                 break;
@@ -1325,10 +1323,11 @@ export class DrawingPainter {
             const w = Math.ceil(Math.max(...rows.map((r) => ctx.measureText(r).width))) + padL + padR;
             const h = rows.length * rowH + 10;
             // Below and right of the point, flipped back inside the pane near its right or bottom edge.
-            let x = ax + 12;
-            let y = ay + 12;
-            if (x + w > proj.width - 2) x = ax - 12 - w;
-            if (y + h > rect.top + rect.height - 2) y = ay - 12 - h;
+            // TradingView sets it ~15 px right of and below the point.
+            let x = ax + 15;
+            let y = ay + 15;
+            if (x + w > proj.width - 2) x = ax - 15 - w;
+            if (y + h > rect.top + rect.height - 2) y = ay - 15 - h;
             const dpr = ctx.getTransform?.()?.a || 1;
             x = Math.round(Math.max(2, x) * dpr) / dpr;
             y = Math.round(Math.max(rect.top + 2, y) * dpr) / dpr;
@@ -2816,18 +2815,6 @@ export class DrawingPainter {
                 ctx.lineTo(s[2], s[3]);
             });
         }
-    }
-
-    /** Paint an info line's segment; its stats box is painted on top of the candles by `paintLineStats`. */
-    private paintInfoLine(ctx: CanvasRenderingContext2D, d: Drawing, proj: Projector): void {
-        const pts = d.handlePoints(proj);
-        if (pts.length < 2) return;
-        const [x1, y1] = pts[0]!;
-        const [x2, y2] = pts[1]!;
-        this.stroke(ctx, d.style, () => {
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-        });
     }
 
     /** Paint a trend angle: the segment + a faint dashed baseline, an arc, and a degree readout at

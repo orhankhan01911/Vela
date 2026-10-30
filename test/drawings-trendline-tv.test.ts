@@ -106,9 +106,12 @@ describe('trend line defaults (TradingView)', () => {
         expect(statsOf(back)).toMatchObject({ pips: true, always: true, position: 'auto' });
     });
 
-    it('info line keeps its stats always on', () => {
+    it('info line = the trend line with every stat on (pips too), always shown, box at the center', () => {
         const d = createDrawing('infoline', { paneId: 'price', anchors: [{ time: 0, price: 1 }, { time: 1, price: 2 }] })!;
-        expect(statsOf(d)!.always).toBe(true);
+        expect(statsOf(d)).toMatchObject({ price: true, percent: true, pips: true, bars: true, date: true, distance: true, angle: true, position: 'center', always: true });
+        expect(d.style.lineColor).toBe(TV_LINE_COLOR);
+        const paths = d.schema().fields.map((f) => f.path);
+        for (const p of ['style.arrowLeft', 'extendLeft', 'showMiddlePoint', 'showPriceLabels']) expect(paths).toContain(p);
     });
 });
 

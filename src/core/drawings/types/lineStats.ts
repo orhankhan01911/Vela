@@ -34,8 +34,8 @@ export const STATS_PARTS: ReadonlyArray<{ key: 'price' | 'percent' | 'pips' | 'b
 ];
 
 export const NO_STATS: LineStats = { price: false, percent: false, pips: false, bars: false, date: false, distance: false, angle: false, position: 'right', always: false };
-/** The info line shows every part, under the middle of the line, all the time. */
-export const ALL_STATS: LineStats = { price: true, percent: true, pips: false, bars: true, date: true, distance: true, angle: true, position: 'center', always: true };
+/** The info line shows every part (pips too, as TradingView's), under the middle of the line, all the time. */
+export const ALL_STATS: LineStats = { price: true, percent: true, pips: true, bars: true, date: true, distance: true, angle: true, position: 'center', always: true };
 
 export function readStats(raw: unknown, defaults: LineStats): LineStats {
     const s = { ...defaults };
