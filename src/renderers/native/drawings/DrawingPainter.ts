@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, Box, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP, XPOST_DARK, XPOST_LIGHT } from '../../../core/palette';
@@ -176,6 +176,7 @@ export class DrawingPainter {
                 this.paintClipped(ctx, d, proj, () => {
                     this.paintMiddlePoint(ctx, d, proj);
                     this.paintTvHandles(ctx, d.handlePoints(proj), shapes);
+                    this.paintSelectionMarkers(ctx, d.selectionMarkers(proj));
                 });
             }
         }
@@ -307,6 +308,11 @@ export class DrawingPainter {
             if (d.type === 'path') {
                 const pts = d.handlePoints(proj); // a path ends in an arrowhead along its last segment
                 if (pts.length >= 2) this.paintArrowhead(ctx, pts[pts.length - 2]!, pts[pts.length - 1]!, d.style);
+            }
+            if (d instanceof Freehand && d.tv && (d.style.arrowLeft || d.style.arrowRight)) {
+                const ends = d.strokeEnds(proj); // TradingView's brush line ends: an open arrow at either end
+                if (ends && d.style.arrowLeft) this.paintChevron(ctx, ends.start[0], ends.start[1], d.style);
+                if (ends && d.style.arrowRight) this.paintChevron(ctx, ends.end[0], ends.end[1], d.style);
             }
             this.paintLabel(ctx, d, proj, theme);
             return;
@@ -3135,6 +3141,28 @@ export class DrawingPainter {
             ctx.fill();
             ctx.stroke();
         });
+        ctx.restore();
+    }
+
+    /** TradingView's selection markers (its SelectionRenderer): a 4 px blue ring, 1 px thick, on a 5 px disc of the
+     *  chart background. Display only. */
+    private paintSelectionMarkers(ctx: CanvasRenderingContext2D, points: ReadonlyArray<readonly [number, number]>): void {
+        if (!points.length) return;
+        const dpr = ctx.getTransform?.()?.a || 1;
+        ctx.save();
+        for (const [px, py] of points) {
+            const x = Math.round(px * dpr) / dpr;
+            const y = Math.round(py * dpr) / dpr;
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, Math.PI * 2);
+            ctx.fillStyle = this.handleBg;
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.arc(x, y, 3, 0, Math.PI * 2, true);
+            ctx.fillStyle = TV_HANDLE_RING;
+            ctx.fill('evenodd');
+        }
         ctx.restore();
     }
 

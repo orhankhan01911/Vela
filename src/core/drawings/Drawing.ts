@@ -390,6 +390,11 @@ export abstract class Drawing {
         }
     }
 
+    /** Points TradingView marks on a selected drawing without letting them be dragged (a brush's two ends). */
+    selectionMarkers(_proj: Projector): Array<[number, number]> {
+        return [];
+    }
+
     /** Re-read per-type extras (props) onto this instance — used by the store on an edit. */
     applyProps(props: Record<string, unknown>): void {
         this.readProps(props);

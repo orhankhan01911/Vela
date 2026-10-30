@@ -178,9 +178,9 @@ describe('drawing settings TradingView has', () => {
         expect(starts.map((y) => Math.round(y))).toEqual([40, 60, 30, 70]); // y 50 ± 10 (0.5) and ± 20 (1)
     });
 
-    it('brush: smoothing rounds the stroke (old strokes unchanged), a fill color closes it', () => {
+    it('brush saved before: Chaikin smoothing rounds the stroke (0 = as drawn), a fill color closes it', () => {
         const anchors = [{ time: 10, price: 10 }, { time: 30, price: 60 }, { time: 50, price: 10 }, { time: 70, price: 60 }];
-        const raw = createDrawing('freehand', { paneId: 'price', anchors })! as SegmentDrawing;
+        const raw = createDrawing('freehand', { paneId: 'price', anchors, props: {} })! as SegmentDrawing;
         expect(raw.geometry(proj())!.segments.length).toBe(3);
         expect(raw.serialize().props).toBeUndefined();
         const smooth = createDrawing('freehand', { paneId: 'price', anchors, props: { smooth: 2 } })! as SegmentDrawing;
@@ -188,8 +188,8 @@ describe('drawing settings TradingView has', () => {
         expect(segs.length).toBeGreaterThan(3);
         expect(Math.min(...segs.map((x) => x[1]))).toBeGreaterThan(40); // the sharp peaks at y 40 are rounded off
         expect(segs[0]!.slice(0, 2)).toEqual([10, 90]); // ends stay put
-        expect(paths('freehand', 2)).toContain('smooth');
-        const filled = createDrawing('freehand', { paneId: 'price', anchors, style: { lineColor: '#fff', lineWidth: 1, lineStyle: 'solid', fillColor: '#ff000033' } as never })! as SegmentDrawing;
+        expect(smooth.schema().fields.map((f) => f.path)).toContain('smooth');
+        const filled = createDrawing('freehand', { paneId: 'price', anchors, props: {}, style: { lineColor: '#fff', lineWidth: 1, lineStyle: 'solid', fillColor: '#ff000033' } as never })! as SegmentDrawing;
         expect(filled.geometry(proj())!.fill).not.toBeNull();
     });
 });

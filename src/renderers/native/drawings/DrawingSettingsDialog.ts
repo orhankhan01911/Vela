@@ -13,6 +13,7 @@ import {
     DatePriceRange,
     DateRange,
     MeasureBox,
+    Freehand,
     FixedRangeVolumeProfile,
     FixedRangeTpoProfile,
     INTERVAL_UNITS,
@@ -77,7 +78,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { freehand: 'Brush', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -135,7 +136,9 @@ export class DrawingSettingsDialog {
         if (custom) tabs.push('inputs');
         if (drawing.editableLevels() || styleFields(drawing).length > 0) tabs.push('style');
         if (drawing.schema().fields.some((f) => f.path.startsWith('text.'))) tabs.push('text');
-        if (!(drawing instanceof PositionTool) && drawing.anchors.length > 0) tabs.push('coordinates');
+        // TradingView's brush has no Coordinates tab (hundreds of points).
+        const brush = drawing instanceof Freehand && drawing.tv;
+        if (!(drawing instanceof PositionTool) && !brush && drawing.anchors.length > 0) tabs.push('coordinates');
         tabs.push('visibility');
         return tabs;
     }
@@ -301,8 +304,15 @@ export class DrawingSettingsDialog {
         }
         if (has('style.fillColor')) {
             const fill = effectiveFillColor(drawing, this.theme) ?? drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR;
-            grid.appendChild(fieldRow({ label: 'Background', control: [this.colorControl(drawing, 'style.fillColor', actions, fill)], fit: true }));
-            done.add('style.fillColor');
+            const control = [this.colorControl(drawing, 'style.fillColor', actions, fill)];
+            // TradingView's Background row: a switch beside the color when the tool has one (the brush).
+            const on = (drawing as unknown as { fillBackground?: boolean }).fillBackground;
+            const row = has('fillBackground')
+                ? fieldRow({ label: 'Background', toggle: { id: uid(), checked: on === true, onChange: (v) => actions.patch({ fillBackground: v }) }, control, fit: true })
+                : fieldRow({ label: 'Background', control, fit: true });
+            row.dataset.role = 'background';
+            grid.appendChild(row);
+            done.add('style.fillColor').add('fillBackground');
         }
         if (has('extendLeft') && has('extendRight')) {
             grid.appendChild(fieldRow({ label: 'Extend', control: [this.extendDropdown(drawing, actions)], fit: true }));

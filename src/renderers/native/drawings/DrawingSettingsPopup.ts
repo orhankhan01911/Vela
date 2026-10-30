@@ -17,6 +17,7 @@ import {
     MAGNIFIER_TIMEFRAME_OPTIONS,
     magnifierTimeframeLabel,
     effectiveFillColor,
+    Freehand,
 } from '../../../core/drawings';
 import { icon, svg24, svg24Solid } from '../../../core/icons';
 import { applyChromeTokens } from '../../shared/theme-tokens';
@@ -274,7 +275,8 @@ export class DrawingSettingsPopup {
         if (paths.has('style.lineStyle')) bar.appendChild(this.dropdown('Line style', LINE_STYLE_OPTIONS.map((o) => o.value), common((d) => d.style.lineStyle), (s) => lineIcon(2, s), (v) => actions.patch({ 'style.lineStyle': v }), { label: styleLabel }));
         // initialize the Fill swatch to the color actually painted (validity tint / line-color wash /
         // background fallback), not a stale default — same source the renderer fills with.
-        if (paths.has('style.fillColor')) bar.appendChild(swatch('Fill', BUCKET_ICON, (d) => effectiveFillColor(d, this.theme) ?? d.style.fillColor ?? DEFAULT_DRAWING_COLOR, 'style.fillColor'));
+        // TradingView's brush bar has no fill (its Background lives in the dialog).
+        if (paths.has('style.fillColor') && !drawings.every((d) => d instanceof Freehand && d.tv)) bar.appendChild(swatch('Fill', BUCKET_ICON, (d) => effectiveFillColor(d, this.theme) ?? d.style.fillColor ?? DEFAULT_DRAWING_COLOR, 'style.fillColor'));
         // Fixed-range VP: all settings live in the gear panel (nothing inline on the quick bar).
         const isFrvp = paths.has('frvp.rows') && drawing instanceof FixedRangeVolumeProfile;
         const isFrtpo = paths.has('frtpo.rows') && drawing instanceof FixedRangeTpoProfile;

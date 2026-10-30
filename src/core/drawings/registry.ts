@@ -544,7 +544,8 @@ registerDrawingType({
     group: 'shapes',
     label: 'Brush',
     icon: FREEHAND_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    // TradingView's brush: sky blue 2 px, its fill (off until switched on) the same blue at 20 %.
+    defaultStyle: { lineColor: '#00bcd4', lineWidth: 2, lineStyle: 'solid', fillColor: '#00bcd433' }, // palette-exempt: TradingView's sky blue
     create: (init) => new Freehand(init),
 });
 
