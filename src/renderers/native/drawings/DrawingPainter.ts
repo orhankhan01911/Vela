@@ -32,6 +32,8 @@ const BADGE_STROKE = SLATE;
 /** The frame a text label wears when it's the target: firm once clicked, a hint under the cursor.
  *  (Its box is the shared TEXT_FRAME inset/rise, so it coincides with the inline editor's border.) */
 const TEXT_FRAME_ALPHA = { selected: 0.3, hovered: 0.12 };
+const TV_TEXT_OUTLINE = '#2962ff'; // palette-exempt: TradingView's blue 500
+const TV_TEXT_OUTLINE_HOVER = '#2962ff66'; // palette-exempt: TradingView's blue 500 at 40 %
 /** Tools whose text can sit ON the line (vertical "middle"); the line breaks around it there. */
 const ON_LINE_LABEL_TYPES: ReadonlySet<string> = new Set(['hline', 'hray', 'trendline', 'ray', 'extendedline', 'infoline', 'trendangle', 'arrow']);
 /** Clear space between on-line text and where its line resumes, each side (TradingView's ~4 px). */
@@ -175,7 +177,9 @@ export class DrawingPainter {
                 const shapes = d.handleShapes();
                 this.paintClipped(ctx, d, proj, () => {
                     this.paintMiddlePoint(ctx, d, proj);
-                    this.paintTvHandles(ctx, d.handlePoints(proj), shapes);
+                    const pts = d.handlePoints(proj);
+                    const shown = pts.map((_, i) => i).filter((i) => !d.handleHidden(i));
+                    this.paintTvHandles(ctx, shown.map((i) => pts[i]!), shapes.length ? shown.map((i) => shapes[i] ?? 'circle') : shapes);
                     this.paintSelectionMarkers(ctx, d.selectionMarkers(proj));
                 });
             }
@@ -756,23 +760,25 @@ export class DrawingPainter {
             ctx.fillStyle = ink;
         }
         lines.forEach((line, i) => ctx.fillText(line, layout.x, layout.top + i * lh));
-        if (tl) this.paintTextFrame(ctx, d.id, layout.x, layout.top, lines, fs, theme);
+        if (tl) this.paintTextFrame(ctx, d.id, layout.x, layout.top, lines, fs, theme, tl.tv === true, wrap);
         ctx.restore();
     }
 
     /** Frame a plain text label while it is the target, so the text reads as a clickable object even
      *  though it has no shape of its own: a firm frame once selected, a fainter one under the cursor.
      *  Placed to coincide with the inline editor's frame — clicking into the text doesn't shift it. */
-    private paintTextFrame(ctx: CanvasRenderingContext2D, id: string, x: number, top: number, lines: readonly string[], fs: number, theme: VelaTheme): void {
+    private paintTextFrame(ctx: CanvasRenderingContext2D, id: string, x: number, top: number, lines: readonly string[], fs: number, theme: VelaTheme, tv = false, wrap: number | null = null): void {
         const t = this.targets;
-        const alpha = t.selected?.has(id) ? TEXT_FRAME_ALPHA.selected : t.hovered === id ? TEXT_FRAME_ALPHA.hovered : 0;
+        const selected = t.selected?.has(id) === true;
+        const alpha = selected ? TEXT_FRAME_ALPHA.selected : t.hovered === id ? TEXT_FRAME_ALPHA.hovered : 0;
         if (alpha === 0) return;
         const lh = labelLineHeight(fs);
-        const w = Math.max(8, ...lines.map((l) => ctx.measureText(l).width));
+        const w = Math.max(8, wrap ?? 0, ...lines.map((l) => ctx.measureText(l).width));
         ctx.save();
         ctx.setLineDash([]);
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = withAlpha(theme.textColor, alpha);
+        // TradingView's text outline: 1.5 px, its blue when selected, the blue at 40 % under the cursor.
+        ctx.lineWidth = tv ? 1.5 : 1;
+        ctx.strokeStyle = tv ? (selected ? TV_TEXT_OUTLINE : TV_TEXT_OUTLINE_HOVER) : withAlpha(theme.textColor, alpha);
         roundRect(ctx, x - TEXT_FRAME_INSET, top - (lh - fs) / 2 - TEXT_FRAME_RISE, w + TEXT_FRAME_INSET * 2, lines.length * lh + TEXT_FRAME_RISE * 2, 4);
         ctx.stroke();
         ctx.restore();

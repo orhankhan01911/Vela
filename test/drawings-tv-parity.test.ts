@@ -145,7 +145,8 @@ describe('drawing settings TradingView has', () => {
 
     it('text: background, border and word wrap round-trip; a wrapped text is no wider than its wrap width', () => {
         const long = 'one two three four five six seven eight nine ten eleven twelve';
-        const t = createDrawing('text', { paneId: 'price', anchors: [{ time: 50, price: 50 }], text: { value: long, size: 'normal' } as never })! as TextLabel;
+        // A text saved before TradingView's look (new ones: drawings-text-tv).
+        const t = createDrawing('text', { paneId: 'price', anchors: [{ time: 50, price: 50 }], props: {}, text: { value: long, size: 'normal' } as never })! as TextLabel;
         expect(t.serialize().props).toBeUndefined(); // plain text stays as before
         const wide = t.bounds(proj())!.w;
         t.applySettings({ background: true, border: true, wordWrap: true, wrapWidth: 120 });
@@ -153,7 +154,9 @@ describe('drawing settings TradingView has', () => {
         expect(t.bounds(proj())!.w).toBe(128);
         const back = deserializeDrawing(t.serialize())! as TextLabel;
         expect([back.background, back.border, back.wrapPx()]).toEqual([true, true, 120]);
-        for (const p of ['background', 'backgroundColor', 'border', 'borderColor', 'wordWrap', 'wrapWidth']) expect(paths('text', 1)).toContain(p);
+        // TradingView's text (new ones) sets the wrap width with a handle, not a number.
+        for (const p of ['background', 'backgroundColor', 'border', 'borderColor', 'wordWrap']) expect(paths('text', 1)).toContain(p);
+        expect(paths('text', 1)).not.toContain('wrapWidth');
     });
 
     it('pitchforks: TradingView levels (0.5 + 1 on), band fills and a red median; old saved ones draw as before', () => {

@@ -115,6 +115,10 @@ const TABLE_SIZE_PX: Record<string, number> = { tiny: 10, small: 12, normal: 14,
  * `|` between cells. Background and border colors are the text tool's.
  */
 export class TableDrawing extends AnchoredText {
+    protected override tvLook(): boolean {
+        return false;
+    }
+
     override readonly type = 'table' as const;
 
     /** The cells, row by row (short rows padded so every row has as many cells as the widest). */

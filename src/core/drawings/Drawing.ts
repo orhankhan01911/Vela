@@ -384,6 +384,11 @@ export abstract class Drawing {
         return null;
     }
 
+    /** A handle that is grabbed but not drawn (TradingView's text shows no point). */
+    handleHidden(_index: number): boolean {
+        return false;
+    }
+
     /** A variable click tool that ends when the next click lands on its last point (TradingView's path). */
     finishesOnSamePoint(): boolean {
         return false;

@@ -119,7 +119,7 @@ describe('drawings/Ray Box TextLabel', () => {
     it('TextLabel starts empty (typed inline) with an approximate hit box', () => {
         const t = createDrawing('text', { paneId: 'price', anchors: [{ time: 10, price: 50 }] })!;
         expect(t.text?.value).toBe(''); // no seeded literal — the inline editor's placeholder invites the text
-        expect(t.text?.size).toBe('large'); // reads at a glance without reaching for the size control
+        expect(t.text?.size).toBe(14); // TradingView's text: 14 px
         expect(t.hitTest(20, 60, proj, 5)).toBe(true);
         expect(t.hitTest(400, 400, proj, 5)).toBe(false);
         // round-trips the text block
@@ -218,8 +218,8 @@ describe('drawings/resetDrawingSettings', () => {
         d.applySettings({ 'text.value': 'Buy zone', 'text.color': '#ff0000', 'text.size': 'huge', 'text.bold': true });
         resetDrawingSettings(d);
         expect(d.text?.value).toBe('Buy zone');
-        expect(d.text?.color).toBeUndefined();
-        expect(d.text?.size).toBe('large'); // back to the type's own default, not the global one
+        expect(d.text?.color).toBe('#2962ff'); // back to the type's own default (TradingView's), not the global one
+        expect(d.text?.size).toBe(14);
         expect(d.text?.bold).toBeUndefined();
     });
 

@@ -119,7 +119,8 @@ describe('DrawingPainter.paintAll muted label', () => {
         return { ctx: base.ctx, texts: () => texts };
     }
 
-    const label = (id: string) => createDrawing('text', { id, paneId: 'price', anchors: [{ time: 10, price: 50 }], text: { value: 'Buy zone', size: 'normal', hAlign: 'left', vAlign: 'top' } })!;
+    // A text saved before TradingView's look (its themed frame); the TradingView outline is in drawings-text-tv.
+    const label = (id: string) => createDrawing('text', { id, paneId: 'price', anchors: [{ time: 10, price: 50 }], props: {}, text: { value: 'Buy zone', size: 'normal', hAlign: 'left', vAlign: 'top' } })!;
 
     it('paints a text label normally', () => {
         const { ctx, texts } = textCountingCtx();
@@ -151,7 +152,8 @@ describe('DrawingPainter.paintAll text label frame', () => {
         return { ctx: base.ctx, strokes: () => strokes };
     }
 
-    const label = (id: string) => createDrawing('text', { id, paneId: 'price', anchors: [{ time: 10, price: 50 }], text: { value: 'Buy zone', size: 'normal', hAlign: 'left', vAlign: 'top' } })!;
+    // A text saved before TradingView's look (its themed frame); the TradingView outline is in drawings-text-tv.
+    const label = (id: string) => createDrawing('text', { id, paneId: 'price', anchors: [{ time: 10, price: 50 }], props: {}, text: { value: 'Buy zone', size: 'normal', hAlign: 'left', vAlign: 'top' } })!;
     const frame = (targets: { selected?: ReadonlySet<string>; hovered?: string | null }): string[] => {
         const { ctx, strokes } = strokeRecordingCtx();
         new DrawingPainter().paintAll(ctx, [label('a')], fakeProjector(), theme, targets);
