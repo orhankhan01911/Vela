@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP, XPOST_DARK, XPOST_LIGHT } from '../../../core/palette';
@@ -305,6 +305,10 @@ export class DrawingPainter {
         }
         if (d instanceof ArrowMarker && d.tv) {
             this.paintTvArrowMarker(ctx, d, proj, theme);
+            return;
+        }
+        if (d instanceof Path && d.tv) {
+            this.paintTvPath(ctx, d, proj);
             return;
         }
         if (d instanceof SegmentDrawing) {
@@ -3193,9 +3197,8 @@ export class DrawingPainter {
 
     /** TradingView's line-end arrow (trend line, arrow): two open strokes at `to` in the line's width, ~40° off it. */
     private paintChevron(ctx: CanvasRenderingContext2D, from: readonly [number, number], to: readonly [number, number], style: DrawingStyle): void {
-        const ang = Math.atan2(to[1] - from[1], to[0] - from[0]);
-        const len = Math.max(8, style.lineWidth * 4.5);
-        const spread = (40 * Math.PI) / 180;
+        const arms = chevronArms(from, to, style.lineWidth);
+        if (!arms) return;
         ctx.save();
         ctx.setLineDash([]);
         ctx.strokeStyle = style.lineColor;
@@ -3203,11 +3206,29 @@ export class DrawingPainter {
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         ctx.beginPath();
-        ctx.moveTo(to[0] - len * Math.cos(ang - spread), to[1] - len * Math.sin(ang - spread));
+        ctx.moveTo(arms[0][0], arms[0][1]);
         ctx.lineTo(to[0], to[1]);
-        ctx.lineTo(to[0] - len * Math.cos(ang + spread), to[1] - len * Math.sin(ang + spread));
+        ctx.lineTo(arms[1][0], arms[1][1]);
         ctx.stroke();
         ctx.restore();
+    }
+
+    /** TradingView's path: the points as ONE line (round joins; round caps when solid, as its polygon renderer), and an
+     *  open arrow at each end that is switched on. */
+    private paintTvPath(ctx: CanvasRenderingContext2D, d: Path, proj: Projector): void {
+        const pts = d.handlePoints(proj);
+        if (pts.length < 2) return;
+        ctx.save();
+        this.applyStroke(ctx, d.style);
+        ctx.lineCap = (d.style.lineStyle ?? 'solid') === 'solid' ? 'round' : 'butt';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(pts[0]![0], pts[0]![1]);
+        for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i]![0], pts[i]![1]);
+        ctx.stroke();
+        ctx.restore();
+        if (d.style.arrowLeft) this.paintChevron(ctx, pts[1]!, pts[0]!, d.style);
+        if (d.style.arrowRight) this.paintChevron(ctx, pts[pts.length - 2]!, pts[pts.length - 1]!, d.style);
     }
 
     /** A filled triangular arrowhead at `to`, pointing along the `from`→`to` direction. */
@@ -3509,6 +3530,21 @@ function formatMachRatio(ratio: number): string {
 
 /** Where a drawing's label paints. With `rotate`, the canvas is rotated by `angle`
  *  around `(cx, cy)` first, and `x`/`top` are in that rotated frame. */
+/** TradingView's open arrow at `to` (its getArrowPoints): two arms 5 x the line width back along the line and as far
+ *  out to each side (45 degrees), or null when the segment is too short to point anywhere. */
+export function chevronArms(from: readonly [number, number], to: readonly [number, number], lineWidth: number): [[number, number], [number, number]] | null {
+    const dx = to[0] - from[0];
+    const dy = to[1] - from[1];
+    const len = Math.hypot(dx, dy);
+    if (len < 1) return null;
+    const ux = dx / len;
+    const uy = dy / len;
+    const h = 5 * Math.max(1, lineWidth);
+    const bx = to[0] - ux * h;
+    const by = to[1] - uy * h;
+    return [[bx - uy * h, by + ux * h], [bx + uy * h, by - ux * h]];
+}
+
 export function labelLayout(d: Drawing, proj: Projector): {
     x: number;
     top: number;

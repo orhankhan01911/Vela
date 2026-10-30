@@ -198,10 +198,10 @@ function legacyArrowMarker(doc: SerializedDrawing): SerializedDrawing {
     return doc.type === 'arrowmarker' && doc.props === undefined ? { ...doc, props: {} } : doc;
 }
 
-/** Brush and highlighter strokes and rectangles became TradingView's (2026-10-30). One saved before with no props:
+/** Brush and highlighter strokes, rectangles and paths became TradingView's (2026-10-30). One saved before with no props:
  *  give it an empty bag so it keeps its look (a fresh stroke has no props and starts as TradingView's). */
 function legacyStroke(doc: SerializedDrawing): SerializedDrawing {
-    return (doc.type === 'freehand' || doc.type === 'highlighter' || doc.type === 'box') && doc.props === undefined ? { ...doc, props: {} } : doc;
+    return (doc.type === 'freehand' || doc.type === 'highlighter' || doc.type === 'box' || doc.type === 'path') && doc.props === undefined ? { ...doc, props: {} } : doc;
 }
 
 /** Ellipses became TradingView's tilted three-point ellipse. A record saved before has two corners and no `axis`
@@ -607,7 +607,8 @@ registerDrawingType({
     group: 'shapes',
     label: 'Path',
     icon: PATH_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    // TradingView's path: its blue, 2 px.
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new Path(init),
 });
 

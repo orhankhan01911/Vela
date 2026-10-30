@@ -4,6 +4,8 @@ import { topDrawingAt, HIT_TOLERANCE } from './DrawingHitTester';
 
 /** Pixels of motion before a press counts as a drag (vs a click → open settings). */
 const DRAG_SLOP = 3;
+/** TradingView's minimum distance between path points (mouse): a click closer to the last point ends the path. */
+const PATH_FINISH_PX = 5;
 /** Minimum pixel gap between captured freehand points (keeps a stroke from over-sampling). */
 const FREEHAND_SAMPLE_PX = 4;
 /** Shift-snap quantum: the free endpoint of a line locks to 45° steps (0/±45/±90/±135/180). */
@@ -256,6 +258,12 @@ export class DrawingInteraction {
         const proj = this.deps.projector();
         if (this.state.kind === 'placing') {
             if (this.state.draft.placementMode() !== 'click') return; // drag/freehand finalize on release, not extra clicks
+            // TradingView's path: a click on (within 5 px of) the last point ends it.
+            const prev = this.state.draft.anchors[this.state.draft.anchors.length - 1];
+            if (prev && this.state.draft.finishesOnSamePoint()) {
+                const py = proj.yOf(prev.price, this.state.draft.paneId);
+                if (py != null && Math.hypot(x - proj.xOf(prev.time), y - py) < PATH_FINISH_PX && this.finishPlacing(false)) return;
+            }
             const pivot = shift ? this.placingPivot(this.state.draft) : null;
             const point = pivot
                 ? this.resolveAngleSnapped(pivot, this.state.draft.paneId, x, y)

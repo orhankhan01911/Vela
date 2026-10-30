@@ -384,6 +384,11 @@ export abstract class Drawing {
         return null;
     }
 
+    /** A variable click tool that ends when the next click lands on its last point (TradingView's path). */
+    finishesOnSamePoint(): boolean {
+        return false;
+    }
+
     /** TradingView's text for this tool (color, size, alignment), used when text is first added. */
     textDefaults(): Partial<DrawingText> | undefined {
         return TV_TEXT_DEFAULTS[this.type];
