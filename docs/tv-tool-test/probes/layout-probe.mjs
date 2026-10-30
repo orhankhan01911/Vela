@@ -1,0 +1,44 @@
+import { chromium } from "playwright-core";
+const OUT = process.argv[2];
+const b = await chromium.launch({ headless: true });
+const p = await b.newPage({ viewport: { width: 1600, height: 900 }, colorScheme: "dark" });
+const errs = []; p.on("pageerror", (e) => errs.push(String(e).slice(0, 200)));
+await p.goto("http://localhost:5179/", { waitUntil: "domcontentloaded" });
+await p.waitForFunction(() => window.__velaReady, null, { timeout: 90000 });
+await p.waitForTimeout(2500);
+const chip = async () => p.evaluate(() => ({ name: document.querySelector(".of-lay-label")?.textContent ?? null, save: !(document.querySelector(".of-lay-save")?.hidden ?? true) }));
+const out = { steps: [] };
+const log = (k, v) => out.steps.push([k, v]);
+await p.evaluate(() => window.__vela.setLayout("4"));
+await p.waitForTimeout(2500);
+const cells = await p.evaluate(() => [...document.querySelectorAll(".vela-cell")].map((c) => { const r = c.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
+log("cells", cells.length);
+for (const [x, y] of cells) { await p.mouse.click(x, y); await p.waitForTimeout(400); log("unnamed-click", await chip()); }
+log("templatesButtonVisible", await p.evaluate(() => [...document.querySelectorAll(".vela-widget-topbar .vela-widget-action")].some((b) => (b.getAttribute("aria-label") ?? b.textContent ?? "").trim() === "Templates" && b.getClientRects().length > 0)));
+await p.screenshot({ path: `${OUT}/bar-unnamed.png`, clip: { x: 900, y: 0, width: 700, height: 60 } });
+await p.click(".of-lay-name"); await p.waitForTimeout(500);
+await p.screenshot({ path: `${OUT}/menu.png` });
+log("menu", await p.evaluate(() => document.querySelector("#of-layout-menu, .vela-menu")?.innerText ?? null));
+await p.keyboard.press("Escape"); await p.waitForTimeout(300);
+await p.keyboard.press("Control+s"); await p.waitForTimeout(500);
+log("focus-after-ctrl-s", await p.evaluate(() => { const a = document.activeElement; return a ? a.tagName + "." + a.className + " in-dialog=" + !!a.closest('[role="dialog"], .vela-dialog') : null; }));
+await p.screenshot({ path: `${OUT}/save-dialog.png` });
+await p.keyboard.press("Control+a"); await p.keyboard.type("Gold desk"); await p.keyboard.press("Enter"); await p.waitForTimeout(800);
+for (const [x, y] of cells) { await p.mouse.click(x, y); await p.waitForTimeout(400); log("named-click", await chip()); }
+// Create a new layout (1 chart), then open Gold desk again from the menu's recent list.
+await p.click(".of-lay-name"); await p.waitForTimeout(400);
+await p.getByText("Create new layout…").click(); await p.waitForTimeout(400);
+await p.keyboard.press("Control+a"); await p.keyboard.type("Scratch"); await p.keyboard.press("Enter"); await p.waitForTimeout(1500);
+log("after-create", { chip: await chip(), cells: await p.evaluate(() => document.querySelectorAll(".vela-cell").length) });
+await p.click(".of-lay-name"); await p.waitForTimeout(400);
+await p.screenshot({ path: `${OUT}/menu-recent.png` });
+log("before-open", { chip: await chip(), idx: await p.evaluate(() => localStorage.getItem("of-layouts")) });
+log("chartKeys", await p.evaluate(() => Object.keys(window.__vela.getState().charts[0]).join(",") + " | tf=" + JSON.stringify(window.__vela.getState().charts[0].timeframe ?? window.__vela.getState().charts[0].interval)));
+await p.locator(".vela-menu").getByText("Gold desk", { exact: true }).first().click(); await p.waitForTimeout(2000);
+log("after-open", { chip: await chip(), cells: await p.evaluate(() => document.querySelectorAll(".vela-cell").length) });
+await p.keyboard.press("."); await p.waitForTimeout(500);
+await p.screenshot({ path: `${OUT}/open-dialog.png` });
+log("open-dialog", await p.evaluate(() => document.querySelector(".of-lay-list")?.innerText ?? null));
+out.errs = errs;
+console.log(JSON.stringify(out, null, 1));
+await b.close();
