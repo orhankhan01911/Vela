@@ -81,7 +81,7 @@ export interface UserDrawingDeps {
     /** A price as the pane's scale prints it (grouping, decimals, percent mode) and the axis font: the drawings'
      *  price chips use it so they read like the axis numbers and the crosshair chip. Null when the pane is gone. */
     axisLabel?(paneId: string, price: number): { text: string; font: string } | null;
-    /** The Zoom In tool: the x of the bar centre nearest to `x`. */
+    /** The x of the bar centre nearest to `x` (the Zoom In box and the ruler run from bar to bar). */
     zoomSnapX?(x: number): number;
     /** Zoom to the box between two points (bars across, the first point's pane's prices up and down). Returns the
      *  view to go back to, or null when nothing changed (both ends on one bar). */
@@ -566,7 +566,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
     beginMeasureAt(x: number, y: number, snap: SnapMode = 'off'): boolean {
         if (this.measureMode || this.eraserMode || this.zoomMode || this.activeTool != null) return false;
         this.withModeIntent(() => this.toggleMeasure());
-        const g = this.interaction.snapCursor(x, y, snap);
+        const g = this.rulerPoint(x, y, snap);
         this.measure.down(x, y, g.x, g.y);
         this.render();
         return true;
@@ -623,7 +623,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
             return;
         }
         if (this.measureMode) {
-            const g = this.interaction.snapCursor(x, y, snap);
+            const g = this.rulerPoint(x, y, snap);
             this.measure.down(x, y, g.x, g.y);
             // 2nd click finishes → disarm (reported as a mode change), keep the ruler shown.
             if (this.measure.isFinished()) this.withModeIntent(() => this.exitMeasure(false));
@@ -693,7 +693,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
             return;
         }
         if (this.measureMode) {
-            const g = this.interaction.snapCursor(x, y, snap);
+            const g = this.rulerPoint(x, y, snap);
             this.measure.move(g.x, g.y); // click-move-click: the cursor sizes the ruler with no button down
             this.render();
             return;
@@ -735,7 +735,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
             return;
         }
         if (this.measureMode) {
-            const g = this.interaction.snapCursor(x, y, snap);
+            const g = this.rulerPoint(x, y, snap);
             this.measure.up(x, y, g.x, g.y); // press-drag-release finishes the ruler in one gesture
             if (this.measure.isFinished()) this.withModeIntent(() => this.exitMeasure(false));
             this.render();
@@ -749,6 +749,12 @@ export class UserDrawingController implements IDrawingsRendererPort {
             if (this.selectedIds.size >= 2) this.openSettingsForSelection(this.selectionIds());
             else this.openSettingsById(dragged, x, y);
         }
+    }
+
+    /** A ruler end: the magnet's point, its x on the bar centre (TradingView measures from bar to bar). */
+    private rulerPoint(x: number, y: number, snap: SnapMode): { x: number; y: number } {
+        const g = this.interaction.snapCursor(x, y, snap);
+        return { x: this.deps.zoomSnapX?.(g.x) ?? g.x, y: g.y };
     }
 
     /** Toggle the transient ruler. Arming it clears any drawing tool + selection. */
@@ -1405,7 +1411,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
         const my = m ? proj.yOf(m.point.price, m.paneId) : null;
         if (m && my != null) this.painter.paintSnapRing(ctx, proj.xOf(m.point.time), my, this.deps.theme());
         // The transient ruler paints on top of everything (until cleared on the next press/pan/zoom).
-        if (this.measure.isActive()) this.measure.paint(ctx, proj, this.deps.theme());
+        if (this.measure.isActive()) this.measure.paint(ctx, proj, this.deps.theme(), (paneId, price) => this.painter.priceTick(paneId, price));
         this.paintZoomBox(ctx);
         const marquee = this.interaction.marqueeRect();
         if (marquee) this.painter.paintMarquee(ctx, marquee);

@@ -1,7 +1,7 @@
 import type { VelaTheme } from '../../../core/options';
 import type { Projector } from '../../../core/drawings';
-import { formatDuration } from '../../../core/drawings';
-import { ACCENT, BEARISH } from '../../../core/palette';
+import { rangeInfoLines } from '../../../core/drawings';
+import { chevronArms } from './DrawingPainter';
 
 /**
  * Decimals for a price change measured at `ref`: about five significant digits of the price, at least 2. EURUSD
@@ -19,10 +19,21 @@ export function signed(n: number, decimals = 2): string {
     return `${n >= 0 ? '+' : '-'}${body}`;
 }
 
-// TradingView's ruler colours (blue up, red down). Fixed, not the theme's candle colors: it must stay readable
-// over candles of any user-chosen color.
-const UP = ACCENT;
-const DOWN = BEARISH;
+// TradingView's ruler colours (module 649873): fixed, not the theme's candle colours, so it reads over any candles.
+const UP_FILL = 'rgba(41, 98, 255, 0.2)'; // its blue 500 at 20 %
+const DOWN_FILL = 'rgba(247, 82, 95, 0.2)'; // its ripe red 400 at 20 %
+const UP_LINE = '#1E53E5'; // palette-exempt: TradingView's ruler line (blue 600)
+const DOWN_LINE = '#F7525F'; // palette-exempt: TradingView's ruler line (ripe red 400)
+const UP_LABEL = '#2962FF'; // palette-exempt: TradingView's ruler label (blue 500)
+const DOWN_LABEL = '#F7525F'; // palette-exempt: TradingView's ruler label (ripe red 400)
+const LABEL_TEXT = '#FFFFFF'; // palette-exempt: TradingView's ruler label text
+const LABEL_FONT = 12;
+const LABEL_GAP = 8;
+const LABEL_PAD = 9;
+const LABEL_RADIUS = 4;
+const LABEL_OFFSET = 10;
+/** A line gets its arrow once it is this long (px). */
+const ARROW_MIN = 50;
 const DRAG_SLOP = 3;
 
 type MeasureState = 'idle' | 'measuring' | 'finished';
@@ -94,7 +105,14 @@ export class MeasureOverlay {
         this.end = null;
     }
 
-    paint(ctx: CanvasRenderingContext2D, proj: Projector, theme: VelaTheme): void {
+    /**
+     * TradingView's ruler (module 649873, read 2026-10-30): a box from the start to the end at 20 % of its blue (up) or
+     * red (down); a 1 px line across and one up and down through its middle, each with an open arrow at the end the
+     * ruler was drawn to once it is 50 px long; and a solid label 10 px past the end, flipped inside the pane when it
+     * would leave it. Its lines: `12.31 (0.31%) 1,231` (change, percent, change in ticks), `18 bars, 19h`, `Vol 391.14 K`.
+     * `tick` is one step of the pane's price scale.
+     */
+    paint(ctx: CanvasRenderingContext2D, proj: Projector, theme: VelaTheme, tick: (paneId: string, price: number) => number = () => 0.01): void {
         if (!this.start || !this.end) return;
         const { x: x1, y: y1 } = this.start;
         const { x: x2, y: y2 } = this.end;
@@ -102,89 +120,89 @@ export class MeasureOverlay {
         if (!paneId) return;
         const p1 = proj.pxToPoint(x1, y1, paneId);
         const p2 = proj.pxToPoint(x2, y2, paneId);
-        const priceDiff = p2.price - p1.price;
-        const pct = p1.price !== 0 ? (priceDiff / p1.price) * 100 : 0;
-        const bars = proj.barsBetween ? Math.round(proj.barsBetween(p1.time, p2.time)) : null;
-        const up = priceDiff >= 0;
-        const color = up ? UP : DOWN;
+        const down = p2.price < p1.price;
+        const line = down ? DOWN_LINE : UP_LINE;
         const left = Math.min(x1, x2);
-        const right = Math.max(x1, x2);
         const top = Math.min(y1, y2);
-        const bot = Math.max(y1, y2);
-        const midX = (x1 + x2) / 2;
-        const midY = (y1 + y2) / 2;
 
         ctx.save();
-        ctx.globalAlpha = 0.2;
-        ctx.fillStyle = color;
-        ctx.fillRect(left, top, right - left, bot - top);
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = color;
+        ctx.fillStyle = down ? DOWN_FILL : UP_FILL;
+        ctx.fillRect(left, top, Math.abs(x2 - x1), Math.abs(y2 - y1));
+        ctx.strokeStyle = line;
         ctx.lineWidth = 1;
-        // solid center lines on the half pixel, so a 1 px line covers one device row instead of smearing over two
-        const cx = Math.round(midX) + 0.5;
-        const cy = Math.round(midY) + 0.5;
+        ctx.lineCap = 'butt';
+        // On the half pixel, so a 1 px line covers one device row instead of smearing over two.
+        const cx = Math.round((x1 + x2) / 2) + 0.5;
+        const cy = Math.round((y1 + y2) / 2) + 0.5;
         ctx.beginPath();
-        ctx.moveTo(cx, y1);
-        ctx.lineTo(cx, y2);
         ctx.moveTo(x1, cy);
         ctx.lineTo(x2, cy);
+        ctx.moveTo(cx, y1);
+        ctx.lineTo(cx, y2);
+        if (Math.abs(x2 - x1) >= ARROW_MIN) arrow(ctx, [x1, cy], [x2, cy]);
+        if (Math.abs(y2 - y1) >= ARROW_MIN) arrow(ctx, [cx, y1], [cx, y2]);
         ctx.stroke();
-        // a filled arrow at the destination edge, pointing the way price moved
-        const ay = up ? top : bot;
-        const dir = up ? 1 : -1;
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(midX, ay);
-        ctx.lineTo(midX - 5, ay + dir * 7);
-        ctx.lineTo(midX + 5, ay + dir * 7);
-        ctx.closePath();
-        ctx.fill();
         ctx.restore();
 
-        const dec = measureDecimals(p1.price);
-        this.paintLabel(ctx, proj, theme, midX, top, bot, up, color, [
-            `${signed(priceDiff, dec)} (${signed(pct)}%)`,
-            bars != null ? `${bars} bars, ${formatDuration(p2.time - p1.time)}` : formatDuration(p2.time - p1.time),
-        ]);
+        const span = proj.barsBetween ? proj.barsBetween(p1.time, p2.time) : 0;
+        const bars = p2.time < p1.time ? -span : span;
+        const inRange = proj.barsInRange ? proj.barsInRange(Math.min(p1.time, p2.time), Math.max(p1.time, p2.time)) : [];
+        // TradingView leaves the volume line out when any bar in the range has no volume.
+        const volume = inRange.length > 0 && inRange.every((b) => b.volume != null) ? inRange.reduce((sum, b) => sum + (b.volume ?? 0), 0) : undefined;
+        const all = { priceRange: true, percent: true, pips: true, bars: true, dateTime: true, volume: true };
+        const lines = rangeInfoLines(all, p1, p2, { tick: tick(paneId, Math.max(Math.abs(p1.price), Math.abs(p2.price))), bars, volume });
+        this.paintLabel(ctx, proj, theme, paneId, (x1 + x2) / 2, y1, y2, down ? DOWN_LABEL : UP_LABEL, lines);
     }
 
-    /**
-     * TradingView's label: a solid box in the ruler's colour with white text, past the end the price moved to (above
-     * the box going up, below it going down), flipped to the other side when it would leave the pane. Whole-pixel
-     * positions so the text stays sharp.
-     */
-    private paintLabel(
-        ctx: CanvasRenderingContext2D,
-        proj: Projector,
-        theme: VelaTheme,
-        midX: number,
-        boxTop: number,
-        boxBot: number,
-        up: boolean,
-        color: string,
-        lines: string[],
-    ): void {
+    /** The label (TradingView's text renderer: 12 px, 8 px between lines, 9 px padding, radius 4), placed by its
+     *  calculateLabelPosition: past the end the ruler was drawn to, else on the other side, else pushed inside. */
+    private paintLabel(ctx: CanvasRenderingContext2D, proj: Projector, theme: VelaTheme, paneId: string, midX: number, y1: number, y2: number, color: string, lines: string[]): void {
+        if (lines.length === 0) return;
         ctx.save();
-        ctx.font = `500 13px ${theme.fontFamily}`;
-        const w = Math.ceil(Math.max(...lines.map((l) => ctx.measureText(l).width)) + 20);
-        const lh = 18;
-        const h = lines.length * lh + 8;
-        const above = Math.round(boxTop - h - 8);
-        const below = Math.round(boxBot + 8);
-        let y = up ? above : below;
-        if (y < 0) y = below;
-        else if (y + h > proj.height) y = above;
+        ctx.font = `${LABEL_FONT}px ${theme.fontFamily}`;
+        const w = Math.ceil(Math.max(...lines.map((l) => ctx.measureText(l).width)) + 2 * LABEL_PAD);
+        const h = lines.length * LABEL_FONT + (lines.length - 1) * LABEL_GAP + 2 * LABEL_PAD;
+        const pane = proj.paneRect?.(paneId) ?? { top: 0, height: proj.height };
+        const half = h / 2;
+        const reach = LABEL_OFFSET + half;
+        const lo = Math.min(y1, y2) - pane.top;
+        const hi = Math.max(y1, y2) - pane.top;
+        let c: number;
+        if (y1 > y2) {
+            c = lo - reach;
+            const over = half - c;
+            if (over > 0) {
+                const below = hi + reach;
+                c = below + half <= pane.height ? below : c + over;
+            }
+        } else {
+            c = hi + reach;
+            const over = c + half - pane.height;
+            if (over > 0) {
+                const above = lo - reach;
+                c = above - half >= 0 ? above : c - over;
+            }
+        }
         const x = Math.round(midX - w / 2);
+        const y = Math.round(pane.top + c - half);
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.roundRect(x, y, w, h, 4);
+        ctx.roundRect(x, y, w, h, LABEL_RADIUS);
         ctx.fill();
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = LABEL_TEXT;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         const tx = Math.round(midX);
-        lines.forEach((line, i) => ctx.fillText(line, tx, Math.round(y + 4 + lh / 2 + i * lh)));
+        lines.forEach((l, i) => ctx.fillText(l, tx, Math.round(y + LABEL_PAD + LABEL_FONT / 2 + i * (LABEL_FONT + LABEL_GAP))));
         ctx.restore();
     }
+}
+
+/** An open arrow at `to` (the arms only; the caller strokes). */
+function arrow(ctx: CanvasRenderingContext2D, from: [number, number], to: [number, number]): void {
+    const arms = chevronArms(from, to, 1);
+    if (!arms) return;
+    ctx.moveTo(arms[0][0], arms[0][1]);
+    ctx.lineTo(to[0], to[1]);
+    ctx.lineTo(arms[1][0], arms[1][1]);
 }

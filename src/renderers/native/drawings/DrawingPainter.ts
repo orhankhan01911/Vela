@@ -1432,7 +1432,7 @@ export class DrawingPainter {
     }
 
     /** One tick of the pane's price scale (its last shown decimal): `0.01` when the axis reads `78,248.10`. */
-    private priceTick(paneId: string, price: number): number {
+    priceTick(paneId: string, price: number): number {
         const text = this.axisLabel?.(paneId, price)?.text ?? formatPriceTag(price);
         const m = /[.,](\d+)\s*$/.exec(text.replace(/[^\d.,]/g, ''));
         return m ? 10 ** -m[1]!.length : 1;
