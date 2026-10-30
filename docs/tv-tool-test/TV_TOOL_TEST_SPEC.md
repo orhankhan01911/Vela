@@ -88,10 +88,13 @@ point on the placed shape (a click there selects it); `DPR` is the device pixel 
 
 **All tools at once (the regression check, run it after any shared change):**
 
-The audit has 26 tools: 24 are placed on the chart, the other two (Zoom and the Ruler) are modes, checked by hand.
+The audit has 26 tools: 24 are placed on the chart; Zoom and the Ruler are modes. TradingView has no shape or dialog
+for those two (it refuses to create them: "Cannot create \"measure\" shape"), so the sweep checks their behaviour against
+the facts read from TradingView (table at the end): Zoom in narrows the view, Zoom out shows, restores the view and hides;
+the Ruler's picture (`DIR/ruler.png`) shows the box, arrows, label and the shaded scales with blue end chips.
 
 1. `node e2e/zz-sweep.mjs DIR > DIR/run2.txt` (a copy of `sweep-probe.mjs`; `DIR` must exist; add `tool,tool` after
-   `DIR` to run only some): places the 24 placed tools fresh on Local and prints, per tool, the saved
+   `DIR` to run only some, e.g. `zoom,ruler`): places the 24 placed tools fresh on Local, runs Zoom and the Ruler, and prints, per tool, the saved
    style, the floating-toolbar buttons, every dialog tab with its rows, and page errors. Screenshots go to `DIR`.
 2. Paste `tv-read-dialogs.js` into `ui_evaluate`: the same from TradingView (toolbar `data-name`s, tabs, rows), on your
    own shapes, removed after. It returns `'started'` and takes about a minute. Then call `ui_evaluate` with

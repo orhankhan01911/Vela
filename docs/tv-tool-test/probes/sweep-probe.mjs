@@ -65,5 +65,43 @@ for (const [tool, spec] of TOOLS) {
   rows.push(r);
   console.log(JSON.stringify(r));
 }
+// The two modes (Zoom, Ruler): TradingView has no shape or dialog for them, so their behaviour is checked against
+// the facts read from TradingView (spec "Known TradingView facts").
+if (!ONLY.length || ONLY.includes("zoom")) {
+  const r = { tool: "zoom" };
+  try {
+    const vr = () => p.evaluate(() => window.__vela.active.chart.getVisibleRange());
+    const before = await vr();
+    await p.locator('[aria-label="Zoom in"]').first().click();
+    await p.mouse.move(500, 300); await p.mouse.down(); await p.mouse.move(800, 550, { steps: 10 });
+    await p.screenshot({ path: `${OUT}/zoom.png`, clip: { x: 380, y: 180, width: 560, height: 420 } });
+    await p.mouse.up(); await p.waitForTimeout(600);
+    const after = await vr();
+    const out = p.locator('[aria-label="Zoom out"]').first();
+    r.zoomedIn = after.to - after.from < before.to - before.from;
+    r.zoomOutShown = await out.isVisible().catch(() => false);
+    await out.click().catch(() => {}); await p.waitForTimeout(500);
+    const back = await vr();
+    r.ranges = { before, after, back };
+    // A new live bar can shift the view by one bar while zoomed: allow one bar of drift.
+    const bar = await p.evaluate(() => { const b = window.__vela.active.chart.bars(); return b.at(-1).time - b.at(-2).time; });
+    r.restored = Math.abs(back.from - before.from) <= bar && Math.abs(back.to - before.to) <= bar;
+    r.zoomOutHidden = !(await out.isVisible().catch(() => false));
+    r.ok = r.zoomedIn && r.zoomOutShown && r.restored && r.zoomOutHidden;
+  } catch (e) { r.err = String(e).slice(0, 160); }
+  console.log(JSON.stringify(r));
+}
+if (!ONLY.length || ONLY.includes("ruler")) {
+  const r = { tool: "ruler" };
+  try {
+    await p.locator('[aria-label="Measure"]').first().click();
+    await p.mouse.click(500, 500); await p.mouse.move(800, 300, { steps: 8 }); await p.waitForTimeout(300);
+    await p.screenshot({ path: `${OUT}/ruler.png` });
+    await p.mouse.click(800, 300); await p.waitForTimeout(300);
+    r.note = "look at ruler.png: blue box, arrows, label (change (pct) ticks / bars, span / Vol), span shaded on both scales with blue end chips";
+    r.ok = true;
+  } catch (e) { r.err = String(e).slice(0, 160); }
+  console.log(JSON.stringify(r));
+}
 console.log("ERRS", JSON.stringify(errs));
 await b.close();
