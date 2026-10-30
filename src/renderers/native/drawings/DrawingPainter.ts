@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, Box, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP, XPOST_DARK, XPOST_LIGHT } from '../../../core/palette';
@@ -352,8 +352,8 @@ export class DrawingPainter {
             this.paintLabel(ctx, d, proj, theme);
             return;
         }
-        if (d instanceof PriceRange && d.tv) {
-            this.paintPriceRange(ctx, d, proj, theme);
+        if (d instanceof MeasureBox && d.tv) {
+            this.paintTvRange(ctx, d, proj, theme);
             return;
         }
         if (d instanceof MeasureBox) {
@@ -1530,103 +1530,124 @@ export class DrawingPainter {
         ctx.restore();
     }
 
-    /** TradingView's price range: the two price lines (extendable), the fill, an arrow up the middle the way price
-     *  moved (an open head at its end) and the custom text in the middle over the arrow. The plate (12 px white on
-     *  #1A1A1A, 8.8 / 6.4 px padding, 4 px corners, a soft shadow: TradingView's own numbers, read from its renderer
-     *  2026-10-30) is {@link paintRangePlates}. Edges land on whole device pixels. */
-    private paintPriceRange(ctx: CanvasRenderingContext2D, d: PriceRange, proj: Projector, theme: VelaTheme): void {
+    /** TradingView's price range and date & price range (new ones; its renderers' rules, read from its code
+     *  2026-10-30). The price range: two price lines (extendable, the fill with them) and an arrow up the middle the way
+     *  price moved, its head once 15 x the line width long. The date & price range: an optional border, an arrow across
+     *  the middle the way time ran and one up the middle the way price moved, heads once 25 x the line width long. Both:
+     *  the fill and the custom text in the middle, breaking the arrows. The plate is {@link paintRangePlates}. Edges
+     *  land on whole device pixels. */
+    private paintTvRange(ctx: CanvasRenderingContext2D, d: MeasureBox, proj: Projector, theme: VelaTheme): void {
         const pts = d.handlePoints(proj);
         if (pts.length < 2) return;
         const dpr = ctx.getTransform?.()?.a || 1;
         const snap = (v: number): number => Math.round(v * dpr) / dpr;
         const lw = Math.max(1, Math.round(d.style.lineWidth * dpr)) / dpr;
-        const crisp = (v: number): number => (Math.round(v * dpr - (lw * dpr) / 2) + (lw * dpr) / 2) / dpr;
+        const crisp = (v: number, w = lw): number => (Math.round(v * dpr - (w * dpr) / 2) + (w * dpr) / 2) / dpr;
         const [ax, ay] = pts[0]!;
         const [bx, by] = pts[1]!;
         const xl = snap(Math.min(ax, bx));
         const xr = snap(Math.max(ax, bx));
-        const yA = crisp(ay);
-        const yB = crisp(by);
-        const style = { ...d.style, lineWidth: lw };
+        const yt = snap(Math.min(ay, by));
+        const yb = snap(Math.max(ay, by));
+        const line = { ...d.style, lineWidth: lw, lineStyle: 'solid' as const }; // TradingView draws these solid
+        const pr = d instanceof PriceRange ? d : null;
+        const dp = d instanceof DatePriceRange ? d : null;
+        const left = pr?.extendLeft ? 0 : xl;
+        const right = pr?.extendRight ? proj.width : xr;
         if (d.fillBackground && d.style.fillColor) {
             ctx.fillStyle = d.style.fillColor;
-            ctx.fillRect(xl, Math.min(yA, yB), xr - xl, Math.abs(yB - yA));
+            ctx.fillRect(left, yt, right - left, yb - yt);
         }
-        const left = d.extendLeft ? 0 : xl;
-        const right = d.extendRight ? proj.width : xr;
-        for (const y of [yA, yB]) this.stroke(ctx, style, () => { ctx.moveTo(left, y); ctx.lineTo(right, y); });
-        // The arrow, broken around the custom text in the middle of the box.
-        const mx = crisp((xl + xr) / 2);
+        if (pr) for (const y of [crisp(ay), crisp(by)]) this.stroke(ctx, line, () => { ctx.moveTo(left, y); ctx.lineTo(right, y); });
+        if (dp?.drawBorder) {
+            const bw = Math.max(1, Math.round(dp.borderWidth * dpr)) / dpr;
+            this.stroke(ctx, { ...line, lineColor: dp.borderColor, lineWidth: bw }, () => {
+                ctx.rect(crisp(xl, bw), crisp(yt, bw), crisp(xr, bw) - crisp(xl, bw), crisp(yb, bw) - crisp(yt, bw));
+            });
+        }
+        // The custom text in the middle of the box; the arrows leave a gap around it.
+        const mx = crisp((ax + bx) / 2);
+        const my = crisp((ay + by) / 2);
+        let box: { x0: number; x1: number; y0: number; y1: number } | null = null;
         const value = d.text?.value?.trim() ?? '';
-        let gap: [number, number] | null = null;
         if (value) {
             const t = d.text!;
             const fs = textPx(t.size ?? 12);
             ctx.font = `${t.italic ? 'italic ' : ''}${t.bold ? '700 ' : ''}${fs}px ${theme.fontFamily}`;
             const lines = value.split('\n');
             const lh = Math.round(fs * 1.2);
-            const cy = (yA + yB) / 2;
-            const top = cy - (lines.length * lh) / 2;
-            ctx.fillStyle = t.color || style.lineColor;
+            const top = my - (lines.length * lh) / 2;
+            const w = Math.max(...lines.map((l) => ctx.measureText(l).width));
+            ctx.fillStyle = t.color || line.lineColor;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             lines.forEach((l, i) => ctx.fillText(l, mx, top + lh / 2 + i * lh));
             ctx.textAlign = 'left';
             ctx.textBaseline = 'alphabetic';
-            gap = [top - 3, top + lines.length * lh + 3];
+            box = { x0: mx - w / 2 - 3, x1: mx + w / 2 + 3, y0: top - 3, y1: top + lines.length * lh + 3 };
         }
-        const lo = Math.min(yA, yB);
-        const hi = Math.max(yA, yB);
-        const spans: Array<[number, number]> = gap && gap[0] > lo && gap[1] < hi ? [[lo, gap[0]], [gap[1], hi]] : [[lo, hi]];
-        for (const [s0, s1] of spans) this.stroke(ctx, style, () => { ctx.moveTo(mx, s0); ctx.lineTo(mx, s1); });
-        if (Math.abs(yB - yA) > 4) this.paintChevron(ctx, [mx, yA], [mx, yB], style);
-        // The plate is painted over the candles (paintRangePlates), like TradingView's.
+        // One arrow from `from` to `to` along an axis, broken around the text; its head once `min` px long.
+        const arrow = (vertical: boolean, from: number, to: number, min: number): void => {
+            const lo = Math.min(from, to);
+            const hi = Math.max(from, to);
+            let spans: Array<[number, number]> = [[lo, hi]];
+            if (box) {
+                const [c0, c1] = vertical ? [box.y0, box.y1] : [box.x0, box.x1];
+                const crosses = vertical ? mx >= box.x0 && mx <= box.x1 : my >= box.y0 && my <= box.y1;
+                if (crosses && c0 > lo && c1 < hi) spans = [[lo, c0], [c1, hi]];
+            }
+            for (const [s0, s1] of spans)
+                this.stroke(ctx, line, () => {
+                    if (vertical) { ctx.moveTo(mx, s0); ctx.lineTo(mx, s1); } else { ctx.moveTo(s0, my); ctx.lineTo(s1, my); }
+                });
+            if (hi - lo >= min) this.paintChevron(ctx, vertical ? [mx, from] : [from, my], vertical ? [mx, to] : [to, my], line);
+        };
+        if (dp) arrow(false, ax, bx, 25 * d.style.lineWidth);
+        arrow(true, ay, by, (dp ? 25 : 15) * d.style.lineWidth);
     }
 
-    /** The price ranges' plates, over the candles (a range drawn under them would hide its own numbers), as
-     *  TradingView's: 10 px past the end price moved to, above a rise and below a fall. */
+    /** The range plates (new price and date & price ranges), over the candles (a range drawn under them would hide
+     *  its own numbers), TradingView's: 10 px past the second point (above it when price rose, below when it fell),
+     *  12 px white on #1A1A1A, lines 8 px apart, padding 0.4 / 0.2 x the size + a third of it, 4 px corners and a soft
+     *  shadow (its RangeToolsConstants). */
     paintRangePlates(ctx: CanvasRenderingContext2D, drawings: readonly Drawing[], proj: Projector, theme: VelaTheme): void {
         for (const d of drawings) {
-            if (!(d instanceof PriceRange) || !d.tv || !d.visible || !shownOnBarMs(d.intervals, this.barMs)) continue;
+            if (!(d instanceof MeasureBox) || !d.tv || !d.visible || !shownOnBarMs(d.intervals, this.barMs)) continue;
+            const a = d.anchors[0];
+            const b = d.anchors[1];
             const pts = d.handlePoints(proj);
-            if (pts.length < 2) continue;
+            if (!a || !b || pts.length < 2) continue;
+            const lines = d.infoLines(proj, this.priceTick(d.paneId, Math.max(Math.abs(a.price), Math.abs(b.price))));
+            if (!lines.length) continue;
             const dpr = ctx.getTransform?.()?.a || 1;
             const snap = (v: number): number => Math.round(v * dpr) / dpr;
-            const mx = (pts[0]![0] + pts[1]![0]) / 2;
-            const yA = pts[0]![1];
-            const yB = pts[1]![1];
+            const fs = d.labelSize;
             ctx.save();
-            this.paintRangePlate(ctx, d, mx, yA, yB, snap, theme);
+            ctx.font = `${fs}px ${theme.fontFamily}`;
+            const padH = fs * 0.4 + fs / 3;
+            const padV = fs * 0.2 + fs / 3;
+            const pw = Math.round(Math.max(...lines.map((l) => ctx.measureText(l).width)) + 2 * padH);
+            const ph = Math.round(lines.length * fs + (lines.length - 1) * 8 + 2 * padV);
+            const by = pts[1]![1];
+            const py = snap(b.price > a.price ? by - 10 - ph : by + 10);
+            const cx = (pts[0]![0] + pts[1]![0]) / 2;
+            const px = snap(cx - pw / 2);
+            if (d.labelBackground) {
+                ctx.save();
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetY = 1;
+                roundRect(ctx, px, py, pw, ph, 4);
+                ctx.fillStyle = d.labelBgColor;
+                ctx.fill();
+                ctx.restore();
+            }
+            ctx.fillStyle = d.labelColor;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            lines.forEach((l, i) => ctx.fillText(l, px + pw / 2, py + padV + fs / 2 + i * (fs + 8)));
             ctx.restore();
         }
-    }
-
-    private paintRangePlate(ctx: CanvasRenderingContext2D, d: PriceRange, mx: number, yA: number, yB: number, snap: (v: number) => number, theme: VelaTheme): void {
-        const text = d.infoText(this.priceTick(d.paneId, Math.max(Math.abs(d.anchors[0]!.price), Math.abs(d.anchors[1]!.price))));
-        if (!text) return;
-        const fs = d.labelSize;
-        ctx.font = `${fs}px ${theme.fontFamily}`;
-        const pw = Math.round(ctx.measureText(text).width + 2 * 8.8);
-        const ph = Math.round(fs + 2 * 6.4);
-        const up = yB <= yA;
-        const py = snap(up ? yB - 10 - ph : yB + 10);
-        const px = snap(mx - pw / 2);
-        if (d.labelBackground) {
-            ctx.save();
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-            ctx.shadowBlur = 4;
-            ctx.shadowOffsetY = 1;
-            roundRect(ctx, px, py, pw, ph, 4);
-            ctx.fillStyle = d.labelBgColor;
-            ctx.fill();
-            ctx.restore();
-        }
-        ctx.fillStyle = d.labelColor;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(text, px + pw / 2, py + ph / 2);
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'alphabetic';
     }
 
     /** Paint a measurement box: a direction-tinted (green up / red down) shaded rect with a

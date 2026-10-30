@@ -25,6 +25,7 @@ export const TV_TEXT_DEFAULTS: Readonly<Record<string, Partial<DrawingText>>> = 
     parallelchannel: { color: TV_LINE_COLOR, size: 14, hAlign: 'left', vAlign: 'top' },
     vline: { color: TV_LINE_COLOR, size: 14, hAlign: 'center', vAlign: 'center' },
     pricerange: { color: TV_LINE_COLOR, size: 12 },
+    datepricerange: { color: TV_LINE_COLOR, size: 12 },
 };
 
 export interface DrawingInputsDialog {

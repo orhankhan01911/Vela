@@ -3,6 +3,7 @@ import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
 import { LINE_FIELDS, TEXT_SIZE_OPTIONS } from '../schema';
 import { pointInBox, handleAt } from '../hittest';
+import { RANGE_LABEL, RANGE_PARTS, rangeInfoLines, type RangeInfo, type RangePart } from './rangeInfo';
 
 /** Signed value with 2 decimals (e.g. "+523.45"). */
 function signed(n: number): string {
@@ -44,10 +45,44 @@ export abstract class MeasureBox extends Drawing {
     /** Show the `N bars, duration` line. */
     showDate!: boolean;
 
+    /** TradingView's look (new price and date & price ranges); a box saved before keeps the old one. */
+    tv?: boolean;
+    fillBackground!: boolean;
+    /** The Stats parts that are on ({@link rangeParts}). */
+    info!: RangeInfo;
+    labelColor!: string;
+    labelSize!: number;
+    labelBackground!: boolean;
+    labelBgColor!: string;
+
     constructor(init: Partial<SerializedDrawing> & { paneId: string }) {
         super(init);
         if (this.showPrice === undefined) this.showPrice = true;
         if (this.showDate === undefined) this.showDate = true;
+        if (this.fillBackground === undefined) this.fillBackground = true;
+        if (!this.info) this.info = Object.fromEntries(this.rangeParts().map((p) => [p.key, true])) as RangeInfo;
+        if (this.labelColor === undefined) this.labelColor = RANGE_LABEL.color;
+        if (this.labelSize === undefined) this.labelSize = RANGE_LABEL.size;
+        if (this.labelBackground === undefined) this.labelBackground = true;
+        if (this.labelBgColor === undefined) this.labelBgColor = RANGE_LABEL.background;
+    }
+
+    /** The Stats parts TradingView's dialog offers for this range. */
+    rangeParts(): ReadonlyArray<{ key: RangePart; label: string }> {
+        return RANGE_PARTS;
+    }
+
+    /** The plate's lines in TradingView's format; `tick` is the price scale's step. */
+    infoLines(proj: Projector, tick: number): string[] {
+        const a = this.anchors[0];
+        const b = this.anchors[1];
+        if (!a || !b) return [];
+        const bars = proj.barsBetween ? proj.barsBetween(a.time, b.time) : 0;
+        const inRange = proj.barsInRange ? proj.barsInRange(Math.min(a.time, b.time), Math.max(a.time, b.time)) : null;
+        const volume = inRange ? inRange.reduce((sum, bar) => sum + (bar.volume ?? 0), 0) : undefined;
+        const on: RangeInfo = {};
+        for (const p of this.rangeParts()) on[p.key] = this.info[p.key] === true;
+        return rangeInfoLines(on, a, b, { tick, bars, volume });
     }
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
@@ -156,11 +191,34 @@ export abstract class MeasureBox extends Drawing {
     }
 
     protected override writeProps(): Record<string, unknown> {
-        return { showPrice: this.showPrice, showDate: this.showDate };
+        const base = { showPrice: this.showPrice, showDate: this.showDate };
+        if (!this.tv) return base;
+        return {
+            ...base,
+            tv: true,
+            fillBackground: this.fillBackground,
+            info: { ...this.info },
+            labelColor: this.labelColor,
+            labelSize: this.labelSize,
+            labelBackground: this.labelBackground,
+            labelBgColor: this.labelBgColor,
+        };
     }
 
     protected override readProps(props: Record<string, unknown>): void {
         if (typeof props.showPrice === 'boolean') this.showPrice = props.showPrice;
         if (typeof props.showDate === 'boolean') this.showDate = props.showDate;
+        if (props.tv === true) this.tv = true;
+        if (typeof props.fillBackground === 'boolean') this.fillBackground = props.fillBackground;
+        if (typeof props.labelBackground === 'boolean') this.labelBackground = props.labelBackground;
+        if (typeof props.labelColor === 'string') this.labelColor = props.labelColor;
+        if (typeof props.labelBgColor === 'string') this.labelBgColor = props.labelBgColor;
+        if (typeof props.labelSize === 'number' && props.labelSize > 0) this.labelSize = props.labelSize;
+        if (props.info && typeof props.info === 'object') {
+            const r = props.info as Record<string, unknown>;
+            const info: RangeInfo = { ...(this.info ?? {}) };
+            for (const p of RANGE_PARTS) if (typeof r[p.key] === 'boolean') info[p.key] = r[p.key] as boolean;
+            this.info = info;
+        }
     }
 }

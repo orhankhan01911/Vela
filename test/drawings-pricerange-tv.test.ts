@@ -11,7 +11,7 @@ import { describe, it, expect, beforeAll, afterEach } from 'vitest';
     disconnect() {}
 };
 
-import { createDrawing, deserializeDrawing, PriceRange, priceRangeText, TV_LINE_COLOR, type Drawing } from '../src/core/drawings';
+import { createDrawing, deserializeDrawing, PriceRange, DatePriceRange, rangeInfoLines, formatRangeVolume, TV_LINE_COLOR, type Drawing, type Projector } from '../src/core/drawings';
 import { DARK_THEME } from '../src/core/theme';
 import { DrawingSettingsPopup, type SettingsActions } from '../src/renderers/native/drawings/DrawingSettingsPopup';
 
@@ -72,6 +72,7 @@ function setup(drawing: Drawing) {
 
 
 
+const flat: Projector = { xOf: (t) => t, yOf: (p) => 1000 - p, pxToPoint: (x, y) => ({ time: x, price: 1000 - y }), paneIdAtY: () => 'price', width: 2000, height: 1000 };
 const two = [{ time: 100, price: 82428.5 }, { time: 300, price: 83648.3 }];
 const pr = (props?: Record<string, unknown>): PriceRange =>
     createDrawing('pricerange', { id: 'r', paneId: 'price', anchors: two, ...(props ? { props } : {}) })! as PriceRange;
@@ -86,7 +87,7 @@ describe('price range defaults (TradingView)', () => {
 
     it('plate: every part on, white 12 px on #1A1A1A with its background on', () => {
         const d = pr();
-        expect(d.info).toEqual({ priceRange: true, percent: true, pips: true });
+        expect(d.rangeParts().map((p) => [p.key, d.info[p.key]])).toEqual([['priceRange', true], ['percent', true], ['pips', true]]);
         expect([d.labelColor, d.labelSize, d.labelBackground, d.labelBgColor.toLowerCase()]).toEqual(['#ffffff', 12, true, '#1a1a1a']);
     });
 
@@ -105,20 +106,22 @@ describe('price range defaults (TradingView)', () => {
 
 describe('price range plate text (TradingView\'s format)', () => {
     it('reads like TradingView on a 0.1 tick: 1,219.8 (1.48%) 12,198', () => {
-        expect(pr().infoText(0.1)).toBe('1,219.8 (1.48%) 12,198');
+        expect(pr().infoLines(flat, 0.1)).toEqual(['1,219.8 (1.48%) 12,198']);
     });
 
     it('a fall carries the minus sign on every part', () => {
-        const down = priceRangeText({ priceRange: true, percent: true, pips: true }, { time: 0, price: 80000 }, { time: 1, price: 78319.1 }, 0.1);
-        expect(down).toBe('−1,680.9 (−2.10%) −16,809');
+        const down = rangeInfoLines({ priceRange: true, percent: true, pips: true }, { time: 0, price: 80000 }, { time: 1, price: 78319.1 }, { tick: 0.1 });
+        expect(down).toEqual(['−1,680.9 (−2.10%) −16,809']);
     });
 
     it('each part can be switched off', () => {
         const a = { time: 0, price: 100 };
         const b = { time: 1, price: 101 };
-        expect(priceRangeText({ priceRange: false, percent: true, pips: false }, a, b, 0.01)).toBe('1.00%');
-        expect(priceRangeText({ priceRange: true, percent: false, pips: true }, a, b, 0.01)).toBe('1.00 100');
-        expect(priceRangeText({ priceRange: false, percent: false, pips: false }, a, b, 0.01)).toBe('');
+        const t = { tick: 0.01 };
+        expect(rangeInfoLines({ percent: true }, a, b, t)).toEqual(['1.00%']);
+        expect(rangeInfoLines({ priceRange: true, pips: true }, a, b, t)).toEqual(['1.00, 100']); // TradingView: a comma without the percent
+        expect(rangeInfoLines({ percent: true, pips: true }, a, b, t)).toEqual(['1.00%, 100']);
+        expect(rangeInfoLines({}, a, b, t)).toEqual([]);
     });
 
     it('the settings survive a save', () => {
@@ -160,5 +163,50 @@ describe('price range dialog', () => {
         s.tab('Style').click();
         s.body('style').querySelector<HTMLElement>('[data-role="label-background"] [role="switch"]')!.click();
         expect((s.live() as PriceRange).labelBackground).toBe(false);
+    });
+});
+
+describe('date and price range (TradingView, defaults from its code)', () => {
+    const dp = (props?: Record<string, unknown>): DatePriceRange =>
+        createDrawing('datepricerange', { id: 'd', paneId: 'price', anchors: two, ...(props ? { props } : {}) })! as DatePriceRange;
+
+    it('2 px blue, 15 % fill, no border (1 px blue when on), every Stats part on', () => {
+        const d = dp();
+        expect(d.style).toMatchObject({ lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' });
+        expect([d.tv, d.fillBackground, d.drawBorder, d.borderColor, d.borderWidth]).toEqual([true, true, false, TV_LINE_COLOR, 1]);
+        expect(d.rangeParts().map((p) => p.label)).toEqual(['Price range', 'Percent change', 'Change in pips', 'Bars range', 'Date/time range', 'Volume']);
+        expect(d.rangeParts().every((p) => d.info[p.key] === true)).toBe(true);
+    });
+
+    it('plate lines like TradingView\'s: price, bars and time, volume', () => {
+        const lines = rangeInfoLines(
+            { priceRange: true, percent: true, pips: true, bars: true, dateTime: true, volume: true },
+            { time: 0, price: 78000 },
+            { time: (4 * 60 + 5) * 60_000, price: 79680.9 },
+            { tick: 0.1, bars: 49, volume: 13900 },
+        );
+        expect(lines).toEqual(['1,680.9 (2.15%) 16,809', '49 bars, 4h 5m', 'Vol 13.9 K']);
+        expect(formatRangeVolume(37670)).toBe('37.67 K');
+    });
+
+    it('a saved date & price range keeps the old box; settings survive a save', () => {
+        const old = deserializeDrawing({ id: 'o', type: 'datepricerange', paneId: 'price', anchors: two, style: { lineColor: '#123456', lineWidth: 1, lineStyle: 'solid' }, props: { showPrice: true, showDate: true } } as never)! as DatePriceRange;
+        expect(old.tv).toBeUndefined();
+        const d = dp();
+        d.applySettings({ drawBorder: true, 'info.volume': false, labelSize: 14 });
+        const back = deserializeDrawing(d.serialize())! as DatePriceRange;
+        expect([back.tv, back.drawBorder, back.info.volume, back.labelSize]).toEqual([true, true, false, 14]);
+    });
+
+    it('dialog: Line, Border, Background, then INFO; title "Date and price range"', async () => {
+        const s = setup(dp());
+        s.gear().click();
+        await settled();
+        s.tab('Style').click();
+        const st = s.body('style').textContent!;
+        const order = ['Line', 'Border', 'Background', 'Stats', 'Label', 'Label background'].map((l) => st.indexOf(l));
+        expect(order.every((i, k) => i >= 0 && (k === 0 || i > order[k - 1]!))).toBe(true);
+        expect(st).not.toContain('Extend');
+        expect(document.querySelector('.vela-drawing-dialog')!.textContent).toContain('Date and price range');
     });
 });

@@ -989,7 +989,8 @@ registerDrawingType({
     group: 'measure',
     label: 'Date & Price Range',
     icon: MEASURE_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    // TradingView's date & price range: 2 px blue arrows, its blue at 15 % behind.
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid', fillColor: `${TV_LINE_COLOR}26` },
     create: (init) => new DatePriceRange(init),
 });
 
