@@ -8,8 +8,8 @@ Use it for every tool in the audit list and for any other UI copied from Trading
 
 ## 0. Rules
 
-- **TradingView is the spec.** Read its code and its UI. Do not guess. Do not ask the user for what CDP can tell
-  you. A video or screenshot from the user is evidence: read it frame by frame (`ffmpeg -vf fps=1/2`, then tile).
+- **TradingView is the spec.** Read its code and its UI. Do not guess. Do not ask the user for anything you can read
+  from TradingView yourself. A video or screenshot from the user is evidence: read it frame by frame (`ffmpeg -vf fps=1/2`, then tile).
 - **Compare default settings.** Use a freshly placed tool with no remembered settings on either side. TradingView
   Desktop has the user's own templates, so its **values** (colours, sizes, alignment) come from its code (§2), not
   from a new shape. Its **labels, tabs and buttons** can be read from a new shape.
@@ -17,7 +17,7 @@ Use it for every tool in the audit list and for any other UI copied from Trading
 - **Never click Create on a TradingView alert.**
 - **Touch only your own shapes.** Create them with the API, keep their ids, remove them when done, and check that
   only the user's shapes are left. The user often works in TradingView at the same time.
-- **Reconnect it yourself.** If TradingView shows "Session disconnected", click its Connect button.
+- **If TradingView shows "Session disconnected",** click its Connect button yourself.
 - **Saved drawings keep their look.** A new look applies to new drawings only (§4).
 - **Do not copy TradingView's artwork** (icons, stickers). Draw our own icon.
 - **One tool per loop.** Fix it, prove it, send a card, and wait for the user's "Tested, good" before the next tool.
@@ -30,7 +30,9 @@ Use it for every tool in the audit list and for any other UI copied from Trading
 | Ours (Local) | `http://localhost:5179` (vela-sandbox, served by its own Vite; never start your own) |
 | Vela fork | `~/Desktop/claude_folder/worktrees/vela-alert-pin` (rebuild: `npx tsup`, then `touch dist/*.js`) |
 | Sandbox | `~/Desktop/claude_folder/worktrees/project-options-tv-chart-live/frontend/vela-sandbox` |
-| Probes | `docs/tv-tool-test/probes/` here: copy into `vela-sandbox/e2e/zz-*.mjs`, run from `vela-sandbox`, delete after |
+| Probes | `vela-alert-pin/docs/tv-tool-test/probes/`. Copy a `.mjs` to `vela-sandbox/e2e/zz-<name>.mjs` (it needs that folder's `playwright-core`), run `node e2e/zz-<name>.mjs ...` from `vela-sandbox`, then delete the copy. `tv-read-dialogs.js` is pasted into `ui_evaluate`; `sweep-compare.py` runs from anywhere |
+| Ship lock | `~/Desktop/claude_folder/claude/project-options/.tester-ship.lock` (`flock` it around any Tester / dmcharts ship) |
+| Memory | `~/.claude/projects/-home-hammad-Desktop-claude-folder-claude-project-options/memory/project_drawing_tools_tv_audit_20261030.md` |
 
 - `capture_screenshot` gives a 2560-wide image shown 2000 wide: multiply shown coordinates by 1.28.
   `ui_mouse_click` takes CSS pixels: read them from `getBoundingClientRect()`, not from the screenshot.
@@ -39,11 +41,14 @@ Use it for every tool in the audit list and for any other UI copied from Trading
 
 ## 2. Read TradingView
 
+In `ui_evaluate`, `chart` is `window.TradingViewApi.activeChart()`.
+
 1. **Make your own shape** so the tool's code loads (most tool modules load lazily):
    `chart.createMultipointShape(points, { shape: 'rectangle' })`. Put the points inside the visible range
    (`chart.getVisibleRange()`, `chart.getPanes()[0].getMainSourcePriceScale().getVisiblePriceRange()`).
    Only text tools take a `text` option; giving it to other shapes makes the call fail.
-2. **Find its module:** search `window.webpackChunktradingview` sources for `defaultName:"linetool<name>"` (or the
+2. **Find its module:** loop over `window.webpackChunktradingview`; each chunk's `chunk[1]` maps module ids to
+   functions `f`. Search their sources for `defaultName:"linetool<name>"` (or the
    class name, such as `LineToolEmoji`). Read `f.toString()` in slices of about 7000 characters.
 3. **Read from the module:**
    - Factory defaults: the object given as `factoryDefaultsSupplier`, plus the themed map.
@@ -61,24 +66,34 @@ Use it for every tool in the audit list and for any other UI copied from Trading
    leave it alone.
 6. **Remove your shapes:** `chart.removeEntity(id)`, then check `getAllShapes()` lists only the user's shapes.
 7. **Bulk data** (emoji lists, icon code points): export through CDP straight to a file with Node 22
-   (`probes/tv-export-module.mjs`), so it does not flood the conversation.
+   (`node probes/tv-export-module.mjs OUT.json`; it exports the emoji and icon groups, modules 825958 and 621674;
+   change the module ids for other data), so it does not flood the conversation.
 
 ## 3. Probe ours
 
 **One tool:**
 
-- `gen-probe.mjs OUT TOOL "x,y;x,y" SELX,SELY [TEXT]`: places a click tool with tool memory cleared, dumps every
-  dialog tab, screenshots each tab and the canvas, prints the saved JSON and page errors.
-- `text-probe.mjs` (tools that open an editor on placement), `brush-probe.mjs` (press-drag tools),
-  `layout-probe.mjs` (a whole-feature example).
+Arguments: `OUT` is an existing folder for screenshots; `TOOL` is Vela's id (`trendline`, `box`, `freehand`), not
+TradingView's name (`trend_line`, `rectangle`); points are CSS pixels in the probe's 1400 × 900 window; `SELX,SELY` is a
+point on the placed shape (a click there selects it); `DPR` is the device pixel ratio (default 1).
+
+- `gen-probe.mjs OUT TOOL "x,y;x,y" SELX,SELY [TEXT] [DPR]`: places a click tool with tool memory cleared, dumps
+  every dialog tab, screenshots each tab and the canvas, prints the saved JSON and page errors.
+- `text-probe.mjs OUT TOOL "x,y" SELX,SELY [TEXT] [DPR]`: the same for tools that open an editor on placement; it
+  types `$TYPE` (default "Hello world").
+- `brush-probe.mjs OUT TOOL "x,y;x,y;..." SELX,SELY [TEXT] [DPR]`: press-drag tools; the points are the drag path.
+- `layout-probe.mjs OUT`: the layout chip and menu (an example of a whole-feature probe).
 
 **All tools at once (the regression check, run it after any shared change):**
 
-1. `sweep-probe.mjs OUT [tool,tool]`: places all 24 placeable tools fresh on Local and prints, per tool, the saved
+The audit has 26 tools: 24 are placed on the chart, the other two (Zoom and the Ruler) are modes, checked by hand.
+
+1. `sweep-probe.mjs OUT [tool,tool]`: places the 24 placed tools fresh on Local and prints, per tool, the saved
    style, the floating-toolbar buttons, every dialog tab with its rows, and page errors. Screenshots go to `OUT`.
 2. `tv-read-dialogs.js` in `ui_evaluate`: the same from TradingView (toolbar `data-name`s, tabs, rows), on your own
    shapes, removed after.
-3. `sweep-compare.py DIR`: puts the two side by side and prints `OK` or the real differences (known, expected ones
+3. Save the sweep's output as `DIR/run2.txt` and the result of step 2 (`JSON.stringify(window.__wkRes)`) as
+   `DIR/tv.json`, then run `python3 sweep-compare.py DIR`. It puts the two side by side and prints `OK` or the real differences (known, expected ones
    are skipped: bold/italic icons, "time" for "bar", values from TradingView's saved templates).
 4. Tile the screenshots into one sheet (`ffmpeg ... tile=6x4`) and look at it.
 
@@ -111,6 +126,8 @@ server was reloading: run it again.
 
 ## 5. Prove it
 
+Steps 1 to 4 run in the Vela fork (`vela-alert-pin`); steps 5 and 6 in `vela-sandbox`.
+
 1. A test file `test/drawings-<tool>-tv.test.ts`: defaults, the saved-drawing case, geometry, handles, cursors, drags,
    dialog tabs and rows, and the painter's calls where the shape matters.
 2. Whole suite: `npx vitest run`. Known failures: the `renderer-layers` idle-layer test and the timing-flaky
@@ -130,14 +147,14 @@ server was reloading: run it again.
 
 - **By pathspec only.** Other sessions edit the same worktrees. Never `git add -A`, `stash`, `reset` or `checkout`.
 - **A file that also has someone else's edits:** commit through a temporary index built from HEAD with only your
-  change, then put your change into the real index too, so their staged work stays staged (layout commit 4bd75dc7d
-  shows the script).
+  change, then put your change into the real index too, so their staged work stays staged (commit 4bd75dc7d in the
+  project-options repo shows the script).
 - **Message:** what TradingView does (module ids), what changed, what saved drawings keep, then the
   Co-Authored-By and Claude-Session lines.
 
 ## 7. Card and wait
 
-Send a PushNotification and an `AskUserQuestion` card:
+A "card" is a PushNotification plus an `AskUserQuestion` (it reaches the user's phone). Send one covering:
 
 - What changed, in plain words.
 - Where to test it ("Local :5179, hard refresh").
@@ -148,7 +165,8 @@ commit id and the approval.
 
 ## 8. Shipping
 
-Nothing ships without the user's word. Order: Local → emulator check → Tester → dmcharts (the dmcharts gate asks the
+Nothing ships without the user's word. The Tester is the testers' site (`orderflow.dmterminal.net`); dmcharts is the
+public site, built from the Tester line. Order: Local → emulator check → Tester → dmcharts (the dmcharts gate asks the
 user). Ship only approved commits, never a whole line that carries unapproved work. Another session may be shipping
 on the same line: use the shared ship lock and build on top of what is live.
 
@@ -167,7 +185,7 @@ on the same line: use the shared ship lock and build on top of what is live.
 | Callout | 583711 | white text on #0097A7 at 70 %, 2 px border; radius 8 + margin 2; wedge tail |
 | Note ("Pin") | 229151 | 24 × 30 pin; 236 px tooltip, caret 12 × 10, shadow; Label row |
 | Emoji / icon | 275496, 820690, 637188, 528863 | Twemoji SVG; FA4 glyph paths; size 72, angle π/2; 4 resize corners + rotate zones |
-| Zoom in / out | 649873 | box between bar centres, zoomToViewport (bars + prices, autoscale off), zoom stack + Zoom out button; box blue 30 %/80 % |
+| Zoom in / out | 649873 | box between bar centres, zoomToViewport (bars + prices, autoscale off), zoom stack + Zoom out button; box blue 30 %/80 %, no marks on the scales; a pending zoom is cancelled by right-click (Escape did not reach it) |
 | Ruler (Measure) | 649873, 516130, 847997 | 20 % blue/red box, blue-600 lines, arrows ≥ 50 px, label 12 px gap 8 pad 9, 10 px past the end; change (pct) ticks / bars, span / Vol; its span shaded on both scales with blue chips at both ends |
 | Layout menu | (UI) | Save layout, Autosave, Share, Make a copy, Rename, Download data, Create, Recently used, Open (".") |
 | Coordinates rows | (UI) | "#1 (price, bar)"; ours say "#1 (price, time)" because our field is a date (the user's call) |

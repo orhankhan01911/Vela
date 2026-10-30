@@ -1,5 +1,5 @@
 import { chromium } from "playwright-core";
-// node gen-probe.mjs OUT TOOL "x,y;x,y" SELECTX,SELECTY [TEXT] [DPR]
+// node text-probe.mjs OUT TOOL "x,y" SELECTX,SELECTY [TEXT] [DPR]   (types $TYPE, default "Hello world", into the editor that opens)
 const [OUT, TOOL, CLICKS, SEL, TEXT, DPR] = process.argv.slice(2);
 const b = await chromium.launch({ headless: true });
 const p = await b.newPage({ viewport: { width: 1400, height: 900 }, colorScheme: "dark", deviceScaleFactor: Number(DPR || 1) });

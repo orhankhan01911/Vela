@@ -1,5 +1,5 @@
 import { chromium } from "playwright-core";
-// node gen-probe.mjs OUT TOOL "x,y;x,y" SELECTX,SELECTY [TEXT] [DPR]
+// node brush-probe.mjs OUT TOOL "x,y;x,y;..." SELECTX,SELECTY [TEXT] [DPR]   (the points are the press-drag path)
 const [OUT, TOOL, CLICKS, SEL, TEXT, DPR] = process.argv.slice(2);
 const b = await chromium.launch({ headless: true });
 const p = await b.newPage({ viewport: { width: 1400, height: 900 }, colorScheme: "dark", deviceScaleFactor: Number(DPR || 1) });
