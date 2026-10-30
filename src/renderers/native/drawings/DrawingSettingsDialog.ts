@@ -28,6 +28,8 @@ import {
     FixedRangeVolumeProfile,
     FixedRangeTpoProfile,
     INTERVAL_UNITS,
+    DRAWING_TITLE_MAX,
+    drawingTitle,
     LINE_STYLE_OPTIONS,
     DEFAULT_DRAWING_COLOR,
     TEXT_SIZE_OPTIONS,
@@ -216,6 +218,7 @@ export class DrawingSettingsDialog {
             onOpenChange: (open) => { if (!open && this.ui === ui) this.close(); },
         });
         applyChromeTokens(ui.panel, this.theme);
+        this.buildRename(ui, live, actions, DIALOG_TITLE[live.type] ?? getDrawingType(live.type)?.label ?? 'Settings');
 
         // Tab strip: the indicator dialog's look (bold labels, underline on the active one).
         const strip = document.createElement('div');
@@ -875,6 +878,66 @@ export class DrawingSettingsDialog {
             const label = priceOnly ? `#${i + 1} (price)` : timeOnly ? `#${i + 1} (time)` : `#${i + 1}`;
             grid.appendChild(fieldRow({ label, control: controls, fit: true }));
         });
+    }
+
+    /**
+     * TradingView's rename in the dialog header: the drawing's name (its own, else the tool's) with a pencil. The pencil
+     * swaps the name for a field filling the header with the name selected. Enter or leaving the field keeps it (an
+     * empty name goes back to the tool's), Escape drops the edit; the dialog stays open, and Cancel undoes the rename.
+     */
+    private buildRename(ui: Dialog, drawing: Drawing, actions: SettingsActions, toolName: string): void {
+        const title = ui.titleEl;
+        const close = ui.panel.querySelector<HTMLElement>('.vela-dialog-close');
+        const shown = (): string => (actions.resolve() ?? drawing).title || vt(toolName);
+        const showName = (): void => {
+            const text = document.createElement('span');
+            text.className = 'vela-drawing-name';
+            text.textContent = shown();
+            const pen = document.createElement('button');
+            pen.type = 'button';
+            pen.className = 'vela-drawing-rename';
+            pen.setAttribute('aria-label', vt('Rename'));
+            pen.title = vt('Rename');
+            pen.appendChild(iconEl('pencil'));
+            pen.addEventListener('pointerdown', (e) => e.stopPropagation()); // a press on the pencil is not a header drag
+            pen.addEventListener('click', edit);
+            title.replaceChildren(text, pen);
+            if (close) close.style.display = '';
+        };
+        const edit = (): void => {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'vela-drawing-rename-input';
+            input.value = shown();
+            input.maxLength = DRAWING_TITLE_MAX;
+            input.setAttribute('aria-label', vt('Name'));
+            let done = false;
+            // On window, capturing: the dialog layer takes Escape at the document before the field would see it.
+            const onKey = (e: KeyboardEvent): void => {
+                if (e.target !== input || (e.key !== 'Enter' && e.key !== 'Escape')) return;
+                e.preventDefault();
+                e.stopPropagation(); // Escape ends the rename only, not the dialog
+                finish(e.key === 'Enter');
+            };
+            const finish = (keep: boolean): void => {
+                if (done) return;
+                done = true;
+                window.removeEventListener('keydown', onKey, true);
+                if (keep) {
+                    const v = drawingTitle(input.value);
+                    actions.patch({ title: v === vt(toolName) ? undefined : v });
+                }
+                showName();
+            };
+            input.addEventListener('pointerdown', (e) => e.stopPropagation()); // select text, do not drag the dialog
+            window.addEventListener('keydown', onKey, true);
+            input.addEventListener('blur', () => finish(true));
+            title.replaceChildren(input);
+            if (close) close.style.display = 'none'; // the field fills the header, as TradingView's
+            input.focus();
+            input.select();
+        };
+        showName();
     }
 
     /** Visibility tab: TradingView's "visibility on intervals": Ticks (a switch), one row per timeframe unit (a switch

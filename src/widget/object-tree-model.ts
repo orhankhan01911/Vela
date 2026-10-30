@@ -93,9 +93,10 @@ export function drawingMeta(type: string): { label: string; icon: string | null 
     return { label: String(type || 'drawing').replace(/(^|\s)\S/g, (c) => c.toUpperCase()), icon: null };
 }
 
-/** A drawing's row label — its type's name, plus its own text when it carries any. */
+/** A drawing's row label — the name the user gave it (the settings dialog's rename), else its type's name, plus its own
+ *  text when it carries any. */
 export function drawingLabel(d: SerializedDrawing): string {
-    const { label } = drawingMeta(d.type);
+    const label = d.title?.trim() || drawingMeta(d.type).label;
     const text = d.text?.value?.trim();
     return text ? `${label} — ${text}` : label;
 }

@@ -13,6 +13,7 @@ import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 
 import { barUnit, compactIntervals, createDrawing, deserializeDrawing, shownOnBarMs, type Drawing } from '../src/core/drawings';
 import { DARK_THEME } from '../src/core/theme';
+import { drawingLabel } from '../src/widget/object-tree-model';
 import { DrawingSettingsPopup, type SettingsActions } from '../src/renderers/native/drawings/DrawingSettingsPopup';
 import { DrawingSettingsDialog, formatLocal, parseLocal } from '../src/renderers/native/drawings/DrawingSettingsDialog';
 
@@ -45,6 +46,7 @@ function chart(initial: Drawing): { actions: SettingsActions; live: () => Drawin
             if (doc.props !== undefined) live.applyProps(doc.props);
             if (doc.anchors) live.anchors = doc.anchors.map((p) => ({ ...p }));
             if ('intervals' in doc) live.intervals = doc.intervals ? { ...doc.intervals } : undefined;
+            if ('title' in doc) live.title = doc.title;
             sync();
         },
         setLocked: () => {},
@@ -213,6 +215,59 @@ describe('settings dialog', () => {
         expect(s.live().intervals).toEqual({ ranges: { on: false, from: 1, to: 1 } });
         // A time row switched off does not touch tick charts.
         expect(shownOnBarMs({ minutes: { on: false, from: 1, to: 59 } }, 0, 'ticks')).toBe(true);
+    });
+
+    it("rename: TradingView's pencil in the header; Enter keeps, Escape drops, empty goes back, Cancel undoes", async () => {
+        const s = setup(trend());
+        s.gear().click();
+        await settled();
+        const head = (): HTMLElement => s.host.querySelector<HTMLElement>('.vela-drawing-dialog .vela-dialog-title')!;
+        const close = (): HTMLElement => s.host.querySelector<HTMLElement>('.vela-drawing-dialog .vela-dialog-close')!;
+        expect(head().querySelector('.vela-drawing-name')!.textContent).toBe('Trendline');
+        const rename = (): HTMLInputElement => {
+            head().querySelector<HTMLButtonElement>('.vela-drawing-rename')!.click();
+            return head().querySelector<HTMLInputElement>('.vela-drawing-rename-input')!;
+        };
+        const key = (el: HTMLElement, k: string): void => void el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+        let input = rename();
+        expect(input.value).toBe('Trendline');
+        expect(document.activeElement).toBe(input);
+        expect([input.selectionStart, input.selectionEnd]).toEqual([0, 9]);
+        expect(close().style.display).toBe('none'); // the field fills the header
+        input.value = '  Support  ';
+        key(input, 'Enter');
+        expect(s.live().title).toBe('Support');
+        expect(head().querySelector('.vela-drawing-name')!.textContent).toBe('Support');
+        expect(close().style.display).toBe('');
+        expect(s.host.querySelector('.vela-drawing-dialog')).not.toBeNull(); // the dialog stays open
+        input = rename();
+        input.value = 'Other';
+        key(input, 'Escape');
+        expect(s.live().title).toBe('Support');
+        expect(s.host.querySelector('.vela-drawing-dialog')).not.toBeNull(); // Escape ended the rename only
+        input = rename();
+        input.value = '   ';
+        key(input, 'Enter');
+        expect(s.live().title).toBeUndefined();
+        expect(head().querySelector('.vela-drawing-name')!.textContent).toBe('Trendline');
+        input = rename();
+        input.value = 'Keep me?';
+        input.dispatchEvent(new Event('blur'));
+        expect(s.live().title).toBe('Keep me?');
+        s.button('Cancel').click();
+        await settled();
+        expect(s.live().title).toBeUndefined();
+    });
+
+    it('a name round-trips through save and is capped at 100 characters', () => {
+        const d = trend();
+        d.applySettings({ title: 'x'.repeat(150) });
+        const back = deserializeDrawing(JSON.parse(JSON.stringify(d.serialize())))!;
+        expect(back.title).toBe('x'.repeat(100));
+        expect(trend().serialize().title).toBeUndefined();
+        // The object tree lists it by its name.
+        expect(drawingLabel({ ...trend().serialize(), title: 'Support' })).toBe('Support');
+        expect(drawingLabel(trend().serialize())).toBe('Trend Line');
     });
 
     it('opening from More > Visibility on intervals lands on that tab', async () => {

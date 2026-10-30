@@ -1,5 +1,5 @@
 import type { Unsubscribe } from '../util/types';
-import { Drawing, type SerializedDrawing } from './Drawing';
+import { Drawing, drawingTitle, type SerializedDrawing } from './Drawing';
 import { deserializeDrawing } from './registry';
 import { migrate, type DrawingsDocument, DRAWINGS_DOC_VERSION } from './document';
 import { readAnchor } from './futureAnchors';
@@ -62,6 +62,7 @@ export class DrawingStore {
         if (patch.visible !== undefined) d.visible = patch.visible;
         // `serialize()` always carries the key (undefined = every timeframe), so an edit can clear it.
         if ('intervals' in patch) d.intervals = patch.intervals ? { ...patch.intervals } : undefined;
+        if ('title' in patch) d.title = drawingTitle(patch.title); // `serialize()` carries the key, so a rename can be undone
         if (patch.zIndex !== undefined) d.zIndex = patch.zIndex;
         if (patch.props !== undefined) d.applyProps(patch.props); // per-type extras (e.g. fib levels)
         this.emit();

@@ -8,7 +8,7 @@ export type { DrawingStyle, DrawingText } from './style';
 export { defaultStyle, defaultText, DEFAULT_DRAWING_COLOR, textPx, TEXT_PX_SIZES, TV_LINE_COLOR } from './style';
 export type { FieldKind, SettingsField, SettingsSchema } from './schema';
 export { LINE_FIELDS, FILL_FIELDS, LINE_STYLE_OPTIONS, TEXT_FIELDS, TEXT_SIZE_OPTIONS } from './schema';
-export { Drawing, setByPath, TV_TEXT_DEFAULTS } from './Drawing';
+export { Drawing, setByPath, TV_TEXT_DEFAULTS, drawingTitle, DRAWING_TITLE_MAX } from './Drawing';
 export { INTERVAL_UNITS, BAR_KIND_UNITS, barUnit, compactIntervals, defaultRange, shownOnBarMs, type BarKind, type IntervalRange, type IntervalUnit, type IntervalVisibility } from './intervals';
 export type { DrawingTypeKey, AnchorSlot, SerializedDrawing, DrawingInputsDialog, DrawingToolbarAction } from './Drawing';
 export { toolSettings, rememberToolSettings, clearToolSettings, type ToolSettings } from './toolMemory';

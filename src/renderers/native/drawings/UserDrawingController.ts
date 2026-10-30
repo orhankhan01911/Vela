@@ -1579,6 +1579,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 // The settings dialog edits anchors (Coordinates tab) and intervals (Visibility tab) too.
                 if (doc.anchors) d.anchors = doc.anchors.map((p) => ({ time: p.time, price: p.price }));
                 if ('intervals' in doc) d.intervals = doc.intervals ? { ...doc.intervals } : undefined;
+                if ('title' in doc) d.title = doc.title;
                 this.render();
                 this.emit({ kind: 'edit', doc });
             },

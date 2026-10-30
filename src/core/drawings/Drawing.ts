@@ -166,6 +166,16 @@ export interface AnchorSlot {
     free: FreeAxis;
 }
 
+/** The longest name a drawing keeps. */
+export const DRAWING_TITLE_MAX = 100;
+
+/** A drawing's name as saved: trimmed text, at most {@link DRAWING_TITLE_MAX} characters; empty or not text = none. */
+export function drawingTitle(v: unknown): string | undefined {
+    if (typeof v !== 'string') return undefined;
+    const t = v.trim().slice(0, DRAWING_TITLE_MAX);
+    return t || undefined;
+}
+
 /**
  * The plain-JSON shape of one drawing — the ONLY representation that crosses the
  * renderer port and the persistence boundary. A {@link Drawing} (rich behavior)
@@ -188,6 +198,8 @@ export interface SerializedDrawing {
     createdAt: number;
     /** Timeframes the drawing shows on (the settings dialog's Visibility tab); absent = every timeframe. */
     intervals?: IntervalVisibility;
+    /** The user's name for the drawing (TradingView's rename, the pencil in the settings dialog); absent = the tool's name. */
+    title?: string;
     /** Per-type extras (e.g. box `extend`) — keeps the base closed. */
     props?: Record<string, unknown>;
 }
@@ -211,6 +223,8 @@ export abstract class Drawing {
     visible = true;
     /** Timeframes the drawing shows on; undefined = all. See `intervals.ts`. */
     intervals?: IntervalVisibility;
+    /** The user's name for it; undefined = the tool's own name. */
+    title?: string;
     zIndex = 0;
     readonly createdAt: number;
     /** The bar axis of the chart showing this drawing (null on a time chart); see `futureAnchors`. Not saved. */
@@ -227,6 +241,7 @@ export abstract class Drawing {
         this.locked = init.locked ?? false;
         this.visible = init.visible ?? true;
         this.intervals = compactIntervals(init.intervals);
+        this.title = drawingTitle(init.title);
         this.zIndex = init.zIndex ?? 0;
         this.createdAt = init.createdAt ?? Date.now();
         if (init.props) this.readProps(init.props);
@@ -432,6 +447,7 @@ export abstract class Drawing {
             locked: this.locked,
             visible: this.visible,
             intervals: compactIntervals(this.intervals),
+            title: drawingTitle(this.title),
             zIndex: this.zIndex,
             createdAt: this.createdAt,
             props: this.writeProps(),

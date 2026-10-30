@@ -92,6 +92,37 @@ export const DIALOG_CSS = `
    line under the header, and the footer carries its own top delimiter. */
 .vela-dialog--form .vela-dialog-header { align-items: flex-start; padding: 16px 20px 20px; border-bottom: none; }
 .vela-dialog--form .vela-dialog-title { font-size: 20px; line-height: 28px; }
+.vela-dialog--form .vela-dialog-title:has(.vela-drawing-rename, .vela-drawing-rename-input) { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.vela-drawing-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.vela-drawing-rename {
+    all: unset;
+    cursor: pointer;
+    flex: none;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--vela-fg-muted);
+    font-size: 18px;
+}
+.vela-drawing-rename:hover { background: var(--vela-hover); color: var(--vela-fg-bright); }
+.vela-drawing-rename:focus-visible { outline: 2px solid var(--vela-accent); outline-offset: 1px; }
+.vela-drawing-rename-input {
+    flex: 1;
+    min-width: 0;
+    box-sizing: border-box;
+    height: 34px;
+    margin: -3px 0;
+    padding: 0 9px;
+    border: 1px solid var(--vela-accent);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--vela-fg-bright);
+    font: inherit;
+    outline: none;
+}
 .vela-dialog--form .vela-dialog-footer {
     padding: 16px 20px;
     display: flex;
