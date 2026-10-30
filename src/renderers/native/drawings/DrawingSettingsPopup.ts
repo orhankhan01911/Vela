@@ -1286,6 +1286,8 @@ function applyTvBar(bar: HTMLElement, items: readonly TvBarItem[], make: Partial
         bar.insertBefore(at, tpl ? tpl.nextSibling : bar.firstChild);
     }
     for (const k of managed) k.remove();
+    // TradingView has no text-editing button on the bar: a text edits on double-click, a line's text in the dialog.
+    find('Text')?.remove();
     for (const i of items) {
         const el = find(TV_BAR_TIP[i]) ?? make[i]?.() ?? null;
         if (el) bar.insertBefore(el, at);

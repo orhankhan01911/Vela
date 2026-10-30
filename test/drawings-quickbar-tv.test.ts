@@ -14,7 +14,7 @@ afterEach(() => {
     document.body.replaceChildren();
 });
 
-const MANAGED = new Set(['Line color', 'Fill', 'Text color', 'Line width', 'Line style', 'Text size']);
+const MANAGED = new Set(['Line color', 'Fill', 'Text color', 'Line width', 'Line style', 'Text size', 'Text']);
 
 /** The bar's colour / width / style / size controls, in order. */
 function bar(type: string, anchors: number): string[] {
