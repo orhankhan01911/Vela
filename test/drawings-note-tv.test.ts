@@ -130,3 +130,18 @@ describe('note dialog (TradingView: Style, Text, Coordinates, Visibility)', () =
         expect(s.body('text').textContent).not.toContain('Always show');
     });
 });
+
+describe('anchored note (TradingView: the same note, pinned to the screen)', () => {
+    it("takes the note's TradingView look, marks nothing on the axes, has no Coordinates tab, titled 'Anchored note'", async () => {
+        const d = createDrawing('anchorednote', { id: 'a', paneId: 'price', anchors: [{ time: 500, price: 500 }] })! as Note;
+        expect(d.tv).toBe(true);
+        expect(d.style.lineColor).toBe(TV_LINE_COLOR);
+        expect(d.axisPoints()).toEqual([]);
+        d.applySettings({ 'text.value': 'Pinned' });
+        const s = setup(d);
+        s.gear().click();
+        await settled();
+        expect(s.tabs()).toEqual(['Style', 'Text', 'Visibility']);
+        expect(document.querySelector('.vela-drawing-dialog')!.textContent).toContain('Anchored note');
+    });
+});

@@ -102,6 +102,11 @@ export class AnchoredNote extends Note {
         return null;
     }
 
+    /** TradingView marks nothing on the axes for a note pinned to the screen. */
+    override axisPoints(): DrawingPoint[] {
+        return [];
+    }
+
     protected override writeProps(): Record<string, unknown> {
         return { ...super.writeProps(), ...this.pin.write() };
     }

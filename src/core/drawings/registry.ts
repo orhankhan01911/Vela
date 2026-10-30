@@ -1229,7 +1229,8 @@ registerDrawingType({
     label: 'Anchored Note',
     icon: ANCHORED_NOTE_ICON,
     coversSeries: true,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    // TradingView's anchored note: the pin (Label) in its blue, like the note.
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new AnchoredNote(init),
 });
 const TABLE_ICON = svg24('<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 10h18M3 14.5h18M9 5v14M15 5v14"/>');

@@ -86,7 +86,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -145,7 +145,9 @@ export class DrawingSettingsDialog {
         if (drawing.schema().fields.some((f) => f.path.startsWith('text.'))) tabs.push('text');
         // TradingView's brush, highlighter and path have no Coordinates tab.
         const brush = (drawing instanceof Freehand || drawing instanceof Highlighter || drawing instanceof Path) && drawing.tv;
-        if (!(drawing instanceof PositionTool) && !brush && !(tvText && drawing instanceof TextLabel) && drawing.anchors.length > 0) tabs.push('coordinates');
+        // TradingView hides Coordinates for a drawing pinned to the screen (anchored note) and for its text.
+        const pinned = drawing.type === 'anchorednote';
+        if (!(drawing instanceof PositionTool) && !brush && !pinned && !(tvText && drawing instanceof TextLabel) && drawing.anchors.length > 0) tabs.push('coordinates');
         tabs.push('visibility');
         return tabs;
     }
