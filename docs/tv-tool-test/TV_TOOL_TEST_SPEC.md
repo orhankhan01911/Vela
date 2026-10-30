@@ -92,7 +92,7 @@ The audit has 26 tools: 24 are placed on the chart, the other two (Zoom and the 
 
 1. `node e2e/zz-sweep.mjs DIR > DIR/run2.txt` (a copy of `sweep-probe.mjs`; `DIR` must exist; add `tool,tool` after
    `DIR` to run only some): places the 24 placed tools fresh on Local and prints, per tool, the saved
-   style, the floating-toolbar buttons, every dialog tab with its rows, and page errors. Screenshots go to `OUT`.
+   style, the floating-toolbar buttons, every dialog tab with its rows, and page errors. Screenshots go to `DIR`.
 2. Paste `tv-read-dialogs.js` into `ui_evaluate`: the same from TradingView (toolbar `data-name`s, tabs, rows), on your
    own shapes, removed after. It returns `'started'` and takes about a minute. Then call `ui_evaluate` with
    `JSON.stringify(window.__wkDone && window.__wkRes)` until it is not `false`, and save that bare JSON object as
