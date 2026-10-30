@@ -11,6 +11,7 @@ import {
     PITCHFORK_STYLES,
     PriceRange,
     DatePriceRange,
+    DateRange,
     MeasureBox,
     FixedRangeVolumeProfile,
     FixedRangeTpoProfile,
@@ -76,7 +77,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { pricerange: 'Price range', datepricerange: 'Date and price range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -323,7 +324,8 @@ export class DrawingSettingsDialog {
         }
     }
 
-    /** TradingView's range Style tabs. Price range: Line, Background (a switch and its color), Extend. Date & price range:
+    /** TradingView's range Style tabs. Price range: Line, Background (a switch and its color), Extend (left / right).
+     *  Date range: the same, Extend top / bottom. Date & price range:
      *  Line, Border (a switch and its line), Background. Then INFO: Stats (the tool's parts), Label (color and size) and
      *  Label background (a switch and its color). */
     private buildRangeStyle(grid: HTMLElement, mb: MeasureBox, actions: SettingsActions): void {
@@ -343,6 +345,22 @@ export class DrawingSettingsDialog {
         bg.dataset.role = 'background';
         grid.appendChild(bg);
         if (mb instanceof PriceRange) grid.appendChild(fieldRow({ label: 'Extend', control: [this.extendDropdown(mb, actions)], fit: true }));
+        if (mb instanceof DateRange) {
+            // TradingView's: Extend top / Extend bottom ticks.
+            const ends = [{ key: 'extendTop', label: 'Extend top' }, { key: 'extendBottom', label: 'Extend bottom' }] as const;
+            const cur = (): DateRange => ((actions.resolve() ?? mb) as DateRange);
+            const extLabel = (): string => {
+                const on = ends.filter((e) => cur()[e.key]).map((e) => vt(e.label));
+                return on.length ? joinChoices(on) : "Don't extend";
+            };
+            const ext = dropdownTrigger(extLabel());
+            ext.el.dataset.role = 'extend';
+            ext.button.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleChecks(ext.button, ends.map((en) => ({ label: en.label, checked: () => cur()[en.key], set: (v: boolean) => actions.patch({ [en.key]: v }) })), () => ext.setLabel(extLabel()));
+            });
+            grid.appendChild(fieldRow({ label: 'Extend', control: [ext.el], fit: true }));
+        }
         grid.appendChild(fieldSection('Info'));
         const now = (): MeasureBox => ((actions.resolve() ?? mb) as MeasureBox);
         const parts = mb.rangeParts();

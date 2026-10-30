@@ -11,7 +11,7 @@ import { describe, it, expect, beforeAll, afterEach } from 'vitest';
     disconnect() {}
 };
 
-import { createDrawing, deserializeDrawing, PriceRange, DatePriceRange, rangeInfoLines, formatRangeVolume, TV_LINE_COLOR, type Drawing, type Projector } from '../src/core/drawings';
+import { createDrawing, deserializeDrawing, PriceRange, DatePriceRange, DateRange, rangeInfoLines, formatRangeVolume, TV_LINE_COLOR, type Drawing, type Projector } from '../src/core/drawings';
 import { DARK_THEME } from '../src/core/theme';
 import { DrawingSettingsPopup, type SettingsActions } from '../src/renderers/native/drawings/DrawingSettingsPopup';
 
@@ -208,5 +208,40 @@ describe('date and price range (TradingView, defaults from its code)', () => {
         expect(order.every((i, k) => i >= 0 && (k === 0 || i > order[k - 1]!))).toBe(true);
         expect(st).not.toContain('Extend');
         expect(document.querySelector('.vela-drawing-dialog')!.textContent).toContain('Date and price range');
+    });
+});
+
+describe('date range (TradingView, defaults from its code)', () => {
+    const dr = (props?: Record<string, unknown>): DateRange =>
+        createDrawing('daterange', { id: 'g', paneId: 'price', anchors: two, ...(props ? { props } : {}) })! as DateRange;
+
+    it('2 px blue, 15 % fill, not extended; Stats: bars, date/time, volume, all on', () => {
+        const d = dr();
+        expect(d.style).toMatchObject({ lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' });
+        expect([d.tv, d.fillBackground, d.extendTop, d.extendBottom]).toEqual([true, true, false, false]);
+        expect(d.rangeParts().map((p) => p.label)).toEqual(['Bars range', 'Date/time range', 'Volume']);
+        expect(d.infoLines(flat, 0.1).some((l) => l.includes('1,219.8'))).toBe(false); // no price part
+    });
+
+    it('extends survive a save; a saved date range keeps the old box', () => {
+        const d = dr();
+        d.applySettings({ extendTop: true });
+        const back = deserializeDrawing(d.serialize())! as DateRange;
+        expect([back.tv, back.extendTop, back.extendBottom]).toEqual([true, true, false]);
+        const old = deserializeDrawing({ id: 'o', type: 'daterange', paneId: 'price', anchors: two, style: { lineColor: '#123456', lineWidth: 1, lineStyle: 'solid' }, props: { showPrice: false, showDate: true } } as never)! as DateRange;
+        expect(old.tv).toBeUndefined();
+    });
+
+    it('dialog: Line, Background, Extend (top / bottom), INFO', async () => {
+        const s = setup(dr());
+        s.gear().click();
+        await settled();
+        s.tab('Style').click();
+        const st = s.body('style');
+        const order = ['Line', 'Background', 'Extend', 'Stats', 'Label', 'Label background'].map((l) => st.textContent!.indexOf(l));
+        expect(order.every((i, k) => i >= 0 && (k === 0 || i > order[k - 1]!))).toBe(true);
+        expect(st.querySelector('[data-role="extend"]')!.textContent).toContain("Don't extend");
+        expect(st.textContent).toContain('Bars range, date/time range, volume');
+        expect(document.querySelector('.vela-drawing-dialog')!.textContent).toContain('Date range');
     });
 });

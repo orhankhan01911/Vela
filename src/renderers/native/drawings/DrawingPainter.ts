@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, Box, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP, XPOST_DARK, XPOST_LIGHT } from '../../../core/palette';
@@ -1530,8 +1530,9 @@ export class DrawingPainter {
         ctx.restore();
     }
 
-    /** TradingView's price range and date & price range (new ones; its renderers' rules, read from its code
-     *  2026-10-30). The price range: two price lines (extendable, the fill with them) and an arrow up the middle the way
+    /** TradingView's range tools (new ones; its renderers' rules, read from its code 2026-10-30). The date range: two
+     *  time lines (extendable to the pane's top and bottom, the fill with them) and an arrow across the middle the way
+     *  time ran, its head once 15 x the line width long. The price range: two price lines (extendable, the fill with them) and an arrow up the middle the way
      *  price moved, its head once 15 x the line width long. The date & price range: an optional border, an arrow across
      *  the middle the way time ran and one up the middle the way price moved, heads once 25 x the line width long. Both:
      *  the fill and the custom text in the middle, breaking the arrows. The plate is {@link paintRangePlates}. Edges
@@ -1552,13 +1553,18 @@ export class DrawingPainter {
         const line = { ...d.style, lineWidth: lw, lineStyle: 'solid' as const }; // TradingView draws these solid
         const pr = d instanceof PriceRange ? d : null;
         const dp = d instanceof DatePriceRange ? d : null;
+        const dr = d instanceof DateRange ? d : null;
+        const pane = proj.paneRect?.(d.paneId) ?? { top: 0, height: proj.height };
         const left = pr?.extendLeft ? 0 : xl;
         const right = pr?.extendRight ? proj.width : xr;
+        const top = dr?.extendTop ? pane.top : yt;
+        const bottom = dr?.extendBottom ? pane.top + pane.height : yb;
         if (d.fillBackground && d.style.fillColor) {
             ctx.fillStyle = d.style.fillColor;
-            ctx.fillRect(left, yt, right - left, yb - yt);
+            ctx.fillRect(left, top, right - left, bottom - top);
         }
         if (pr) for (const y of [crisp(ay), crisp(by)]) this.stroke(ctx, line, () => { ctx.moveTo(left, y); ctx.lineTo(right, y); });
+        if (dr) for (const x of [crisp(ax), crisp(bx)]) this.stroke(ctx, line, () => { ctx.moveTo(x, top); ctx.lineTo(x, bottom); });
         if (dp?.drawBorder) {
             const bw = Math.max(1, Math.round(dp.borderWidth * dpr)) / dpr;
             this.stroke(ctx, { ...line, lineColor: dp.borderColor, lineWidth: bw }, () => {
@@ -1603,11 +1609,12 @@ export class DrawingPainter {
             if (hi - lo >= min) this.paintChevron(ctx, vertical ? [mx, from] : [from, my], vertical ? [mx, to] : [to, my], line);
         };
         if (dp) arrow(false, ax, bx, 25 * d.style.lineWidth);
-        arrow(true, ay, by, (dp ? 25 : 15) * d.style.lineWidth);
+        if (dr) arrow(false, ax, bx, 15 * d.style.lineWidth);
+        else arrow(true, ay, by, (dp ? 25 : 15) * d.style.lineWidth);
     }
 
     /** The range plates (new price and date & price ranges), over the candles (a range drawn under them would hide
-     *  its own numbers), TradingView's: 10 px past the second point (above it when price rose, below when it fell),
+     *  its own numbers), TradingView's: 10 px past the box (above it when point 2 is higher, below otherwise),
      *  12 px white on #1A1A1A, lines 8 px apart, padding 0.4 / 0.2 x the size + a third of it, 4 px corners and a soft
      *  shadow (its RangeToolsConstants). */
     paintRangePlates(ctx: CanvasRenderingContext2D, drawings: readonly Drawing[], proj: Projector, theme: VelaTheme): void {
@@ -1628,8 +1635,19 @@ export class DrawingPainter {
             const padV = fs * 0.2 + fs / 3;
             const pw = Math.round(Math.max(...lines.map((l) => ctx.measureText(l).width)) + 2 * padH);
             const ph = Math.round(lines.length * fs + (lines.length - 1) * 8 + 2 * padV);
-            const by = pts[1]![1];
-            const py = snap(b.price > a.price ? by - 10 - ph : by + 10);
+            // TradingView's calculateLabelPosition: above the box when point 2 is higher on screen, else below; flipped
+            // to the other side when it would leave the pane, and kept inside it when neither side fits.
+            const pane = proj.paneRect?.(d.paneId) ?? { top: 0, height: proj.height };
+            const y0 = pts[0]![1];
+            const y1 = pts[1]![1];
+            const above = Math.min(y0, y1) - 10 - ph;
+            const below = Math.max(y0, y1) + 10;
+            const paneTop = pane.top;
+            const paneBottom = pane.top + pane.height;
+            let ty = y0 > y1 ? above : below;
+            if (y0 > y1 && ty < paneTop) ty = below + ph <= paneBottom ? below : paneTop;
+            else if (y0 <= y1 && ty + ph > paneBottom) ty = above >= paneTop ? above : paneBottom - ph;
+            const py = snap(ty);
             const cx = (pts[0]![0] + pts[1]![0]) / 2;
             const px = snap(cx - pw / 2);
             if (d.labelBackground) {
