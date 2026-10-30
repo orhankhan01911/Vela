@@ -43,6 +43,7 @@ for (const [tool, spec] of TOOLS) {
     const d = await p.evaluate(() => { const ds = window.__vela.active.chart.drawings.all().filter((d) => d.type !== "pricealert"); return ds.at(-1) ?? null; });
     r.placed = d ? d.type : null;
     r.n = d?.anchors?.length; r.style = d?.style; r.tv = d?.props?.tv; r.text = d?.text ?? d?.props?.text;
+    if (tool === "emoji") await p.waitForTimeout(4000); // the emoji art is a lazy chunk: let it load before the picture
     await p.screenshot({ path: `${OUT}/${tool}.png`, clip: { x: 380, y: 180, width: 560, height: 360 } });
     if (d) {
       await p.evaluate((id) => window.__vela.active.chart.drawings.openSettings(id), d.id);

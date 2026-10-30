@@ -12,6 +12,7 @@ M={'trendline':'trend_line','hline':'horizontal_line','ray':'ray','vline':'verti
 ALIGN_VALUES = {'Top', 'Middle', 'Bottom', 'Left', 'Center', 'Right', 'Inside', 'Vertical', 'Horizontal'}
 
 def words(t):
+    t = t.replace('\xa0', ' ')  # TradingView joins list text with non-breaking spaces
     # labels only: drop numbers/px values and option values that depend on saved templates
     parts=[x.strip() for x in re.split(r'\s*\|\s*|\n',t) if x.strip()]
     out = []
