@@ -28,6 +28,7 @@ export type DrawingIntent =
     | { kind: 'draft'; doc: SerializedDrawing | null }
     | { kind: 'create'; doc: SerializedDrawing }
     | { kind: 'edit'; doc: SerializedDrawing }
+    | { kind: 'convert'; doc: SerializedDrawing } // the same drawing as another type (TradingView's Anchor drawing toggle)
     | { kind: 'edit-many'; docs: SerializedDrawing[] } // atomic multi-drag / multi-nudge (one undo entry)
     | { kind: 'select'; ids: string[]; additive?: boolean } // additive = shift-toggle vs replace
     | { kind: 'delete'; ids: string[] }

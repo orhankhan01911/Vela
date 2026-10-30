@@ -53,6 +53,8 @@ export interface SettingsActions {
     openInputs?(): boolean;
     /** Add an alert on this drawing (the host's alert dialog). Present only on types the host can alert on. */
     addAlert?(): void;
+    /** TradingView's "Anchor drawing" toggle: a text or note becomes its screen-pinned twin, or back. Optional. */
+    toggleAnchor?(): void;
     /** Put a saved template's look on the drawing and rebuild the toolbar (the Templates button). Optional. */
     applyTemplate?(look: TemplateLook): void;
 }
@@ -419,6 +421,14 @@ export class DrawingSettingsPopup {
             bar.appendChild(alertBtn);
         }
         bar.appendChild(this.toggle('Lock', LOCK_ICON, common((d) => d.locked), (v) => actions.setLocked(v), UNLOCK_ICON));
+        // TradingView's "Anchor drawing" sits between the lock and the trash on texts and notes; pressed = pinned.
+        if (!multi && actions.toggleAnchor) {
+            const flip = actions.toggleAnchor;
+            const pinned = drawing.type === 'anchoredtext' || drawing.type === 'anchorednote';
+            const anchorBtn = this.toggle('Anchor drawing', ANCHOR_ICON, pinned, () => flip());
+            anchorBtn.dataset.action = 'toggle-anchor';
+            bar.appendChild(anchorBtn);
+        }
         const del = this.iconBtn('Delete', TRASH_ICON, () => actions.remove());
         del.style.color = 'var(--vela-danger)';
         bar.appendChild(del);
@@ -1286,6 +1296,7 @@ function applyTvBar(bar: HTMLElement, items: readonly TvBarItem[], make: Partial
 const BRUSH_ICON = icon('brush');
 const TEMPLATES_ICON = icon('drawing-templates');
 const ALERT_ADD_ICON = icon('alarm-add');
+const ANCHOR_ICON = icon('anchor');
 const BUCKET_ICON = icon('bucket');
 const TYPE_ICON = icon('type');
 const PRICE_DELTA_ICON = icon('price-delta');

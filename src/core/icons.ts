@@ -115,6 +115,8 @@ registerIcon(
 // Drawing templates: four tiles, the last one a plus.
 registerIcon('drawing-templates', S('<rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><path d="M11.25 9v4.5M9 11.25h4.5"/>'));
 // Add alert: an alarm clock with a plus.
+// An anchor: a drawing pinned to the screen (TradingView's "Anchor drawing" toggle on texts and notes).
+registerIcon('anchor', S('<circle cx="8" cy="3.6" r="1.6"/><path d="M8 5.2v8.6M5.4 7.6h5.2M3.4 10a4.6 4.6 0 0 0 9.2 0"/>'));
 registerIcon('alarm-add', S('<circle cx="7.5" cy="8.5" r="5"/><path d="M7.5 6v2.5l1.6 1.2M2.5 3.2 4.2 1.8M12.5 3.2 10.8 1.8"/><path d="M13 10.5v4M11 12.5h4"/>'));
 registerIcon('pencil', S('<path d="M10.7 2.9a1.7 1.7 0 0 1 2.4 2.4L5.6 12.8l-3.1.7.7-3.1Z"/><path d="m9.5 4.1 2.4 2.4"/>'));
 registerIcon('search', S('<circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3.5 3.5"/>'));

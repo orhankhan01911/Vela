@@ -533,6 +533,18 @@ export class DrawingController {
                 }
                 break;
             }
+            case 'convert': {
+                // Same id, place in the stack and history: only the type (and what it keeps) changes.
+                const old = this.store.get(i.doc.id);
+                const d = old ? deserializeDrawing({ ...i.doc, zIndex: old.zIndex }) : null;
+                if (!d) break;
+                const before = this.store.serialize();
+                this.store.remove(d.id);
+                this.store.add(d);
+                this.history.record(before);
+                this.events.emit('drawing:edited', { id: d.id });
+                break;
+            }
             case 'edit-many': {
                 this.history.begin(this.store.serialize());
                 for (const doc of i.docs) {

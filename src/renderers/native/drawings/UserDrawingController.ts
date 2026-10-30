@@ -127,6 +127,9 @@ export function sliceKeyFor(zIndex: number, boundaries: readonly number[]): numb
  * snapshots and reports gestures back as intents. It never holds authoritative
  * state beyond the current projection.
  */
+/** TradingView's "Anchor drawing" toggle: each text / note and its screen-pinned twin. */
+const ANCHOR_TWIN: Readonly<Record<string, DrawingTypeKey>> = { text: 'anchoredtext', anchoredtext: 'text', note: 'anchorednote', anchorednote: 'note' };
+
 export class UserDrawingController implements IDrawingsRendererPort {
     private ctx: CanvasRenderingContext2D | null = null;
     private drawings: Drawing[] = [];
@@ -1578,6 +1581,23 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 this.openSettingsById(id, 0, 0);
             },
             ...(this.alertTypes.has(live()?.type ?? '') ? { addAlert: () => this.emit({ kind: 'alert', id }) } : {}),
+            ...(ANCHOR_TWIN[drawing.type]
+                ? {
+                      toggleAnchor: () => {
+                          const d = live();
+                          const twin = d ? ANCHOR_TWIN[d.type] : undefined;
+                          if (!d || !twin) return;
+                          this.finishTextEditor(true); // typed text goes with it
+                          // The pinned twin keeps the point where the drawing is now; unpinned, it drops the screen fraction.
+                          const doc = d.serialize();
+                          const props = { ...(doc.props ?? {}) };
+                          delete props.fx;
+                          delete props.fy;
+                          this.emit({ kind: 'convert', doc: { ...doc, type: twin, props } });
+                          this.openSettingsById(id, 0, 0);
+                      },
+                  }
+                : {}),
             applyTemplate: (look) => {
                 const d = live();
                 if (!d) return;

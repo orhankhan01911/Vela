@@ -259,6 +259,21 @@ describe('DrawingController — editing foundation', () => {
         expect(ctrl.all().length).toBe(2);
     });
 
+    it('convert: the same drawing as another type (TradingView\'s Anchor drawing), same id and stack place, one undo', () => {
+        const { port, ctrl, seen } = setup();
+        const TEXT_DOC = { ...HLINE_DOC, type: 'text', text: { value: 'Hi' } } as SerializedDrawing;
+        port.fire({ kind: 'create', doc: TEXT_DOC });
+        const before = ctrl.all()[0]!;
+        port.fire({ kind: 'convert', doc: { ...before, type: 'anchoredtext' } as SerializedDrawing });
+        const after = ctrl.all();
+        expect(after.length).toBe(1);
+        expect([after[0]!.id, after[0]!.type, after[0]!.text?.value, after[0]!.zIndex]).toEqual([before.id, 'anchoredtext', 'Hi', before.zIndex]);
+        expect(seen).toContainEqual(['drawing:edited', before.id]);
+        expect(seen).not.toContainEqual(['drawing:removed', before.id]);
+        ctrl.undo();
+        expect(ctrl.all()[0]!.type).toBe('text');
+    });
+
     it('a single edit is one undo entry (drawing survives, anchors revert)', () => {
         const { port, ctrl } = setup();
         port.fire({ kind: 'create', doc: HLINE_DOC });
