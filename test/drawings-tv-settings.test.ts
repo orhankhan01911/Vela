@@ -13,9 +13,11 @@ const proj: Projector = {
 };
 
 describe('TradingView drawing settings (2026-10-17)', () => {
-    const fib = () => createDrawing('fibretracement', { paneId: 'price', anchors: [{ time: 40, price: 0 }, { time: 90, price: 100 }] })! as FibLevels;
+    // A fib saved before TradingView's look (2026-10-31: new retracements are TradingView's, see
+    // drawings-fibretracement-tv.test.ts). Saved props without `tv` keep these settings and this look.
+    const fib = () => createDrawing('fibretracement', { paneId: 'price', anchors: [{ time: 40, price: 0 }, { time: 90, price: 100 }], props: { reverse: false } })! as FibLevels;
 
-    it('a new fib keeps the old look: no extension, level and price numbers left and above, faint fill', () => {
+    it('a saved fib keeps the old look: no extension, level and price numbers left and above, faint fill', () => {
         const d = fib();
         const l = d.entryLines(proj)!.find((e) => e.numberText.startsWith('0.5'))!;
         expect([l.x1, l.x2]).toEqual([40, 90]);
@@ -26,7 +28,7 @@ describe('TradingView drawing settings (2026-10-17)', () => {
         expect(d.fillOpacity).toBe(0.06);
     });
 
-    it('offers TradingView\'s 25 levels: the 7 standard ones on, the extension and negative ones off', () => {
+    it('a saved fib keeps its 25 levels: the 7 standard ones on, the extension and negative ones off', () => {
         const d = fib();
         expect(d.levels.length).toBe(25);
         expect(d.levels.filter((l) => l.enabled).map((l) => l.ratio)).toEqual([0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]);

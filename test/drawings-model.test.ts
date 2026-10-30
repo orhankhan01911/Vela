@@ -207,7 +207,7 @@ describe('drawings/resetDrawingSettings', () => {
         expect(d.levels[0]!.enabled).toBe(false);
         expect(d.text?.color).toBe('#abcdef');
         resetDrawingSettings(d);
-        expect(d.style.lineWidth).toBe(1);
+        expect(d.style.lineWidth).toBe(2); // TradingView's 2 px levels (new retracements, 2026-10-31)
         expect(d.numbersSize).toBe('small');
         expect(d.levels).toEqual(defaultLevels);
         expect(d.text).toBeUndefined();

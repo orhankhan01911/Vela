@@ -9,6 +9,32 @@ import { fibLevels } from '../levelPalette';
 const EXTRA = [1.272, 1.414, 1.618, 2, 2.272, 2.414, 2.618, 3, 3.272, 3.414, 3.618, 4, 4.236, -0.236, -0.382, -0.618, -1, -1.618];
 const LEVELS = fibLevels([0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, ...EXTRA.map((ratio) => ({ ratio, enabled: false }))]);
 
+// TradingView's factory colours (module 984358 with its colour names from module 872966).
+const TV_GRAY = '#808080'; // palette-exempt: TradingView's cold-gray-500
+const TV_RED = '#F23645'; // palette-exempt: TradingView's ripe-red-500
+const TV_ORANGE = '#FF9800'; // palette-exempt: TradingView's tan-orange-500
+const TV_GREEN = '#4caf50'; // palette-exempt: TradingView's iguana-green-500
+const TV_TEAL = '#089981'; // palette-exempt: TradingView's minty-green-500
+const TV_CYAN = '#00bcd4'; // palette-exempt: TradingView's sky-blue-500
+const TV_BLUE = '#2962FF'; // palette-exempt: TradingView's tv-blue-500
+const TV_PURPLE = '#9c27b0'; // palette-exempt: TradingView's grapes-purple-500
+const TV_PINK = '#e91e63'; // palette-exempt: TradingView's berry-pink-500
+
+/** TradingView's 24 levels in its order (level1 .. level24): ratio, colour, shown. The dialog lists them two per row. */
+export const TV_FIB_RETRACEMENT_LEVELS: readonly FibLevel[] = (
+    [
+        [0, TV_GRAY, true], [0.236, TV_RED, true], [0.382, TV_ORANGE, true], [0.5, TV_GREEN, true],
+        [0.618, TV_TEAL, true], [0.786, TV_CYAN, true], [1, TV_GRAY, true], [1.618, TV_BLUE, true],
+        [2.618, TV_RED, true], [3.618, TV_PURPLE, true], [4.236, TV_PINK, true], [1.272, TV_ORANGE, false],
+        [1.414, TV_RED, false], [2.272, TV_ORANGE, false], [2.414, TV_GREEN, false], [2, TV_TEAL, false],
+        [3, TV_CYAN, false], [3.272, TV_GRAY, false], [3.414, TV_BLUE, false], [4, TV_RED, false],
+        [4.272, TV_PURPLE, false], [4.414, TV_PINK, false], [4.618, TV_ORANGE, false], [4.764, TV_TEAL, false],
+    ] as const
+).map(([ratio, color, enabled]) => ({ ratio, color, enabled }));
+
+/** TradingView's trend line colour (its dashed swing line). */
+export const TV_FIB_TREND_COLOR = TV_GRAY;
+
 /**
  * Fibonacci retracement: horizontal levels between two swing anchors. Level 0 sits on the
  * second anchor and level 1 on the first, so the levels measure the pullback from the
@@ -23,6 +49,30 @@ export class FibRetracement extends FibLevels {
     constructor(init: ConstructorParameters<typeof FibLevels>[0]) {
         super(init);
         if (this.reverse === undefined) this.reverse = false;
+        if (!init.props) {
+            // A new retracement is TradingView's (module 984358 factory defaults): 24 levels, a dashed grey trend
+            // line, 2 px solid level lines, background at 80 % transparency, coefficient + price labels on the left,
+            // middle, 12 px, level texts centered on their lines.
+            this.tv = true;
+            this.levels = TV_FIB_RETRACEMENT_LEVELS.map((l) => ({ ...l }));
+            this.trendline = true;
+            this.trendColor = TV_FIB_TREND_COLOR;
+            this.trendWidth = 2;
+            this.trendStyle = 'dashed';
+            this.style = { ...this.style, lineWidth: 2, lineStyle: 'solid' };
+            this.background = true;
+            this.fillOpacity = 0.2;
+            this.showLevels = true;
+            this.levelsAsPercent = false;
+            this.showPrices = true;
+            this.labelH = 'left';
+            this.labelV = 'middle';
+            this.showText = true;
+            this.textH = 'center';
+            this.textV = 'middle';
+            this.fontSize = 12;
+            this.logScale = false;
+        }
     }
 
     defaultLevels(): readonly FibLevel[] {

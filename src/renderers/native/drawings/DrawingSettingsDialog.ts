@@ -4,6 +4,7 @@ import {
     DIRECTION_OPTIONS,
     FibLevels,
     FibRetracement,
+    TV_FIB_FONT_SIZES,
     GannBox,
     GannFan,
     GannSquare,
@@ -87,12 +88,27 @@ const FRVP_ANCHOR: readonly SelectOption[] = [
     { value: 'right', label: 'Right' },
     { value: 'left', label: 'Left' },
 ];
+/** TradingView's Fib "Levels" choice, Labels / Text places (its dialog order: Top, Middle, Bottom). */
+const FIB_LEVELS_AS: readonly SelectOption[] = [
+    { value: 'values', label: 'Values' },
+    { value: 'percents', label: 'Percents' },
+];
+const FIB_H: readonly SelectOption[] = [
+    { value: 'left', label: 'Left' },
+    { value: 'center', label: 'Center' },
+    { value: 'right', label: 'Right' },
+];
+const FIB_V: readonly SelectOption[] = [
+    { value: 'top', label: 'Top' },
+    { value: 'middle', label: 'Middle' },
+    { value: 'bottom', label: 'Bottom' },
+];
 const WIDTH_OPTIONS: readonly SelectOption[] = [1, 2, 3, 4].map((w) => ({ value: String(w), label: `${w}px` }));
 const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -282,6 +298,10 @@ export class DrawingSettingsDialog {
      *  line-end buttons), Background, Extend, the tool's switches, then the INFO section (stats) and the tool's own
      *  sections (Fib, levels). */
     private buildStyle(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
+        if (drawing instanceof FibLevels && drawing.tv) {
+            this.buildFibTvStyle(grid, drawing, actions);
+            return;
+        }
         if (drawing instanceof ParallelChannel) {
             this.buildChannelStyle(grid, drawing, actions);
             return;
@@ -1537,6 +1557,127 @@ export class DrawingSettingsDialog {
             { value: 'bottom', label: 'Bottom' },
         ]);
         grid.appendChild(fieldSection('Levels', { variant: 'inputs' }));
+    }
+
+    /** TradingView's Fib retracement Style tab (module 426316): Trend line (a switch and its line button), Levels
+     *  line (width and style), Extend, the 24 levels two per row (a switch, the coefficient, the colour), Use one
+     *  color, Background (a switch and its transparency), Reverse, Prices, Levels (values or percents), Labels and
+     *  Text (horizontal and vertical place), Font size and Fib levels based on log scale. */
+    private buildFibTvStyle(grid: HTMLElement, fib: FibLevels, actions: SettingsActions): void {
+        const trend = this.pathLineButton(
+            { color: fib.trendColor || DEFAULT_DRAWING_COLOR, width: fib.trendWidth ?? 2, style: fib.trendStyle ?? 'dashed' },
+            { color: 'trendColor', width: 'trendWidth', style: 'trendStyle' },
+            actions,
+        );
+        trend.dataset.role = 'trend-line';
+        grid.appendChild(fieldRow({ label: 'Trend line', toggle: { id: uid(), checked: fib.trendline, onChange: (v) => actions.patch({ trendline: v }) }, control: [trend], fit: true }));
+        const width = this.selectControl('style.lineWidth', WIDTH_OPTIONS, String(fib.style.lineWidth ?? 2), actions, (v) => Number(v));
+        const style = this.selectControl('style.lineStyle', LINE_STYLE_OPTIONS, String(fib.style.lineStyle ?? 'solid'), actions);
+        const levelsLine = fieldRow({ label: 'Levels line', control: [width, style], fit: true });
+        levelsLine.dataset.role = 'levels-line';
+        grid.appendChild(levelsLine);
+        grid.appendChild(fieldRow({ label: 'Extend', control: [this.extendDropdown(fib, actions, { left: 'Extend lines left', right: 'Extend lines right' })], fit: true }));
+
+        const cells = document.createElement('div');
+        cells.className = 'vela-field-span';
+        cells.dataset.role = 'fib-levels';
+        cells.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;';
+        const colors = fib.levels.map((l) => l.color);
+        const swatches: ColorField[] = [];
+        fib.levels.forEach((lv, i) => {
+            const cell = document.createElement('div');
+            cell.style.cssText = 'display:flex;align-items:center;gap:8px;min-width:0;';
+            cell.dataset.role = `level-${i}`;
+            const sw = buildFieldControl({ kind: 'switch', checked: lv.enabled, onChange: (v) => actions.patch({ [`levels.${i}.enabled`]: v }) });
+            let cur = lv.ratio;
+            const coeff = buildFieldControl({
+                kind: 'number',
+                value: cur,
+                min: -100,
+                step: 0.01,
+                fill: false,
+                compact: true,
+                commit: 'blur',
+                onChange: (n) => {
+                    if (!Number.isFinite(n)) {
+                        coeff.setValue?.(cur);
+                        return;
+                    }
+                    cur = n;
+                    actions.patch({ [`levels.${i}.ratio`]: n });
+                },
+            });
+            coeff.el.dataset.role = 'level-ratio';
+            coeff.el.style.flex = '1';
+            coeff.el.style.minWidth = '0';
+            const col = new ColorField({
+                theme: this.theme,
+                getVal: () => colors[i] ?? DEFAULT_DRAWING_COLOR,
+                onVal: (v) => {
+                    colors[i] = v;
+                    actions.patch({ [`levels.${i}.color`]: v });
+                    paintOne();
+                },
+                popover: { align: 'start' },
+            });
+            col.el.dataset.role = 'level-color';
+            swatches.push(col);
+            cell.append(sw.el, coeff.el, col.el);
+            cells.appendChild(cell);
+        });
+        grid.appendChild(cells);
+
+        // Use one color: one pick recolors the trend line and every level (TradingView's collected line colours);
+        // its swatch is split in two while they differ.
+        const oneColor: ColorField = new ColorField({
+            theme: this.theme,
+            getVal: () => colors[0] ?? DEFAULT_DRAWING_COLOR,
+            onVal: (v) => {
+                colors.fill(v);
+                actions.patch({ trendColor: v, ...Object.fromEntries(fib.levels.map((_, i) => [`levels.${i}.color`, v])) });
+                for (const sw of swatches) sw.paint();
+                paintOne();
+            },
+            popover: { align: 'start' },
+        });
+        const paintOne = (): void => {
+            oneColor.paint();
+            const sw = oneColor.el.querySelector<HTMLElement>('.vela-color-field-swatch');
+            if (sw && new Set(colors.map((c) => c.toLowerCase())).size > 1) sw.style.background = `linear-gradient(135deg, ${BULLISH} 50%, ${BEARISH} 50%)`;
+        };
+        paintOne();
+        oneColor.el.dataset.role = 'one-color';
+        grid.appendChild(fieldRow({ label: 'Use one color', control: [oneColor.el], fit: true }));
+        const bg = fieldRow({
+            label: 'Background',
+            toggle: { id: uid(), checked: fib.background, onChange: (v) => actions.patch({ background: v }) },
+            control: [opacitySlider(Math.round(fib.fillOpacity * 100), (n) => actions.patch({ fillOpacity: n / 100 }))],
+            fit: true,
+        });
+        bg.dataset.role = 'background';
+        grid.appendChild(bg);
+        const check = (label: string, key: string, on: boolean): HTMLElement => {
+            const row = fieldRow({ label, bool: true, toggle: { id: uid(), checked: on, onChange: (v) => actions.patch({ [key]: v }) } });
+            grid.appendChild(row);
+            return row;
+        };
+        if (fib instanceof FibRetracement) check('Reverse', 'reverse', fib.reverse);
+        check('Prices', 'showPrices', fib.showPrices);
+        const levelsAs = this.selectControl('levelsAsPercent', FIB_LEVELS_AS, fib.levelsAsPercent ? 'percents' : 'values', actions, (v) => v === 'percents');
+        grid.appendChild(fieldRow({ label: 'Levels', toggle: { id: uid(), checked: fib.showLevels, onChange: (v) => actions.patch({ showLevels: v }) }, control: [levelsAs], fit: true }));
+        const labelH = this.selectControl('labelH', FIB_H, fib.labelH, actions);
+        const labelV = this.selectControl('labelV', FIB_V, fib.labelV, actions);
+        grid.appendChild(fieldRow({ label: 'Labels', control: [labelH, labelV], fit: true }));
+        const textH = this.selectControl('textH', FIB_H, fib.textH ?? 'center', actions);
+        const textV = this.selectControl('textV', FIB_V, fib.textV ?? 'middle', actions);
+        grid.appendChild(fieldRow({ label: 'Text', toggle: { id: uid(), checked: fib.showText !== false, onChange: (v) => actions.patch({ showText: v }) }, control: [textH, textV], fit: true }));
+        const sizes = TV_FIB_FONT_SIZES.map((n) => ({ value: String(n), label: String(n) }));
+        grid.appendChild(fieldRow({ label: 'Font size', control: [this.selectControl('fontSize', sizes, String(fib.fontSize ?? 12), actions, (v) => Number(v))], fit: true }));
+        // TradingView greys this out unless the price scale is logarithmic; Vela's levels are linear, so it stays off.
+        const log = check('Fib levels based on log scale', 'logScale', fib.logScale === true);
+        log.style.opacity = '0.5';
+        log.style.pointerEvents = 'none';
+        log.dataset.role = 'log-scale';
     }
 
     /** TradingView's Gann settings: fills (fan wedges, square arc rings, box rows / columns) and which labels show. */

@@ -20,6 +20,7 @@ import {
     effectiveFillColor,
     Freehand,
     HIGHLIGHTER_WIDTHS,
+    FibLevels,
 } from '../../../core/drawings';
 import { icon, svg24, svg24Solid } from '../../../core/icons';
 import { applyChromeTokens } from '../../shared/theme-tokens';
@@ -436,9 +437,24 @@ export class DrawingSettingsPopup {
 
         // TradingView's quick bar for the audited tools: which colour, width, style and size controls it shows, in its
         // order (line colour, background, text colour, width, style). Built controls are reused; a missing one is made.
-        const tvBar = multi ? undefined : TV_QUICK_BAR[drawing.type];
+        const tvFib = !multi && drawing instanceof FibLevels && drawing.tv === true ? drawing : null;
+        const tvBar = multi ? undefined : tvFib ? TV_FIB_BAR : TV_QUICK_BAR[drawing.type];
+        if (tvFib) {
+            // TradingView's Fib bar: one colour for the trend line and every level, one width for both (its collected
+            // line colour / width properties). The generic width button only sets the levels, so it is replaced.
+            bar.querySelectorAll<HTMLElement>('[data-tip="Line width"]').forEach((k) => k.remove());
+        }
         if (tvBar) {
             const make: Partial<Record<TvBarItem, () => HTMLElement | null>> = {
+                ...(tvFib
+                    ? {
+                          line: () => {
+                              const read = (d: Drawing): string => (d as FibLevels).levels.find((l) => l.enabled)?.color ?? DEFAULT_DRAWING_COLOR;
+                              return this.colorButton('Line color', BRUSH_ICON, read(tvFib), (v) => actions.patch({ trendColor: v, ...Object.fromEntries(tvFib.levels.map((_, i) => [`levels.${i}.color`, v])) }), undefined, distinctValues([tvFib], read));
+                          },
+                          width: () => this.dropdown('Line width', [1, 2, 3, 4], tvFib.style.lineWidth ?? 2, (w) => lineIcon(w, 'solid'), (v) => actions.patch({ 'style.lineWidth': v, trendWidth: v }), { label: (v) => `${v}px`, labelInTrigger: true }),
+                      }
+                    : {}),
                 text: () => (paths.has('text.color') ? swatch('Text color', TYPE_ICON, (d) => d.text?.color || t.textColor, 'text.color') : null),
                 size: () => (paths.has('text.size') ? this.dropdown('Text size', TEXT_SIZE_OPTIONS.map((o) => o.value), common((d) => d.text?.size ?? 'normal'), (sz) => labelSizeIcon(sz), (v) => actions.patch({ 'text.size': v }), { label: sizeLabel }) : null),
                 // A text's background is its own colour plus a switch: picking a colour turns the background on.
@@ -1246,6 +1262,8 @@ const TV_BAR_TIP: Record<TvBarItem, string> = { line: 'Line color', fill: 'Fill'
 const LINE_BAR: readonly TvBarItem[] = ['line', 'text', 'width', 'style'];
 const AREA_BAR: readonly TvBarItem[] = ['line', 'fill', 'text', 'width'];
 /** TradingView's floating toolbar per tool (read from TradingView Desktop's toolbar data-names, 2026-10-30). */
+/** TradingView's Fib retracement bar (its data-names: templates, line-tool-color, line-tool-width, settings, ...). */
+const TV_FIB_BAR: readonly TvBarItem[] = ['line', 'width'];
 const TV_QUICK_BAR: Readonly<Record<string, readonly TvBarItem[]>> = {
     trendline: LINE_BAR,
     hline: LINE_BAR,

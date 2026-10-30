@@ -43,6 +43,11 @@ export interface FibEntryLine {
     numberAlign: 'left' | 'center' | 'right';
     labelX: number;
     labelY: number;
+    /** The level's ratio and price (TradingView-look Fibs), so the painter can format the price at the scale's step. */
+    ratio?: number;
+    price?: number;
+    /** Where the custom label is anchored (default centered). */
+    labelAlign?: 'left' | 'center' | 'right';
 }
 
 /**

@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, FibLevels, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -817,19 +817,28 @@ export class DrawingPainter {
             ctx.fill();
             ctx.restore();
         }
+        const tvFib = d as { tv?: boolean; trendColor?: string; trendWidth?: number; trendStyle?: 'solid' | 'dashed' | 'dotted'; fontSize?: number };
         if ((d as { trendline?: unknown }).trendline === true) {
-            // TradingView's optional trend line: the swing the levels measure, dashed between the two anchors.
+            // TradingView's optional trend line: the swing the levels measure, dashed between the two anchors
+            // (its own colour, width and style on TradingView-look drawings).
             const pts = d.handlePoints(proj);
             if (pts.length === 2) {
-                this.stroke(ctx, { ...d.style, lineColor: theme.textColor, lineStyle: 'dashed', lineWidth: 1 }, () => {
+                const trend = tvFib.tv
+                    ? { lineColor: tvFib.trendColor || theme.textColor, lineStyle: tvFib.trendStyle ?? 'dashed', lineWidth: tvFib.trendWidth ?? 2 }
+                    : { lineColor: theme.textColor, lineStyle: 'dashed' as const, lineWidth: 1 };
+                this.stroke(ctx, { ...d.style, ...trend }, () => {
                     ctx.moveTo(pts[0]![0], pts[0]![1]);
                     ctx.lineTo(pts[1]![0], pts[1]![1]);
                 });
             }
         }
         ctx.textBaseline = 'middle';
-        const numFont = `${namedFontSize(d.numbersSize)}px ${theme.fontFamily}`;
-        const lblFont = `${namedFontSize(d.labelsSize)}px ${theme.fontFamily}`;
+        // TradingView-look Fibs: one px size (its Font size) for the labels and the level texts.
+        const numFont = `${tvFib.tv ? tvFib.fontSize ?? 12 : namedFontSize(d.numbersSize)}px ${theme.fontFamily}`;
+        const lblFont = `${tvFib.tv ? tvFib.fontSize ?? 12 : namedFontSize(d.labelsSize)}px ${theme.fontFamily}`;
+        if (tvFib.tv && d instanceof FibLevels) {
+            for (const l of lines) if (l.ratio != null && l.price != null && l.numberText) l.numberText = d.levelText(l.ratio, l.price, this.priceTick(d.paneId, Math.abs(l.price)));
+        }
         for (const l of lines) {
             // A level's text set on the line (vertical "middle") breaks the line around it, like TradingView.
             const gaps: Array<Array<[number, number]>> = [];
@@ -843,7 +852,7 @@ export class DrawingPainter {
                     gaps.push([[left - LABEL_GAP_PX, y - half], [left + w + LABEL_GAP_PX, y - half], [left + w + LABEL_GAP_PX, y + half], [left - LABEL_GAP_PX, y + half]]);
                 };
                 onLine(l.numberText, numFont, l.numberX, l.numberY, l.numberAlign);
-                onLine(l.label, lblFont, l.labelX, l.labelY, 'center');
+                onLine(l.label, lblFont, l.labelX, l.labelY, l.labelAlign ?? 'center');
             }
             const line = (): void => this.stroke(ctx, { ...d.style, lineColor: l.color }, () => {
                 ctx.moveTo(l.x1, l.y1);
@@ -857,7 +866,7 @@ export class DrawingPainter {
             if (l.numberText) ctx.fillText(l.numberText, l.numberX, l.numberY);
             if (l.label) {
                 ctx.font = lblFont;
-                ctx.textAlign = 'center';
+                ctx.textAlign = l.labelAlign ?? 'center';
                 ctx.fillText(l.label, l.labelX, l.labelY);
             }
         }

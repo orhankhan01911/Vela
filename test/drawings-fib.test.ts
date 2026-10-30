@@ -37,7 +37,9 @@ describe('drawings/FibRetracement', () => {
         expect(priceAt(0)).toBe(0);
         expect(priceAt(0.618)).toBeCloseTo(61.8, 6);
         expect(priceAt(1)).toBe(100);
-        expect(d.priceRange()).toEqual({ min: 0, max: 100 });
+        // TradingView's shown levels reach 4.236 (2026-10-31): the range runs from level 0 to level 4.236.
+        expect(d.priceRange()!.min).toBe(0);
+        expect(d.priceRange()!.max).toBeCloseTo(423.6, 6);
     });
 
     it('reverse round-trips through serialize and applies through store.update', () => {
@@ -73,7 +75,8 @@ describe('drawings/FibRetracement', () => {
         expect(d.hitTest(25, 50, proj, 4)).toBe(true); // the 0.5 level (price 50 → y 50), x 0..50
         expect(d.hitTest(25, 35, proj, 2)).toBe(false); // between levels
         expect(d.hitTest(120, 50, proj, 4)).toBe(false); // past the level's right end
-        expect(d.priceRange()).toEqual({ min: 0, max: 100 });
+        expect(d.priceRange()!.min).toBeCloseTo(-323.6, 6); // level 4.236, TradingView's highest shown level
+        expect(d.priceRange()!.max).toBe(100);
     });
 
     it('round-trips through serialize', () => {
@@ -85,13 +88,13 @@ describe('drawings/FibRetracement', () => {
     it('exposes editable levels; disabling one drops it from the rendered lines', () => {
         const d = make();
         const levels = d.editableLevels()!;
-        expect(levels.length).toBe(25); // TradingView's list: 7 standard on, 18 extension/negative off
-        expect(levels.filter((l) => l.enabled).length).toBe(7);
+        expect(levels.length).toBe(24); // TradingView's 24 levels: 0 .. 4.236 on (11), the rest off
+        expect(levels.filter((l) => l.enabled).length).toBe(11);
         const i = levels.findIndex((l) => l.ratio === 0.5);
         d.applySettings({ [`levels.${i}.enabled`]: false }); // toggle the 0.5 level off
         const lines = (d as FibLevels).levelLines(proj)!;
         expect(lines.some((l) => l.ratio === 0.5)).toBe(false);
-        expect(lines.length).toBe(6);
+        expect(lines.length).toBe(10);
     });
 
     it('per-level color + label round-trip through serialize (props)', () => {
