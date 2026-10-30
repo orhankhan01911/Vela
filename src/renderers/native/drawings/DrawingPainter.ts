@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP, XPOST_DARK, XPOST_LIGHT } from '../../../core/palette';
@@ -2700,6 +2700,10 @@ export class DrawingPainter {
     /** TradingView's note: a map pin with its tip on the point; the text shows in a plate above the pin while it is
      *  hovered or selected (or always, with `showText`). */
     private paintNote(ctx: CanvasRenderingContext2D, d: Note, proj: Projector, theme: VelaTheme): void {
+        if (d.tv) {
+            this.paintTvNote(ctx, d, proj, theme);
+            return;
+        }
         const pts = d.handlePoints(proj);
         if (!pts.length) return;
         const [ax, ay] = pts[0]!;
@@ -2729,6 +2733,55 @@ export class DrawingPainter {
         const w = tw + padX * 2;
         const bh = lines.length * lh + padY * 2;
         this.paintTextPlate(ctx, d, theme, ax - w / 2, ay - h - 6 - bh, w, bh, lines, lh, padX, padY);
+    }
+
+    /** TradingView's note (its pin renderer): the 24 x 30 pin icon in the Label color, tip on the point; while hovered
+     *  or selected, the text in a 236 px tooltip above it (below when there is no room), a caret toward the pin. */
+    private paintTvNote(ctx: CanvasRenderingContext2D, d: Note, proj: Projector, theme: VelaTheme): void {
+        const pt = d.handlePoints(proj)[0];
+        if (!pt) return;
+        const [x, y] = pt;
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.fillStyle = d.style.lineColor || TV_NOTE_LABEL;
+        if (typeof Path2D === 'function') {
+            ctx.translate(x - TV_NOTE_PIN.w / 2, y - TV_NOTE_PIN.h);
+            ctx.fill(tvPinPath(), 'evenodd');
+        }
+        ctx.restore();
+        if (!handleIdsFor(this.targets).has(d.id)) return;
+        const tip = noteTooltip(ctx, d, proj, theme);
+        if (!tip) return;
+        const dark = isDarkColor(theme.background);
+        ctx.save();
+        if (d.background !== false) {
+            ctx.save();
+            ctx.fillStyle = d.backgroundColor ?? (dark ? TV_NOTE_DARK.back : TV_NOTE_LIGHT.back);
+            ctx.shadowColor = dark ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.2)';
+            ctx.shadowBlur = 4;
+            ctx.shadowOffsetY = 2;
+            noteTooltipPath(ctx, tip, x);
+            ctx.fill();
+            ctx.restore();
+        }
+        if (d.border) {
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = d.borderColor ?? (dark ? TV_NOTE_DARK.border : TV_NOTE_LIGHT.border);
+            noteTooltipPath(ctx, { ...tip, left: tip.left + 0.5, top: tip.top + 0.5, width: tip.width - 1, height: tip.height - 1 }, x);
+            ctx.stroke();
+        }
+        if (d.id !== this.targets.mutedLabel) {
+            ctx.font = tip.font;
+            ctx.fillStyle = d.text?.color ?? (dark ? TV_NOTE_DARK.text : TV_NOTE_LIGHT.text);
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            let ty = tip.top + NOTE_TIP.padV + tip.fs / 2;
+            for (const line of tip.lines) {
+                ctx.fillText(line, tip.left + NOTE_TIP.padH, ty);
+                ty += tip.fs + NOTE_TIP.lineGap;
+            }
+        }
+        ctx.restore();
     }
 
     /** A Price Note: a box joined to the pinned point by a leader + a dot, showing that point's
@@ -3608,6 +3661,101 @@ function formatMachRatio(ratio: number): string {
 
 /** Where a drawing's label paints. With `rotate`, the canvas is rotated by `angle`
  *  around `(cx, cy)` first, and `x`/`top` are in that rotated frame. */
+/** TradingView's note tooltip (its pin renderer constants). */
+const NOTE_TIP = { width: 236, padH: 12, padV: 12, lineGap: 5, margin: 13, radius: 4, caretW: 12, caretH: 10, edge: 10, noCaret: 24 } as const;
+const TV_NOTE_LABEL = '#2962ff'; // palette-exempt: TradingView's blue 500
+const TV_NOTE_DARK = { back: '#1a1a1a', border: '#464646', text: '#dbdbdb' } as const; // palette-exempt: TradingView's cold grays 800 / 700 / 200
+const TV_NOTE_LIGHT = { back: '#ffffff', border: '#ebebeb', text: '#000000' } as const; // palette-exempt: TradingView's white, cold grays 150 / 900
+let pinPath: Path2D | null = null;
+/** TradingView's pin icon (24 x 30), its own path. */
+function tvPinPath(): Path2D {
+    return (pinPath ??= new Path2D('m12 30 .88-.77C20.25 22.73 24 17.07 24 12.09 24 5.04 18.54 0 12 0S0 5.04 0 12.1c0 4.97 3.75 10.64 11.12 17.13L12 30Zm0-13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z'));
+}
+
+export interface NoteTooltip {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    caret: 'top' | 'bottom' | null;
+    lines: string[];
+    font: string;
+    fs: number;
+}
+
+/** Where TradingView puts a note's tooltip: 236 px wide (the pane at most), the text wrapped inside 12 px padding,
+ *  13 px above the pin, or below the point when it would go above the pane; kept 10 px inside the pane's sides; a
+ *  caret toward the pin unless the pin is within 24 px of a side. */
+export function noteTooltip(ctx: CanvasRenderingContext2D, d: Note, proj: Projector, theme: VelaTheme, value?: string): NoteTooltip | null {
+    const pt = d.handlePoints(proj)[0];
+    const text = d.text;
+    if (!pt || !text) return null;
+    const [x, y] = pt;
+    const fs = namedFontSize(text.size);
+    const font = labelFont(text, fs, theme);
+    const width = Math.min(NOTE_TIP.width, proj.width);
+    ctx.save();
+    ctx.font = font;
+    const lines = wrapLines(ctx, value ?? text.value ?? '', width - 2 * NOTE_TIP.padH);
+    ctx.restore();
+    let height = lines.length * fs + 2 * NOTE_TIP.padV;
+    if (lines.length > 1) height += (lines.length - 1) * NOTE_TIP.lineGap;
+    let left = Math.round(x - width / 2);
+    let top = Math.round(y - TV_NOTE_PIN.h - height - NOTE_TIP.margin);
+    const edge = x < NOTE_TIP.noCaret || x + NOTE_TIP.noCaret > proj.width;
+    let caret: 'top' | 'bottom' | null = edge ? null : 'top';
+    const paneTop = proj.paneRect?.(d.paneId)?.top ?? 0;
+    if (top < paneTop + NOTE_TIP.edge) top = y + NOTE_TIP.margin;
+    else if (!edge) caret = 'bottom';
+    if (left < NOTE_TIP.edge) left = NOTE_TIP.edge;
+    else if (left + width + NOTE_TIP.edge > proj.width) left = proj.width - width - NOTE_TIP.edge;
+    return { left, top, width, height, caret, lines, font, fs };
+}
+
+/** TradingView's tooltip outline: radius 4 corners and, on the side facing the pin, a 12 x 10 caret with rounded
+ *  shoulders and tip. */
+function noteTooltipPath(ctx: CanvasRenderingContext2D, t: NoteTooltip, px: number): void {
+    const { left: g, top: T, width: C, height: x } = t;
+    const B = NOTE_TIP.radius;
+    const w = NOTE_TIP.caretW;
+    const m = NOTE_TIP.caretH;
+    const b = px - w / 2;
+    const e = px + w / 2;
+    const P = Math.atan(m / (w / 2));
+    const S = Math.cos(P) * B;
+    const yy = Math.sin(P) * B;
+    const k = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(g, T + B);
+    ctx.arcTo(g, T, g + B, T, B);
+    if (t.caret === 'top') {
+        const o = T - m;
+        ctx.lineTo(b - B, T);
+        ctx.arcTo(b, T, b + S, T - yy, B);
+        ctx.lineTo(px - S * k, o + yy * k);
+        ctx.arcTo(px, o, px + S * k, o + yy * k, S * k);
+        ctx.lineTo(e - S, T - yy);
+        ctx.arcTo(e, T, e + B, T, B);
+    }
+    ctx.lineTo(g + C - B, T);
+    ctx.arcTo(g + C, T, g + C, T + B, B);
+    ctx.lineTo(g + C, T + x - B);
+    ctx.arcTo(g + C, T + x, g + C - B, T + x, B);
+    if (t.caret === 'bottom') {
+        const bot = T + x;
+        const o = bot + m;
+        ctx.lineTo(e + B, bot);
+        ctx.arcTo(e, bot, e - S, bot + yy, B);
+        ctx.lineTo(px + S * k, o - yy * k);
+        ctx.arcTo(px, o, px - S * k, o - yy * k, S * k);
+        ctx.lineTo(b + S, bot + yy);
+        ctx.arcTo(b, bot, b - B, bot, B);
+    }
+    ctx.lineTo(g + B, T + x);
+    ctx.arcTo(g, T + x, g, T + x - B, B);
+    ctx.closePath();
+}
+
 /** TradingView's open arrow at `to` (its getArrowPoints): two arms 5 x the line width back along the line and as far
  *  out to each side (45 degrees), or null when the segment is too short to point anywhere. */
 export function chevronArms(from: readonly [number, number], to: readonly [number, number], lineWidth: number): [[number, number], [number, number]] | null {

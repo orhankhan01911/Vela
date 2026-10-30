@@ -45,7 +45,7 @@ export { TrendAngle } from './types/TrendAngle';
 export { Box } from './types/Box';
 export { PinnedLabel } from './types/PinnedLabel';
 export { TextLabel } from './types/TextLabel';
-export { Note, NOTE_PIN } from './types/Note';
+export { Note, NOTE_PIN, TV_NOTE_PIN } from './types/Note';
 export { PriceLabel } from './types/PriceLabel';
 export { SegmentDrawing } from './types/SegmentDrawing';
 export { ParallelChannel } from './types/ParallelChannel';

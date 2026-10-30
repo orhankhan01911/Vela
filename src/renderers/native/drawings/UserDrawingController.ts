@@ -12,12 +12,12 @@ import type {
     SnapMode,
     ToolbarDefinition,
 } from '../../../core/drawings';
-import { deserializeDrawing, getDrawingType, resetDrawingSettings, shownOnBarMs, resolveAnchors, writeAnchor, Callout, CALLOUT_RADIUS, CALLOUT_MARGIN, Magnifier, PriceAlert, TextLabel, type BarAxis } from '../../../core/drawings';
+import { deserializeDrawing, getDrawingType, resetDrawingSettings, shownOnBarMs, resolveAnchors, writeAnchor, Callout, CALLOUT_RADIUS, CALLOUT_MARGIN, Note, Magnifier, PriceAlert, TextLabel, type BarAxis } from '../../../core/drawings';
 import type { Unsubscribe } from '../../../core/util/types';
 import { contrastColor, namedFontSize, labelLineHeight, safeCssColor, safeCssPx, TEXT_FRAME_INSET, TEXT_FRAME_RISE } from '../../shared/drawing-geometry';
 import { withAlpha } from '../core/chartConfig';
 import { blendOver, splitColor } from '../../../ui/components/color-picker';
-import { DrawingPainter, handleIdsFor, wrapLines, type PaintTargets } from './DrawingPainter';
+import { DrawingPainter, handleIdsFor, noteTooltip, wrapLines, type PaintTargets } from './DrawingPainter';
 import { DrawingInteraction } from './DrawingInteraction';
 import { DrawingSettingsPopup, type PopupAnchor } from './DrawingSettingsPopup';
 import { DrawingToolbar, TOOLBAR_WIDTH, TOOLBAR_COLLAPSED_WIDTH } from './DrawingToolbar';
@@ -39,10 +39,10 @@ const CARET_ROOM = 8;
 const EDITOR_BORDER = 1;
 
 /** The drawings whose text is typed straight onto the chart rather than through the settings popup. */
-type InlineEditable = Callout | TextLabel;
+type InlineEditable = Callout | TextLabel | Note;
 
 function isInlineEditable(d: Drawing | null | undefined): d is InlineEditable {
-    return d instanceof Callout || d instanceof TextLabel;
+    return d instanceof Callout || d instanceof TextLabel || (d instanceof Note && d.tv === true); // TradingView's note types in its tooltip
 }
 
 /** What the controller needs from the native renderer (coords + theme + dpr). */
@@ -859,6 +859,19 @@ export class UserDrawingController implements IDrawingsRendererPort {
         const fs = namedFontSize(text?.size ?? 'normal');
         const font = `${text?.italic ? 'italic ' : ''}${text?.bold ? 'bold ' : ''}${fs}px ${theme.fontFamily}`;
         const base = 'position:absolute;z-index:24;box-sizing:border-box;resize:none;overflow:hidden;margin:0;outline:none;pointer-events:auto;text-align:left;';
+        if (d instanceof Note) {
+            // TradingView's note: typed inside its tooltip, where the painter puts the text.
+            const tip = this.ctx ? noteTooltip(this.ctx, d, proj, theme, value) : null;
+            if (!tip) return null;
+            const dark = contrastColor(theme.background) === '#ffffff';
+            const back = d.background !== false ? safeCssColor(d.backgroundColor, dark ? '#1a1a1a' : '#ffffff') : 'transparent'; // palette-exempt: TradingView's note tooltip
+            const ink = safeCssColor(d.text?.color, dark ? '#dbdbdb' : '#000000'); // palette-exempt: TradingView's note text
+            return (
+                base +
+                `left:${tip.left}px;top:${tip.top}px;width:${tip.width}px;height:${tip.height}px;padding:${12 - EDITOR_BORDER}px;` +
+                `border:${EDITOR_BORDER}px solid transparent;border-radius:4px;background:${back};color:${ink};font:${tip.font};line-height:${tip.fs + 5}px;`
+            );
+        }
         if (d instanceof Callout && d.tv) {
             // TradingView's bubble, measured as the painter measures it: the text 10 px in (corner radius 8 +
             // margin 2) from the bubble's edge, radius 8, its border width, one font size per line.
@@ -1488,7 +1501,8 @@ export class UserDrawingController implements IDrawingsRendererPort {
             // live theme's plot background, stored on the drawing itself — so a later theme
             // or background change never recolors what is already placed. A color the user
             // chose (or a deserialized document carries) always passes through untouched.
-            if (i.doc.text && i.doc.text.color === undefined) {
+            // (TradingView's note keeps its theme's text color: left unset.)
+            if (i.doc.text && i.doc.text.color === undefined && !(i.doc.type === 'note' || i.doc.type === 'anchorednote')) {
                 i.doc.text = { ...i.doc.text, color: contrastColor(this.deps.theme().background) };
             }
             const before = new Set(this.drawings.map((d) => d.id));

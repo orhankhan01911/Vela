@@ -37,14 +37,14 @@ describe('drawings/annotations (Wave 13)', () => {
         }
     });
 
-    it('Note exposes free text + fill', () => {
-        const paths = mk('note', 1).schema().fields.map((f) => f.path);
+    it('Note exposes free text + fill (a note saved before; TradingView\'s is in drawings-note-tv)', () => {
+        const paths = createDrawing('note', { paneId: 'price', anchors: [{ time: 0, price: 1 }], props: {} })!.schema().fields.map((f) => f.path);
         expect(paths).toContain('text.value');
         expect(paths).toContain('style.fillColor');
     });
 
     it('seeds distinct placeholder text per free-text tool', () => {
-        expect(mk('note', 1).text?.value).toBe('Note');
+        expect(mk('note', 1).text?.value).toBe(''); // TradingView's note: typed in place
         expect(mk('comment', 2).text?.value).toBe('Comment');
         expect(mk('signpost', 2).text?.value).toBe('Signpost');
     });

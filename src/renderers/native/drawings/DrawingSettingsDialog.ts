@@ -14,6 +14,7 @@ import {
     DateRange,
     MeasureBox,
     Freehand,
+    Note,
     TextLabel,
     Callout,
     Path,
@@ -292,6 +293,13 @@ export class DrawingSettingsDialog {
         }
         if (drawing instanceof Box && drawing.tv) {
             this.buildRectangleStyle(grid, drawing, actions);
+            return;
+        }
+        if (drawing instanceof Note && drawing.tv) {
+            // TradingView's note: one Label row, the pin's color.
+            const row = fieldRow({ label: 'Label', control: [this.colorControl(drawing, 'style.lineColor', actions, drawing.style.lineColor || DEFAULT_DRAWING_COLOR)], fit: true });
+            row.dataset.role = 'label';
+            grid.appendChild(row);
             return;
         }
         if (drawing instanceof Highlighter && drawing.tv) {
@@ -726,6 +734,16 @@ export class DrawingSettingsDialog {
             });
             ta.el.classList.add('vela-field-span');
             grid.appendChild(ta.el);
+        }
+        if (drawing instanceof Note && drawing.tv) {
+            // TradingView's note: the tooltip's Background and Border (a switch and a color each); unset colors are
+            // the theme's.
+            const dark = isDarkBackground(this.theme.background);
+            const bg = fieldRow({ label: 'Background', toggle: { id: uid(), checked: drawing.background !== false, onChange: (v) => actions.patch({ background: v }) }, control: [this.colorControl(drawing, 'backgroundColor', actions, drawing.backgroundColor ?? (dark ? NOTE_DARK_BACK : NOTE_LIGHT_BACK))], fit: true });
+            bg.dataset.role = 'background';
+            const border = fieldRow({ label: 'Border', toggle: { id: uid(), checked: !!drawing.border, onChange: (v) => actions.patch({ border: v }) }, control: [this.colorControl(drawing, 'borderColor', actions, drawing.borderColor ?? (dark ? NOTE_DARK_BORDER : NOTE_LIGHT_BORDER))], fit: true });
+            border.dataset.role = 'border';
+            grid.append(bg, border);
         }
         if (drawing instanceof TextLabel && drawing.tv) {
             // TradingView's text: Background and Border (a switch and a color each), then Text wrap.
@@ -1895,6 +1913,20 @@ function rangeSlider(min: number, max: number, get: () => { from: number; to: nu
     wrap.append(fill, a, b);
     paint();
     return wrap;
+}
+
+/** TradingView's note tooltip colors (cold grays 800 / 700 on dark, white / gray 150 on light). */
+const NOTE_DARK_BACK = '#1a1a1a'; // palette-exempt: TradingView's cold gray 800
+const NOTE_DARK_BORDER = '#464646'; // palette-exempt: TradingView's cold gray 700
+const NOTE_LIGHT_BACK = '#ffffff'; // palette-exempt: TradingView's white
+const NOTE_LIGHT_BORDER = '#ebebeb'; // palette-exempt: TradingView's cold gray 150
+
+/** True for a dark chart background (luma under half). */
+function isDarkBackground(c: string): boolean {
+    const m = /^#([0-9a-f]{6})/i.exec(c);
+    if (!m) return true;
+    const n = parseInt(m[1]!, 16);
+    return 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) < 128;
 }
 
 /** A one-thumb 0-100 slider (TradingView's background opacity), in the range slider's look. */

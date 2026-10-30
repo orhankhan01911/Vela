@@ -365,7 +365,8 @@ registerDrawingType({
     label: 'Note',
     icon: NOTE_ICON,
     coversSeries: true, // text over the candles like TradingView's: a candle never paints over the words
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
+    // TradingView's note: the pin (Label) in its blue.
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
     create: (init) => new Note(init),
 });
 

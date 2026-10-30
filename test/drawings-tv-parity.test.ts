@@ -115,10 +115,11 @@ describe('drawing settings TradingView has', () => {
     });
 
     it('note: a map pin whose tip is the point; text shows on hover unless "Always show text"', () => {
-        const n = createDrawing('note', { paneId: 'price', anchors: [{ time: 50, price: 50 }] })!;
+        // A note saved before TradingView's look (props); TradingView's own (no "Always show text") is in drawings-note-tv.
+        const n = createDrawing('note', { paneId: 'price', anchors: [{ time: 50, price: 50 }], props: {} })!;
         expect(n.hitTest(50, 50 - NOTE_PIN.h + 4, proj(), 0)).toBe(true); // the pin head
         expect(n.hitTest(90, 45, proj(), 0)).toBe(false); // no text plate to hit while hidden
-        expect(paths('note', 1)).toContain('showText');
+        expect(n.schema().fields.map((f) => f.path)).toContain('showText');
         expect(createDrawing('note', { paneId: 'price', anchors: [{ time: 50, price: 50 }], props: { showText: true } })!.serialize().props).toEqual({ showText: true });
     });
 
