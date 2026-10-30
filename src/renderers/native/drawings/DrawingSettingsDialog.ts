@@ -15,6 +15,7 @@ import {
     MeasureBox,
     Freehand,
     TextLabel,
+    Callout,
     Path,
     Box,
     Highlighter,
@@ -138,12 +139,12 @@ export class DrawingSettingsDialog {
         const custom = drawing instanceof PositionTool || drawing instanceof FixedRangeVolumeProfile || drawing instanceof FixedRangeTpoProfile;
         if (custom) tabs.push('inputs');
         // TradingView's text: the Text tab and Visibility only.
-        const tvText = drawing instanceof TextLabel && drawing.tv === true;
+        const tvText = (drawing instanceof TextLabel || drawing instanceof Callout) && drawing.tv === true;
         if (!tvText && (drawing.editableLevels() || styleFields(drawing).length > 0)) tabs.push('style');
         if (drawing.schema().fields.some((f) => f.path.startsWith('text.'))) tabs.push('text');
         // TradingView's brush, highlighter and path have no Coordinates tab.
         const brush = (drawing instanceof Freehand || drawing instanceof Highlighter || drawing instanceof Path) && drawing.tv;
-        if (!(drawing instanceof PositionTool) && !brush && !tvText && drawing.anchors.length > 0) tabs.push('coordinates');
+        if (!(drawing instanceof PositionTool) && !brush && !(tvText && drawing instanceof TextLabel) && drawing.anchors.length > 0) tabs.push('coordinates');
         tabs.push('visibility');
         return tabs;
     }
@@ -731,6 +732,21 @@ export class DrawingSettingsDialog {
             const bg = fieldRow({ label: 'Background', toggle: { id: uid(), checked: !!drawing.background, onChange: (v) => actions.patch({ background: v }) }, control: [this.colorControl(drawing, 'backgroundColor', actions, drawing.backgroundColor ?? DEFAULT_DRAWING_COLOR)], fit: true });
             bg.dataset.role = 'background';
             const border = fieldRow({ label: 'Border', toggle: { id: uid(), checked: !!drawing.border, onChange: (v) => actions.patch({ border: v }) }, control: [this.colorControl(drawing, 'borderColor', actions, drawing.borderColor ?? DEFAULT_DRAWING_COLOR)], fit: true });
+            border.dataset.role = 'border';
+            const wrap = fieldRow({ label: 'Text wrap', bool: true, toggle: { id: uid(), checked: !!drawing.wordWrap, onChange: (v) => actions.patch({ wordWrap: v }) } });
+            wrap.dataset.role = 'wrap';
+            grid.append(bg, border, wrap);
+        }
+        if (drawing instanceof Callout && drawing.tv) {
+            // TradingView's callout: Background (a color), Border (color and width), then Text wrap.
+            const bg = fieldRow({ label: 'Background', control: [this.colorControl(drawing, 'style.fillColor', actions, drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR)], fit: true });
+            bg.dataset.role = 'background';
+            const line = this.pathLineButton(
+                { color: drawing.style.lineColor || DEFAULT_DRAWING_COLOR, width: drawing.style.lineWidth ?? 2, style: 'solid' },
+                { color: 'style.lineColor', width: 'style.lineWidth' },
+                actions,
+            );
+            const border = fieldRow({ label: 'Border', control: [line], fit: true });
             border.dataset.role = 'border';
             const wrap = fieldRow({ label: 'Text wrap', bool: true, toggle: { id: uid(), checked: !!drawing.wordWrap, onChange: (v) => actions.patch({ wordWrap: v }) } });
             wrap.dataset.role = 'wrap';

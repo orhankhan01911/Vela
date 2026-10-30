@@ -198,10 +198,10 @@ function legacyArrowMarker(doc: SerializedDrawing): SerializedDrawing {
     return doc.type === 'arrowmarker' && doc.props === undefined ? { ...doc, props: {} } : doc;
 }
 
-/** Brush and highlighter strokes, rectangles, paths and texts became TradingView's (2026-10-30). One saved before with no props:
+/** Brush and highlighter strokes, rectangles, paths, texts and callouts became TradingView's (2026-10-30). One saved before with no props:
  *  give it an empty bag so it keeps its look (a fresh stroke has no props and starts as TradingView's). */
 function legacyStroke(doc: SerializedDrawing): SerializedDrawing {
-    return (doc.type === 'freehand' || doc.type === 'highlighter' || doc.type === 'box' || doc.type === 'path' || doc.type === 'text') && doc.props === undefined ? { ...doc, props: {} } : doc;
+    return (doc.type === 'freehand' || doc.type === 'highlighter' || doc.type === 'box' || doc.type === 'path' || doc.type === 'text' || doc.type === 'callout') && doc.props === undefined ? { ...doc, props: {} } : doc;
 }
 
 /** Ellipses became TradingView's tilted three-point ellipse. A record saved before has two corners and no `axis`
@@ -348,7 +348,8 @@ registerDrawingType({
     label: 'Callout',
     icon: CALLOUT_ICON,
     coversSeries: true, // text over the candles like TradingView's: a candle never paints over the words
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
+    // TradingView's callout: its sky blue 700 border (2 px) and the same at 70 % behind the text.
+    defaultStyle: { lineColor: '#0097a7', lineWidth: 2, lineStyle: 'solid', fillColor: '#0097a7b3' }, // palette-exempt: TradingView's sky blue 700
     create: (init) => new Callout(init),
 });
 

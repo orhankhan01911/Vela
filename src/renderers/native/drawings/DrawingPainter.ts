@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP, XPOST_DARK, XPOST_LIGHT } from '../../../core/palette';
@@ -2488,7 +2488,79 @@ export class DrawingPainter {
     /** Paint a callout as a speech bubble: a rounded text box with a tapered triangular tail
      *  flush on the box edge facing the target, its apex at the target point. */
     private paintCallout(ctx: CanvasRenderingContext2D, d: Callout, proj: Projector, theme: VelaTheme): void {
+        if (d.tv) {
+            this.paintTvCallout(ctx, d, proj, theme);
+            return;
+        }
         this.paintBubble(ctx, d, proj, theme, 5); // squared-off corners
+    }
+
+    /** TradingView's callout (its CalloutRenderer): a bubble of corner radius 8 around the text and its 2 px margin,
+     *  centred on the box point; the side or corner facing the target becomes a wedge to it (a wedge 16 px wide in
+     *  the middle of a side when the target is level with the bubble, else from the corner); stroked, then filled
+     *  over; text left-aligned, one font size per line. No tail when the target is inside the bubble. */
+    private paintTvCallout(ctx: CanvasRenderingContext2D, d: Callout, proj: Projector, theme: VelaTheme): void {
+        const p = d.points(proj);
+        const text = d.text;
+        if (!p || !text) return;
+        const fs = namedFontSize(text.size);
+        ctx.save();
+        ctx.font = labelFont(text, fs, theme);
+        const wrap = d.wrapPx();
+        const lines = wrap == null ? (text.value ?? '').split('\n') : wrapLines(ctx, text.value ?? '', wrap);
+        const tw = wrap ?? Math.max(0, ...lines.map((l) => ctx.measureText(l).width));
+        const o = CALLOUT_RADIUS;
+        const r = CALLOUT_MARGIN;
+        const W = tw + 2 * r + 2 * o;
+        const H = fs * lines.length + 2 * r + 2 * o;
+        const c = p[1][0] - W / 2;
+        const top = p[1][1] - H / 2;
+        const ex = p[0][0] - c;
+        const ey = p[0][1] - top;
+        const ix = W / 2;
+        const iy = H / 2;
+        const wide = tw + 2 * r > 2 * o;
+        const tall = fs * lines.length + 2 * r > 2 * o;
+        let at = p[0][0] > c + W ? 20 : p[0][0] > c ? 10 : 0;
+        at += p[0][1] > top + H ? 2 : p[0][1] > top ? 1 : 0;
+        ctx.translate(c, top);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'miter';
+        ctx.setLineDash([]);
+        ctx.strokeStyle = d.style.lineColor;
+        ctx.lineWidth = d.style.lineWidth;
+        ctx.beginPath();
+        ctx.moveTo(o, 0);
+        if (at === 10) {
+            if (wide) { ctx.lineTo(ix - o, 0); ctx.lineTo(ex, ey); ctx.lineTo(ix + o, 0); ctx.lineTo(W - o, 0); }
+            else { ctx.lineTo(ex, ey); ctx.lineTo(W - o, 0); }
+        } else ctx.lineTo(W - o, 0);
+        if (at === 20) { ctx.lineTo(ex, ey); ctx.lineTo(W, o); } else ctx.arcTo(W, 0, W, o, o);
+        if (at === 21) {
+            if (tall) { ctx.lineTo(W, iy - o); ctx.lineTo(ex, ey); ctx.lineTo(W, iy + o); ctx.lineTo(W, H - o); }
+            else { ctx.lineTo(ex, ey); ctx.lineTo(W, H - o); }
+        } else ctx.lineTo(W, H - o);
+        if (at === 22) { ctx.lineTo(ex, ey); ctx.lineTo(W - o, H); } else ctx.arcTo(W, H, W - o, H, o);
+        if (at === 12) {
+            if (wide) { ctx.lineTo(ix + o, H); ctx.lineTo(ex, ey); ctx.lineTo(ix - o, H); ctx.lineTo(o, H); }
+            else { ctx.lineTo(ex, ey); ctx.lineTo(o, H); }
+        } else ctx.lineTo(o, H);
+        if (at === 2) { ctx.lineTo(ex, ey); ctx.lineTo(0, H - o); } else ctx.arcTo(0, H, 0, H - o, o);
+        if (at === 1) {
+            if (tall) { ctx.lineTo(0, iy + o); ctx.lineTo(ex, ey); ctx.lineTo(0, iy - o); ctx.lineTo(0, o); }
+            else { ctx.lineTo(ex, ey); ctx.lineTo(0, o); }
+        } else ctx.lineTo(0, o);
+        if (at === 0) { ctx.lineTo(ex, ey); ctx.lineTo(o, 0); } else ctx.arcTo(0, 0, o, 0, o);
+        if (d.style.lineWidth > 0) ctx.stroke();
+        ctx.fillStyle = d.style.fillColor ?? theme.background;
+        ctx.fill();
+        if (d.id !== this.targets.mutedLabel) {
+            ctx.fillStyle = text.color ?? theme.textColor;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'bottom';
+            lines.forEach((line, i) => ctx.fillText(line, o + r, o + r + fs * (i + 1)));
+        }
+        ctx.restore();
     }
 
     /** TradingView's comment: a rounded bubble standing on its point, the bottom-left corner the sharp tip on it.
@@ -3405,7 +3477,7 @@ function formatPriceTag(p: number): string {
 
 /** Split text into lines no wider than `width` px at the context's current font, breaking at spaces (a single word
  *  longer than the width keeps its own line); explicit newlines still break. */
-function wrapLines(ctx: CanvasRenderingContext2D, text: string, width: number): string[] {
+export function wrapLines(ctx: CanvasRenderingContext2D, text: string, width: number): string[] {
     const out: string[] = [];
     for (const para of text.split('\n')) {
         let line = '';

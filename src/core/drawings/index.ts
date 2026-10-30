@@ -111,7 +111,7 @@ export { FibArcs } from './types/FibArcs';
 export { FibWedge } from './types/FibWedge';
 export { FibSpiral } from './types/FibSpiral';
 export { CalloutBase } from './types/CalloutBase';
-export { Callout } from './types/Callout';
+export { Callout, CALLOUT_RADIUS, CALLOUT_MARGIN } from './types/Callout';
 export { PriceNote } from './types/PriceNote';
 export { Comment } from './types/Comment';
 export { Signpost, SIGNPOST_R } from './types/Signpost';

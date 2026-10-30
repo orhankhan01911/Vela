@@ -12,12 +12,12 @@ import type {
     SnapMode,
     ToolbarDefinition,
 } from '../../../core/drawings';
-import { deserializeDrawing, getDrawingType, resetDrawingSettings, shownOnBarMs, resolveAnchors, writeAnchor, Callout, Magnifier, PriceAlert, TextLabel, type BarAxis } from '../../../core/drawings';
+import { deserializeDrawing, getDrawingType, resetDrawingSettings, shownOnBarMs, resolveAnchors, writeAnchor, Callout, CALLOUT_RADIUS, CALLOUT_MARGIN, Magnifier, PriceAlert, TextLabel, type BarAxis } from '../../../core/drawings';
 import type { Unsubscribe } from '../../../core/util/types';
 import { contrastColor, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE } from '../../shared/drawing-geometry';
 import { withAlpha } from '../core/chartConfig';
 import { blendOver, splitColor } from '../../../ui/components/color-picker';
-import { DrawingPainter, handleIdsFor, type PaintTargets } from './DrawingPainter';
+import { DrawingPainter, handleIdsFor, wrapLines, type PaintTargets } from './DrawingPainter';
 import { DrawingInteraction } from './DrawingInteraction';
 import { DrawingSettingsPopup, type PopupAnchor } from './DrawingSettingsPopup';
 import { DrawingToolbar, TOOLBAR_WIDTH, TOOLBAR_COLLAPSED_WIDTH } from './DrawingToolbar';
@@ -844,7 +844,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
         if (!d) return; // deleted from under the editor
         d.applySettings({ 'text.value': value });
         this.render();
-        if (d instanceof TextLabel && value.trim() === '') {
+        if ((d instanceof TextLabel || (d instanceof Callout && d.tv)) && value.trim() === '') {
             this.clearSelection(); // its settings popup would outlive the drawing
             this.emit({ kind: 'delete', ids: [d.id] });
         } else if (value !== ed.stored) this.emit({ kind: 'edit', doc: d.serialize() });
@@ -859,6 +859,34 @@ export class UserDrawingController implements IDrawingsRendererPort {
         const fs = namedFontSize(text?.size ?? 'normal');
         const font = `${text?.italic ? 'italic ' : ''}${text?.bold ? 'bold ' : ''}${fs}px ${theme.fontFamily}`;
         const base = 'position:absolute;z-index:24;box-sizing:border-box;resize:none;overflow:hidden;margin:0;outline:none;pointer-events:auto;text-align:left;';
+        if (d instanceof Callout && d.tv) {
+            // TradingView's bubble, measured as the painter measures it: the text 10 px in (corner radius 8 +
+            // margin 2) from the bubble's edge, radius 8, its border width, one font size per line.
+            const p = d.points(proj);
+            if (!p) return null;
+            const wrap = d.wrapPx();
+            let lines = value.split('\n');
+            let tw = wrap ?? 0;
+            if (this.ctx) {
+                this.ctx.save();
+                this.ctx.font = font;
+                if (wrap != null) lines = wrapLines(this.ctx, value, wrap);
+                else tw = Math.max(0, ...lines.map((l) => this.ctx!.measureText(l).width));
+                this.ctx.restore();
+            }
+            const rows = lines.length;
+            const pad = 2 * (CALLOUT_RADIUS + CALLOUT_MARGIN);
+            const w = Math.ceil(tw) + pad;
+            const h = rows * fs + pad;
+            const lw = d.style.lineWidth ?? 2;
+            const fill = d.style.fillColor ?? theme.background;
+            return (
+                base +
+                `left:${Math.round(p[1][0] - w / 2)}px;top:${Math.round(p[1][1] - h / 2)}px;width:${w}px;height:${h}px;` +
+                `padding:${Math.max(0, pad / 2 - lw)}px;border-radius:${CALLOUT_RADIUS}px;border:${lw}px solid ${d.style.lineColor ?? theme.borderColor};line-height:${fs}px;` +
+                `background:${blendOver(fill, theme.background, splitColor(fill).alpha)};color:${text?.color ?? theme.textColor};font:${font};`
+            );
+        }
         if (d instanceof Callout) {
             const box = d.box(proj);
             if (!box) return null;
