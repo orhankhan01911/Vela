@@ -147,10 +147,10 @@ describe('drawings/position tools', () => {
         const d = createDrawing('position', { paneId: 'price', anchors: [{ time: 0, price: 50 }, { time: 5 * HR, price: 40 }, { time: 10 * HR, price: 70 }] })! as PositionTool;
         expect(d.targetBoxLabel()).toBe('Target: 70.00 (40.00%) 20.00, Amount: 200.00');
         expect(d.stopBoxLabel()).toBe('Stop: 40.00 (20.00%) 10.00, Amount: 100.00');
-        expect(d.centerBoxLines()).toEqual(['Long, Qty: 10, Risk: $100.00', 'Risk/Reward Ratio: 2.00']);
+        expect(d.centerBoxLines()).toEqual(['Long, Qty: 10, Risk: $100.00', 'Risk/reward ratio: 2.00']);
         d.applySettings({ showPrices: false, showLossSize: false });
         expect(d.targetBoxLabel()).toBe('Target: (40.00%) 20.00, Amount: 200.00');
-        expect(d.centerBoxLines()).toEqual(['Risk/Reward Ratio: 2.00']);
+        expect(d.centerBoxLines()).toEqual(['Risk/reward ratio: 2.00']);
         // thousands separators on big prices
         const b = createDrawing('position', { paneId: 'price', anchors: [{ time: 0, price: 82000 }, { time: 5 * HR, price: 81000 }, { time: 10 * HR, price: 84000 }] })! as PositionTool;
         expect(b.targetBoxLabel()).toBe('Target: 84,000.00 (2.44%) 2,000.00, Amount: 200.00');
@@ -227,8 +227,8 @@ describe('drawings/position tools', () => {
 
     it('round-trips risk settings, display toggles, zone colors + text styling through serialize', () => {
         const d = createDrawing('position', { paneId: 'price', anchors: [{ time: 0, price: 50 }, { time: 5 * HR, price: 40 }, { time: 10 * HR, price: 70 }] })! as PositionTool;
-        expect(d.profitColor).toBe('#0ecb81');
-        expect(d.lossColor).toBe('#f6465d');
+        expect(d.profitColor).toBe('#089981');
+        expect(d.lossColor).toBe('#f23645');
         d.applySettings({
             riskPercent: 1.5,
             accountBalance: 25_000,
@@ -265,9 +265,10 @@ describe('drawings/position tools', () => {
             'entryPrice', 'stopPrice', 'targetPrice',
             'showText', 'showHeader', 'showPrices', 'showLossSize', 'showTargetLabel', 'showStopLabel',
             'profitColor', 'lossColor',
-            'text.color', 'text.size',
+            'text.color', 'fontSize',
         ]));
         expect(paths).not.toContain('tickSize');
+        expect(paths).not.toContain('text.size'); // px size (fontSize), not small/large
     });
 });
 

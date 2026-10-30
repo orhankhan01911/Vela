@@ -213,6 +213,50 @@ describe('settings dialog', () => {
         expect(DrawingSettingsDialog.tabsFor(label)).toContain('text');
     });
 
+    it('the position tools take a px text size (no Small/Normal/Large/Huge), clamped to whole px', async () => {
+        for (const type of ['long-position', 'short-position', 'position'] as const) {
+            const pos = createDrawing(type, { paneId: 'price', anchors: [{ time: 0, price: 100 }, { time: 10 * H, price: 90 }, { time: 10 * H, price: 120 }] })!;
+            const s = setup(pos);
+            expect(s.tips()).not.toContain('Text size'); // no named-size dropdown on the quick bar
+            s.gear().click();
+            await settled();
+            s.tab('Text').click();
+            await settled();
+            const text = s.body('text');
+            expect(text.textContent).not.toMatch(/Small|Normal|Large|Huge/);
+            const input = text.querySelector<HTMLInputElement>('input[type="number"]')!;
+            expect(input).not.toBeNull();
+            expect(input.value).toBe('12'); // TradingView's default
+            commit(input, '17');
+            expect((s.live() as unknown as { fontSize: number }).fontSize).toBe(17);
+            commit(input, '200');
+            expect((s.live() as unknown as { fontSize: number }).fontSize).toBe(72);
+            commit(input, '2');
+            expect((s.live() as unknown as { fontSize: number }).fontSize).toBe(6);
+            s.popup.close?.();
+            document.body.replaceChildren();
+        }
+    });
+
+    it('the position Style tab has a Trade line switch, off by default, that turns the dashed line on', async () => {
+        const pos = createDrawing('long-position', { paneId: 'price', anchors: [{ time: 0, price: 100 }, { time: 10 * H, price: 90 }, { time: 10 * H, price: 120 }] })!;
+        const s = setup(pos);
+        s.gear().click();
+        await settled();
+        s.tab('Style').click();
+        await settled();
+        const style = s.body('style');
+        expect(style.textContent).toContain('Trade line');
+        expect(s.body('inputs').textContent).not.toContain('Trade line'); // only on Style
+        const sws = [...style.querySelectorAll<HTMLElement>('[role="switch"], input[type="checkbox"]')];
+        expect(sws.length).toBe(1); // the Trade line switch is the Style tab's only switch
+        const sw = sws[0]!;
+        expect((s.live() as unknown as { showTradeLine: boolean }).showTradeLine).toBe(false);
+        (sw as HTMLElement).click();
+        await settled();
+        expect((s.live() as unknown as { showTradeLine: boolean }).showTradeLine).toBe(true);
+    });
+
     it('the regression channel quick bar keeps one color; its other settings are in the dialog', async () => {
         const reg = createDrawing('regressionchannel', { paneId: 'price', anchors: [{ time: 0, price: 100 }, { time: 10, price: 110 }] })!;
         const s = setup(reg);

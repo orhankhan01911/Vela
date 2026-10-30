@@ -987,6 +987,8 @@ registerDrawingType({
 });
 
 // ── positions ──
+/** TradingView's position entry line: gray, not the drawing accent. */
+const POSITION_ENTRY_COLOR = '#808080'; // palette-exempt: TradingView position entry line
 // Shaded target zone above the entry edge, hollow stop zone below it.
 // Target and stop levels, each from a left anchor handle, with an "L" (long) between them.
 const POSITION_ICON = svg24(
@@ -1009,7 +1011,7 @@ registerDrawingType({
     // Starts over the candles like TradingView: its zones are translucent, and its stats labels
     // must never be painted over by a candle (a misread target/stop is a trading loss).
     coversSeries: true,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    defaultStyle: { lineColor: POSITION_ENTRY_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new LongPositionTool(init),
 });
 
@@ -1019,7 +1021,7 @@ registerDrawingType({
     label: 'Short Position',
     icon: SHORT_POSITION_ICON,
     coversSeries: true,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    defaultStyle: { lineColor: POSITION_ENTRY_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new ShortPositionTool(init),
 });
 
@@ -1029,7 +1031,7 @@ registerDrawingType({
     label: 'Long/Short Position',
     icon: POSITION_ICON,
     coversSeries: true,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    defaultStyle: { lineColor: POSITION_ENTRY_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new PositionTool(init),
 });
 

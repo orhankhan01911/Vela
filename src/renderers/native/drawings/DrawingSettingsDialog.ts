@@ -286,6 +286,9 @@ export class DrawingSettingsDialog {
         const style: HTMLElement[] = [];
         if (has('text.color')) style.push(this.colorControl(drawing, 'text.color', actions, text?.color || this.theme.textColor));
         if (has('text.size')) style.push(this.selectControl('text.size', SIZE_OPTIONS, text?.size ?? 'normal', actions));
+        // A px size instead of small/large (the position tools, like TradingView's).
+        const px = drawing.schema().fields.find((f) => f.path === 'fontSize' && f.kind === 'number');
+        if (px) style.push(this.numberControl(drawing, px, actions));
         if (style.length) grid.appendChild(fieldRow({ label: 'Font', control: style, fit: true }));
         if (has('text.bold')) grid.appendChild(fieldRow({ label: 'Bold', bool: true, toggle: { checked: !!text?.bold, onChange: (v) => actions.patch({ 'text.bold': v }) } }));
         if (has('text.italic')) grid.appendChild(fieldRow({ label: 'Italic', bool: true, toggle: { checked: !!text?.italic, onChange: (v) => actions.patch({ 'text.italic': v }) } }));
@@ -1105,6 +1108,11 @@ function pick(d: SerializedDrawing): Pick<SerializedDrawing, 'style' | 'text' | 
     return { style: d.style, text: d.text, props: d.props };
 }
 
+/** A position tool's line switch (its dashed trade line): a Style-tab setting, not an Inputs one. */
+function positionLineSwitch(drawing: Drawing, f: SettingsField): boolean {
+    return drawing instanceof PositionTool && f.kind === 'boolean' && f.group === 'line';
+}
+
 /** The look settings of a drawing's schema (everything but its text, which has its own tab). */
 function styleFields(drawing: Drawing): SettingsField[] {
     // Sizing / profile tools edit their numbers on the Inputs tab: their Style tab only takes colors and line styles.
@@ -1114,7 +1122,7 @@ function styleFields(drawing: Drawing): SettingsField[] {
             !f.path.startsWith('text.') &&
             !SKIP_PATHS.has(f.path) &&
             !(f.kind === 'select' && !f.options?.length) &&
-            !(custom && (f.group === 'behavior' || (f.kind !== 'color' && f.kind !== 'lineStyle'))),
+            !(custom && (f.group === 'behavior' || (f.kind !== 'color' && f.kind !== 'lineStyle' && !positionLineSwitch(drawing, f)))),
     );
 }
 

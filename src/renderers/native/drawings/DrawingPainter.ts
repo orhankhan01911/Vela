@@ -15,6 +15,9 @@ const HANDLE_RADIUS = 4.5; // px radius of the round drag handles
 const HANDLE_BORDER = DEFAULT_DRAWING_COLOR;
 const HANDLE_FILL = withAlpha(NEUTRAL, 0.55);
 const GHOST_ALPHA = 0.7;
+/** TradingView's handle ring color and half-size (the position tools wear TradingView's handles). */
+const TV_HANDLE_RING = '#2962ff'; // palette-exempt: TradingView drawing-handle blue
+const TV_HANDLE_HALF = 5;
 /** Price-chip text size without a renderer (`axisLabel` null): the chart's default axis size. */
 const AXIS_CHIP_FONT_PX = 12;
 /** Info badges (regression R², measure deltas) float over CHART CONTENT of any color, so
@@ -67,6 +70,8 @@ const ALERT_AXIS_OVERFLOW_PX = 120;
 export class DrawingPainter {
     /** The current `paintAll` call's interaction state, visible to the per-type painters. */
     private targets: PaintTargets = {};
+    /** The chart background of the last paint: TradingView-style handles are filled with it. */
+    private handleBg = '#000000'; // palette-exempt: placeholder until the first paint passes the theme
 
     /** The chart's active series LOOK — style + resolved series colors — pushed by the
      *  controller before each paint. The magnifier's inset mirrors both: candles/bars/line/
@@ -145,6 +150,7 @@ export class DrawingPainter {
         targets: PaintTargets = {},
     ): void {
         this.targets = targets;
+        this.handleBg = theme.background;
         for (const d of drawings) {
             if (!d.visible || !shownOnBarMs(d.intervals, this.barMs)) continue;
             this.paintClipped(ctx, d, proj, () => this.paintOne(ctx, d, proj, theme));
@@ -160,7 +166,8 @@ export class DrawingPainter {
         if (highlightIds.size === 0) return;
         for (const d of drawings) {
             if (d.visible && highlightIds.has(d.id)) {
-                this.paintClipped(ctx, d, proj, () => this.paintHandles(ctx, d.handlePoints(proj)));
+                if (d instanceof PositionTool) this.paintClipped(ctx, d, proj, () => this.paintTvHandles(ctx, d.handlePoints(proj), d.handleShapes()));
+                else this.paintClipped(ctx, d, proj, () => this.paintHandles(ctx, d.handlePoints(proj)));
             }
         }
     }
@@ -1473,59 +1480,114 @@ export class DrawingPainter {
     private paintPosition(ctx: CanvasRenderingContext2D, d: PositionTool, proj: Projector, theme: VelaTheme): void {
         const L = d.layout(proj);
         if (!L) return;
-        const { x1, x2, ey, sy, ty } = L;
+        // Everything lands on whole DEVICE pixels: at a browser zoom (110 %, 125 % ...) a whole CSS pixel falls between
+        // device pixels and fills, 1 px lines and text go soft. `snap` rounds an edge, `crisp` centres a line on a pixel row.
+        const dpr = ctx.getTransform?.().a || 1;
+        const snap = (v: number): number => Math.round(v * dpr) / dpr;
+        const lineW = (cssW: number): number => Math.max(1, Math.round(cssW * dpr)) / dpr;
+        const crisp = (v: number, w: number): number => (Math.round(v * dpr - (w * dpr) / 2) + (w * dpr) / 2) / dpr;
+        const x1 = snap(L.x1);
+        const x2 = snap(L.x2);
+        const ey = snap(L.ey);
+        const sy = snap(L.sy);
+        const ty = snap(L.ty);
         const w = x2 - x1;
-        const zone = (yA: number, yB: number, color: string): void => {
+        const zone = (yA: number, yB: number, color: string, alpha = 0.2): void => {
             ctx.save();
-            ctx.globalAlpha = 0.2 * ctx.globalAlpha;
+            ctx.globalAlpha = alpha * ctx.globalAlpha;
             ctx.fillStyle = color;
             ctx.fillRect(x1, Math.min(yA, yB), w, Math.abs(yB - yA));
             ctx.restore();
         };
         zone(ey, ty, d.profitColor); // reward
         zone(ey, sy, d.lossColor); // risk
+        // Where the trade stands on the candles (null until price has reached the entry).
+        const bars = proj.barsInRange && d.anchors[2] ? proj.barsInRange(Math.min(d.anchors[0]!.time, d.anchors[2].time), Math.max(d.anchors[0]!.time, d.anchors[1]!.time, d.anchors[2].time)) : null;
+        const trade = bars ? d.trade(bars) : null;
+        const exitY = trade ? proj.yOf(trade.price, d.paneId) : null;
+        // TradingView deepens the strip between the entry and where price is now (or where the trade closed), across
+        // the box: green on the profit side, red on the loss side.
+        if (trade && exitY != null && trade.pnl !== 0) {
+            const y = Math.min(Math.max(snap(exitY), Math.min(sy, ty)), Math.max(sy, ty));
+            zone(ey, y, trade.pnl > 0 ? d.profitColor : d.lossColor, 0.2);
+        }
+        const lw = lineW(d.style.lineWidth);
         const line = (y: number, color: string): void =>
-            this.stroke(ctx, { ...d.style, lineColor: color }, () => {
-                ctx.moveTo(x1, y);
-                ctx.lineTo(x2, y);
+            this.stroke(ctx, { ...d.style, lineColor: color, lineWidth: lw }, () => {
+                const cy = crisp(y, lw);
+                ctx.moveTo(x1, cy);
+                ctx.lineTo(x2, cy);
             });
-        line(ty, d.profitColor);
-        line(sy, d.lossColor);
-        line(ey, d.style.lineColor); // entry — accent
+        // TradingView strokes only the entry line (gray by default); the target and stop edges are the zone fills.
+        line(ey, d.style.lineColor);
+        // TradingView's trade line: dashed, from where the entry filled to the exit (target / stop hit, else the last
+        // close inside the box). Only once price has actually reached the entry, and only with "Trade line" on (Style).
+        if (trade && exitY != null && d.showTradeLine) {
+            ctx.save();
+            ctx.strokeStyle = d.style.lineColor;
+            ctx.lineWidth = lineW(1);
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(Math.max(x1, proj.xOf(trade.openTime)), ey);
+            ctx.lineTo(proj.xOf(trade.time), exitY);
+            ctx.stroke();
+            ctx.restore();
+        }
         if (!d.showText) return;
         // TradingView: the stats show while the tool is hovered, selected or dragged, unless "Always show stats".
         if (!d.alwaysShowStats && !handleIdsFor(this.targets).has(d.id)) return;
-        const fs = namedFontSize(d.text?.size ?? 'normal');
+        const fs = d.fontSize;
         const ink = d.text?.color ?? '#ffffff'; // palette-exempt: TradingView-style white label text
         ctx.font = `${fs}px ${theme.fontFamily}`;
-        ctx.textAlign = 'center';
+        ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        const cx = x1 + w / 2;
-        const padX = 6;
-        const lh = Math.round(fs * 1.3);
-        const gap = 3;
-        /** A solid rounded box of `lines`, centred on cx; `top` is its top edge. */
-        const box = (lines: string[], top: number, fill: string): void => {
+        // TradingView's label metrics (measured on its 12 px labels): ~1.12 line height, 3 px top/bottom and 5 px
+        // side padding, 3 px corners; the target/stop labels clear the handles, the centre box sits above the entry.
+        // Centre on the part of the box that is on screen (a box stretched far past an edge keeps its labels in
+        // view, as TradingView does), and keep every label inside the plot.
+        const visL = Math.max(x1, 0);
+        const visR = Math.min(x2, proj.width);
+        const cx = Math.round(visR > visL ? (visL + visR) / 2 : x1 + w / 2);
+        const padX = 5;
+        const padY = 3;
+        const lh = Math.round(fs * 1.12);
+        const boxH = (n: number): number => n * lh + padY * 2;
+        /** A solid rounded box of `lines`, centred on cx; `top` is its top edge. Edges and text origins on whole device
+         *  pixels, so the text stays sharp at any browser zoom. */
+        const box = (lines: string[], top: number, fill: string, border?: string): void => {
             if (lines.length === 0) return;
-            const tw = Math.max(...lines.map((t) => ctx.measureText(t).width));
-            const bw = Math.ceil(tw + padX * 2);
-            const bh = lines.length * lh + 6;
+            const widths = lines.map((t) => ctx.measureText(t).width);
+            const bw = snap(Math.ceil(Math.max(...widths) + padX * 2));
+            const bx = snap(bw < proj.width ? Math.min(Math.max(cx - bw / 2, 0), proj.width - bw) : cx - bw / 2);
+            const by = snap(top);
+            const bh = snap(boxH(lines.length));
             ctx.save();
-            roundRect(ctx, Math.round(cx - bw / 2), Math.round(top), bw, bh, 3);
+            roundRect(ctx, bx, by, bw, bh, 3);
             ctx.fillStyle = fill;
             ctx.fill();
+            if (border) {
+                const bl = lineW(1);
+                roundRect(ctx, bx + bl / 2, by + bl / 2, bw - bl, bh - bl, 3);
+                ctx.strokeStyle = border;
+                ctx.lineWidth = bl;
+                ctx.setLineDash([]);
+                ctx.stroke();
+            }
             ctx.restore();
             ctx.fillStyle = ink;
-            lines.forEach((t, i) => ctx.fillText(t, cx, top + 3 + lh / 2 + i * lh));
+            // left-aligned from a snapped origin: a centred string starts at a fractional x and blurs at a zoom
+            lines.forEach((t, i) => ctx.fillText(t, snap(bx + (bw - widths[i]!) / 2), snap(by + padY + lh / 2 + i * lh)));
         };
-        const boxH = lh + 6;
-        // Target and stop boxes sit outside the box, on their own level line (above it when the
-        // level is the top edge, below when it is the bottom edge).
-        const outside = (y: number): number => (y <= ey ? y - gap - boxH : y + gap);
+        // Target and stop boxes sit outside the zone on their own level, clear of the level's handle.
+        const gap = TV_HANDLE_HALF + 8;
+        const outside = (y: number): number => (y <= ey ? y - gap - boxH(1) : y + gap);
         if (d.showTargetLabel) box([d.targetBoxLabel()], outside(ty), labelFill(d.profitColor));
         if (d.showStopLabel) box([d.stopBoxLabel()], outside(sy), labelFill(d.lossColor));
-        const mid = d.centerBoxLines();
-        if (mid.length > 0) box(mid, ey - (mid.length * lh + 6) / 2, POSITION_CENTER_FILL);
+        // The centre box rides just above the entry line (TradingView), so the entry handles never cover its text.
+        const mid = d.centerBoxLines(trade);
+        // TradingView colors the centre box by the trade: green in profit, red in loss, neutral before the entry fills.
+        const midFill = !trade || trade.pnl === 0 ? POSITION_CENTER_FILL : labelFill(trade.pnl > 0 ? d.profitColor : d.lossColor);
+        if (mid.length > 0) box(mid, ey - gap - boxH(mid.length), midFill, POSITION_CENTER_BORDER);
         ctx.textAlign = 'left';
         ctx.textBaseline = 'alphabetic';
     }
@@ -2758,6 +2820,35 @@ export class DrawingPainter {
         ctx.setLineDash(dashPattern(style.lineStyle, style.lineWidth));
     }
 
+    /** TradingView's handles (the position tools): a chart-background fill in a thin blue ring, round or a
+     *  rounded square per point. */
+    private paintTvHandles(
+        ctx: CanvasRenderingContext2D,
+        points: ReadonlyArray<readonly [number, number]>,
+        shapes: ReadonlyArray<'circle' | 'square'>,
+    ): void {
+        ctx.save();
+        // a device-whole ring centred on a device pixel row/column: sharp at any browser zoom
+        const dpr = ctx.getTransform?.().a || 1;
+        const lw = Math.max(1, Math.round(dpr)) / dpr;
+        const crisp = (v: number): number => (Math.round(v * dpr - (lw * dpr) / 2) + (lw * dpr) / 2) / dpr;
+        ctx.setLineDash([]);
+        ctx.lineWidth = lw;
+        ctx.fillStyle = this.handleBg;
+        ctx.strokeStyle = TV_HANDLE_RING;
+        const r = Math.round(TV_HANDLE_HALF * dpr) / dpr;
+        points.forEach(([px, py], i) => {
+            const x = crisp(px);
+            const y = crisp(py);
+            ctx.beginPath();
+            if (shapes[i] === 'square') roundRect(ctx, x - r, y - r, r * 2, r * 2, 2);
+            else ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        });
+        ctx.restore();
+    }
+
     /** Round selection/placement handles — blue ring + gray fill (shared chrome, not the
      *  drawing's line color). */
     paintHandles(ctx: CanvasRenderingContext2D, points: ReadonlyArray<readonly [number, number]>): void {
@@ -2830,6 +2921,8 @@ const STATS_TEXT = '#f2f4f8'; // palette-exempt: ~7:1 on STATS_FILL
 
 /** Neutral fill of the position tool's centre (size + ratio) box; white text on it is ~9:1. */
 const POSITION_CENTER_FILL = '#4c525e'; // palette-exempt: neutral position-tool centre label box
+/** TradingView's thin light rim on the position tool's centre box. */
+const POSITION_CENTER_BORDER = 'rgba(255, 255, 255, 0.85)'; // palette-exempt: TradingView centre-box rim
 
 /** A label fill derived from a zone color: the same hue, darkened until white text on it
  *  reaches 4.5:1 (WCAG AA). Unparseable colors are returned unchanged. */

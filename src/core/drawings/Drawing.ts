@@ -267,6 +267,11 @@ export abstract class Drawing {
         return false;
     }
 
+    /** The CSS cursor over handle `index` (e.g. a resize arrow), or null for the default pointer. */
+    handleCursor(_index: number): string | null {
+        return null;
+    }
+
     /**
      * A whole-body drag in screen pixels from the press point, for a type whose anchors are not all price/time (a post
      * card's height on the pane). Return the moved anchors, or null to use {@link translateBody}. Default: null.

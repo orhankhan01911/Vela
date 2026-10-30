@@ -1,9 +1,21 @@
 import { Drawing, type AnchorSlot, type SerializedDrawing } from '../Drawing';
 import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
-import { LINE_FIELDS, TEXT_SIZE_OPTIONS } from '../schema';
+import { LINE_FIELDS } from '../schema';
 import { pointInBox, handleAt } from '../hittest';
-import { VALID, INVALID } from '../../palette';
+
+/** Where the position stands on the candles: still open at the last close, or closed at its target / stop. */
+export interface PositionTrade {
+    /** Time of the bar the entry filled on. */
+    openTime: number;
+    /** Time of the closing bar (the last bar inside the box while still open). */
+    time: number;
+    /** Exit price: the target or stop when hit, else the last close. */
+    price: number;
+    status: 'open' | 'target' | 'stop';
+    /** Profit (+) or loss (−) at `price` for the computed position size. */
+    pnl: number;
+}
 
 /** How the gear panel's stop/target inputs interpret their value. */
 export type PositionLevelMode = 'price' | 'points';
@@ -37,9 +49,14 @@ export class PositionTool extends Drawing {
     private static readonly DEFAULT_WIDTH_PX = 150;
     private static readonly MIN_WIDTH_PX = 48;
     private static readonly DEFAULT_RISK_PERCENT = 1;
+    /** TradingView's default label size for the position tools (its `fontsize`, in px). */
+    static readonly DEFAULT_FONT_PX = 12;
+    static readonly MIN_FONT_PX = 6;
+    static readonly MAX_FONT_PX = 72;
     private static readonly DEFAULT_ACCOUNT_BALANCE = 10_000;
-    private static readonly DEFAULT_PROFIT_COLOR = VALID;
-    private static readonly DEFAULT_LOSS_COLOR = INVALID;
+    // TradingView's own long/short position defaults (read from TradingView Desktop, 2026-10-30).
+    private static readonly DEFAULT_PROFIT_COLOR = '#089981'; // palette-exempt: TradingView position profit zone
+    private static readonly DEFAULT_LOSS_COLOR = '#f23645'; // palette-exempt: TradingView position stop zone
 
     // Declared with `!` so a field default never clobbers readProps (base constructor runs first).
     /** Percent of account balance risked on the stop (drives dollar loss + position size). */
@@ -64,6 +81,18 @@ export class PositionTool extends Drawing {
     profitColor!: string;
     /** Fill + line color of the risk zone. */
     lossColor!: string;
+    /** The dashed trade line (entry fill → exit / last close), in the entry line's color. Off by default. */
+    showTradeLine!: boolean;
+    private fontPx!: number;
+    /** Label text size in px (TradingView's position tools take a pixel size, not small/large): whole px,
+     *  clamped to MIN_FONT_PX..MAX_FONT_PX; a non-number is ignored. */
+    get fontSize(): number {
+        return this.fontPx;
+    }
+    set fontSize(v: number) {
+        if (typeof v !== 'number' || !Number.isFinite(v)) return;
+        this.fontPx = Math.min(PositionTool.MAX_FONT_PX, Math.max(PositionTool.MIN_FONT_PX, Math.round(v)));
+    }
 
     constructor(init: Partial<SerializedDrawing> & { paneId: string }) {
         super(init);
@@ -78,6 +107,8 @@ export class PositionTool extends Drawing {
         if (this.showStopLabel === undefined) this.showStopLabel = true;
         if (this.profitColor === undefined) this.profitColor = PositionTool.DEFAULT_PROFIT_COLOR;
         if (this.lossColor === undefined) this.lossColor = PositionTool.DEFAULT_LOSS_COLOR;
+        if (this.showTradeLine === undefined) this.showTradeLine = false;
+        if (this.fontPx === undefined) this.fontSize = PositionTool.DEFAULT_FONT_PX;
     }
 
     /** `'LONG'` or `'SHORT'`, computed from geometry so it flips live as the drag crosses the
@@ -97,7 +128,7 @@ export class PositionTool extends Drawing {
         const entry = this.anchors[0];
         const stop = this.anchors[1];
         const target = this.anchors[2];
-        if (!entry || !stop || !target) return;
+        if (!entry || !stop || !target || this.placeSide) return; // the Long / Short Position tools keep their side
         if ((v === 'long' || v === 'short') && v !== this.direction) {
             stop.price = 2 * entry.price - stop.price;
             target.price = 2 * entry.price - target.price;
@@ -125,8 +156,17 @@ export class PositionTool extends Drawing {
     set entryPrice(v: number) {
         const a = this.anchors[0];
         if (a && Number.isFinite(v)) {
+            if (this.placeSide) this.shiftLevels(v - a.price); // TradingView: stop/target are distances from the entry
             a.price = v;
             this.constrainHandleDrag(0);
+        }
+    }
+
+    /** Move the stop and target by `dp` (the Long / Short Position tools keep them at a fixed distance from the entry). */
+    private shiftLevels(dp: number): void {
+        for (const i of [1, 2]) {
+            const a = this.anchors[i];
+            if (a) a.price += dp;
         }
     }
 
@@ -219,6 +259,15 @@ export class PositionTool extends Drawing {
         const stop = this.anchors[1];
         const target = this.anchors[2];
         if (!entry || !stop || !target) return;
+        if (this.placeSide) {
+            // TradingView's Long / Short Position: a level dragged (or typed) past the entry stops just short of it;
+            // the trade never turns around.
+            const up = this.placeSide === 'long' ? 1 : -1;
+            const eps = Math.max(Math.abs(entry.price) * 1e-6, 1e-9);
+            if ((target.price - entry.price) * up < eps) target.price = entry.price + up * eps;
+            if ((entry.price - stop.price) * up < eps) stop.price = entry.price - up * eps;
+            return;
+        }
         const stopSide = Math.sign(stop.price - entry.price);
         const targetSide = Math.sign(target.price - entry.price);
         if (stopSide === 0 || targetSide === 0 || stopSide !== targetSide) return; // already opposed (or on the line)
@@ -235,12 +284,14 @@ export class PositionTool extends Drawing {
         const a1 = this.anchors[1];
         if (!e || !a1) return null;
         if (this.anchors[2]) return [e, a1, this.anchors[2]];
-        // live preview: a1 is the target; stop sits opposite at 1/R:R of the reward
-        const stop = {
-            time: a1.time,
-            price: e.price - (a1.price - e.price) / PositionTool.DEFAULT_RR,
-        };
-        return [e, stop, a1];
+        // live preview: a1 is the target; stop sits opposite at 1/R:R of the reward. The Long / Short
+        // Position tools mirror a wrong-way drag here exactly as onPlaced does, so the preview never
+        // shows a side the placed tool will not have.
+        let tp = a1.price;
+        if ((this.placeSide === 'long' && tp < e.price) || (this.placeSide === 'short' && tp > e.price)) tp = 2 * e.price - tp;
+        const target = { time: a1.time, price: tp };
+        const stop = { time: a1.time, price: e.price - (tp - e.price) / PositionTool.DEFAULT_RR };
+        return [e, stop, target];
     }
 
     private prices(): { entry: number; stop: number; target: number } | null {
@@ -330,14 +381,54 @@ export class PositionTool extends Drawing {
         return `Stop: ${at}(${this.riskPct().toFixed(2)}%) ${formatGrouped(dist)}, Amount: ${formatGrouped(dist * this.positionSize(), 2)}`;
     }
 
-    /** The centre box on the entry line: `Long, Qty: 0.0591, Risk: $100` (showLossSize) over
-     *  `Risk/Reward Ratio: 2.07` (showHeader). Empty when both are off. */
-    centerBoxLines(): string[] {
+    /** The centre box by the entry line: `Long, Qty: 0.0591, Risk: $100` (or `Open PnL: …, Qty: …, Risk: $…` once `trade` filled; showLossSize) over
+     *  `Risk/reward ratio: 2.07` (showHeader). Empty when both are off. */
+    centerBoxLines(trade?: PositionTrade | null): string[] {
         const lines: string[] = [];
         const dir = this.direction === 'long' ? 'Long' : 'Short';
-        if (this.showLossSize) lines.push(`${dir}, Qty: ${formatQty(this.positionSize())}, Risk: $${formatGrouped(this.dollarLoss(), 2)}`);
-        if (this.showHeader) lines.push(`Risk/Reward Ratio: ${this.rr().toFixed(2)}`);
+        // TradingView: once price fills the entry the first line is the trade's PnL (Open while running, Closed after a hit).
+        if (this.showLossSize && trade) lines.push(`${trade.status === 'open' ? 'Open' : 'Closed'} PnL: ${formatGrouped(trade.pnl, 2).replace(/^-/, '\u2212')}, Qty: ${formatQty(this.positionSize())}, Risk: $${formatGrouped(this.dollarLoss(), 2)}`);
+        else if (this.showLossSize) lines.push(`${dir}, Qty: ${formatQty(this.positionSize())}, Risk: $${formatGrouped(this.dollarLoss(), 2)}`);
+        if (this.showHeader) lines.push(`Risk/reward ratio: ${this.rr().toFixed(2)}`);
         return lines;
+    }
+
+    // ── the trade over the candles (TradingView's dashed entry→exit line) ──
+
+    /**
+     * Play the position over `bars` (oldest first, the chart's candles): it opens on the first bar at or after the
+     * entry time whose range touches the entry price, then closes on the first bar that reaches the target or the stop
+     * (both in one bar counts as the stop: the conservative read), else it is still open at the close of the last bar
+     * inside the box. Null when it never opened (the entry is in the future, or price never came back to it).
+     */
+    trade(bars: ReadonlyArray<{ time: number; high: number; low: number; close: number }>): PositionTrade | null {
+        const r = this.resolved();
+        if (!r || !this.anchors[2]) return null;
+        const p = { entry: r[0]!.price, stop: r[1]!.price, target: r[2]!.price };
+        const from = Math.min(r[0]!.time, r[2]!.time);
+        const to = Math.max(r[0]!.time, r[1]!.time, r[2]!.time);
+        const long = p.target >= p.entry;
+        let open: number | null = null;
+        let last: { time: number; close: number } | null = null;
+        for (const b of bars) {
+            if (b.time < from || b.time > to) continue;
+            if (open === null) {
+                if (b.low <= p.entry && b.high >= p.entry) open = b.time;
+                else continue;
+            }
+            const hitStop = long ? b.low <= p.stop : b.high >= p.stop;
+            const hitTarget = long ? b.high >= p.target : b.low <= p.target;
+            if (hitStop) return this.closedAt(open, b.time, p.stop, 'stop', p.entry, long);
+            if (hitTarget) return this.closedAt(open, b.time, p.target, 'target', p.entry, long);
+            last = b;
+        }
+        if (open === null || !last) return null;
+        return this.closedAt(open, last.time, last.close, 'open', p.entry, long);
+    }
+
+    private closedAt(openTime: number, time: number, price: number, status: PositionTrade['status'], entry: number, long: boolean): PositionTrade {
+        const pnl = (long ? price - entry : entry - price) * this.positionSize();
+        return { openTime, time, price, status, pnl };
     }
 
     // ── stop/target input units (the gear panel's Price / Points dropdowns) ──
@@ -365,10 +456,23 @@ export class PositionTool extends Drawing {
     }
 
     private box(proj: Projector): { x1: number; x2: number; ey: number; sy: number; ty: number } | null {
-        const pts = this.handlePoints(proj);
+        const pts = this.levelPoints(proj);
         if (pts.length < 3) return null;
         const xs = pts.map((p) => p[0]);
         return { x1: Math.min(...xs), x2: Math.max(...xs), ey: pts[0]![1], sy: pts[1]![1], ty: pts[2]![1] };
+    }
+
+    /** Entry, stop and target at their own anchor x/y (the box geometry; handles sit elsewhere). */
+    private levelPoints(proj: Projector): Array<[number, number]> {
+        const r = this.resolved();
+        if (!r) return [];
+        const pts: Array<[number, number]> = [];
+        for (const a of r) {
+            const y = proj.yOf(a.price, this.paneId);
+            if (y == null) return [];
+            pts.push([proj.xOf(a.time), y]);
+        }
+        return pts;
     }
 
     /** Pixel layout for the painter: the box x-range + each level's y. */
@@ -384,16 +488,61 @@ export class PositionTool extends Drawing {
         return pointInBox(px, py, b.x1, top, b.x2, bot, tol);
     }
 
+    /** TradingView's four handles: [0] the entry (circle, left), [1] the stop and [2] the target on
+     *  the box's left edge (they move their level only), [3] the entry's right end (sets the width). */
     handlePoints(proj: Projector): Array<[number, number]> {
-        const r = this.resolved();
-        if (!r) return [];
-        const pts: Array<[number, number]> = [];
-        for (const a of r) {
-            const y = proj.yOf(a.price, this.paneId);
-            if (y == null) return [];
-            pts.push([proj.xOf(a.time), y]);
+        const b = this.box(proj);
+        if (!b) return [];
+        const ex = this.levelPoints(proj)[0]![0];
+        return [[ex, b.ey], [b.x1, b.sy], [b.x1, b.ty], [b.x2, b.ey]];
+    }
+
+    /** TradingView's cursors: move on the entry circle, up/down on the stop and target, left/right on the width. */
+    override handleCursor(index: number): string | null {
+        if (this.anchors.length < 3) return null;
+        return index === 0 ? 'move' : index === 3 ? 'ew-resize' : index === 1 || index === 2 ? 'ns-resize' : null;
+    }
+
+    /** Handle shapes in {@link handlePoints} order, as TradingView draws them. */
+    handleShapes(): ReadonlyArray<'circle' | 'square'> {
+        return ['circle', 'square', 'square', 'square'];
+    }
+
+    /** Stop / target handles move their price only (TradingView); the right-end handle moves the box's right edge. */
+    override dragHandlePx(index: number, x: number, y: number, proj: Projector): boolean {
+        if (this.anchors.length < 3) return false;
+        if (index === 0) {
+            if (!this.placeSide) return false; // the combined tool: the default free move (its levels stay put)
+            // TradingView: the entry circle moves in both directions — its price and the box's left edge — while the
+            // target, the stop and the right edge stay put. It stays 1 px inside the stop..target band and left of the
+            // right edge, so the tool never turns around or folds over.
+            const sy = proj.yOf(this.anchors[1]!.price, this.paneId);
+            const ty = proj.yOf(this.anchors[2]!.price, this.paneId);
+            const rx = proj.xOf(this.anchors[2]!.time);
+            if (sy != null && ty != null) y = Math.min(Math.max(y, Math.min(sy, ty) + 1), Math.max(sy, ty) - 1);
+            x = Math.min(x, rx - 1);
+            const pt = proj.pxToPoint(x, y, this.paneId);
+            if (!Number.isFinite(pt.price)) return true;
+            this.anchors[0] = { time: pt.time, price: pt.price };
+            return true;
         }
-        return pts;
+        if (this.placeSide && (index === 1 || index === 2)) {
+            // keep the level at least 1 px on its own side of the entry (y grows downward)
+            const ey = proj.yOf(this.anchors[0]!.price, this.paneId);
+            const above = (index === 2) === (this.placeSide === 'long');
+            if (ey != null) y = above ? Math.min(y, ey - 1) : Math.max(y, ey + 1);
+        }
+        const pt = proj.pxToPoint(x, y, this.paneId);
+        if (index === 3) {
+            this.anchors[1]!.time = pt.time;
+            this.anchors[2]!.time = pt.time;
+            return true;
+        }
+        const a = this.anchors[index];
+        if (!a || !Number.isFinite(pt.price)) return false;
+        a.price = pt.price;
+        this.constrainHandleDrag(index);
+        return true;
     }
 
     hitHandle(px: number, py: number, proj: Projector, tol: number): number {
@@ -420,7 +569,7 @@ export class PositionTool extends Drawing {
                 { path: 'riskPercent', label: 'Risk %', kind: 'number', min: 0, max: 100, step: 0.1, group: 'behavior' },
                 { path: 'accountBalance', label: 'Account balance', kind: 'number', min: 0, max: 1e12, step: 1, group: 'behavior' },
                 { path: 'quantity', label: 'Position size', kind: 'number', group: 'behavior' },
-                { path: 'direction', label: 'Direction', kind: 'select', options: DIRECTION_OPTIONS, group: 'behavior' },
+                ...(this.placeSide ? [] : [{ path: 'direction', label: 'Direction', kind: 'select' as const, options: DIRECTION_OPTIONS, group: 'behavior' as const }]),
                 { path: 'entryPrice', label: 'Entry price', kind: 'number', group: 'behavior' },
                 { path: 'stopPrice', label: 'Stop price', kind: 'number', group: 'behavior' },
                 { path: 'targetPrice', label: 'Target price', kind: 'number', group: 'behavior' },
@@ -433,9 +582,10 @@ export class PositionTool extends Drawing {
                 { path: 'showPrices', label: 'Show level prices', kind: 'boolean', group: 'behavior' },
                 { path: 'profitColor', label: 'Profit zone', kind: 'color', group: 'fill' },
                 { path: 'lossColor', label: 'Loss zone', kind: 'color', group: 'fill' },
+                { path: 'showTradeLine', label: 'Trade line', kind: 'boolean', group: 'line' },
                 ...LINE_FIELDS.filter((f) => f.path !== 'style.lineColor'),
                 { path: 'text.color', label: 'Text color', kind: 'color', group: 'text' },
-                { path: 'text.size', label: 'Text size', kind: 'select', options: TEXT_SIZE_OPTIONS, group: 'text' },
+                { path: 'fontSize', label: 'Text size', kind: 'number', min: PositionTool.MIN_FONT_PX, max: PositionTool.MAX_FONT_PX, step: 1, group: 'text' },
             ],
         };
     }
@@ -453,6 +603,8 @@ export class PositionTool extends Drawing {
             showStopLabel: this.showStopLabel,
             profitColor: this.profitColor,
             lossColor: this.lossColor,
+            fontSize: this.fontSize,
+            showTradeLine: this.showTradeLine,
         };
     }
 
@@ -472,8 +624,19 @@ export class PositionTool extends Drawing {
         if (typeof props.showStopLabel === 'boolean') this.showStopLabel = props.showStopLabel;
         if (typeof props.profitColor === 'string') this.profitColor = props.profitColor;
         if (typeof props.lossColor === 'string') this.lossColor = props.lossColor;
+        if (typeof props.showTradeLine === 'boolean') this.showTradeLine = props.showTradeLine;
+        if (typeof props.fontSize === 'number' && Number.isFinite(props.fontSize)) {
+            this.fontSize = props.fontSize;
+        } else if (this.fontPx === undefined && typeof props.riskPercent === 'number') {
+            // a position saved before the px size (a saved doc carries every prop): keep the size it painted at.
+            // Props from the API / assistant (no riskPercent) fall through to the 12 px default.
+            this.fontSize = LEGACY_FONT_PX[this.text?.size ?? 'normal'] ?? PositionTool.DEFAULT_FONT_PX;
+        }
     }
 }
+
+/** The px each named text size painted at before the position tools took a px size (namedFontSize). */
+const LEGACY_FONT_PX: Record<string, number> = { tiny: 10, small: 12, normal: 14, large: 18, huge: 28 };
 
 /** Compact money string (drops trailing .00; keeps two decimals otherwise). */
 function formatMoney(n: number): string {

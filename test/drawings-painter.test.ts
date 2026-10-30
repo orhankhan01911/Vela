@@ -256,3 +256,94 @@ describe('DrawingPainter trendline label follows the line', () => {
         expect(rotated).toBe(0);
     });
 });
+
+describe('DrawingPainter position labels', () => {
+    it('paint at the tool\'s px size', () => {
+        const d = createDrawing('long-position', { id: 'p', paneId: 'price', anchors: [{ time: 0, price: 50 }, { time: 60, price: 40 }, { time: 60, price: 70 }] })!;
+        d.applySettings({ fontSize: 19, alwaysShowStats: true });
+        const fonts: string[] = [];
+        const { ctx } = recordingCtx();
+        Object.defineProperty(ctx, 'font', { set: (v: string) => fonts.push(v), get: () => fonts[fonts.length - 1] ?? '' });
+        (ctx as unknown as { textAlign: string; textBaseline: string; fillStyle: string; strokeStyle: string; lineWidth: number }).textAlign = 'left';
+        new DrawingPainter().paintAll(ctx, [d], fakeProjector(), theme);
+        expect(fonts.some((f) => f.startsWith('19px '))).toBe(true);
+    });
+});
+
+describe('DrawingPainter position labels at extremes', () => {
+    /** Labels painted (text + x) for a long position, with a fillText-recording context. */
+    function labels(anchors: Array<{ time: number; price: number }>): Array<{ t: string; x: number }> {
+        const d = createDrawing('long-position', { id: 'p', paneId: 'price', anchors, props: { alwaysShowStats: true } })!;
+        const out: Array<{ t: string; x: number }> = [];
+        const { ctx } = recordingCtx();
+        (ctx as unknown as { fillText: (t: string, x: number) => void }).fillText = (t, x) => out.push({ t, x });
+        (ctx as unknown as { measureText: (t: string) => { width: number } }).measureText = (t) => ({ width: t.length * 2 }); // fits the 200 px plot
+        new DrawingPainter().paintAll(ctx, [d], fakeProjector(), theme);
+        return out;
+    }
+
+    it('a box stretched far past the right edge keeps its labels on screen', () => {
+        const out = labels([{ time: 20, price: 50 }, { time: 100_000, price: 45 }, { time: 100_000, price: 60 }]);
+        expect(out.map((o) => o.t.split(':')[0])).toEqual(expect.arrayContaining(['Target', 'Stop']));
+        for (const o of out) {
+            // the whole label (left-aligned text from x) inside the 200 px plot
+            expect(o.x).toBeGreaterThanOrEqual(0);
+            expect(o.x + o.t.length * 2).toBeLessThanOrEqual(200);
+        }
+    });
+
+    it('a box starting far off the left edge too', () => {
+        const out = labels([{ time: -100_000, price: 50 }, { time: 150, price: 45 }, { time: 150, price: 60 }]);
+        expect(out.length).toBeGreaterThan(0);
+        for (const o of out) expect(o.x).toBeGreaterThanOrEqual(0);
+    });
+});
+
+describe('DrawingPainter position trade line', () => {
+    it('the dashed trade line paints only with Trade line on', () => {
+        const proj: Projector = { ...fakeProjector(), barsInRange: () => [{ time: 30, open: 49, high: 52, low: 48, close: 51 }, { time: 40, open: 51, high: 56, low: 50, close: 55 }] };
+        const dashes = (on: boolean): number => {
+            const d = createDrawing('long-position', { id: 'p', paneId: 'price', anchors: [{ time: 20, price: 50 }, { time: 60, price: 40 }, { time: 60, price: 70 }], props: { showTradeLine: on } })!;
+            let n = 0;
+            const { ctx } = recordingCtx();
+            (ctx as unknown as { setLineDash: (a: number[]) => void }).setLineDash = (a) => { if (a.length === 2 && a[0] === 4 && a[1] === 3) n += 1; };
+            new DrawingPainter().paintAll(ctx, [d], proj, theme);
+            return n;
+        };
+        expect(dashes(false)).toBe(0);
+        expect(dashes(true)).toBe(1);
+    });
+});
+
+describe('DrawingPainter position at a browser zoom', () => {
+    it('lands label text and box edges on whole device pixels at dpr 1.25', () => {
+        const d = createDrawing('long-position', { id: 'p', paneId: 'price', anchors: [{ time: 20.3, price: 50.37 }, { time: 140.7, price: 40.11 }, { time: 140.7, price: 70.53 }], props: { alwaysShowStats: true } })!;
+        const texts: Array<[number, number]> = [];
+        const rects: number[] = [];
+        const { ctx } = recordingCtx();
+        const c = ctx as unknown as Record<string, unknown>;
+        c.getTransform = () => ({ a: 1.25 });
+        c.fillText = (_t: string, x: number, y: number) => texts.push([x, y]);
+        c.measureText = (t: string) => ({ width: t.length * 1.7 });
+        c.fillRect = (x: number, y: number, w: number, h: number) => rects.push(x, y, x + w, y + h);
+        new DrawingPainter().paintAll(ctx, [d], fakeProjector(), theme);
+        const onDevice = (v: number): boolean => Math.abs(v * 1.25 - Math.round(v * 1.25)) < 1e-6;
+        expect(texts.length).toBeGreaterThan(0);
+        for (const [x, y] of texts) expect(onDevice(x) && onDevice(y)).toBe(true);
+        for (const v of rects) expect(onDevice(v)).toBe(true);
+    });
+});
+
+describe('DrawingPainter position PnL band', () => {
+    it('deepens entry→last close on the profit side while the trade is up', () => {
+        const proj: Projector = { ...fakeProjector(), barsInRange: () => [{ time: 30, open: 49, high: 52, low: 48, close: 51 }, { time: 40, open: 51, high: 56, low: 50, close: 55 }] };
+        const d = createDrawing('long-position', { id: 'p', paneId: 'price', anchors: [{ time: 20, price: 50 }, { time: 60, price: 40 }, { time: 60, price: 70 }] })!;
+        const rects: Array<[number, number, number, number]> = [];
+        const { ctx } = recordingCtx();
+        (ctx as unknown as Record<string, unknown>).fillRect = (x: number, y: number, w: number, h: number) => rects.push([x, y, w, h]);
+        new DrawingPainter().paintAll(ctx, [d], proj, theme);
+        // reward zone, risk zone, then the band from the entry (y 50) up to the last close 55 (y 45)
+        expect(rects.length).toBe(3);
+        expect(rects[2]).toEqual([20, 45, 40, 5]);
+    });
+});

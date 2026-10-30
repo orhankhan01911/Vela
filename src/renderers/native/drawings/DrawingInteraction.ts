@@ -188,6 +188,11 @@ export class DrawingInteraction {
     /** A cursor hint for hovering (pointer over a drawing/handle), or null off any drawing. */
     cursorAt(x: number, y: number): string | null {
         if (this.deps.activeTool() != null) return null; // armed → keep the crosshair
+        const proj = this.deps.projector();
+        for (const d of this.handleDrawings()) {
+            const i = d.hitHandle(x, y, proj, HIT_TOLERANCE);
+            if (i >= 0) return d.handleCursor(i) ?? 'pointer'; // a handle can name its own cursor (a resize arrow)
+        }
         return this.hitAt(x, y) ? 'pointer' : null;
     }
 
