@@ -84,11 +84,24 @@ function barAtOrBefore(bars: readonly OHLCV[], t: number): number {
     return lo;
 }
 
-/** A tick when the symbol reports none: a power of ten near 1/100 000 of the price (0.1 at 77 000). */
-function fallbackTick(bars: readonly OHLCV[]): number | undefined {
-    const c = bars[bars.length - 1]?.close;
-    if (!(c != null && c > 0)) return undefined;
-    return 10 ** Math.floor(Math.log10(c * 1e-5));
+/**
+ * The tick when the symbol reports none, read from the prices themselves: the most decimal places any open, high,
+ * low or close shows (Bybit BTC 80223.6 -> 0.1, HYPE 91.235 -> 0.001). A venue whose tick is not a power of ten
+ * (0.5) reads as the finer 0.1. Undefined without prices.
+ */
+export function inferTick(bars: readonly OHLCV[]): number | undefined {
+    let decimals = -1;
+    const n = Math.min(bars.length, 3000);
+    for (let i = bars.length - n; i < bars.length; i += 1) {
+        const b = bars[i]!;
+        for (const x of [b.open, b.high, b.low, b.close]) {
+            if (!Number.isFinite(x)) continue;
+            let d = 0;
+            while (d < 10 && Math.abs(x * 10 ** d - Math.round(x * 10 ** d)) > 1e-6 * Math.max(1, Math.abs(x) * 10 ** d * 1e-9)) d += 1;
+            if (d > decimals) decimals = d;
+        }
+    }
+    return decimals < 0 ? undefined : 10 ** -decimals;
 }
 
 /** One TradingView line row (VAH, VAL, POC, Developing POC / VA): its switch, colour and width keys. */
@@ -229,9 +242,14 @@ class VpvrIndicator implements NativeIndicator {
         this.timer = null;
     }
 
+    /** The symbol's tick, else the one its prices show. */
+    private tickOf(bars: readonly OHLCV[]): number | undefined {
+        return this.tick ?? inferTick(bars);
+    }
+
     private layerData(bars: readonly OHLCV[]): VpvrLayerData {
         const ticks = this.inputs.rowsLayout === 'Ticks Per Row';
-        return vpvrLayerData(this.inputs, ticks ? (this.tick ?? fallbackTick(bars)) : undefined);
+        return vpvrLayerData(this.inputs, ticks ? this.tickOf(bars) : undefined);
     }
 
     /** The window as chart bars: the first bar opening at or after its left edge through the last opening in it. */
@@ -329,7 +347,7 @@ class VpvrIndicator implements NativeIndicator {
                 }
             }
         }
-        const roundTick = data.rowSize == null ? this.tick : undefined;
+        const roundTick = data.rowSize == null ? this.tickOf(src) : undefined;
         const profile = src.length > 0 ? buildVpvrProfile(src, 0, src.length - 1, data.rows, data.valueAreaFrac, data.rowSize, roundTick) : null;
         ctx.pushData(profile ? { ...data, profile } : data);
         if (!profile) {

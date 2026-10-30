@@ -278,3 +278,13 @@ describe('VRVP against TradingView numbers (measured 2026-10-30)', () => {
         ind.stop();
     });
 });
+
+describe('VRVP tick when the symbol reports none', () => {
+    it('reads it from the prices (most decimal places shown)', async () => {
+        const { inferTick } = await import('../src/core/native-indicators/vpvr/VpvrIndicator');
+        expect(inferTick([{ time: 0, open: 80223.6, high: 81967, low: 76455, close: 80000.5, volume: 1 }])).toBeCloseTo(0.1, 12);
+        expect(inferTick([{ time: 0, open: 91.235, high: 91.94, low: 90.66, close: 91.24, volume: 1 }])).toBeCloseTo(0.001, 12);
+        expect(inferTick([{ time: 0, open: 100, high: 101, low: 99, close: 100, volume: 1 }])).toBe(1);
+        expect(inferTick([])).toBeUndefined();
+    });
+});
