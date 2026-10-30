@@ -4,7 +4,7 @@ import { createProjector } from '../src/renderers/native/drawings/Projector';
 import { deletableSelection, deleteTargets } from '../src/renderers/native/drawings/DrawingHitTester';
 import { effectiveSnapMode } from '../src/renderers/native/core/InputController';
 import { CoordinateSystem } from '../src/renderers/native/core/CoordinateSystem';
-import { createDrawing, DEFAULT_DRAWING_COLOR, TV_LINE_COLOR, MAX_PATH_POINTS, type Drawing, type DrawingIntent, type DrawingStyle, type DrawingTypeKey, type Projector } from '../src/core/drawings';
+import { clearToolSettings, rememberToolSettings, createDrawing, DEFAULT_DRAWING_COLOR, TV_LINE_COLOR, MAX_PATH_POINTS, type Drawing, type DrawingIntent, type DrawingStyle, type DrawingTypeKey, type Projector } from '../src/core/drawings';
 
 /** Linear projector: x = time, y = 100 − price, single pane 'price'. */
 function fakeProjector(): Projector {
@@ -61,6 +61,23 @@ function harness(tool: DrawingTypeKey | null, drawings: Drawing[] = []) {
         changes: () => changes,
     };
 }
+
+describe('DrawingInteraction: placing with the tool\'s remembered settings', () => {
+    it('the ghost shows the remembered Fib levels while placing, as the placed Fib will (user\'s recording, 2026-10-31)', () => {
+        // The user turned 1.618 / 2.618 ... off on a Fib; the ghost showed TradingView's defaults (1.618 on) until the
+        // click, then the placed one had only 0 .. 1.
+        clearToolSettings();
+        const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.618, 2.618].map((ratio) => ({ ratio, color: '#808080', enabled: ratio <= 1 }));
+        rememberToolSettings({ id: 'm', type: 'fibretracement', paneId: 'price', anchors: [], style: { lineColor: '#2962ff', lineWidth: 1, lineStyle: 'solid' }, props: { levels, trendline: false } } as never);
+        const h = harness('fibretracement');
+        h.it.down(10, 90);
+        h.it.move(50, 40);
+        const ghost = h.it.ghost() as unknown as { levels: Array<{ ratio: number; enabled: boolean }>; trendline: boolean };
+        expect(ghost.levels.filter((l) => l.enabled).map((l) => l.ratio)).toEqual([0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]);
+        expect(ghost.trendline).toBe(false);
+        clearToolSettings();
+    });
+});
 
 describe('DrawingInteraction: placing', () => {
     it('a 2-anchor trend line places over two clicks + a moving ghost', () => {

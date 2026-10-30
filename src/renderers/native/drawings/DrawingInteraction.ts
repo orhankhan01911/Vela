@@ -1,5 +1,5 @@
 import type { Drawing, DrawingIntent, DrawingPoint, DrawingStyle, DrawingTypeKey, FreeAxis, Projector, SerializedDrawing, SnapMode } from '../../../core/drawings';
-import { createDrawing, deserializeDrawing, resolveAnchors, translateInBars } from '../../../core/drawings';
+import { createDrawing, deserializeDrawing, resolveAnchors, toolSettings, translateInBars } from '../../../core/drawings';
 import { topDrawingAt, HIT_TOLERANCE } from './DrawingHitTester';
 
 /** Pixels of motion before a press counts as a drag (vs a click → open settings). */
@@ -280,6 +280,10 @@ export class DrawingInteraction {
             const paneId = proj.paneIdAtY(y) ?? 'price';
             const draft = createDrawing(tool, { paneId, anchors: [this.resolve(x, y, paneId, mode)], style: this.deps.lastStyle() });
             if (!draft) return;
+            // The tool's last-used extras (Fib levels, switches ...) apply while placing too, exactly as placement
+            // applies them, so what is drawn under the cursor is what lands (the user's recording, 2026-10-31).
+            const remembered = toolSettings(tool)?.props;
+            if (remembered) draft.applyProps(remembered);
             this.state = { kind: 'placing', draft, need: draft.anchorSchema().max, cursor: null };
             // Fixed tools (max === min) finalize as soon as the count is met; variable/freehand wait for a gesture.
             if (draft.placementMode() === 'click' && draft.anchors.length >= this.state.need) this.finalize();
@@ -513,7 +517,11 @@ export class DrawingInteraction {
         if (this.state.kind !== 'placing') return null;
         const { draft, cursor } = this.state;
         if (!cursor) return draft.anchors.length >= 1 && draft.type === 'hline' ? draft : null;
-        return createDrawing(draft.type, { paneId: draft.paneId, anchors: [...draft.anchors, this.placementAnchor(draft, cursor)], style: draft.style });
+        const g = createDrawing(draft.type, { paneId: draft.paneId, anchors: [...draft.anchors, this.placementAnchor(draft, cursor)], style: draft.style });
+        // Carry the draft's extras (its remembered levels, switches ...): a fresh drawing would show the defaults.
+        const props = draft.serialize().props;
+        if (g && props) g.applyProps(props);
+        return g;
     }
 
     /** Map a raw placement cursor to the anchor the drawing actually stores.
