@@ -153,7 +153,7 @@ describe('VRVP painter', () => {
 
 describe('VRVP lines (the indicator)', () => {
     const bars = [bar(0, 100, 110, 1000), bar(60_000, 104, 106, 3000), bar(120_000, 101, 109, 800, false)];
-    function run(inputs: Record<string, unknown> = {}): NativeIndicatorOutput {
+    function run(inputs: Record<string, unknown> = {}, range = { from: 0, to: 120_000 }): NativeIndicatorOutput {
         const outs: NativeIndicatorOutput[] = [];
         const ctx = {
             id: 'native-1', symbol: 'X', timeframe: '1', live: false,
@@ -165,7 +165,7 @@ describe('VRVP lines (the indicator)', () => {
         } as NativeIndicatorContext;
         const ind = vpvrDescriptor.create();
         ind.start(ctx, { ...vpvrDescriptor.defaultInputs(), ...inputs } as never);
-        ind.onViewport({ from: 0, to: 120_000 });
+        ind.onViewport(range);
         ind.stop();
         return outs[outs.length - 1]!;
     }
@@ -189,11 +189,16 @@ describe('VRVP lines (the indicator)', () => {
         expect(titles).toEqual(['POC', 'VAH', 'VAL', 'Developing POC', 'Developing VA High', 'Developing VA Low']);
         const dev = out.series![3] as LineLikeSeries;
         expect(dev.kind).toBe('step');
-        expect(dev.points).toHaveLength(3);
+        expect(dev.points).toHaveLength(3); // one per chart bar (index-aligned)
         for (const s of out.series!) {
             expect(s.axisTag).toBe(false);
             expect(s.display!.legend).toBe(false);
         }
+    });
+
+    it('lines cover only the visible window (null on the bars outside it)', () => {
+        const out = run({ showDevPoc: true }, { from: 60_000, to: 120_000 });
+        for (const s of out.series as LineLikeSeries[]) expect(s.points.map((p) => p.value === null)).toEqual([true, false, false]);
     });
 
     it('POC off: no line at all', () => {

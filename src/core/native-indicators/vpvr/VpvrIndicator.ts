@@ -238,7 +238,9 @@ class VpvrIndicator implements NativeIndicator {
             lineStyle: 'solid',
         });
         const id = (title: string, ordinal: number): string => stableSeriesId({ instanceId: 'vpvr', kind: 'line', title, ordinal });
-        const window = bars.slice(i0, i1 + 1);
+        // Series points line up with the chart's bars index by index: every bar gets one, null outside the window.
+        const over = (value: (i: number) => number | null): Array<{ time: number; value: number | null }> =>
+            bars.map((b, i) => ({ time: b.time, value: i >= i0 && i <= i1 ? value(i) : null }));
 
         // POC / VAH / VAL: full-width lines (TradingView extends them both ways), plus a value-only series that
         // carries the price-scale label and the status-line value.
@@ -257,7 +259,7 @@ class VpvrIndicator implements NativeIndicator {
                 title,
                 paneId: '',
                 kind: 'line',
-                points: window.map((b) => ({ time: b.time, value: price })),
+                points: over(() => price),
                 style: st,
                 display: { pane: false, priceScale: labels, legend: values, dataWindow: true },
                 axisTag: labels,
@@ -275,7 +277,7 @@ class VpvrIndicator implements NativeIndicator {
                     title,
                     paneId: '',
                     kind: 'step',
-                    points: dev.map((l, j) => ({ time: window[j]!.time, value: l ? pick(l) : null })),
+                    points: over((i) => { const l = dev[i - i0]; return l ? pick(l) : null; }),
                     style: style(row, color, 1),
                     display: { pane: true, priceScale: labels, legend: values, dataWindow: true },
                     axisTag: labels,
