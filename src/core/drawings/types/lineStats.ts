@@ -9,24 +9,40 @@ import type { SettingsField } from '../schema';
 export interface LineStats {
     price: boolean;
     percent: boolean;
+    /** TradingView's "Change in pips": the price change in ticks of the price scale. */
+    pips: boolean;
     bars: boolean;
     date: boolean;
     distance: boolean;
     angle: boolean;
-    /** Where the box sits: by the first point, the middle of the line or the second point. */
-    position: 'left' | 'center' | 'right';
+    /** Where the box sits: by the first point, the middle of the line or the second point; `auto` = by the second
+     *  point, or the first when that one is off screen. */
+    position: 'left' | 'center' | 'right' | 'auto';
+    /** TradingView's "Always show stats": off = the box shows only while the line is selected, hovered or dragged. */
+    always: boolean;
 }
 
-export const NO_STATS: LineStats = { price: false, percent: false, bars: false, date: false, distance: false, angle: false, position: 'right' };
-/** The info line shows every part, under the middle of the line. */
-export const ALL_STATS: LineStats = { price: true, percent: true, bars: true, date: true, distance: true, angle: true, position: 'center' };
+/** The stats parts, TradingView's order and names (the Stats dropdown). */
+export const STATS_PARTS: ReadonlyArray<{ key: 'price' | 'percent' | 'pips' | 'bars' | 'date' | 'distance' | 'angle'; label: string }> = [
+    { key: 'price', label: 'Price range' },
+    { key: 'percent', label: 'Percent change' },
+    { key: 'pips', label: 'Change in pips' },
+    { key: 'bars', label: 'Bars range' },
+    { key: 'date', label: 'Date/time range' },
+    { key: 'distance', label: 'Distance' },
+    { key: 'angle', label: 'Angle' },
+];
+
+export const NO_STATS: LineStats = { price: false, percent: false, pips: false, bars: false, date: false, distance: false, angle: false, position: 'right', always: false };
+/** The info line shows every part, under the middle of the line, all the time. */
+export const ALL_STATS: LineStats = { price: true, percent: true, pips: false, bars: true, date: true, distance: true, angle: true, position: 'center', always: true };
 
 export function readStats(raw: unknown, defaults: LineStats): LineStats {
     const s = { ...defaults };
     if (raw && typeof raw === 'object') {
         const r = raw as Record<string, unknown>;
-        for (const k of ['price', 'percent', 'bars', 'date', 'distance', 'angle'] as const) if (typeof r[k] === 'boolean') s[k] = r[k] as boolean;
-        if (r.position === 'left' || r.position === 'center' || r.position === 'right') s.position = r.position;
+        for (const k of ['price', 'percent', 'pips', 'bars', 'date', 'distance', 'angle', 'always'] as const) if (typeof r[k] === 'boolean') s[k] = r[k] as boolean;
+        if (r.position === 'left' || r.position === 'center' || r.position === 'right' || r.position === 'auto') s.position = r.position;
     }
     return s;
 }
@@ -41,23 +57,21 @@ export function statsOf(d: { type: string; stats?: unknown }): LineStats | null 
 export const STATS_TYPES: ReadonlySet<string> = new Set(['trendline', 'ray', 'extendedline', 'infoline']);
 
 export function anyStats(s: LineStats | undefined): boolean {
-    return !!s && (s.price || s.percent || s.bars || s.date || s.distance || s.angle);
+    return !!s && (s.price || s.percent || s.pips || s.bars || s.date || s.distance || s.angle);
 }
 
+/** The stats settings. The dialog shows them as TradingView's INFO section: one Stats dropdown of the parts, Stats
+ *  position, Always show stats. */
 export const LINE_STATS_FIELDS: SettingsField[] = [
-    { path: 'stats.price', label: 'Stats: price range', kind: 'boolean', group: 'behavior' },
-    { path: 'stats.percent', label: 'Stats: percent change', kind: 'boolean', group: 'behavior' },
-    { path: 'stats.bars', label: 'Stats: bars', kind: 'boolean', group: 'behavior' },
-    { path: 'stats.date', label: 'Stats: time span', kind: 'boolean', group: 'behavior' },
-    { path: 'stats.distance', label: 'Stats: distance', kind: 'boolean', group: 'behavior' },
-    { path: 'stats.angle', label: 'Stats: angle', kind: 'boolean', group: 'behavior' },
+    ...STATS_PARTS.map((p): SettingsField => ({ path: `stats.${p.key}`, label: p.label, kind: 'boolean', group: 'behavior' })),
     {
         path: 'stats.position',
         label: 'Stats position',
         kind: 'select',
-        options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }],
+        options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }, { value: 'auto', label: 'Auto' }],
         group: 'behavior',
     },
+    { path: 'stats.always', label: 'Always show stats', kind: 'boolean', group: 'behavior' },
 ];
 
 /** `1d 2h 30m` for a span in ms (largest units first, zero parts left out). */
@@ -79,13 +93,18 @@ function fmtPrice(v: number, ref: number): string {
 }
 
 /** The stats box's text rows, TradingView's order: price, bars + time + distance, angle. Empty when all are off. */
-export function lineStatsRows(s: LineStats, a: DrawingPoint, b: DrawingPoint, p: [number, number, number, number], proj: Projector): string[] {
+export function lineStatsRows(s: LineStats, a: DrawingPoint, b: DrawingPoint, p: [number, number, number, number], proj: Projector, tick?: number): string[] {
     const rows: string[] = [];
     const diff = b.price - a.price;
     const pct = a.price !== 0 ? (diff / Math.abs(a.price)) * 100 : 0;
     const price = s.price ? fmtPrice(diff, Math.max(Math.abs(a.price), Math.abs(b.price))) : '';
     const percent = s.percent ? `${pct >= 0 ? '' : '−'}${Math.abs(pct).toFixed(2)}%` : '';
-    if (price || percent) rows.push(price && percent ? `${price.replace('-', '−')} (${percent})` : price.replace('-', '−') || percent);
+    // Pips: the change in ticks of the price scale (TradingView: 1,184.7 on a 0.1-tick scale reads 11,847).
+    const t = tick && tick > 0 ? tick : 0;
+    const pips = s.pips && t ? Math.round(diff / t) : null;
+    const pipsText = pips == null ? '' : `${pips < 0 ? '−' : ''}${Math.abs(pips).toLocaleString('en-US')}`;
+    const head = price && percent ? `${price.replace('-', '−')} (${percent})` : price.replace('-', '−') || percent;
+    if (head || pipsText) rows.push([head, pipsText].filter(Boolean).join(', '));
     const parts: string[] = [];
     if (s.bars) {
         const bars = proj.barsBetween ? Math.abs(Math.round(proj.barsBetween(a.time, b.time))) : 0;

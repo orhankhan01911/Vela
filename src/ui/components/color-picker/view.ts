@@ -362,6 +362,10 @@ export interface ColorFieldOpts {
     popover?: Pick<PopoverOptions, 'host' | 'position' | 'boundary' | 'zIndex' | 'gap' | 'align'>;
     /** Opacity-drag commit policy of the popover picker (default `'live'`) — see {@link ColorCommit}. */
     commit?: ColorCommit;
+    /** TradingView's line button: the trigger shows the swatch and a sample of the line (width + dash). */
+    line?: () => { width: number; style: string };
+    /** More controls under the picker in the same popover (the line button's Thickness and Line style). */
+    extra?: () => HTMLElement | null;
 }
 
 /** Closed-state swatch shape. `circle` is the settings-dialog preview (a square chip
@@ -383,6 +387,9 @@ export class ColorField {
     private readonly theme: VelaTheme;
     private readonly popoverOpts: ColorFieldOpts['popover'];
     private readonly commit: ColorCommit | undefined;
+    private readonly line: ColorFieldOpts['line'];
+    private readonly extra: ColorFieldOpts['extra'];
+    private sample: HTMLElement | null = null;
 
     constructor(opts: ColorFieldOpts) {
         injectStyles(COLOR_STYLE_ID, COLOR_CSS, document);
@@ -391,6 +398,8 @@ export class ColorField {
         this.onVal = opts.onVal;
         this.popoverOpts = opts.popover;
         this.commit = opts.commit;
+        this.line = opts.line;
+        this.extra = opts.extra;
 
         const trigger = document.createElement('button');
         trigger.type = 'button';
@@ -399,6 +408,12 @@ export class ColorField {
         const swatch = document.createElement('span');
         swatch.className = 'vela-color-field-swatch';
         trigger.appendChild(swatch);
+        if (opts.line) {
+            trigger.classList.add('vela-color-field-line');
+            this.sample = document.createElement('span');
+            this.sample.className = 'vela-color-field-sample';
+            trigger.appendChild(this.sample);
+        }
         this.el = trigger;
         this.swatch = swatch;
         this.paint();
@@ -415,9 +430,14 @@ export class ColorField {
         });
     }
 
-    private paint(): void {
+    /** Repaint the swatch (and the line sample): after an outside change of the color, width or style. */
+    paint(): void {
         const v = this.getVal();
         this.swatch.style.background = `linear-gradient(${v}, ${v}), ${FIELD_CHECKER}`;
+        if (this.sample && this.line) {
+            const { width, style } = this.line();
+            this.sample.style.borderTop = `${Math.max(1, Math.min(4, width))}px ${style === 'dashed' ? 'dashed' : style === 'dotted' ? 'dotted' : 'solid'} ${v}`;
+        }
     }
 
     private toggle(): void {
@@ -435,17 +455,27 @@ export class ColorField {
             boundary: this.popoverOpts?.boundary as PopoverBoundary | undefined,
             zIndex: this.popoverOpts?.zIndex,
             className: 'vela-color-field-pop',
-            content: buildColorPicker(
-                this.getVal(),
-                this.theme,
-                (val) => {
-                    this.onVal(val);
-                    this.paint();
-                },
-                { commit: this.commit },
-            ),
+            content: this.content(),
         });
         pop.show();
+    }
+
+    private content(): HTMLElement {
+        const picker = buildColorPicker(
+            this.getVal(),
+            this.theme,
+            (val) => {
+                this.onVal(val);
+                this.paint();
+            },
+            { commit: this.commit },
+        );
+        const extra = this.extra?.();
+        if (!extra) return picker;
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+        wrap.append(picker, extra);
+        return wrap;
     }
 }
 

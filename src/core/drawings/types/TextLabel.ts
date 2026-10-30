@@ -1,3 +1,4 @@
+import { textPx } from '../style';
 import { type SerializedDrawing } from '../Drawing';
 import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
@@ -6,7 +7,6 @@ import { defaultText } from '../style';
 import { PinnedLabel } from './PinnedLabel';
 
 /** Approximate px font size for a named text size (the painter measures the glyphs exactly). */
-const SIZE_PX: Record<string, number> = { tiny: 10, small: 12, normal: 14, large: 18, huge: 24, auto: 14 };
 
 /**
  * A free-floating text annotation anchored to one point (top-left of the text). Like TradingView's, it can sit on a
@@ -61,7 +61,7 @@ export class TextLabel extends PinnedLabel {
         const b = super.box(proj);
         const wrap = this.wrapPx();
         if (!b || wrap == null || b.w - 8 <= wrap) return b;
-        const fs = SIZE_PX[this.text?.size ?? 'normal'] ?? 14;
+        const fs = textPx(this.text?.size);
         const lines = this.labelText()
             .split('\n')
             .reduce((n, l) => n + Math.max(1, Math.ceil((l.length * fs * 0.6) / wrap)), 0);

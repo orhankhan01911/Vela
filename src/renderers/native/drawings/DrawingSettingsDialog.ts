@@ -14,6 +14,10 @@ import {
     LINE_STYLE_OPTIONS,
     DEFAULT_DRAWING_COLOR,
     TEXT_SIZE_OPTIONS,
+    TEXT_PX_SIZES,
+    TV_LINE_COLOR,
+    STATS_PARTS,
+    textPx,
     MachFigure,
     PositionTool,
     clonePlain,
@@ -31,7 +35,9 @@ import { Menu } from '../../../ui/components/menu';
 import { contrastColor } from '../../shared/drawing-geometry';
 import { applyChromeTokens } from '../../shared/theme-tokens';
 import { Dialog } from '../../../ui/components/dialog';
-import { closeOpenPopovers, eventDismissedPopover, isPopoverOpen } from '../../../ui/components/popover';
+import { Popover, closeOpenPopovers, eventDismissedPopover, isPopoverOpen, openPopoverTrigger } from '../../../ui/components/popover';
+import { ColorField } from '../../../ui/components/color-picker';
+import { iconEl } from '../../../ui/icons';
 import { fieldGrid, fieldRow, fieldSection, buildFieldControl } from '../../../ui/components/field';
 import type { SelectOption } from '../../../ui/components/select';
 import type { SettingsActions } from './DrawingSettingsPopup';
@@ -61,6 +67,22 @@ const FRVP_ANCHOR: readonly SelectOption[] = [
 ];
 const WIDTH_OPTIONS: readonly SelectOption[] = [1, 2, 3, 4].map((w) => ({ value: String(w), label: `${w}px` }));
 const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
+/** TradingView's text-size dropdown: px. */
+const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
+/** TradingView's vertical text alignment on a line names where the line sits against the text: "Top" puts the text
+ *  under the line, "Bottom" over it. Stored values keep their meaning (top = over the line). */
+const ON_LINE_VALIGN: readonly SelectOption[] = [
+    { value: 'bottom', label: 'Top' },
+    { value: 'center', label: 'Middle' },
+    { value: 'top', label: 'Bottom' },
+];
+/** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
+const DIALOG_TITLE: Record<string, string> = { trendline: 'Trendline' };
+const STATS_PATHS = new Set(['stats.position', 'stats.always', ...STATS_PARTS.map((p) => `stats.${p.key}`)]);
+/** TradingView's Extend dropdown label for each left/right combination. */
+function extendLabel(left: boolean, right: boolean): string {
+    return left && right ? 'Extend both lines' : left ? 'Extend left line' : right ? 'Extend right line' : "Don't extend";
+}
 /** Schema paths the dialog never shows: the toolbar owns them (lock) or they are per-tool icons. */
 const SKIP_PATHS = new Set(['locked', 'visible', 'glyph', 'size']);
 /** Drawings whose one anchor only carries a price (or only a time): the Coordinates tab shows that one value. */
@@ -143,7 +165,7 @@ export class DrawingSettingsDialog {
         let ui: Dialog;
         ui = new Dialog({
             host: this.host,
-            title: getDrawingType(live.type)?.label ?? 'Settings',
+            title: DIALOG_TITLE[live.type] ?? getDrawingType(live.type)?.label ?? 'Settings',
             // Non-modal: live-edit dialog — a modal machine locks pointer events on the
             // whole body, killing the chart and the body-portaled popovers.
             modal: false,
@@ -226,22 +248,32 @@ export class DrawingSettingsDialog {
         ui.show();
     }
 
-    /** Style tab: the tool's line/background row first (TradingView's "Line" row is color + width + style),
-     *  then every other look setting from the drawing's schema, then the tool's own sections (Fib, levels). */
+    /** Style tab, TradingView's: the Line row (one button for color, opacity, thickness and line style, then the two
+     *  line-end buttons), Background, Extend, the tool's switches, then the INFO section (stats) and the tool's own
+     *  sections (Fib, levels). */
     private buildStyle(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
         const fields = styleFields(drawing);
         const has = (p: string): boolean => fields.some((f) => f.path === p);
         const done = new Set<string>();
         if (has('style.lineColor') || has('style.lineWidth') || has('style.lineStyle')) {
             const controls: HTMLElement[] = [];
-            if (has('style.lineColor')) controls.push(this.colorControl(drawing, 'style.lineColor', actions, DEFAULT_DRAWING_COLOR));
             const wf = fields.find((f) => f.path === 'style.lineWidth');
-            if (wf) {
-                // Markers (highlighter 4-60 px) take a number; hairline tools the 1-4 px list.
-                if ((wf.min ?? 1) > 1 || (wf.max ?? 4) > 10) controls.push(this.numberControl(drawing, wf, actions));
-                else controls.push(this.selectControl('style.lineWidth', WIDTH_OPTIONS, String(drawing.style.lineWidth ?? 1), actions, (v) => Number(v)));
+            // Markers (highlighter 4-60 px) take a number; hairline tools the 1-4 px list inside the line button.
+            const marker = !!wf && ((wf.min ?? 1) > 1 || (wf.max ?? 4) > 10);
+            if (has('style.lineColor') && !marker && (wf || has('style.lineStyle'))) {
+                controls.push(this.lineButton(drawing, actions, !!wf, has('style.lineStyle')));
+            } else {
+                if (has('style.lineColor')) controls.push(this.colorControl(drawing, 'style.lineColor', actions, DEFAULT_DRAWING_COLOR));
+                if (wf) {
+                    if (marker) controls.push(this.numberControl(drawing, wf, actions));
+                    else controls.push(this.selectControl('style.lineWidth', WIDTH_OPTIONS, String(drawing.style.lineWidth ?? 1), actions, (v) => Number(v)));
+                }
+                if (has('style.lineStyle')) controls.push(this.selectControl('style.lineStyle', LINE_STYLE_OPTIONS, String(drawing.style.lineStyle ?? 'solid'), actions));
             }
-            if (has('style.lineStyle')) controls.push(this.selectControl('style.lineStyle', LINE_STYLE_OPTIONS, String(drawing.style.lineStyle ?? 'solid'), actions));
+            if (has('style.arrowLeft') && has('style.arrowRight')) {
+                controls.push(this.lineEndButton(drawing, 'style.arrowLeft', 'left', actions), this.lineEndButton(drawing, 'style.arrowRight', 'right', actions));
+                done.add('style.arrowLeft').add('style.arrowRight');
+            }
             grid.appendChild(fieldRow({ label: 'Line', control: controls, fit: true }));
             done.add('style.lineColor').add('style.lineWidth').add('style.lineStyle');
         }
@@ -250,11 +282,16 @@ export class DrawingSettingsDialog {
             grid.appendChild(fieldRow({ label: 'Background', control: [this.colorControl(drawing, 'style.fillColor', actions, fill)], fit: true }));
             done.add('style.fillColor');
         }
+        if (has('extendLeft') && has('extendRight')) {
+            grid.appendChild(fieldRow({ label: 'Extend', control: [this.extendDropdown(drawing, actions)], fit: true }));
+            done.add('extendLeft').add('extendRight');
+        }
         for (const f of fields) {
-            if (done.has(f.path)) continue;
+            if (done.has(f.path) || STATS_PATHS.has(f.path)) continue;
             const row = this.schemaRow(drawing, f, actions);
             if (row) grid.appendChild(row);
         }
+        if (fields.some((f) => STATS_PATHS.has(f.path))) this.buildStats(grid, drawing, actions);
         if (drawing.editableLevels()) {
             if (!(drawing instanceof MachFigure)) {
                 const sizes = drawing as unknown as { numbersSize?: string; labelsSize?: string };
@@ -265,11 +302,183 @@ export class DrawingSettingsDialog {
         }
     }
 
-    /** Text tab: the text itself, then its color, size, bold/italic and position. */
+    /** TradingView's Line button: the color swatch and a sample of the line; it opens the color grid and opacity with
+     *  Thickness (1-4 px) and Line style (solid / dashed / dotted) under them. */
+    private lineButton(drawing: Drawing, actions: SettingsActions, width: boolean, style: boolean): HTMLElement {
+        let color = drawing.style.lineColor || DEFAULT_DRAWING_COLOR;
+        let w = drawing.style.lineWidth ?? 1;
+        let ls: string = drawing.style.lineStyle ?? 'solid';
+        const field: ColorField = new ColorField({
+            theme: this.theme,
+            getVal: () => color,
+            onVal: (v) => {
+                color = v;
+                actions.patch({ 'style.lineColor': v });
+            },
+            line: () => ({ width: w, style: ls }),
+            popover: { align: 'start' },
+            extra: () => {
+                const box = document.createElement('div');
+                box.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+                if (width) {
+                    box.append(
+                        caption('Thickness'),
+                        segmented([1, 2, 3, 4].map((n) => ({ value: String(n), sample: { width: n, style: 'solid' } })), String(w), (v) => {
+                            w = Number(v);
+                            actions.patch({ 'style.lineWidth': w });
+                            field.paint();
+                        }),
+                    );
+                }
+                if (style) {
+                    box.append(
+                        caption('Line style'),
+                        segmented(LINE_STYLE_OPTIONS.map((o) => ({ value: o.value, sample: { width: 2, style: o.value } })), ls, (v) => {
+                            ls = v;
+                            actions.patch({ 'style.lineStyle': v });
+                            field.paint();
+                        }),
+                    );
+                }
+                return box;
+            },
+        });
+        field.el.dataset.role = 'line-button';
+        field.el.title = vt('Line');
+        return field.el;
+    }
+
+    /** TradingView's line-end button (left / right end of a trend line): a plain end or an arrow. */
+    private lineEndButton(drawing: Drawing, path: 'style.arrowLeft' | 'style.arrowRight', side: 'left' | 'right', actions: SettingsActions): HTMLElement {
+        let arrow = !!(path === 'style.arrowLeft' ? drawing.style.arrowLeft : drawing.style.arrowRight);
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'vela-dlg-end';
+        b.dataset.role = `line-end-${side}`;
+        b.title = vt(side === 'left' ? 'Left end' : 'Right end');
+        b.style.cssText = END_BTN_CSS;
+        const paint = (): void => { b.innerHTML = endIcon(side, arrow); };
+        paint();
+        b.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleList(b, [
+                { label: 'Normal', icon: endIcon(side, false), checked: !arrow, pick: () => { arrow = false; } },
+                { label: 'Arrow', icon: endIcon(side, true), checked: arrow, pick: () => { arrow = true; } },
+            ], () => {
+                actions.patch({ [path]: arrow });
+                paint();
+            });
+        });
+        return b;
+    }
+
+    /** TradingView's Extend dropdown: "Extend left line" / "Extend right line" checkboxes; the button names the mix. */
+    private extendDropdown(drawing: Drawing, actions: SettingsActions): HTMLElement {
+        const cur = drawing as unknown as { extendLeft?: boolean; extendRight?: boolean };
+        let left = !!cur.extendLeft;
+        let right = !!cur.extendRight;
+        const dd = dropdownTrigger(extendLabel(left, right));
+        dd.el.dataset.role = 'extend';
+        dd.button.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleChecks(dd.button, [
+                { label: 'Extend left line', checked: () => left, set: (v) => { left = v; actions.patch({ extendLeft: v }); } },
+                { label: 'Extend right line', checked: () => right, set: (v) => { right = v; actions.patch({ extendRight: v }); } },
+            ], () => dd.setLabel(extendLabel(left, right)));
+        });
+        return dd.el;
+    }
+
+    /** TradingView's INFO section: a Stats dropdown of the parts to show (Hidden when none), Stats position and
+     *  Always show stats. */
+    private buildStats(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
+        const now = (): Record<string, unknown> => ({ ...((actions.resolve() ?? drawing) as unknown as { stats?: Record<string, unknown> }).stats });
+        const statsLabel = (): string => {
+            const st = now();
+            const on = STATS_PARTS.filter((p) => st[p.key] === true).map((p) => vt(p.label));
+            return on.length ? on.join(', ') : 'Hidden';
+        };
+        grid.appendChild(fieldSection('Info'));
+        const dd = dropdownTrigger(statsLabel());
+        dd.el.dataset.role = 'stats';
+        dd.button.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleChecks(
+                dd.button,
+                STATS_PARTS.map((p) => ({
+                    label: p.label,
+                    checked: () => now()[p.key] === true,
+                    set: (v: boolean) => actions.patch({ [`stats.${p.key}`]: v }),
+                })),
+                () => dd.setLabel(statsLabel()),
+            );
+        });
+        grid.appendChild(fieldRow({ label: 'Stats', control: [dd.el], fit: true }));
+        const pos = drawing.schema().fields.find((f) => f.path === 'stats.position');
+        if (pos?.options) grid.appendChild(fieldRow({ label: 'Stats position', control: [this.selectControl('stats.position', pos.options, String(now().position ?? 'right'), actions)], fit: true }));
+        grid.appendChild(fieldRow({ label: 'Always show stats', bool: true, toggle: { id: uid(), checked: now().always === true, onChange: (v) => actions.patch({ 'stats.always': v }) } }));
+    }
+
+    /** A small list under `trigger` (TradingView's line-end menu): one pick closes it. */
+    private toggleList(trigger: HTMLElement, rows: Array<{ label: string; icon: string; checked: boolean; pick: () => void }>, done: () => void): void {
+        if (openPopoverTrigger() === trigger) { closeOpenPopovers(); return; }
+        const list = document.createElement('div');
+        list.style.cssText = 'display:flex;flex-direction:column;min-width:140px;';
+        for (const r of rows) {
+            const it = document.createElement('button');
+            it.type = 'button';
+            it.className = 'vela-dlg-list-item';
+            it.style.cssText = LIST_ITEM_CSS + (r.checked ? 'background:var(--vela-surface-raised, rgba(255,255,255,0.08));' : '');
+            it.innerHTML = `<span style="display:inline-flex;width:28px;">${r.icon}</span>`;
+            const t = document.createElement('span');
+            t.textContent = vt(r.label);
+            it.appendChild(t);
+            it.addEventListener('click', (e) => {
+                e.stopPropagation();
+                r.pick();
+                done();
+                closeOpenPopovers();
+            });
+            list.appendChild(it);
+        }
+        new Popover({ trigger, theme: this.theme, align: 'start', gap: 4, className: 'vela-color-field-pop', content: list }).show();
+    }
+
+    /** A checkbox list under `trigger` (TradingView's Extend and Stats dropdowns): stays open while ticking. */
+    private toggleChecks(trigger: HTMLElement, rows: Array<{ label: string; checked: () => boolean; set: (v: boolean) => void }>, changed: () => void): void {
+        if (openPopoverTrigger() === trigger) { closeOpenPopovers(); return; }
+        const list = document.createElement('div');
+        list.style.cssText = 'display:flex;flex-direction:column;min-width:200px;padding:2px 0;';
+        for (const r of rows) {
+            const row = fieldRow({ label: r.label, bool: true, toggle: { id: uid(), checked: r.checked(), onChange: (v) => { r.set(v); changed(); } } });
+            row.style.padding = '4px 6px';
+            list.appendChild(row);
+        }
+        new Popover({ trigger, theme: this.theme, align: 'start', gap: 4, className: 'vela-color-field-pop', content: list }).show();
+    }
+
+    /** Text tab, TradingView's: color, size (px), Bold and Italic buttons on one row, the text box, then Text alignment
+     *  (vertical, horizontal). The position tools keep their px number box. */
     private buildText(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
         const fields = drawing.schema().fields.filter((f) => f.path.startsWith('text.'));
         const has = (p: string): boolean => fields.some((f) => f.path === p);
         const text = drawing.text;
+        const px = drawing.schema().fields.find((f) => f.path === 'fontSize' && f.kind === 'number');
+        const style: HTMLElement[] = [];
+        const textDefault = drawing.type === 'trendline' ? TV_LINE_COLOR : this.theme.textColor;
+        if (has('text.color')) style.push(this.colorControl(drawing, 'text.color', actions, text?.color || textDefault));
+        if (has('text.size')) style.push(this.selectControl('text.size', PX_SIZE_OPTIONS, String(textPx(text?.size)), actions, (v) => Number(v)));
+        if (px) style.push(this.numberControl(drawing, px, actions));
+        if (has('text.bold')) style.push(styleToggle('B', 'Bold', 'font-weight:700;', !!text?.bold, (v) => actions.patch({ 'text.bold': v })));
+        if (has('text.italic')) style.push(styleToggle('I', 'Italic', 'font-style:italic;font-family:serif;', !!text?.italic, (v) => actions.patch({ 'text.italic': v })));
+        if (style.length) {
+            const row = document.createElement('div');
+            row.className = 'vela-field-span';
+            row.dataset.role = 'text-style';
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
+            row.append(...style);
+            grid.appendChild(row);
+        }
         if (has('text.value')) {
             const ta = buildFieldControl({
                 kind: 'textarea',
@@ -283,24 +492,19 @@ export class DrawingSettingsDialog {
             ta.el.classList.add('vela-field-span');
             grid.appendChild(ta.el);
         }
-        const style: HTMLElement[] = [];
-        if (has('text.color')) style.push(this.colorControl(drawing, 'text.color', actions, text?.color || this.theme.textColor));
-        if (has('text.size')) style.push(this.selectControl('text.size', SIZE_OPTIONS, text?.size ?? 'normal', actions));
-        // A px size instead of small/large (the position tools, like TradingView's).
-        const px = drawing.schema().fields.find((f) => f.path === 'fontSize' && f.kind === 'number');
-        if (px) style.push(this.numberControl(drawing, px, actions));
-        if (style.length) grid.appendChild(fieldRow({ label: 'Font', control: style, fit: true }));
-        if (has('text.bold')) grid.appendChild(fieldRow({ label: 'Bold', bool: true, toggle: { checked: !!text?.bold, onChange: (v) => actions.patch({ 'text.bold': v }) } }));
-        if (has('text.italic')) grid.appendChild(fieldRow({ label: 'Italic', bool: true, toggle: { checked: !!text?.italic, onChange: (v) => actions.patch({ 'text.italic': v }) } }));
         // TradingView's one "Text alignment" row: vertical position, then horizontal.
         const hf = fields.find((f) => f.path === 'text.hAlign');
         const vf = fields.find((f) => f.path === 'text.vAlign');
         if (hf?.options && vf?.options) {
-            const hDef = ALONG_LINE_TEXT_TYPES.has(drawing.type) ? 'center' : 'left';
+            const onLine = ALONG_LINE_TEXT_TYPES.has(drawing.type);
+            const hDef = onLine ? 'center' : 'left';
             grid.appendChild(
                 fieldRow({
                     label: 'Text alignment',
-                    control: [this.selectControl('text.vAlign', vf.options, text?.vAlign ?? 'top', actions), this.selectControl('text.hAlign', hf.options, text?.hAlign ?? hDef, actions)],
+                    control: [
+                        this.selectControl('text.vAlign', onLine ? ON_LINE_VALIGN : vf.options, text?.vAlign ?? 'top', actions),
+                        this.selectControl('text.hAlign', hf.options, text?.hAlign ?? hDef, actions),
+                    ],
                     fit: true,
                 }),
             );
@@ -392,17 +596,37 @@ export class DrawingSettingsDialog {
                     },
                 });
                 c.el.dataset.role = `interval-${m.unit}-${key}`;
+                c.el.style.width = '64px';
+                c.el.style.flex = 'none';
                 return c.el;
             };
-            const dash = document.createElement('span');
-            dash.textContent = '-';
-            dash.style.cssText = 'opacity:0.6;padding:0 2px;';
-            grid.appendChild(fieldRow({
+            // TradingView's row: from box, a two-knob slider over 1..max, to box; greyed while the row is off.
+            const fromEl = num('from');
+            const toEl = num('to');
+            const sync = (): void => {
+                for (const el of [fromEl, toEl]) el.dispatchEvent(new CustomEvent('vela-sync'));
+                const fi = fromEl.querySelector('input');
+                const ti = toEl.querySelector('input');
+                if (fi) fi.value = String(r.from);
+                if (ti) ti.value = String(r.to);
+            };
+            const slider = rangeSlider(1, m.max, () => r, (from, to) => {
+                r = { ...r, from, to };
+                sync();
+                write(m.unit, r);
+            });
+            slider.dataset.role = `interval-${m.unit}-slider`;
+            const dim = (): void => { for (const el of [fromEl, slider, toEl]) el.style.opacity = r.on ? '' : '0.45'; };
+            const row = fieldRow({
                 label: m.label,
-                toggle: { checked: r.on, onChange: (v) => { r = { ...r, on: v }; write(m.unit, r); } },
-                control: [num('from'), dash, num('to')],
+                toggle: { checked: r.on, onChange: (v) => { r = { ...r, on: v }; dim(); write(m.unit, r); } },
+                control: [fromEl, slider, toEl],
                 fit: true,
-            }));
+            });
+            fromEl.addEventListener('change', () => slider.dispatchEvent(new CustomEvent('vela-sync')), true);
+            toEl.addEventListener('change', () => slider.dispatchEvent(new CustomEvent('vela-sync')), true);
+            dim();
+            grid.appendChild(row);
         }
     }
 
@@ -411,7 +635,8 @@ export class DrawingSettingsDialog {
         const cur = getByPath(drawing, f.path);
         switch (f.kind) {
             case 'boolean':
-                return fieldRow({ label: f.label, bool: true, toggle: { checked: !!cur, onChange: (v) => actions.patch({ [f.path]: v }) } });
+                // The label ticks the box too, as TradingView's do.
+                return fieldRow({ label: f.label, bool: true, toggle: { id: uid(), checked: !!cur, onChange: (v) => actions.patch({ [f.path]: v }) } });
             case 'color':
                 return fieldRow({ label: f.label, control: [this.colorControl(drawing, f.path, actions, typeof cur === 'string' && cur ? cur : DEFAULT_DRAWING_COLOR)], fit: true });
             case 'number':
@@ -549,11 +774,12 @@ export class DrawingSettingsDialog {
         // Rebuild the list each time it opens so saves/deletes show immediately.
         trigger.addEventListener('click', () => {
             const saved = Object.keys(readTemplates()[type] ?? {}).sort((a, b) => a.localeCompare(b));
+            // TradingView's order: Save as…, Apply defaults, then the saved templates.
             menu.setItems([
                 { id: 'save', label: 'Save as\u2026' },
+                { id: 'reset', label: 'Apply defaults' },
                 ...saved.map((n, i) => ({ id: `apply:${n}`, label: n, separatorBefore: i === 0 })),
                 ...(saved.length ? [{ id: 'del-root', label: 'Delete template', separatorBefore: true, submenu: saved.map((n) => ({ id: `del:${n}`, label: n })) }] : []),
-                { id: 'reset', label: 'Reset to defaults', separatorBefore: true },
             ]);
         }, true);
         wrap.appendChild(trigger);
@@ -1173,4 +1399,169 @@ function btn(label: string, primary: boolean, onClick: () => void): HTMLButtonEl
     b.className = primary ? 'vela-dialog-btn vela-dialog-btn-primary' : 'vela-dialog-btn';
     b.addEventListener('click', onClick);
     return b;
+}
+
+let uidN = 0;
+/** A fresh element id (ties a checkbox row's label to its box). */
+function uid(): string {
+    uidN += 1;
+    return `vela-dlg-f${uidN}`;
+}
+
+const END_BTN_CSS =
+    'width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:1px solid var(--vela-border-strong);border-radius:6px;background:transparent;color:inherit;cursor:pointer;flex:none;';
+const LIST_ITEM_CSS =
+    'display:flex;align-items:center;gap:6px;width:100%;padding:7px 10px;border:none;border-radius:4px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;';
+
+/** A line end as TradingView draws it in its menu: a short line with a ring (plain end) or an arrow at that end. */
+function endIcon(side: 'left' | 'right', arrow: boolean): string {
+    const flip = side === 'left' ? '' : ' transform="translate(22 0) scale(-1 1)"';
+    const end = arrow ? '<path d="M8 7 4 11l4 4" fill="none"/>' : '<circle cx="5.5" cy="11" r="2" fill="none"/>';
+    return `<svg width="22" height="22" viewBox="0 0 22 22" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><g${flip}><path d="${arrow ? 'M4 11h15' : 'M7.5 11H19'}"/>${end}</g></svg>`;
+}
+
+/** A select-looking button whose list the caller opens (the Extend and Stats dropdowns hold checkboxes). */
+function dropdownTrigger(label: string): { el: HTMLElement; button: HTMLButtonElement; setLabel: (s: string) => void } {
+    const wrap = document.createElement('div');
+    wrap.className = 'vela-select';
+    wrap.dataset.size = 'md';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'vela-select-trigger';
+    const l = document.createElement('span');
+    l.className = 'vela-select-label';
+    l.textContent = vt(label);
+    const chev = document.createElement('span');
+    chev.className = 'vela-select-chevron';
+    chev.appendChild(iconEl('chevron-down'));
+    b.append(l, chev);
+    b.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        b.focus({ preventScroll: true });
+    });
+    wrap.appendChild(b);
+    wrap.style.minWidth = '190px';
+    return { el: wrap, button: b, setLabel: (t) => { l.textContent = vt(t); } };
+}
+
+function caption(text: string): HTMLElement {
+    const c = document.createElement('div');
+    c.textContent = vt(text);
+    c.style.cssText = 'font-size:12px;color:var(--vela-fg-muted);margin-top:2px;';
+    return c;
+}
+
+/** TradingView's segmented picker in the line popover: equal cells, each a sample of the line; the current one lit. */
+function segmented(cells: Array<{ value: string; sample: { width: number; style: string } }>, value: string, onPick: (v: string) => void): HTMLElement {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;border:1px solid var(--vela-border-strong);border-radius:6px;overflow:hidden;';
+    const els: HTMLButtonElement[] = [];
+    const paint = (v: string): void => {
+        els.forEach((el, i) => {
+            const on = cells[i]!.value === v;
+            el.style.background = on ? 'var(--vela-fg-bright)' : 'transparent';
+            el.style.color = on ? 'var(--vela-surface-overlay, #000)' : 'var(--vela-fg)';
+            el.setAttribute('aria-pressed', String(on));
+        });
+    };
+    cells.forEach((c, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.value = c.value;
+        b.style.cssText = `flex:1 1 0;height:30px;display:flex;align-items:center;justify-content:center;border:none;${i ? 'border-left:1px solid var(--vela-border-strong);' : ''}cursor:pointer;padding:0;`;
+        const line = document.createElement('span');
+        line.style.cssText = `display:block;width:26px;height:0;border-top:${c.sample.width}px ${c.sample.style} currentColor;`;
+        b.appendChild(line);
+        b.addEventListener('click', (e) => {
+            e.stopPropagation();
+            paint(c.value);
+            onPick(c.value);
+        });
+        els.push(b);
+        row.appendChild(b);
+    });
+    paint(value);
+    return row;
+}
+
+/** TradingView's B / I buttons on the Text tab: a square that is lit while on. */
+function styleToggle(glyph: string, title: string, glyphCss: string, on: boolean, onChange: (v: boolean) => void): HTMLElement {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.title = vt(title);
+    b.textContent = glyph;
+    b.dataset.role = `text-${title.toLowerCase()}`;
+    let cur = on;
+    const paint = (): void => {
+        b.style.background = cur ? 'var(--vela-fg-muted)' : 'transparent';
+        b.setAttribute('aria-pressed', String(cur));
+    };
+    b.style.cssText = `width:32px;height:32px;border:1px solid var(--vela-border-strong);border-radius:6px;color:inherit;font-size:15px;cursor:pointer;padding:0;flex:none;${glyphCss}`;
+    paint();
+    b.addEventListener('click', () => {
+        cur = !cur;
+        paint();
+        onChange(cur);
+    });
+    return b;
+}
+
+/** TradingView's two-knob range slider (Visibility rows): `from` and `to` over `min..max`. */
+function rangeSlider(min: number, max: number, get: () => { from: number; to: number }, onChange: (from: number, to: number) => void): HTMLElement {
+    ensureRangeStyles();
+    const wrap = document.createElement('div');
+    wrap.className = 'vela-range2';
+    const fill = document.createElement('div');
+    fill.className = 'vela-range2-fill';
+    const mk = (): HTMLInputElement => {
+        const i = document.createElement('input');
+        i.type = 'range';
+        i.min = String(min);
+        i.max = String(max);
+        i.step = '1';
+        return i;
+    };
+    const a = mk();
+    const b = mk();
+    const paint = (): void => {
+        const r = get();
+        a.value = String(r.from);
+        b.value = String(r.to);
+        const span = Math.max(1, max - min);
+        fill.style.left = `${((r.from - min) / span) * 100}%`;
+        fill.style.right = `${100 - ((r.to - min) / span) * 100}%`;
+    };
+    a.addEventListener('input', () => {
+        const to = Number(b.value);
+        const from = Math.min(Number(a.value), to);
+        onChange(from, to);
+        paint();
+    });
+    b.addEventListener('input', () => {
+        const from = Number(a.value);
+        const to = Math.max(Number(b.value), from);
+        onChange(from, to);
+        paint();
+    });
+    wrap.addEventListener('vela-sync', paint);
+    wrap.append(fill, a, b);
+    paint();
+    return wrap;
+}
+
+let rangeStyled = false;
+function ensureRangeStyles(): void {
+    if (rangeStyled || typeof document === 'undefined') return;
+    rangeStyled = true;
+    const st = document.createElement('style');
+    st.textContent = `
+.vela-range2{position:relative;width:96px;height:20px;flex:none;}
+.vela-range2::before{content:'';position:absolute;left:6px;right:6px;top:9px;height:2px;border-radius:1px;background:var(--vela-border-strong);}
+.vela-range2-fill{position:absolute;top:9px;height:2px;background:var(--vela-fg);margin:0 6px;}
+.vela-range2 input{position:absolute;left:0;top:0;width:100%;height:20px;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none;}
+.vela-range2 input::-webkit-slider-thumb{pointer-events:auto;-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--vela-surface-overlay,#000);border:2px solid var(--vela-fg);cursor:pointer;}
+.vela-range2 input::-moz-range-thumb{pointer-events:auto;width:10px;height:10px;border-radius:50%;background:var(--vela-surface-overlay,#000);border:2px solid var(--vela-fg);cursor:pointer;}
+.vela-range2 input::-webkit-slider-runnable-track{background:none;}
+.vela-range2 input::-moz-range-track{background:none;}`;
+    document.head.appendChild(st);
 }

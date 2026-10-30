@@ -1,6 +1,6 @@
 import type { DrawingPoint, FreeAxis, Projector } from './geometry';
 import type { DrawingStyle, DrawingText } from './style';
-import { defaultStyle, defaultText } from './style';
+import { defaultStyle, defaultText, TV_LINE_COLOR } from './style';
 import { ALONG_LINE_TEXT_TYPES } from './schema';
 import type { SettingsSchema } from './schema';
 import { compactIntervals, type IntervalVisibility } from './intervals';
@@ -357,7 +357,8 @@ export abstract class Drawing {
     /** Apply a `{ 'dot.path': value }` patch (the popup emits these). */
     applySettings(patch: Record<string, unknown>): void {
         for (const [path, value] of Object.entries(patch)) {
-            if (path.startsWith('text.') && !this.text) this.text = { ...defaultText(), ...(ALONG_LINE_TEXT_TYPES.has(this.type) ? { hAlign: 'center' as const } : {}) };
+            // A line's text starts as TradingView's: centered on the line, above it, 14 px, its default blue.
+            if (path.startsWith('text.') && !this.text) this.text = { ...defaultText(), ...(ALONG_LINE_TEXT_TYPES.has(this.type) ? { hAlign: 'center' as const, ...(this.type === 'trendline' ? { color: TV_LINE_COLOR, size: 14 } : {}) } : {}) };
             setByPath(this as unknown as Record<string, unknown>, path, value);
         }
     }

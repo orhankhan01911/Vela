@@ -18,6 +18,9 @@ const GHOST_ALPHA = 0.7;
 /** TradingView's handle ring color and half-size (the position tools wear TradingView's handles). */
 const TV_HANDLE_RING = '#2962ff'; // palette-exempt: TradingView drawing-handle blue
 const TV_HANDLE_HALF = 5;
+/** The selected drawing's shaded spans on the axes (TradingView's): how far into the price scale / time axis. */
+const AXIS_HIGHLIGHT_W = 80;
+const AXIS_HIGHLIGHT_H = 24;
 /** Price-chip text size without a renderer (`axisLabel` null): the chart's default axis size. */
 const AXIS_CHIP_FONT_PX = 12;
 /** Info badges (regression R², measure deltas) float over CHART CONTENT of any color, so
@@ -166,8 +169,12 @@ export class DrawingPainter {
         if (highlightIds.size === 0) return;
         for (const d of drawings) {
             if (d.visible && highlightIds.has(d.id)) {
-                if (d instanceof PositionTool) this.paintClipped(ctx, d, proj, () => this.paintTvHandles(ctx, d.handlePoints(proj), d.handleShapes()));
-                else this.paintClipped(ctx, d, proj, () => this.paintHandles(ctx, d.handlePoints(proj)));
+                // TradingView's handles on every tool: a background-filled blue ring (the position tools' squares too).
+                const shapes = d instanceof PositionTool ? d.handleShapes() : [];
+                this.paintClipped(ctx, d, proj, () => {
+                    this.paintMiddlePoint(ctx, d, proj);
+                    this.paintTvHandles(ctx, d.handlePoints(proj), shapes);
+                });
             }
         }
     }
@@ -449,8 +456,8 @@ export class DrawingPainter {
                 const firstIsLeft = pts[0]![0] <= pts[1]![0];
                 const firstExtended = !!tl && (firstIsLeft ? tl.extendLeft : tl.extendRight);
                 const secondExtended = !!tl && (firstIsLeft ? tl.extendRight : tl.extendLeft);
-                if (d.style.arrowRight && !secondExtended) this.paintArrowhead(ctx, pts[0]!, pts[1]!, d.style);
-                if (d.style.arrowLeft && !firstExtended) this.paintArrowhead(ctx, pts[1]!, pts[0]!, d.style);
+                if (d.style.arrowRight && !secondExtended) this.paintChevron(ctx, pts[0]!, pts[1]!, d.style);
+                if (d.style.arrowLeft && !firstExtended) this.paintChevron(ctx, pts[1]!, pts[0]!, d.style);
                 break;
             }
             case 'ellipse': {
@@ -793,6 +800,19 @@ export class DrawingPainter {
             if (!a || y == null || (rect && (rect.height <= 0 || y < rect.top || y > rect.top + rect.height))) continue;
             this.paintAxisPrice(ctx, d, this.axisChipY.get(d.id) ?? y, proj, theme);
         }
+        // TradingView's "Price labels" (trend line): every point's price in a chip of the line color on the scale.
+        for (const d of drawings) {
+            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs) || !(d as { showPriceLabels?: boolean }).showPriceLabels) continue;
+            const rect = proj.paneRect?.(d.paneId);
+            for (const a of d.anchors) {
+                const y = proj.yOf(a.price, d.paneId);
+                if (y == null || (rect && (rect.height <= 0 || y < rect.top || y > rect.top + rect.height))) continue;
+                ctx.save();
+                ctx.setLineDash([]);
+                this.paintAxisChip(ctx, d, y, proj, theme, d.style.lineColor || theme.textColor, a.price);
+                ctx.restore();
+            }
+        }
         // TradingView's time label for vertical lines / cross lines: the time in a chip of the line color on the time axis.
         for (const d of drawings) {
             if (!d.visible || !shownOnBarMs(d.intervals, this.barMs) || !showsAxisTime(d)) continue;
@@ -813,6 +833,64 @@ export class DrawingPainter {
             ctx.fill();
             ctx.fillStyle = contrastColor(ink);
             ctx.fillText(label, cx, proj.height + 11.5);
+            ctx.restore();
+        }
+    }
+
+    /**
+     * TradingView's axis highlight of the selected drawing: its price span shaded on the price scale and its time span
+     * on the time axis, with each point's price and time in a blue chip. Drawings with many points (brush, path) get the
+     * shaded spans only.
+     */
+    paintSelectionAxes(ctx: CanvasRenderingContext2D, drawings: readonly Drawing[], proj: Projector, theme: VelaTheme, selected: ReadonlySet<string>): void {
+        if (selected.size === 0) return;
+        for (const d of drawings) {
+            if (!selected.has(d.id) || !d.visible || d.anchors.length === 0 || !shownOnBarMs(d.intervals, this.barMs)) continue;
+            const rect = proj.paneRect?.(d.paneId) ?? { top: 0, height: proj.height };
+            if (rect.height <= 0) continue;
+            const ys = d.anchors.map((a) => proj.yOf(a.price, d.paneId)).filter((y): y is number => y != null);
+            const xs = d.anchors.map((a) => proj.xOf(a.time)).filter((x) => Number.isFinite(x));
+            const priceOnly = d.type === 'hline' || d.type === 'hray';
+            const timeOnly = d.type === 'vline';
+            ctx.save();
+            ctx.setLineDash([]);
+            ctx.fillStyle = withAlpha(TV_HANDLE_RING, 0.25);
+            if (ys.length >= 2 && !timeOnly) {
+                const top = Math.max(rect.top, Math.min(...ys));
+                const bot = Math.min(rect.top + rect.height, Math.max(...ys));
+                if (bot > top) ctx.fillRect(proj.width, top, AXIS_HIGHLIGHT_W, bot - top);
+            }
+            if (xs.length >= 2 && !priceOnly) {
+                const l = Math.max(0, Math.min(...xs));
+                const r = Math.min(proj.width, Math.max(...xs));
+                if (r > l) ctx.fillRect(l, proj.height, r - l, AXIS_HIGHLIGHT_H);
+            }
+            if (d.anchors.length <= 4) {
+                if (!timeOnly && !showsAxisPrice(d) && !(d as { showPriceLabels?: boolean }).showPriceLabels) {
+                    for (const a of d.anchors) {
+                        const y = proj.yOf(a.price, d.paneId);
+                        if (y == null || y < rect.top || y > rect.top + rect.height) continue;
+                        this.paintAxisChip(ctx, d, y, proj, theme, TV_HANDLE_RING, a.price);
+                    }
+                }
+                if (!priceOnly && !showsAxisTime(d)) {
+                    ctx.font = `11px ${theme.fontFamily}`;
+                    ctx.textBaseline = 'middle';
+                    ctx.textAlign = 'center';
+                    for (const a of d.anchors) {
+                        const x = proj.xOf(a.time);
+                        if (!Number.isFinite(x) || x < 0 || x > proj.width) continue;
+                        const label = formatTimeStamp(a.time, this.timeZone, this.barMs || 60_000);
+                        const w = Math.ceil(ctx.measureText(label).width + 14);
+                        const cx = Math.max(w / 2 + 1, Math.min(proj.width - w / 2 - 1, x));
+                        roundRect(ctx, Math.round(cx - w / 2), proj.height + 2, w, 18, 4);
+                        ctx.fillStyle = TV_HANDLE_RING;
+                        ctx.fill();
+                        ctx.fillStyle = '#ffffff'; // palette-exempt: TradingView's white chip text
+                        ctx.fillText(label, Math.round(cx), proj.height + 11.5);
+                    }
+                }
+            }
             ctx.restore();
         }
     }
@@ -1193,45 +1271,69 @@ export class DrawingPainter {
     /** TradingView's line stats (trend line, ray, extended line, info line): a box of price range, percent, bars,
      *  time span, distance and angle by the first point, the middle or the second point, below and right of it. Its own
      *  pass on the top canvas like the axis prices, so the candles never cover it. */
-    paintLineStats(ctx: CanvasRenderingContext2D, drawings: readonly Drawing[], proj: Projector, theme: VelaTheme): void {
+    paintLineStats(ctx: CanvasRenderingContext2D, drawings: readonly Drawing[], proj: Projector, theme: VelaTheme, active?: ReadonlySet<string>): void {
         for (const d of drawings) {
             if (!d.visible || !shownOnBarMs(d.intervals, this.barMs)) continue;
             const s = statsOf(d as Drawing & { stats?: unknown });
             const a = d.anchors[0];
             const b = d.anchors[1];
             if (!s || !anyStats(s) || !a || !b) continue;
+            // TradingView: without "Always show stats" the box shows only while the line is selected, hovered or dragged.
+            if (!s.always && active && !active.has(d.id)) continue;
             const pts = d.handlePoints(proj);
             if (pts.length < 2) continue;
             const p: [number, number, number, number] = [pts[0]![0], pts[0]![1], pts[1]![0], pts[1]![1]];
-            const rows = lineStatsRows(s, a, b, p, proj);
+            const rows = lineStatsRows(s, a, b, p, proj, this.priceTick(d.paneId, Math.max(Math.abs(a.price), Math.abs(b.price))));
             if (rows.length === 0) continue;
-            const ax = s.position === 'left' ? p[0] : s.position === 'right' ? p[2] : (p[0] + p[2]) / 2;
-            const ay = s.position === 'left' ? p[1] : s.position === 'right' ? p[3] : (p[1] + p[3]) / 2;
+            const offRight = p[2] < 0 || p[2] > proj.width;
+            const pos = s.position === 'auto' ? (offRight ? 'left' : 'right') : s.position;
+            const ax = pos === 'left' ? p[0] : pos === 'right' ? p[2] : (p[0] + p[2]) / 2;
+            const ay = pos === 'left' ? p[1] : pos === 'right' ? p[3] : (p[1] + p[3]) / 2;
             const rect = proj.paneRect?.(d.paneId) ?? { top: 0, height: proj.height };
             if (ay < rect.top || ay > rect.top + rect.height || ax < 0 || ax > proj.width) continue;
+            // TradingView's box: an icon per row (price range, bars range, angle), 27 px rows, a dark see-through plate.
+            const kinds: Array<'price' | 'bars' | 'angle'> = [];
+            if (s.price || s.percent || s.pips) kinds.push('price');
+            if (s.bars || s.date || s.distance) kinds.push('bars');
+            if (s.angle) kinds.push('angle');
             ctx.save();
             ctx.setLineDash([]);
             ctx.font = `12px ${theme.fontFamily}`;
             ctx.textBaseline = 'middle';
             ctx.textAlign = 'left';
-            const padX = 12;
-            const rowH = 22;
-            const w = Math.ceil(Math.max(...rows.map((r) => ctx.measureText(r).width))) + padX * 2;
+            const padL = 40;
+            const padR = 14;
+            const rowH = 27;
+            const w = Math.ceil(Math.max(...rows.map((r) => ctx.measureText(r).width))) + padL + padR;
             const h = rows.length * rowH + 10;
             // Below and right of the point, flipped back inside the pane near its right or bottom edge.
             let x = ax + 12;
             let y = ay + 12;
             if (x + w > proj.width - 2) x = ax - 12 - w;
             if (y + h > rect.top + rect.height - 2) y = ay - 12 - h;
-            x = Math.max(2, x);
-            y = Math.max(rect.top + 2, y);
+            const dpr = ctx.getTransform?.()?.a || 1;
+            x = Math.round(Math.max(2, x) * dpr) / dpr;
+            y = Math.round(Math.max(rect.top + 2, y) * dpr) / dpr;
             roundRect(ctx, x, y, w, h, 4);
             ctx.fillStyle = STATS_FILL;
             ctx.fill();
             ctx.fillStyle = STATS_TEXT;
-            rows.forEach((r, i) => ctx.fillText(r, x + padX, y + 5 + rowH * i + rowH / 2));
+            ctx.strokeStyle = STATS_TEXT;
+            ctx.lineWidth = 1;
+            rows.forEach((r, i) => {
+                const cy = Math.round((y + 5 + rowH * i + rowH / 2) * dpr) / dpr;
+                statsIcon(ctx, kinds[i] ?? 'price', x + 20, cy);
+                ctx.fillText(r, x + padL, cy);
+            });
             ctx.restore();
         }
+    }
+
+    /** One tick of the pane's price scale (its last shown decimal): `0.01` when the axis reads `78,248.10`. */
+    private priceTick(paneId: string, price: number): number {
+        const text = this.axisLabel?.(paneId, price)?.text ?? formatPriceTag(price);
+        const m = /[.,](\d+)\s*$/.exec(text.replace(/[^\d.,]/g, ''));
+        return m ? 10 ** -m[1]!.length : 1;
     }
 
     private paintAxisPrice(ctx: CanvasRenderingContext2D, d: Drawing, y: number, proj: Projector, theme: VelaTheme): void {
@@ -1247,15 +1349,14 @@ export class DrawingPainter {
      * so the chip reads like the scale beside it (`80,120.61` in the axis face, not a bolder 11 px face with its own
      * decimals). Box and baseline sit on whole device pixels: a fractional y smears the glyphs over two pixel rows.
      */
-    private paintAxisChip(ctx: CanvasRenderingContext2D, d: Drawing, y: number, proj: Projector, theme: VelaTheme, ink: string): void {
-        const a = d.anchors[0]!;
+    private paintAxisChip(ctx: CanvasRenderingContext2D, d: Drawing, y: number, proj: Projector, theme: VelaTheme, ink: string, price = d.anchors[0]!.price): void {
         const W = proj.width;
-        const label = this.axisLabel?.(d.paneId, a.price) ?? null;
-        const priceStr = label?.text || formatPriceTag(a.price);
+        const label = this.axisLabel?.(d.paneId, price) ?? null;
+        const priceStr = label?.text || formatPriceTag(price);
         ctx.font = label?.font ?? `${AXIS_CHIP_FONT_PX}px ${theme.fontFamily}`;
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'left';
-        const dpr = ctx.getTransform?.().a || 1;
+        const dpr = ctx.getTransform?.()?.a || 1;
         const snap = (v: number): number => Math.round(v * dpr) / dpr;
         const cy = snap(y);
         const chipW = Math.ceil(Math.max(54, ctx.measureText(priceStr).width + 14));
@@ -1482,7 +1583,7 @@ export class DrawingPainter {
         if (!L) return;
         // Everything lands on whole DEVICE pixels: at a browser zoom (110 %, 125 % ...) a whole CSS pixel falls between
         // device pixels and fills, 1 px lines and text go soft. `snap` rounds an edge, `crisp` centres a line on a pixel row.
-        const dpr = ctx.getTransform?.().a || 1;
+        const dpr = ctx.getTransform?.()?.a || 1;
         const snap = (v: number): number => Math.round(v * dpr) / dpr;
         const lineW = (cssW: number): number => Math.max(1, Math.round(cssW * dpr)) / dpr;
         const crisp = (v: number, w: number): number => (Math.round(v * dpr - (w * dpr) / 2) + (w * dpr) / 2) / dpr;
@@ -2788,6 +2889,25 @@ export class DrawingPainter {
         ctx.restore();
     }
 
+    /** TradingView's line-end arrow (trend line, arrow): two open strokes at `to` in the line's width, ~40° off it. */
+    private paintChevron(ctx: CanvasRenderingContext2D, from: readonly [number, number], to: readonly [number, number], style: DrawingStyle): void {
+        const ang = Math.atan2(to[1] - from[1], to[0] - from[0]);
+        const len = Math.max(8, style.lineWidth * 4.5);
+        const spread = (40 * Math.PI) / 180;
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = style.lineColor;
+        ctx.lineWidth = style.lineWidth;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(to[0] - len * Math.cos(ang - spread), to[1] - len * Math.sin(ang - spread));
+        ctx.lineTo(to[0], to[1]);
+        ctx.lineTo(to[0] - len * Math.cos(ang + spread), to[1] - len * Math.sin(ang + spread));
+        ctx.stroke();
+        ctx.restore();
+    }
+
     /** A filled triangular arrowhead at `to`, pointing along the `from`→`to` direction. */
     private paintArrowhead(ctx: CanvasRenderingContext2D, from: readonly [number, number], to: readonly [number, number], style: DrawingStyle): void {
         const ang = Math.atan2(to[1] - from[1], to[0] - from[0]);
@@ -2820,16 +2940,36 @@ export class DrawingPainter {
         ctx.setLineDash(dashPattern(style.lineStyle, style.lineWidth));
     }
 
-    /** TradingView's handles (the position tools): a chart-background fill in a thin blue ring, round or a
-     *  rounded square per point. */
-    private paintTvHandles(
+    /** TradingView's "Middle point" (trend line): a small ring of the line color at the middle of the segment, shown with
+     *  the handles (selected or hovered). */
+    private paintMiddlePoint(ctx: CanvasRenderingContext2D, d: Drawing, proj: Projector): void {
+        if (!(d as { showMiddlePoint?: boolean }).showMiddlePoint) return;
+        const pts = d.handlePoints(proj);
+        if (pts.length < 2) return;
+        const dpr = ctx.getTransform?.()?.a || 1;
+        const snap = (v: number): number => Math.round(v * dpr) / dpr;
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = d.style.lineColor;
+        ctx.fillStyle = this.handleBg;
+        ctx.beginPath();
+        ctx.arc(snap((pts[0]![0] + pts[1]![0]) / 2), snap((pts[0]![1] + pts[1]![1]) / 2), 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    /** TradingView's handles: a chart-background fill in a blue ring, round or (position tools) a rounded square
+     *  per point. */
+    paintTvHandles(
         ctx: CanvasRenderingContext2D,
         points: ReadonlyArray<readonly [number, number]>,
         shapes: ReadonlyArray<'circle' | 'square'>,
     ): void {
         ctx.save();
         // a device-whole ring centred on a device pixel row/column: sharp at any browser zoom
-        const dpr = ctx.getTransform?.().a || 1;
+        const dpr = ctx.getTransform?.()?.a || 1;
         const lw = Math.max(1, Math.round(dpr)) / dpr;
         const crisp = (v: number): number => (Math.round(v * dpr - (lw * dpr) / 2) + (lw * dpr) / 2) / dpr;
         ctx.setLineDash([]);
@@ -2849,20 +2989,36 @@ export class DrawingPainter {
         ctx.restore();
     }
 
-    /** Round selection/placement handles — blue ring + gray fill (shared chrome, not the
-     *  drawing's line color). */
+    /** Round placement handles (anchor markers, time-span guides): TradingView's ring, like the selection handles. */
     paintHandles(ctx: CanvasRenderingContext2D, points: ReadonlyArray<readonly [number, number]>): void {
-        ctx.setLineDash([]);
-        ctx.lineWidth = 1.5;
-        for (const [x, y] of points) {
-            ctx.beginPath();
-            ctx.arc(x, y, HANDLE_RADIUS, 0, Math.PI * 2);
-            ctx.fillStyle = HANDLE_FILL;
-            ctx.fill();
-            ctx.strokeStyle = HANDLE_BORDER;
-            ctx.stroke();
-        }
+        this.paintTvHandles(ctx, points, []);
     }
+}
+
+/** TradingView's stats-row icons, 12 px, centred on (cx, cy): a price span (arrow between two bars), a bars span
+ *  (arrow between two posts) and an angle. Half-pixel offsets keep the 1 px strokes sharp. */
+function statsIcon(ctx: CanvasRenderingContext2D, kind: 'price' | 'bars' | 'angle', cx: number, cy: number): void {
+    const x = Math.round(cx) + 0.5;
+    const y = Math.round(cy) + 0.5;
+    ctx.beginPath();
+    if (kind === 'price') {
+        ctx.moveTo(x - 4, y - 6); ctx.lineTo(x + 4, y - 6);
+        ctx.moveTo(x - 4, y + 6); ctx.lineTo(x + 4, y + 6);
+        ctx.moveTo(x, y - 4); ctx.lineTo(x, y + 4);
+        ctx.moveTo(x - 2, y - 2); ctx.lineTo(x, y - 4); ctx.lineTo(x + 2, y - 2);
+        ctx.moveTo(x - 2, y + 2); ctx.lineTo(x, y + 4); ctx.lineTo(x + 2, y + 2);
+    } else if (kind === 'bars') {
+        ctx.moveTo(x - 7, y - 5); ctx.lineTo(x - 7, y + 5);
+        ctx.moveTo(x + 7, y - 5); ctx.lineTo(x + 7, y + 5);
+        ctx.moveTo(x - 4, y); ctx.lineTo(x + 4, y);
+        ctx.moveTo(x - 2, y - 2); ctx.lineTo(x - 4, y); ctx.lineTo(x - 2, y + 2);
+        ctx.moveTo(x + 2, y - 2); ctx.lineTo(x + 4, y); ctx.lineTo(x + 2, y + 2);
+    } else {
+        ctx.moveTo(x - 6, y + 5); ctx.lineTo(x + 6, y + 5);
+        ctx.moveTo(x - 6, y + 5); ctx.lineTo(x + 2, y - 6);
+        ctx.moveTo(x - 1, y + 5); ctx.arc(x - 6, y + 5, 5, 0, -0.95, true);
+    }
+    ctx.stroke();
 }
 
 /** Painted height of one profile row `rowPx` tall: a 1 px gap separates rows only while they are tall enough to read
@@ -2916,7 +3072,7 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, width: number): 
 
 /** Begin a rounded-rectangle path (arcTo-based, no `ctx.roundRect` dependency). */
 /** TradingView's line stats box: a translucent neutral grey with light text, the same on light and dark charts. */
-const STATS_FILL = 'rgba(80, 84, 94, 0.92)'; // palette-exempt: neutral stats box like TradingView's
+const STATS_FILL = 'rgba(72, 72, 72, 0.88)'; // palette-exempt: TradingView's see-through gray stats box
 const STATS_TEXT = '#f2f4f8'; // palette-exempt: ~7:1 on STATS_FILL
 
 /** Neutral fill of the position tool's centre (size + ratio) box; white text on it is ~9:1. */
@@ -3096,9 +3252,11 @@ export function labelLayout(d: Drawing, proj: Projector): {
             const half = Math.hypot(x2 - x1, y2 - y1) / 2;
             const h = lh * lines;
             const ha = text.hAlign ?? 'center';
+            // TradingView sets the glyphs ~2 px off the line: the line box's slack above / below the glyphs counts.
+            const slack = (lh - namedFontSize(text.size)) / 2;
             return {
                 x: ha === 'left' ? -half : ha === 'right' ? half : 0,
-                top: text.vAlign === 'bottom' ? 6 : text.vAlign === 'center' ? -h / 2 : -6 - h,
+                top: text.vAlign === 'bottom' ? 3 - slack : text.vAlign === 'center' ? -h / 2 : -1 - h + slack,
                 align: ha,
                 rotate: { angle: uprightLineAngle(x1, y1, x2, y2), cx: (x1 + x2) / 2, cy: (y1 + y2) / 2 },
             };

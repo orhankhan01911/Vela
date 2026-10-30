@@ -1183,8 +1183,14 @@ export class UserDrawingController implements IDrawingsRendererPort {
         // Price labels on the scale for every horizontal line, including ones painted under the candles.
         this.painter.timeZone = this.deps.timeZone?.() ?? 'UTC';
         this.painter.paintAxisPrices(ctx, this.drawings, proj, this.deps.theme());
-        // Line stats boxes (info line, trend lines) likewise sit over the candles, as TradingView's do.
-        this.painter.paintLineStats(ctx, this.drawings, proj, this.deps.theme());
+        this.painter.paintSelectionAxes(ctx, this.drawings, proj, this.deps.theme(), this.selectedIds);
+        // Line stats boxes (info line, trend lines) likewise sit over the candles, as TradingView's do; without "Always
+        // show stats" only on the selected, hovered or dragged line.
+        const active = new Set<string>(this.selectedIds);
+        if (this.hoveredId) active.add(this.hoveredId);
+        const dragged = this.interaction.activeDragId();
+        if (dragged) active.add(dragged);
+        this.painter.paintLineStats(ctx, this.drawings, proj, this.deps.theme(), active);
         // A Ctrl-drag moves COPIES that are not in the store yet: paint them here, in full and with
         // handles, so they read as the real drawings they are about to become.
         const clones = this.interaction.dragClones();

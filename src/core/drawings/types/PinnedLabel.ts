@@ -1,9 +1,9 @@
+import { textPx } from '../style';
 import { Drawing, type AnchorSlot } from '../Drawing';
 import type { Projector } from '../geometry';
 import { handleAt, pointInBox } from '../hittest';
 
 /** Approximate px font size for a named text size (the painter measures the glyphs exactly). */
-const SIZE_PX: Record<string, number> = { tiny: 10, small: 12, normal: 14, large: 18, huge: 24, auto: 14 };
 
 /**
  * A one-anchor, price-pinned label — the shared base for plain Text, a Note plate, and a Price
@@ -32,7 +32,7 @@ export abstract class PinnedLabel extends Drawing {
         if (!a) return null;
         const y = proj.yOf(a.price, this.paneId);
         if (y == null) return null;
-        const fs = SIZE_PX[this.text?.size ?? 'normal'] ?? 14;
+        const fs = textPx(this.text?.size);
         const lines = this.labelText().split('\n');
         const cols = Math.max(1, ...lines.map((l) => l.length));
         return { x: proj.xOf(a.time), y, w: Math.max(12, cols * fs * 0.6) + 8, h: lines.length * fs * 1.4 + 4 };

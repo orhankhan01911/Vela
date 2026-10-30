@@ -5,7 +5,7 @@
 export type { DrawingPoint, FreeAxis, Projector, SnapMode, SegmentGeometry } from './geometry';
 export { resolveAnchors, translateInBars, readAnchor, writeAnchor, timeBetween, timeAfter, timePlusBars, type BarAxis, type FutureBars } from './futureAnchors';
 export type { DrawingStyle, DrawingText } from './style';
-export { defaultStyle, defaultText, DEFAULT_DRAWING_COLOR } from './style';
+export { defaultStyle, defaultText, DEFAULT_DRAWING_COLOR, textPx, TEXT_PX_SIZES, TV_LINE_COLOR } from './style';
 export type { FieldKind, SettingsField, SettingsSchema } from './schema';
 export { LINE_FIELDS, FILL_FIELDS, LINE_STYLE_OPTIONS, TEXT_FIELDS, TEXT_SIZE_OPTIONS } from './schema';
 export { Drawing, setByPath } from './Drawing';
@@ -39,7 +39,7 @@ export { PriceRange } from './types/PriceRange';
 export { TrianglePattern } from './types/TrianglePattern';
 export { ElliottTriangle, ElliottDoubleCombo, ElliottTripleCombo } from './types/ElliottCombo';
 export { ELLIOTT_DEGREES, DEFAULT_DEGREE } from './types/elliottDegree';
-export { statsOf, anyStats, lineStatsRows, formatSpan, ALL_STATS, NO_STATS, LINE_STATS_FIELDS, type LineStats } from './types/lineStats';
+export { statsOf, anyStats, lineStatsRows, formatSpan, ALL_STATS, NO_STATS, LINE_STATS_FIELDS, STATS_PARTS, type LineStats } from './types/lineStats';
 export { TrendAngle } from './types/TrendAngle';
 export { Box } from './types/Box';
 export { PinnedLabel } from './types/PinnedLabel';

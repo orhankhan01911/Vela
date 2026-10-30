@@ -1,6 +1,6 @@
 import { Drawing, type DrawingTypeKey, type SerializedDrawing } from './Drawing';
 import type { DrawingStyle } from './style';
-import { DEFAULT_DRAWING_COLOR } from './style';
+import { DEFAULT_DRAWING_COLOR, TV_LINE_COLOR } from './style';
 import { svg24 } from '../icons';
 import { ACCENT, BEARISH, BULLISH, INFO, MARKER, NEUTRAL } from '../palette';
 import { TrendLine } from './types/TrendLine';
@@ -209,7 +209,8 @@ registerDrawingType({
     group: 'lines',
     label: 'Trend Line',
     icon: LINE_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    // TradingView's trend line: 2 px solid, TradingView blue.
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new TrendLine(init),
 });
 

@@ -43,7 +43,8 @@ describe('drawing text alignment (TradingView: left / center / right, top / midd
         expect(at('center', 'top')).toMatchObject({ x: 0, align: 'center' });
         expect(at('right', 'top')).toMatchObject({ x: 50, align: 'right' });
         expect(at('center', 'top').rotate).toMatchObject({ cx: 70, cy: 50, angle: 0 });
-        expect(at('center', 'bottom').top).toBe(6);
+        // TradingView sets the glyphs ~2 px off the line: 14 px text in a 20 px line box has 3 px slack each side.
+        expect(at('center', 'bottom').top).toBe(0);
         expect(at('center', 'top').top).toBeLessThan(at('center', 'center').top);
         // drawn right to left: "left" is still the end on the left of the screen (the frame is turned upright)
         const back = labelLayout(withText('trendline', [{ time: 120, price: 50 }, { time: 20, price: 50 }], 'left', 'top'), proj())!;

@@ -1,10 +1,10 @@
+import { textPx } from '../style';
 import type { AnchorSlot } from '../Drawing';
 import type { DrawingPoint, Projector } from '../geometry';
 import { pointInBox } from '../hittest';
 import { CalloutBase } from './CalloutBase';
 
 /** Approximate px font size for a named text size (the painter measures the glyphs exactly). */
-const SIZE_PX: Record<string, number> = { tiny: 10, small: 12, normal: 14, large: 18, huge: 24, auto: 14 };
 
 /**
  * TradingView's comment: a rounded speech bubble standing on one point, its bottom-left corner the sharp tip on
@@ -43,7 +43,7 @@ export class Comment extends CalloutBase {
         const a = this.anchors[0];
         const y = a ? proj.yOf(a.price, this.paneId) : null;
         if (!a || y == null) return null;
-        const fs = SIZE_PX[this.text?.size ?? 'normal'] ?? 14;
+        const fs = textPx(this.text?.size);
         const lines = this.labelText().split('\n');
         const cols = Math.max(1, ...lines.map((l) => l.length));
         const w = Math.max(20, cols * fs * 0.6) + 28;

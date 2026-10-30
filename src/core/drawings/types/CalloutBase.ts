@@ -1,3 +1,4 @@
+import { textPx } from '../style';
 import { Drawing, type AnchorSlot, type SerializedDrawing } from '../Drawing';
 import type { DrawingPoint, Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
@@ -6,7 +7,6 @@ import { defaultText } from '../style';
 import { distToSegment, pointInBox, handleAt } from '../hittest';
 
 /** Approximate px font size for a named text size (the painter measures the glyphs exactly). */
-const SIZE_PX: Record<string, number> = { tiny: 10, small: 12, normal: 14, large: 18, huge: 24, auto: 14 };
 
 /**
  * Shared rig for the two-anchor pinned-box annotations — a text box (anchor[1]) tied to a target
@@ -45,7 +45,7 @@ export abstract class CalloutBase extends Drawing {
         if (!c) return null;
         const cy = proj.yOf(c.price, this.paneId);
         if (cy == null) return null;
-        const fs = SIZE_PX[this.text?.size ?? 'normal'] ?? 14;
+        const fs = textPx(this.text?.size);
         const lines = this.labelText().split('\n');
         const cols = Math.max(1, ...lines.map((l) => l.length));
         const w = Math.max(20, cols * fs * 0.6) + 16;

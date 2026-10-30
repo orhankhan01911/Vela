@@ -169,7 +169,11 @@ export function fieldRow(opts: FieldRowOptions): HTMLElement {
             tone: 'bright',
             onChange: (v) => opts.toggle?.onChange(v),
         });
-        wrap.append(sw.el, labelEl(opts.label, { id: opts.toggle?.id ?? opts.id, size }));
+        const lab = labelEl(opts.label, { id: opts.toggle?.id ?? opts.id, size });
+        // A click on the words ticks the box too, as a checkbox label does (TradingView's rows).
+        lab.style.cursor = 'pointer';
+        lab.addEventListener('click', () => sw.el.click());
+        wrap.append(sw.el, lab);
         if (opts.info) wrap.appendChild(opts.info);
         if (opts.toggle?.get) {
             const get = opts.toggle.get;

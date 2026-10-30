@@ -4,6 +4,7 @@ import {
     deserializeDrawing,
     resetDrawingSettings,
     DEFAULT_DRAWING_COLOR,
+    TV_LINE_COLOR,
     DrawingStore,
     migrate,
     distToSegment,
@@ -152,7 +153,9 @@ describe('drawings/text on every type', () => {
         d.applySettings({ 'text.value': 'support', 'text.bold': true });
         expect(d.text?.value).toBe('support');
         expect(d.text?.bold).toBe(true);
-        expect(d.text?.size).toBe('normal'); // defaults filled in
+        expect(d.text?.size).toBe(14); // TradingView's defaults filled in: 14 px, its blue, centered
+        expect(d.text?.color).toBe(TV_LINE_COLOR);
+        expect(d.text?.hAlign).toBe('center');
     });
 });
 
@@ -165,7 +168,7 @@ describe('drawings/applySettings (dot-path)', () => {
         expect(d.text).toBeUndefined();
         d.applySettings({ 'text.value': 'hello' });
         expect(d.text?.value).toBe('hello');
-        expect(d.text?.size).toBe('normal'); // defaults filled in
+        expect(d.text?.size).toBe(14); // defaults filled in
         d.applySettings({ locked: true });
         expect(d.locked).toBe(true);
     });
@@ -189,7 +192,7 @@ describe('drawings/resetDrawingSettings', () => {
         expect(d.id).toBe('dw-reset');
         expect(d.locked).toBe(true);
         expect(d.anchors).toEqual(anchors);
-        expect(d.style.lineColor).toBe(DEFAULT_DRAWING_COLOR);
+        expect(d.style.lineColor).toBe(TV_LINE_COLOR);
         expect(d.style.lineWidth).toBe(2);
         expect(d.style.lineStyle).toBe('solid');
     });

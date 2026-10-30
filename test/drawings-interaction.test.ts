@@ -4,7 +4,7 @@ import { createProjector } from '../src/renderers/native/drawings/Projector';
 import { deletableSelection, deleteTargets } from '../src/renderers/native/drawings/DrawingHitTester';
 import { effectiveSnapMode } from '../src/renderers/native/core/InputController';
 import { CoordinateSystem } from '../src/renderers/native/core/CoordinateSystem';
-import { createDrawing, DEFAULT_DRAWING_COLOR, MAX_PATH_POINTS, type Drawing, type DrawingIntent, type DrawingStyle, type DrawingTypeKey, type Projector } from '../src/core/drawings';
+import { createDrawing, DEFAULT_DRAWING_COLOR, TV_LINE_COLOR, MAX_PATH_POINTS, type Drawing, type DrawingIntent, type DrawingStyle, type DrawingTypeKey, type Projector } from '../src/core/drawings';
 
 /** Linear projector: x = time, y = 100 − price, single pane 'price'. */
 function fakeProjector(): Projector {
@@ -100,7 +100,7 @@ describe('DrawingInteraction: placing', () => {
         h.it.move(40, 60);
         const ghost = h.it.ghost();
         expect(ghost).not.toBeNull();
-        expect(ghost!.style.lineColor).toBe(DEFAULT_DRAWING_COLOR);
+        expect(ghost!.style.lineColor).toBe(TV_LINE_COLOR); // the trend line's default: TradingView's blue
     });
 
     it('exposes control-circle markers for the points placed so far while placing', () => {

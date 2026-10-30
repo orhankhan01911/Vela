@@ -162,8 +162,10 @@ export function labelLineHeight(fontSize: number): number {
 export const TEXT_FRAME_INSET = 5;
 export const TEXT_FRAME_RISE = 3;
 
-/** Fixed px for a named box text size; `auto` returns 0 (caller fits to box). */
-export function namedFontSize(size: BoxTextSize): number {
+/** Fixed px for a box text size: a number is already px (TradingView's 8-40 px list), a name maps to its px;
+ *  `auto` returns 0 (caller fits to box). */
+export function namedFontSize(size: BoxTextSize | number): number {
+    if (typeof size === 'number') return Number.isFinite(size) && size > 0 ? size : 14;
     switch (size) {
         case 'tiny':
             return 10;

@@ -14,19 +14,31 @@ export class TrendLine extends Drawing {
     extendRight!: boolean;
     /** TradingView's stats box; read through `statsOf`. */
     stats!: Partial<LineStats> | undefined;
+    /** TradingView's "Middle point": a small ring at the middle of the line while it is selected or hovered. */
+    showMiddlePoint!: boolean;
+    /** TradingView's "Price labels": both points' prices in chips of the line color on the price scale. */
+    showPriceLabels!: boolean;
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         return { min: 2, max: 2, slots: [{ role: 'p1', free: 'both' }, { role: 'p2', free: 'both' }] };
     }
 
     protected override writeProps(): Record<string, unknown> {
-        return { extendLeft: !!this.extendLeft, extendRight: !!this.extendRight, stats: statsOf(this)! };
+        return {
+            extendLeft: !!this.extendLeft,
+            extendRight: !!this.extendRight,
+            stats: statsOf(this)!,
+            showMiddlePoint: !!this.showMiddlePoint,
+            showPriceLabels: !!this.showPriceLabels,
+        };
     }
 
     protected override readProps(props: Record<string, unknown>): void {
         if (typeof props.extendLeft === 'boolean') this.extendLeft = props.extendLeft;
         if (typeof props.extendRight === 'boolean') this.extendRight = props.extendRight;
         if (props.stats && typeof props.stats === 'object') this.stats = { ...(props.stats as Partial<LineStats>) };
+        if (typeof props.showMiddlePoint === 'boolean') this.showMiddlePoint = props.showMiddlePoint;
+        if (typeof props.showPriceLabels === 'boolean') this.showPriceLabels = props.showPriceLabels;
     }
 
     private pixels(proj: Projector): [number, number, number, number] | null {
@@ -100,6 +112,8 @@ export class TrendLine extends Drawing {
                 { path: 'style.arrowRight', label: 'Right end arrow', kind: 'boolean', group: 'line' },
                 { path: 'extendLeft', label: 'Extend left', kind: 'boolean', group: 'behavior' },
                 { path: 'extendRight', label: 'Extend right', kind: 'boolean', group: 'behavior' },
+                { path: 'showMiddlePoint', label: 'Middle point', kind: 'boolean', group: 'behavior' },
+                { path: 'showPriceLabels', label: 'Price labels', kind: 'boolean', group: 'behavior' },
                 ...LINE_STATS_FIELDS,
                 ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS,
             ],
