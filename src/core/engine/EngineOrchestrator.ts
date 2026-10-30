@@ -2846,12 +2846,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 data: this.dataControl,
                 ...(this.replayQueue === null
                     ? {
-                          loadBars: (timeframe: string, range: { from: number; to: number }) => {
-                              const step = timeframeToMs(timeframe);
-                              const limit = Math.min(20_000, Math.ceil((range.to - range.from) / step) + 2);
-                              return this.fetchSeries(this.config.market.symbol ?? '', timeframe, { from: range.from, to: range.to, limit, session: this.config.market.session })
-                                  .then((bars) => bars.filter((b) => b.time >= range.from && b.time <= range.to));
-                          },
+                          loadBars: (timeframe: string, range: { from: number; to: number }) => this.loadBarsRange(timeframe, range),
                       }
                     : {}),
                 emit: (out) => this.applyModel(id, this.buildNativeModel(record, out)),
@@ -2866,6 +2861,29 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         } catch (err) {
             this.fail(id, handle, err);
         }
+    }
+
+    /**
+     * This chart's symbol at `timeframe` over `[from, to]`, oldest first. A provider answers one request with at most
+     * its own page of bars (Bybit about 1 000), the NEWEST ones up to `to`, so this pages back until `from` is
+     * covered (at most 25 pages) — without it a 39-hour 1m window came back as its last ~16 hours.
+     */
+    private async loadBarsRange(timeframe: string, range: { from: number; to: number }): Promise<OHLCV[]> {
+        const step = timeframeToMs(timeframe);
+        const symbol = this.config.market.symbol ?? '';
+        const byTime = new Map<number, OHLCV>();
+        let to = range.to;
+        for (let page = 0; page < 25 && to >= range.from; page += 1) {
+            const limit = Math.min(5000, Math.ceil((to - range.from) / step) + 2);
+            const bars = await this.fetchSeries(symbol, timeframe, { from: range.from, to, limit, session: this.config.market.session });
+            const inRange = bars.filter((b) => b.time >= range.from && b.time <= to);
+            if (inRange.length === 0) break;
+            for (const b of inRange) byTime.set(b.time, b);
+            const oldest = inRange.reduce((m, b) => Math.min(m, b.time), Infinity);
+            if (oldest <= range.from) break;
+            to = oldest - 1;
+        }
+        return [...byTime.values()].sort((a, b) => a.time - b.time);
     }
 
     /** Hand a range-aware native (`reactsToViewport`) the current window: viewport changes only reach it after it
