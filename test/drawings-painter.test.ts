@@ -52,24 +52,26 @@ function recordingCtx() {
 
 const theme = { textColor: '#fff', fontFamily: 'sans-serif' } as unknown as VelaTheme;
 const hline = (id: string, price: number) => createDrawing('hline', { id, paneId: 'price', anchors: [{ time: 10, price }] })!;
+// Handles are counted as ring arcs: a trend line has two (the horizontal line's one is TradingView's square).
+const seg = (id: string, price: number) => createDrawing('trendline', { id, paneId: 'price', anchors: [{ time: 10, price }, { time: 40, price: price + 5 }] })!;
 
 describe('DrawingPainter.paintAll handle highlighting', () => {
     it('paints handles for every selected id', () => {
-        const drawings = [hline('a', 30), hline('b', 50)];
+        const drawings = [seg('a', 30), seg('b', 50)];
         const { ctx, arcs } = recordingCtx();
         new DrawingPainter().paintAll(ctx, drawings, fakeProjector(), theme, { selected: new Set(['a', 'b']) });
-        expect(arcs()).toBe(2); // one handle per selected hline
+        expect(arcs()).toBe(4); // two handles per selected trend line
     });
 
     it('paints handles for the hovered and dragged drawings too', () => {
-        const drawings = [hline('a', 30), hline('b', 50)];
+        const drawings = [seg('a', 30), seg('b', 50)];
         const { ctx, arcs } = recordingCtx();
         new DrawingPainter().paintAll(ctx, drawings, fakeProjector(), theme, { hovered: 'a', dragged: 'b' });
-        expect(arcs()).toBe(2);
+        expect(arcs()).toBe(4);
     });
 
     it('paints no handles when nothing is targeted', () => {
-        const drawings = [hline('a', 30), hline('b', 50)];
+        const drawings = [seg('a', 30), seg('b', 50)];
         const { ctx, arcs } = recordingCtx();
         new DrawingPainter().paintAll(ctx, drawings, fakeProjector(), theme);
         expect(arcs()).toBe(0);
@@ -79,10 +81,10 @@ describe('DrawingPainter.paintAll handle highlighting', () => {
     // layers, but their handles have to come back to the top canvas — buried under the candles
     // they'd be unusable.
     it('paintHighlights draws handles alone, for the highlighted ones only', () => {
-        const drawings = [hline('a', 30), hline('b', 50)];
+        const drawings = [seg('a', 30), seg('b', 50)];
         const { ctx, arcs, lines } = recordingCtx();
         new DrawingPainter().paintHighlights(ctx, drawings, fakeProjector(), new Set(['b']));
-        expect(arcs()).toBe(1); // b's handle …
+        expect(arcs()).toBe(2); // b's handles …
         expect(lines()).toBe(0); // … and neither body
     });
 });

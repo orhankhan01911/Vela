@@ -504,7 +504,7 @@ export class PositionTool extends Drawing {
     }
 
     /** Handle shapes in {@link handlePoints} order, as TradingView draws them. */
-    handleShapes(): ReadonlyArray<'circle' | 'square'> {
+    override handleShapes(): ReadonlyArray<'circle' | 'square'> {
         return ['circle', 'square', 'square', 'square'];
     }
 

@@ -170,7 +170,7 @@ export class DrawingPainter {
         for (const d of drawings) {
             if (d.visible && highlightIds.has(d.id)) {
                 // TradingView's handles on every tool: a background-filled blue ring (the position tools' squares too).
-                const shapes = d instanceof PositionTool ? d.handleShapes() : [];
+                const shapes = d.handleShapes();
                 this.paintClipped(ctx, d, proj, () => {
                     this.paintMiddlePoint(ctx, d, proj);
                     this.paintTvHandles(ctx, d.handlePoints(proj), shapes);
@@ -3207,7 +3207,7 @@ export function labelLayout(d: Drawing, proj: Projector): {
             const h = lh * lines;
             const ha = text.hAlign ?? 'left';
             const x = ha === 'right' ? proj.width - 8 : ha === 'center' ? proj.width / 2 : 8;
-            const top = text.vAlign === 'bottom' ? y + 4 : text.vAlign === 'center' ? y - h / 2 : y - 4 - h;
+            const top = text.vAlign === 'bottom' ? y + 4 : text.vAlign === 'center' ? y - h / 2 + (lh - namedFontSize(text.size)) / 2 : y - 4 - h;
             return { x, top, align: ha };
         }
         case 'hray': {
@@ -3217,7 +3217,7 @@ export function labelLayout(d: Drawing, proj: Projector): {
             const h = lh * lines;
             const ha = text.hAlign ?? 'left';
             const x = ha === 'right' ? proj.width - 8 : ha === 'center' ? (ax + proj.width) / 2 : ax + 8;
-            const top = text.vAlign === 'bottom' ? y + 4 : text.vAlign === 'center' ? y - h / 2 : y - 4 - h;
+            const top = text.vAlign === 'bottom' ? y + 4 : text.vAlign === 'center' ? y - h / 2 + (lh - namedFontSize(text.size)) / 2 : y - 4 - h;
             return { x, top, align: ha };
         }
         case 'vline': {
@@ -3256,7 +3256,7 @@ export function labelLayout(d: Drawing, proj: Projector): {
             const slack = (lh - namedFontSize(text.size)) / 2;
             return {
                 x: ha === 'left' ? -half : ha === 'right' ? half : 0,
-                top: text.vAlign === 'bottom' ? 3 - slack : text.vAlign === 'center' ? -h / 2 : -1 - h + slack,
+                top: text.vAlign === 'bottom' ? 3 - slack : text.vAlign === 'center' ? -h / 2 + slack : -1 - h + slack,
                 align: ha,
                 rotate: { angle: uprightLineAngle(x1, y1, x2, y2), cx: (x1 + x2) / 2, cy: (y1 + y2) / 2 },
             };

@@ -68,7 +68,7 @@ export const TEXT_FIELDS: SettingsField[] = [
 ];
 
 /** TradingView's "Price label" on horizontal line / ray / cross line: the price in a chip on the price scale. */
-export const SHOW_PRICE_FIELD: SettingsField = { path: 'showPrice', label: 'Price label on the scale', kind: 'boolean', group: 'behavior' };
+export const SHOW_PRICE_FIELD: SettingsField = { path: 'showPrice', label: 'Price label', kind: 'boolean', group: 'behavior' };
 
 /** TradingView's "Time label" on vertical line / cross line: the time in a chip on the time axis. */
 export const SHOW_TIME_FIELD: SettingsField = { path: 'showTime', label: 'Time label on the axis', kind: 'boolean', group: 'behavior' };

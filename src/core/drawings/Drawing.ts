@@ -13,6 +13,14 @@ import type { InputSchema, InputValue } from '../model/inputs';
  * inputs dialog (tabs, groups, inline rows, `when` gates, phone sheet) on these inputs, and every edit lands on the
  * drawing as the settings patch `{ '<path>.<key>': value }`.
  */
+
+/** TradingView's factory text per tool (read with "Apply defaults" in TradingView, 2026-10-30): size in px, its blue,
+ *  and where it sits. A tool's first text starts from this. */
+export const TV_TEXT_DEFAULTS: Readonly<Record<string, Partial<DrawingText>>> = {
+    trendline: { color: TV_LINE_COLOR, size: 14, hAlign: 'center', vAlign: 'top' },
+    hline: { color: TV_LINE_COLOR, size: 12, hAlign: 'center', vAlign: 'center' },
+};
+
 export interface DrawingInputsDialog {
     title: string;
     inputs: InputSchema[];
@@ -268,6 +276,11 @@ export abstract class Drawing {
     }
 
     /** The CSS cursor over handle `index` (e.g. a resize arrow), or null for the default pointer. */
+    /** Each handle's look: TradingView draws most as rings, some (horizontal line) as rounded squares. Empty = rings. */
+    handleShapes(): ReadonlyArray<'circle' | 'square'> {
+        return [];
+    }
+
     handleCursor(_index: number): string | null {
         return null;
     }
@@ -357,8 +370,8 @@ export abstract class Drawing {
     /** Apply a `{ 'dot.path': value }` patch (the popup emits these). */
     applySettings(patch: Record<string, unknown>): void {
         for (const [path, value] of Object.entries(patch)) {
-            // A line's text starts as TradingView's: centered on the line, above it, 14 px, its default blue.
-            if (path.startsWith('text.') && !this.text) this.text = { ...defaultText(), ...(ALONG_LINE_TEXT_TYPES.has(this.type) ? { hAlign: 'center' as const, ...(this.type === 'trendline' ? { color: TV_LINE_COLOR, size: 14 } : {}) } : {}) };
+            // A tool's text starts as TradingView's (TV_TEXT_DEFAULTS); other lines' text starts centered along them.
+            if (path.startsWith('text.') && !this.text) this.text = { ...defaultText(), ...(ALONG_LINE_TEXT_TYPES.has(this.type) ? { hAlign: 'center' as const } : {}), ...TV_TEXT_DEFAULTS[this.type] };
             setByPath(this as unknown as Record<string, unknown>, path, value);
         }
     }

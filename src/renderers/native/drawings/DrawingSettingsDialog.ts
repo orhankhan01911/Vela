@@ -15,7 +15,7 @@ import {
     DEFAULT_DRAWING_COLOR,
     TEXT_SIZE_OPTIONS,
     TEXT_PX_SIZES,
-    TV_LINE_COLOR,
+    TV_TEXT_DEFAULTS,
     STATS_PARTS,
     textPx,
     MachFigure,
@@ -77,11 +77,15 @@ const ON_LINE_VALIGN: readonly SelectOption[] = [
     { value: 'top', label: 'Bottom' },
 ];
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { trendline: 'Trendline' };
+const DIALOG_TITLE: Record<string, string> = { trendline: 'Trendline', hline: 'Horizontal line' };
 const STATS_PATHS = new Set(['stats.position', 'stats.always', ...STATS_PARTS.map((p) => `stats.${p.key}`)]);
 /** TradingView's Extend dropdown label for each left/right combination. */
 function extendLabel(left: boolean, right: boolean): string {
-    return left && right ? 'Extend both lines' : left ? 'Extend left line' : right ? 'Extend right line' : "Don't extend";
+    return left && right ? 'Extend left line, extend right line' : left ? 'Extend left line' : right ? 'Extend right line' : "Don't extend";
+}
+/** TradingView's summary of ticked choices: the first as written, the rest lower-cased ("Price range, percent change"). */
+function joinChoices(labels: readonly string[]): string {
+    return labels.map((l, i) => (i === 0 ? l : l.charAt(0).toLowerCase() + l.slice(1))).join(', ');
 }
 /** Schema paths the dialog never shows: the toolbar owns them (lock) or they are per-tool icons. */
 const SKIP_PATHS = new Set(['locked', 'visible', 'glyph', 'size']);
@@ -396,7 +400,7 @@ export class DrawingSettingsDialog {
         const statsLabel = (): string => {
             const st = now();
             const on = STATS_PARTS.filter((p) => st[p.key] === true).map((p) => vt(p.label));
-            return on.length ? on.join(', ') : 'Hidden';
+            return on.length ? joinChoices(on) : 'Hidden';
         };
         grid.appendChild(fieldSection('Info'));
         const dd = dropdownTrigger(statsLabel());
@@ -465,9 +469,10 @@ export class DrawingSettingsDialog {
         const text = drawing.text;
         const px = drawing.schema().fields.find((f) => f.path === 'fontSize' && f.kind === 'number');
         const style: HTMLElement[] = [];
-        const textDefault = drawing.type === 'trendline' ? TV_LINE_COLOR : this.theme.textColor;
+        const tv = TV_TEXT_DEFAULTS[drawing.type];
+        const textDefault = tv?.color ?? this.theme.textColor;
         if (has('text.color')) style.push(this.colorControl(drawing, 'text.color', actions, text?.color || textDefault));
-        if (has('text.size')) style.push(this.selectControl('text.size', PX_SIZE_OPTIONS, String(textPx(text?.size)), actions, (v) => Number(v)));
+        if (has('text.size')) style.push(this.selectControl('text.size', PX_SIZE_OPTIONS, String(textPx(text?.size ?? tv?.size)), actions, (v) => Number(v)));
         if (px) style.push(this.numberControl(drawing, px, actions));
         if (has('text.bold')) style.push(styleToggle('B', 'Bold', 'font-weight:700;', !!text?.bold, (v) => actions.patch({ 'text.bold': v })));
         if (has('text.italic')) style.push(styleToggle('I', 'Italic', 'font-style:italic;font-family:serif;', !!text?.italic, (v) => actions.patch({ 'text.italic': v })));
@@ -496,13 +501,14 @@ export class DrawingSettingsDialog {
         const hf = fields.find((f) => f.path === 'text.hAlign');
         const vf = fields.find((f) => f.path === 'text.vAlign');
         if (hf?.options && vf?.options) {
-            const onLine = ALONG_LINE_TEXT_TYPES.has(drawing.type);
-            const hDef = onLine ? 'center' : 'left';
+            // On TradingView's lines "Top" means the text under the line (the line at the text's top).
+            const onLine = ALONG_LINE_TEXT_TYPES.has(drawing.type) || drawing.type === 'hline' || drawing.type === 'hray';
+            const hDef = tv?.hAlign ?? (ALONG_LINE_TEXT_TYPES.has(drawing.type) ? 'center' : 'left');
             grid.appendChild(
                 fieldRow({
                     label: 'Text alignment',
                     control: [
-                        this.selectControl('text.vAlign', onLine ? ON_LINE_VALIGN : vf.options, text?.vAlign ?? 'top', actions),
+                        this.selectControl('text.vAlign', onLine ? ON_LINE_VALIGN : vf.options, text?.vAlign ?? tv?.vAlign ?? 'top', actions),
                         this.selectControl('text.hAlign', hf.options, text?.hAlign ?? hDef, actions),
                     ],
                     fit: true,
@@ -561,7 +567,8 @@ export class DrawingSettingsDialog {
                 t.el.style.flex = 'none';
                 controls.push(t.el);
             }
-            const label = drawing.anchors.length === 1 ? (priceOnly ? 'Price' : timeOnly ? 'Time' : 'Point') : `#${i + 1}`;
+            // TradingView's "#1 (price)" for a price-only point; the time stays a date (the user's call, 2026-10-30).
+            const label = priceOnly ? `#${i + 1} (price)` : drawing.anchors.length === 1 ? (timeOnly ? 'Time' : 'Point') : `#${i + 1}`;
             grid.appendChild(fieldRow({ label, control: controls, fit: true }));
         });
     }

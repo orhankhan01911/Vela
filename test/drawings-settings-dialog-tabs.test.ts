@@ -132,12 +132,12 @@ describe('settings dialog', () => {
         expect(items.some((t) => t.startsWith('Visibility on intervals'))).toBe(true);
     });
 
-    it('a horizontal line gets Style, Text, Coordinates and Visibility, titled with the tool name', async () => {
+    it('a horizontal line gets Style, Text, Coordinates and Visibility, titled like the TradingView dialog', async () => {
         const s = setup(hline());
         s.gear().click();
         await settled();
         expect(s.tabs()).toEqual(['Style', 'Text', 'Coordinates', 'Visibility']);
-        expect(s.host.querySelector('.vela-drawing-dialog')!.textContent).toContain('Horizontal Line');
+        expect(s.host.querySelector('.vela-drawing-dialog')!.textContent).toContain('Horizontal line');
         // a horizontal line's one point is a price only
         expect(s.body('coordinates').querySelectorAll('[data-role="anchor-price"]').length).toBe(1);
         expect(s.body('coordinates').querySelectorAll('[data-role="anchor-time"]').length).toBe(0);

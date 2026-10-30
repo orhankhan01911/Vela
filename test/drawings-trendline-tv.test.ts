@@ -201,7 +201,7 @@ describe('trend line settings dialog (TradingView layout)', () => {
         rows[1]!.querySelector<HTMLButtonElement>('button')!.click();
         const live = s.live() as Drawing & { extendLeft: boolean; extendRight: boolean };
         expect(live.extendLeft && live.extendRight).toBe(true);
-        expect(dd.textContent).toContain('Extend both lines');
+        expect(dd.textContent).toContain('Extend left line, extend right line');
     });
 
     it('Stats lists the seven parts and names the ticked ones', async () => {
