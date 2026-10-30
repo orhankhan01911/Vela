@@ -178,6 +178,23 @@ describe('registerSymbolRanking', () => {
 });
 
 describe('filterSymbols', () => {
+    it('matches a market name typed with separators, and the venue typed last', () => {
+        const pool = [
+            { ticker: 'BTCUSDC.P', provider: 'binance_usdc' },
+            { ticker: 'BTCUSDT.P', provider: 'bybit' },
+            { ticker: 'BTC', provider: 'hyperliquid', aliases: ['BTC-USDC'] },
+            { ticker: '@142', provider: 'hyperliquid', description: 'BTC / USDC (UBTC)' },
+            { ticker: 'ETH', provider: 'hyperliquid' },
+        ];
+        const t = (q: string): string[] => filterSymbols(pool, q, 100, false).map((s) => `${s.provider}:${s.ticker}`);
+        for (const q of ['BTC/USDC', 'BTC-USDC', 'btc / usdc']) {
+            expect(t(q)).toEqual(expect.arrayContaining(['binance_usdc:BTCUSDC.P', 'hyperliquid:BTC', 'hyperliquid:@142']));
+            expect(t(q)).not.toContain('bybit:BTCUSDT.P');
+        }
+        expect(t('btc hyperliquid')).toEqual(['hyperliquid:BTC', 'hyperliquid:@142']);
+        expect(t('hyperliquid btc')).toEqual(['hyperliquid:BTC', 'hyperliquid:@142']);
+    });
+
     const list = [
         { ticker: 'BTCUSDT', description: 'Bitcoin / TetherUS' },
         { ticker: 'ETHUSDT', description: 'Ethereum / TetherUS' },

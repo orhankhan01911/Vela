@@ -62,14 +62,27 @@ export function avatarColor(ticker: string): string {
  * that is no venue (`BTC USD`) leaves the whole query as the term.
  */
 function parseQuery(raw: string, venues: readonly string[]): { scope: string | null; term: string } {
+    const scopeOf = (word: string): string | null => {
+        const t = word.toLowerCase();
+        return venues.includes(t) ? t : onlyOne(venues.filter((v) => v.startsWith(t)));
+    };
     const m = raw.match(/^\s*([^\s:]+)\s*[:\s]\s*(.*)$/);
     if (m) {
-        const t = m[1]!.toLowerCase();
-        const scope = venues.includes(t) ? t : onlyOne(venues.filter((v) => v.startsWith(t)));
+        const scope = scopeOf(m[1]!);
         if (scope) return { scope, term: m[2]!.trim() };
+    }
+    // The venue typed last, as people search the web: `btc hyperliquid`.
+    const e = raw.match(/^\s*(\S.*?)\s+([^\s:]+)\s*$/);
+    if (e) {
+        const scope = scopeOf(e[2]!);
+        if (scope) return { scope, term: e[1]!.trim() };
     }
     return { scope: null, term: raw.trim() };
 }
+
+/** A name without its separators: `BTC-USDC`, `BTC/USDC`, `BTC / USDC` and `BTCUSDC` are one market name. A space alone
+ *  is not a separator (`BTC USD` stays two words). */
+const loose = (x: string): string => x.toUpperCase().replace(/\s*[/_-]\s*/g, '').replace(/\s+/g, ' ');
 
 function onlyOne<T>(matches: readonly T[]): T | null {
     return matches.length === 1 ? matches[0]! : null;
@@ -111,12 +124,15 @@ export function filterSymbols(list: readonly SymbolDescriptor[], query: string, 
     const substr: SymbolDescriptor[] = [];
     const desc: SymbolDescriptor[] = [];
     const venue: SymbolDescriptor[] = [];
+    // `BTC/USDC` or `BTC-USDC` typed: also match the names written without separators (`BTCUSDC`, `BTCUSDC.P`).
+    const ql = loose(term);
+    const sep = ql !== q && ql.length > 0;
     for (const s of pool) {
         if (made.includes(s)) continue;
         const t = s.ticker.toUpperCase();
-        if (t.startsWith(q)) prefix.push(s);
-        else if (t.includes(q) || s.aliases?.some((x) => x.toUpperCase().startsWith(q))) substr.push(s);
-        else if ((s.description ?? '').toUpperCase().includes(q)) desc.push(s);
+        if (t.startsWith(q) || (sep && loose(t).startsWith(ql))) prefix.push(s);
+        else if (t.includes(q) || s.aliases?.some((x) => x.toUpperCase().startsWith(q) || (sep && loose(x).startsWith(ql)))) substr.push(s);
+        else if ((s.description ?? '').toUpperCase().includes(q) || (sep && loose(s.description ?? '').includes(ql))) desc.push(s);
         // Inside a scope the venue is fixed — the tier would swallow the whole pool.
         else if (!scope && (venueOf(s)?.toLowerCase().includes(qLower) || s.provider?.toLowerCase().includes(qLower))) venue.push(s);
         if (prefix.length >= limit) break;
