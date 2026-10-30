@@ -112,6 +112,28 @@ describe('trend line defaults (TradingView)', () => {
     });
 });
 
+describe('ray = the trend line extended right (TradingView)', () => {
+    const ray = (props?: Record<string, unknown>): Drawing => createDrawing('ray', { paneId: 'price', anchors: [{ time: 0, price: 1 }, { time: 1, price: 2 }], ...(props ? { props } : {}) })!;
+    it('starts extended right, in TradingView blue, with the trend line settings', () => {
+        const d = ray() as Drawing & { extendLeft: boolean; extendRight: boolean };
+        expect(d.type).toBe('ray');
+        expect(d.extendRight).toBe(true);
+        expect(!!d.extendLeft).toBe(false);
+        expect(d.style.lineColor).toBe(TV_LINE_COLOR);
+        const paths = d.schema().fields.map((f) => f.path);
+        for (const p of ['style.arrowLeft', 'extendLeft', 'extendRight', 'showMiddlePoint', 'showPriceLabels', 'stats.pips']) expect(paths).toContain(p);
+    });
+    it('a saved ray without an extend setting still extends right; switched off stays off', () => {
+        expect((ray({ stats: {} }) as Drawing & { extendRight: boolean }).extendRight).toBe(true);
+        expect((ray({ extendRight: false }) as Drawing & { extendRight: boolean }).extendRight).toBe(false);
+    });
+    it('its text starts like the trend line', () => {
+        const d = ray();
+        d.applySettings({ 'text.value': 'x' });
+        expect(d.text).toMatchObject({ size: 14, color: TV_LINE_COLOR, hAlign: 'center', vAlign: 'top' });
+    });
+});
+
 describe('text sizes in px', () => {
     it('reads px and the older names', () => {
         expect(textPx(22)).toBe(22);
@@ -216,7 +238,7 @@ describe('trend line settings dialog (TradingView layout)', () => {
         expect(dd.textContent).toContain('Change in pips');
     });
 
-    it('Text: color, px size, B and I on one row; TradingView names for above / below the line', async () => {
+    it('Text: color, px size, B and I on one row; Top = over the line', async () => {
         const d = trend();
         d.applySettings({ 'text.value': 'hi' });
         const s = setup(d);
@@ -228,7 +250,7 @@ describe('trend line settings dialog (TradingView layout)', () => {
         expect(row.querySelector('[data-role="text-italic"]')).not.toBeNull();
         row.querySelector<HTMLButtonElement>('[data-role="text-bold"]')!.click();
         expect(s.live().text?.bold).toBe(true);
-        // over the line (stored "top") is TradingView's "Bottom"
-        expect(text.textContent).toContain('Bottom');
+        // over the line is "Top", as TradingView's dialog reads (its stored value is "bottom", the dialog says Top)
+        expect(text.textContent).toContain('Top');
     });
 });

@@ -1,68 +1,16 @@
-import { Drawing, type AnchorSlot } from '../Drawing';
-import type { Projector } from '../geometry';
-import type { SettingsSchema } from '../schema';
-import { LINE_FIELDS, TEXT_FIELDS, LINE_TEXT_ALIGN_FIELDS } from '../schema';
-import { distToSegment, extendRay, handleAt } from '../hittest';
-import { LINE_STATS_FIELDS, statsOf, type LineStats } from './lineStats';
+import { TrendLine } from './TrendLine';
 
-/** A ray: a line through two anchors that extends to the right chart edge. */
-export class Ray extends Drawing {
-    readonly type = 'ray' as const;
-    /** TradingView's stats box; read through `statsOf`. */
-    stats!: Partial<LineStats> | undefined;
+/**
+ * A ray, TradingView's: a trend line extended past its second point to the pane edge. Like TradingView's it is the
+ * trend line with "Extend right line" on by default, so it has the same settings (line ends, Extend, Middle point,
+ * Price labels, stats); a saved ray without an extend setting keeps extending right.
+ */
+export class Ray extends TrendLine {
+    override readonly type = 'ray' as const;
 
-    protected override writeProps(): Record<string, unknown> {
-        return { stats: statsOf(this)! };
-    }
-
-    protected override readProps(props: Record<string, unknown>): void {
-        if (props.stats && typeof props.stats === 'object') this.stats = { ...(props.stats as Partial<LineStats>) };
-    }
-
-    anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
-        return { min: 2, max: 2, slots: [{ role: 'p1', free: 'both' }, { role: 'p2', free: 'both' }] };
-    }
-
-    private pixels(proj: Projector): [number, number, number, number] | null {
-        const a = this.anchors[0];
-        const b = this.anchors[1];
-        if (!a || !b) return null;
-        const y1 = proj.yOf(a.price, this.paneId);
-        const y2 = proj.yOf(b.price, this.paneId);
-        if (y1 == null || y2 == null) return null;
-        return [proj.xOf(a.time), y1, proj.xOf(b.time), y2];
-    }
-
-    hitTest(px: number, py: number, proj: Projector, tol: number): boolean {
-        const p = this.pixels(proj);
-        if (!p) return false;
-        const [ex1, ey1, ex2, ey2] = extendRay(p[0], p[1], p[2], p[3], 'right', proj.width, proj.height);
-        return distToSegment(px, py, ex1, ey1, ex2, ey2) <= tol;
-    }
-
-    handlePoints(proj: Projector): Array<[number, number]> {
-        const p = this.pixels(proj);
-        return p ? [[p[0], p[1]], [p[2], p[3]]] : [];
-    }
-
-    hitHandle(px: number, py: number, proj: Projector, tol: number): number {
-        return handleAt(px, py, this.handlePoints(proj), tol + 3);
-    }
-
-    bounds(proj: Projector): { x: number; y: number; w: number; h: number } | null {
-        const p = this.pixels(proj);
-        if (!p) return null;
-        return { x: Math.min(p[0], p[2]), y: Math.min(p[1], p[3]), w: Math.abs(p[2] - p[0]), h: Math.abs(p[3] - p[1]) };
-    }
-
-    priceRange(): { min: number; max: number } | null {
-        const a = this.anchors[0];
-        const b = this.anchors[1];
-        if (!a || !b) return null;
-        return { min: Math.min(a.price, b.price), max: Math.max(a.price, b.price) };
-    }
-
-    schema(): SettingsSchema {
-        return { fields: [...LINE_FIELDS, ...LINE_STATS_FIELDS, ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS] };
+    constructor(init: ConstructorParameters<typeof TrendLine>[0]) {
+        super(init);
+        // Extended right unless the ray says otherwise (a new ray, or one saved before rays could switch it off).
+        if (typeof init.props?.extendRight !== 'boolean') this.extendRight = true;
     }
 }

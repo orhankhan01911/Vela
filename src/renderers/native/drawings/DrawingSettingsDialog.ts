@@ -69,13 +69,6 @@ const WIDTH_OPTIONS: readonly SelectOption[] = [1, 2, 3, 4].map((w) => ({ value:
 const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
-/** TradingView's vertical text alignment on a line names where the line sits against the text: "Top" puts the text
- *  under the line, "Bottom" over it. Stored values keep their meaning (top = over the line). */
-const ON_LINE_VALIGN: readonly SelectOption[] = [
-    { value: 'bottom', label: 'Top' },
-    { value: 'center', label: 'Middle' },
-    { value: 'top', label: 'Bottom' },
-];
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
 const DIALOG_TITLE: Record<string, string> = { trendline: 'Trendline', hline: 'Horizontal line' };
 const STATS_PATHS = new Set(['stats.position', 'stats.always', ...STATS_PARTS.map((p) => `stats.${p.key}`)]);
@@ -501,14 +494,12 @@ export class DrawingSettingsDialog {
         const hf = fields.find((f) => f.path === 'text.hAlign');
         const vf = fields.find((f) => f.path === 'text.vAlign');
         if (hf?.options && vf?.options) {
-            // On TradingView's lines "Top" means the text under the line (the line at the text's top).
-            const onLine = ALONG_LINE_TEXT_TYPES.has(drawing.type) || drawing.type === 'hline' || drawing.type === 'hray';
             const hDef = tv?.hAlign ?? (ALONG_LINE_TEXT_TYPES.has(drawing.type) ? 'center' : 'left');
             grid.appendChild(
                 fieldRow({
                     label: 'Text alignment',
                     control: [
-                        this.selectControl('text.vAlign', onLine ? ON_LINE_VALIGN : vf.options, text?.vAlign ?? tv?.vAlign ?? 'top', actions),
+                        this.selectControl('text.vAlign', vf.options, text?.vAlign ?? tv?.vAlign ?? 'top', actions),
                         this.selectControl('text.hAlign', hf.options, text?.hAlign ?? hDef, actions),
                     ],
                     fit: true,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The horizontal line, TradingView parity (audit 2026-10-30): 2 px solid #2962FF with its price label, 12 px text
-// centered on the line, a rounded-square handle, TradingView's dialog names ("Price label", "#1 (price)", and on a line
-// "Top" = text under it), no price-label switch on the floating bar.
+// centered on the line, a rounded-square handle, TradingView's dialog names ("Price label", "#1 (price)"), no price-label
+// switch on the floating bar.
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 
 (globalThis as { CSS?: unknown }).CSS ??= { escape: (v: string) => v };
@@ -104,7 +104,7 @@ describe('horizontal line dialog and bar', () => {
         expect(document.querySelector('.vela-drawing-dialog')!.textContent).toContain('Horizontal line');
     });
 
-    it('shows Middle / Center for new text and calls over-the-line "Bottom"', async () => {
+    it('shows Middle / Center for new text', async () => {
         const d = hl();
         d.applySettings({ 'text.value': 'x' });
         const s = setup(d);

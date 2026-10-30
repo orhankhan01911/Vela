@@ -1,4 +1,5 @@
-import type { Drawing, Projector, DrawingStyle, Box, TrendLine, TextLabel, Ellipse } from '../../../core/drawings';
+import type { Drawing, Projector, DrawingStyle, Box, TextLabel, Ellipse } from '../../../core/drawings';
+import { TrendLine } from '../../../core/drawings';
 import { SegmentDrawing, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
@@ -442,11 +443,13 @@ export class DrawingPainter {
                 break;
             }
             case 'trendline':
+            case 'ray':
             case 'arrow': {
                 const pts = d.handlePoints(proj);
                 if (pts.length < 2) return;
-                // A trend line may extend past either point (TradingView); the arrow tool never does.
-                const tl = d.type === 'trendline' ? (d as TrendLine) : null;
+                // A trend line (and a ray, TradingView's trend line extended right) may extend past either point; the
+                // arrow tool never does.
+                const tl = d instanceof TrendLine ? d : null;
                 const seg = tl?.drawnPixels(proj) ?? [pts[0]![0], pts[0]![1], pts[1]![0], pts[1]![1]];
                 this.stroke(ctx, d.style, () => {
                     ctx.moveTo(seg[0], seg[1]);
@@ -476,16 +479,6 @@ export class DrawingPainter {
                 ctx.ellipse(o.cx, o.cy, o.rx, Math.max(0.5, o.ry), o.rot, 0, Math.PI * 2);
                 ctx.stroke();
                 ctx.setLineDash([]);
-                break;
-            }
-            case 'ray': {
-                const pts = d.handlePoints(proj);
-                if (pts.length < 2) return;
-                const [ex1, ey1, ex2, ey2] = extendEndpoints(pts[0]![0], pts[0]![1], pts[1]![0], pts[1]![1], 'right', proj.width, proj.height);
-                this.stroke(ctx, d.style, () => {
-                    ctx.moveTo(ex1, ey1);
-                    ctx.lineTo(ex2, ey2);
-                });
                 break;
             }
             case 'extendedline': {

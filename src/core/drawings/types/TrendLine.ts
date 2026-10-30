@@ -8,7 +8,8 @@ import { LINE_STATS_FIELDS, statsOf, type LineStats } from './lineStats';
 /** A two-point trend line. Both endpoints move freely on time + price. Like TradingView's, it can extend past
  *  either point to the pane edge and carry an arrow at either end. */
 export class TrendLine extends Drawing {
-    readonly type = 'trendline' as const;
+    // A ray is the same tool extended right (TradingView), so the type is one of the two.
+    readonly type: 'trendline' | 'ray' = 'trendline';
     // `!` (no initializer): the base constructor runs readProps before subclass fields would initialize.
     extendLeft!: boolean;
     extendRight!: boolean;

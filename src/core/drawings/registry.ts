@@ -233,7 +233,8 @@ registerDrawingType({
     group: 'lines',
     label: 'Ray',
     icon: RAY_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    // TradingView's ray: its trend line, 2 px solid TradingView blue, extended right.
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new Ray(init),
 });
 

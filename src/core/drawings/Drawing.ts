@@ -18,6 +18,7 @@ import type { InputSchema, InputValue } from '../model/inputs';
  *  and where it sits. A tool's first text starts from this. */
 export const TV_TEXT_DEFAULTS: Readonly<Record<string, Partial<DrawingText>>> = {
     trendline: { color: TV_LINE_COLOR, size: 14, hAlign: 'center', vAlign: 'top' },
+    ray: { color: TV_LINE_COLOR, size: 14, hAlign: 'center', vAlign: 'top' },
     hline: { color: TV_LINE_COLOR, size: 12, hAlign: 'center', vAlign: 'center' },
 };
 
