@@ -70,7 +70,12 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { trendline: 'Trendline', hline: 'Horizontal line' };
+const DIALOG_TITLE: Record<string, string> = { trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line' };
+/** TradingView's Text orientation dropdown (vertical line). */
+const ORIENTATION_OPTIONS: readonly SelectOption[] = [
+    { value: 'horizontal', label: 'Horizontal' },
+    { value: 'vertical', label: 'Vertical' },
+];
 const STATS_PATHS = new Set(['stats.position', 'stats.always', ...STATS_PARTS.map((p) => `stats.${p.key}`)]);
 /** TradingView's Extend dropdown label for each left/right combination. */
 function extendLabel(left: boolean, right: boolean): string {
@@ -506,6 +511,11 @@ export class DrawingSettingsDialog {
                 }),
             );
         }
+        // TradingView's "Text orientation" (vertical line): a dropdown under the alignment.
+        if (drawing.schema().fields.some((f) => f.path === 'textVertical')) {
+            const vertical = !!(drawing as unknown as { textVertical?: boolean }).textVertical;
+            grid.appendChild(fieldRow({ label: 'Text orientation', control: [this.selectControl('textVertical', ORIENTATION_OPTIONS, vertical ? 'vertical' : 'horizontal', actions, (v) => v === 'vertical')], fit: true }));
+        }
         for (const f of fields) {
             if (['text.value', 'text.color', 'text.size', 'text.bold', 'text.italic', 'text.hAlign', 'text.vAlign'].includes(f.path)) continue;
             const row = this.schemaRow(drawing, f, actions);
@@ -559,7 +569,7 @@ export class DrawingSettingsDialog {
                 controls.push(t.el);
             }
             // TradingView's "#1 (price)" for a price-only point; the time stays a date (the user's call, 2026-10-30).
-            const label = priceOnly ? `#${i + 1} (price)` : drawing.anchors.length === 1 ? (timeOnly ? 'Time' : 'Point') : `#${i + 1}`;
+            const label = priceOnly ? `#${i + 1} (price)` : timeOnly ? `#${i + 1} (time)` : drawing.anchors.length === 1 ? 'Point' : `#${i + 1}`;
             grid.appendChild(fieldRow({ label, control: controls, fit: true }));
         });
     }
@@ -1344,6 +1354,7 @@ function styleFields(drawing: Drawing): SettingsField[] {
     return drawing.schema().fields.filter(
         (f) =>
             !f.path.startsWith('text.') &&
+            f.path !== 'textVertical' &&
             !SKIP_PATHS.has(f.path) &&
             !(f.kind === 'select' && !f.options?.length) &&
             !(custom && (f.group === 'behavior' || (f.kind !== 'color' && f.kind !== 'lineStyle' && !positionLineSwitch(drawing, f)))),

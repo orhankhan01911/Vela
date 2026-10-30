@@ -264,7 +264,8 @@ registerDrawingType({
     group: 'lines',
     label: 'Vertical Line',
     icon: VLINE_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    // TradingView's vertical line: 2 px solid, TradingView blue, through every pane, time label on.
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new VerticalLine(init),
 });
 

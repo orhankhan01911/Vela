@@ -830,6 +830,30 @@ export class DrawingPainter {
         }
     }
 
+    /** TradingView's extended vertical line ("Extend"): the part outside its own pane, through every other pane. Its
+     *  own-pane part paints with the drawing (under or over the candles as it sits); this pass, on the top canvas,
+     *  carries it across the rest of the plot. */
+    paintVlineExtensions(ctx: CanvasRenderingContext2D, drawings: readonly Drawing[], proj: Projector): void {
+        for (const d of drawings) {
+            if (d.type !== 'vline' || !d.visible || !(d as { extendLine?: boolean }).extendLine || !shownOnBarMs(d.intervals, this.barMs)) continue;
+            const a = d.anchors[0];
+            if (!a) continue;
+            const x = proj.xOf(a.time);
+            if (!Number.isFinite(x) || x < 0 || x > proj.width) continue;
+            const own = proj.paneRect?.(d.paneId);
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, 0, proj.width, proj.height);
+            if (own && own.height > 0) ctx.rect(0, own.top, proj.width, own.height);
+            ctx.clip('evenodd');
+            this.stroke(ctx, d.style, () => {
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, proj.height);
+            });
+            ctx.restore();
+        }
+    }
+
     /**
      * TradingView's axis highlight of the selected drawing: its price span shaded on the price scale and its time span
      * on the time axis, with each point's price and time in a blue chip. Drawings with many points (brush, path) get the
@@ -3224,7 +3248,8 @@ export function labelLayout(d: Drawing, proj: Projector): {
                 // Up the line: rotated a quarter turn around the line at the chosen height; left / right = which side.
                 const cy = text.vAlign === 'bottom' ? rect.top + rect.height - 8 : text.vAlign === 'center' ? rect.top + rect.height / 2 : rect.top + 8;
                 const along: CanvasTextAlign = text.vAlign === 'bottom' ? 'left' : text.vAlign === 'center' ? 'center' : 'right';
-                const off = ha === 'left' ? -6 - h : ha === 'right' ? 6 : -h / 2;
+                const slack = (lh - namedFontSize(text.size)) / 2;
+                const off = ha === 'left' ? -6 - h + slack : ha === 'right' ? 6 - slack : -h / 2 + slack;
                 return { x: 0, top: off, align: along, rotate: { angle: -Math.PI / 2, cx: x0, cy } };
             }
             const x = ha === 'left' ? x0 - 6 : ha === 'right' ? x0 + 6 : x0;

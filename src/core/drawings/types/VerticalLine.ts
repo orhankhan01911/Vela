@@ -10,16 +10,28 @@ export class VerticalLine extends Drawing {
     readonly type = 'vline' as const;
     // `!` (no initializer): the base constructor runs readProps first. Absent ⇒ shown (TradingView's default).
     showTime!: boolean;
-    /** TradingView's vertical text: the label runs up the line instead of across it. */
+    /** TradingView's "Text orientation: Vertical": the label runs up the line instead of across it. */
     textVertical!: boolean;
+    /** TradingView's "Extend": the line runs through every pane, not only its own. */
+    extendLine!: boolean;
+
+    constructor(init: ConstructorParameters<typeof Drawing>[0]) {
+        super(init);
+        // A new line starts as TradingView's (through every pane, vertical text); a saved one keeps how it was.
+        if (!init.props) {
+            this.extendLine = true;
+            this.textVertical = true;
+        }
+    }
 
     protected override writeProps(): Record<string, unknown> {
-        return { showTime: this.showTime !== false, ...(this.textVertical ? { textVertical: true } : {}) };
+        return { showTime: this.showTime !== false, extendLine: !!this.extendLine, ...(this.textVertical ? { textVertical: true } : {}) };
     }
 
     protected override readProps(props: Record<string, unknown>): void {
         if (typeof props.showTime === 'boolean') this.showTime = props.showTime;
         if (typeof props.textVertical === 'boolean') this.textVertical = props.textVertical;
+        if (typeof props.extendLine === 'boolean') this.extendLine = props.extendLine;
     }
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
@@ -59,6 +71,15 @@ export class VerticalLine extends Drawing {
     }
 
     schema(): SettingsSchema {
-        return { fields: [...LINE_FIELDS, SHOW_TIME_FIELD, ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS, { path: 'textVertical', label: 'Vertical text', kind: 'boolean', group: 'text' }] };
+        return {
+            fields: [
+                ...LINE_FIELDS,
+                { path: 'extendLine', label: 'Extend', kind: 'boolean', group: 'behavior' },
+                SHOW_TIME_FIELD,
+                ...TEXT_FIELDS,
+                ...LINE_TEXT_ALIGN_FIELDS,
+                { path: 'textVertical', label: 'Text orientation', kind: 'boolean', group: 'text' },
+            ],
+        };
     }
 }

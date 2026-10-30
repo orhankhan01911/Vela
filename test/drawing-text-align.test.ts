@@ -53,7 +53,12 @@ describe('drawing text alignment (TradingView: left / center / right, top / midd
     });
 
     it('vertical line: left of / on / right of it, at the top / middle / bottom of the pane', () => {
-        const at = (h: H, v: V) => labelLayout(withText('vline', [{ time: 80, price: 50 }], h, v), proj())!;
+        // horizontal text (a new vertical line starts with TradingView's vertical text)
+        const at = (h: H, v: V) => {
+            const d = withText('vline', [{ time: 80, price: 50 }], h, v);
+            d.applySettings({ textVertical: false });
+            return labelLayout(d, proj())!;
+        };
         expect(at('left', 'top')).toMatchObject({ x: 74, align: 'right', top: 8 });
         expect(at('center', 'top')).toMatchObject({ x: 80, align: 'center' });
         expect(at('right', 'top')).toMatchObject({ x: 86, align: 'left' });

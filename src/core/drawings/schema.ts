@@ -71,7 +71,7 @@ export const TEXT_FIELDS: SettingsField[] = [
 export const SHOW_PRICE_FIELD: SettingsField = { path: 'showPrice', label: 'Price label', kind: 'boolean', group: 'behavior' };
 
 /** TradingView's "Time label" on vertical line / cross line: the time in a chip on the time axis. */
-export const SHOW_TIME_FIELD: SettingsField = { path: 'showTime', label: 'Time label on the axis', kind: 'boolean', group: 'behavior' };
+export const SHOW_TIME_FIELD: SettingsField = { path: 'showTime', label: 'Time label', kind: 'boolean', group: 'behavior' };
 
 /** TradingView's text alignment on line tools (horizontal line and ray, trend lines, arrows, vertical line) and boxes
  *  (inside the box). Along

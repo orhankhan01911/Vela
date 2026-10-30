@@ -122,3 +122,40 @@ describe('horizontal line dialog and bar', () => {
         expect(s.tips()).not.toContain('Show price');
     });
 });
+
+describe('vertical line (TradingView)', () => {
+    const vl = (props?: Record<string, unknown>): Drawing =>
+        createDrawing('vline', { id: 'v', paneId: 'price', anchors: [{ time: Date.UTC(2026, 9, 1), price: 100 }], ...(props ? { props } : {}) })!;
+    it('starts blue 2 px, through every pane, time label on, text vertical in the middle', () => {
+        const d = vl() as Drawing & { extendLine: boolean; textVertical: boolean; showTime: boolean };
+        expect(d.style).toMatchObject({ lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' });
+        expect(d.extendLine).toBe(true);
+        expect(d.textVertical).toBe(true);
+        d.applySettings({ 'text.value': 'x' });
+        expect(d.text).toMatchObject({ size: 14, color: TV_LINE_COLOR, hAlign: 'center', vAlign: 'center' });
+    });
+
+    it('a saved line keeps its pane-only, horizontal-text look', () => {
+        const d = vl({ showTime: true }) as Drawing & { extendLine: boolean; textVertical: boolean };
+        expect(!!d.extendLine).toBe(false);
+        expect(!!d.textVertical).toBe(false);
+    });
+
+    it('dialog: Line, Extend, Time label; Text orientation on the Text tab; #1 (time)', async () => {
+        const d = vl();
+        d.applySettings({ 'text.value': 'x' });
+        const s = setup(d);
+        s.gear().click();
+        await settled();
+        s.tab('Style').click();
+        const st = s.body('style').textContent!;
+        expect(st).toContain('Extend');
+        expect(st).toContain('Time label');
+        expect(st).not.toContain('Text orientation');
+        s.tab('Text').click();
+        expect(s.body('text').textContent).toContain('Text orientation');
+        expect(s.body('text').textContent).toContain('Vertical');
+        s.tab('Coordinates').click();
+        expect(s.body('coordinates').textContent).toContain('#1 (time)');
+    });
+});
