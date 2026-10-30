@@ -71,6 +71,7 @@ const CSS = `
   border-radius: var(--vela-radius-sm); background: none; color: var(--vela-fg-muted); cursor: pointer; font-size: 18px; line-height: 1; }
 .vela-icons-cat:hover, .vela-icons-cat[aria-current="true"] { background: var(--vela-hover); color: var(--vela-fg-bright); }
 .vela-icons-cat img { width: 20px; height: 20px; }
+.vela-icons-cat .vela-icons-ph { font-size: 16px; line-height: 20px; }
 .vela-icons-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 4px 6px; }
 .vela-icons-title { position: sticky; top: 0; z-index: 1; height: 30px; display: flex; align-items: center; padding: 0 4px; background: var(--vela-surface);
   color: var(--vela-fg-muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
@@ -79,6 +80,7 @@ const CSS = `
   border-radius: var(--vela-radius-sm); background: none; color: var(--vela-fg-bright); cursor: pointer; }
 .vela-icons-cell:hover, .vela-icons-cell:focus-visible { background: var(--vela-hover); outline: none; }
 .vela-icons-cell img { width: 28px; height: 28px; pointer-events: none; }
+.vela-icons-ph { font-size: 22px; line-height: 28px; pointer-events: none; }
 .vela-icons-empty { padding: 4px 4px 10px; color: var(--vela-fg-muted); font-size: 12px; }
 .vela-icons-credit { flex: none; padding: 4px 8px; color: var(--vela-fg-muted); font-size: 10px; }
 .vela-icons-credit a { color: inherit; }
@@ -226,15 +228,25 @@ export function buildIconsPanel(onPick: (p: IconsPick) => void, initial: 'emoji'
 function emojiTab(e: string, fallback?: string): HTMLButtonElement {
     const b = document.createElement('button');
     b.type = 'button';
-    const img = document.createElement('img');
-    img.alt = '';
-    void emojiUrl(e)
-        .then((u) => u ?? (fallback ? emojiUrl(fallback) : null))
-        .then((u) => {
-            if (u) img.src = u;
-        });
-    b.append(img);
+    showEmojiArt(b, e, emojiUrl(e).then((u) => u ?? (fallback ? emojiUrl(fallback) : null)));
     return b;
+}
+
+/** The emoji's own character until its art has loaded (the art is a lazy chunk), then the art: an image with no
+ *  source yet showed a broken-image box on the first open. */
+function showEmojiArt(host: HTMLElement, e: string, url: Promise<string | null>): void {
+    const ph = document.createElement('span');
+    ph.className = 'vela-icons-ph';
+    ph.textContent = e;
+    ph.setAttribute('aria-hidden', 'true');
+    host.append(ph);
+    void url.then((u) => {
+        if (!u) return;
+        const img = document.createElement('img');
+        img.alt = '';
+        img.onload = () => ph.replaceWith(img);
+        img.src = u;
+    });
 }
 
 function iconTab(code: number): HTMLButtonElement {
@@ -252,12 +264,7 @@ function emojiCell(e: string, onClick: () => void): HTMLElement {
     b.setAttribute('role', 'option');
     b.setAttribute('aria-label', e);
     b.dataset.emoji = e;
-    const img = document.createElement('img');
-    img.alt = e;
-    void emojiUrl(e).then((u) => {
-        if (u) img.src = u;
-    });
-    b.append(img);
+    showEmojiArt(b, e, emojiUrl(e));
     b.addEventListener('click', onClick);
     return b;
 }

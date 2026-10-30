@@ -3,6 +3,7 @@ import type { DrawingTypeKey, SnapMode } from '../../../core/drawings';
 import type { ToolbarDefinition, ToolGroup, ToolSection } from '../../../core/drawings';
 import { icon } from '../../../core/icons';
 import { buildIconsPanel } from './IconsPanel';
+import { loadEmojiArt } from './emojiArt';
 import { setToolChoice } from '../../../core/drawings/toolChoice';
 import { applyChromeTokens } from '../../shared/theme-tokens';
 import { attachChromeTooltip } from '../../shared/chrome-tooltip';
@@ -392,6 +393,8 @@ export class DrawingToolbar {
         });
         this.groupCells.set(g.id, cell);
         this.groupIcons.set(g.id, icon);
+        // The emoji art is a lazy chunk: start fetching it when the pointer reaches the Icons button, not on the click.
+        if (g.id === ICONS_GROUP) cell.addEventListener('pointerenter', () => void loadEmojiArt().catch(() => {}), { once: true });
         return cell;
     }
 

@@ -172,4 +172,11 @@ describe('the Icons panel (TradingView: Emojis / Icons tabs, categories, recentl
         const recent = panel.querySelector('.vela-icons-list .vela-icons-grid');
         expect(cellOf(recent!, '😃')).toBeDefined();
     });
+
+    it('before the art loads a cell shows the emoji itself, never an image with no picture', () => {
+        const panel = buildIconsPanel(() => {});
+        const cell = [...panel.querySelectorAll<HTMLElement>('.vela-icons-cell')].find((c) => c.dataset.emoji === '😀')!;
+        expect(cell.querySelector('.vela-icons-ph')?.textContent).toBe('😀');
+        expect(cell.querySelector('img')).toBeNull();
+    });
 });
