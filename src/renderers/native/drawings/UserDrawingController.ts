@@ -81,7 +81,26 @@ export interface UserDrawingDeps {
     /** A price as the pane's scale prints it (grouping, decimals, percent mode) and the axis font: the drawings'
      *  price chips use it so they read like the axis numbers and the crosshair chip. Null when the pane is gone. */
     axisLabel?(paneId: string, price: number): { text: string; font: string } | null;
+    /** The Zoom In tool: the x of the bar centre nearest to `x`. */
+    zoomSnapX?(x: number): number;
+    /** Zoom to the box between two points (bars across, the first point's pane's prices up and down). Returns the
+     *  view to go back to, or null when nothing changed (both ends on one bar). */
+    zoomToBox?(x0: number, y0: number, x1: number, y1: number): ZoomSnapshot | null;
+    /** Put back a view {@link zoomToBox} left. */
+    restoreZoom?(snap: ZoomSnapshot): void;
 }
+
+/** One entry of the Zoom Out stack: the view before a Zoom In. */
+export interface ZoomSnapshot {
+    viewport: { barSpacing: number; rightOffset: number };
+    paneId: string;
+    /** The pane's manual price window then, or null when it was autoscaled. */
+    manual: { min: number; max: number; log?: boolean; invert?: boolean } | null;
+}
+
+/** TradingView's zoom box: its blue at 30 % inside, 80 % on the 1 px border (module 649873). */
+const ZOOM_BOX_FILL = 'rgba(41, 98, 255, 0.3)';
+const ZOOM_BOX_LINE = 'rgba(41, 98, 255, 0.8)';
 
 /** No interaction targets on the interleave layers — handles always paint in front. */
 const EMPTY_TARGETS: PaintTargets = {};
@@ -146,6 +165,12 @@ export class UserDrawingController implements IDrawingsRendererPort {
      *  bubble to its keymap instead — see the renderer's `historyChords` feature. */
     historyChords = true;
     private measureMode = false; // the ruler is armed (placing a measurement)
+    private zoomMode = false; // Zoom In is armed
+    /** The Zoom In press: `x` snapped to a bar centre, `px` where the pointer was. */
+    private zoomStart: { x: number; y: number; px: number } | null = null;
+    private zoomCursor: { x: number; y: number } | null = null;
+    /** Zoom Out goes back through these, newest last (TradingView's zoom stack). */
+    private readonly zoomStack: ZoomSnapshot[] = [];
     private eraserMode = false; // click/drag over a drawing deletes it
     private erasing = false; // a button is held during eraser mode (so a drag erases multiple)
     // The inline on-chart text editor: its element, the id of the drawing it edits, the text it
@@ -188,6 +213,8 @@ export class UserDrawingController implements IDrawingsRendererPort {
             (type, on) => this.emit({ kind: 'favorite', type, on }),
             (on) => this.emit({ kind: 'stay-mode', on }),
             {
+                onZoom: () => this.withModeIntent(() => this.toggleZoom()),
+                onZoomOut: () => this.zoomOut(),
                 onCollapse: (collapsed) => {
                     this.toolbarCollapsed = collapsed;
                     this.syncToolbarGutter();
@@ -356,6 +383,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
             this.withModeIntent(() => {
                 if (this.measureMode) this.exitMeasure();
                 if (this.eraserMode) this.exitEraser();
+                if (this.zoomMode) this.exitZoom();
             });
         }
         this.activeTool = type;
@@ -402,16 +430,19 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 if (!this.measureMode) this.toggleMeasure();
             } else if (mode === 'eraser') {
                 if (!this.eraserMode) this.toggleEraser();
+            } else if (mode === 'zoom') {
+                if (!this.zoomMode) this.toggleZoom();
             } else {
                 if (this.measureMode) this.exitMeasure();
                 if (this.eraserMode) this.exitEraser();
+                if (this.zoomMode) this.exitZoom();
             }
         });
     }
 
     /** The current renderer-local mode (measure/eraser/none). */
     private modeOf(): DrawingMode {
-        return this.measureMode ? 'measure' : this.eraserMode ? 'eraser' : null;
+        return this.measureMode ? 'measure' : this.eraserMode ? 'eraser' : this.zoomMode ? 'zoom' : null;
     }
 
     /** Run a state transition and report the mode ONCE if it actually changed — the
@@ -470,7 +501,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
     // ── pointer/keyboard entry points (driven by InputController/KeyboardController) ──
     /** Should the drawing layer win this press (vs pan)? */
     claim(x: number, y: number): boolean {
-        if (this.measureMode || this.eraserMode) return true; // these modes capture their clicks (no pan)
+        if (this.measureMode || this.eraserMode || this.zoomMode) return true; // these modes capture their clicks (no pan)
         if (this.magnifierChipAt(x, y)) return true; // the chip is a dropdown trigger, never a pan start
         if (this.activeTool == null && this.alertTrashAt(x, y)) return true; // trash button: a click, never a pan
         return this.interaction.claim(x, y);
@@ -483,7 +514,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
     claimOnAxis(x: number, y: number): boolean {
         if (this.magnifierChipAt(x, y)) return true;
         if (this.activeTool == null && this.alertTrashAt(x, y)) return true;
-        if (this.activeTool != null || this.measureMode || this.eraserMode) return false;
+        if (this.activeTool != null || this.measureMode || this.eraserMode || this.zoomMode) return false;
         return this.interaction.claimOnly(x, y, (d) => d instanceof PriceAlert);
     }
 
@@ -533,7 +564,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
      *  `snap` is the effective magnet (sticky mode, or Ctrl/Cmd-forced strong). Returns
      *  false when a mode/tool is already active (the normal press path owns it). */
     beginMeasureAt(x: number, y: number, snap: SnapMode = 'off'): boolean {
-        if (this.measureMode || this.eraserMode || this.activeTool != null) return false;
+        if (this.measureMode || this.eraserMode || this.zoomMode || this.activeTool != null) return false;
         this.withModeIntent(() => this.toggleMeasure());
         const g = this.interaction.snapCursor(x, y, snap);
         this.measure.down(x, y, g.x, g.y);
@@ -570,12 +601,22 @@ export class UserDrawingController implements IDrawingsRendererPort {
     /** Ctrl/Cmd+press on the empty plot: sweep a selection box (adds the drawings it touches to
      *  the selection). Returns false when a mode/tool is active (the normal press path owns it). */
     beginMarqueeAt(x: number, y: number): boolean {
-        if (this.measureMode || this.eraserMode || !this.interaction.beginMarquee(x, y)) return false;
+        if (this.measureMode || this.eraserMode || this.zoomMode || !this.interaction.beginMarquee(x, y)) return false;
         this.render();
         return true;
     }
 
     pointerDown(x: number, y: number, snap: SnapMode = 'off', shift = false, mod = false): void {
+        if (this.zoomMode) {
+            // TradingView: the first press starts the box, a second press (after a click) ends it.
+            if (this.zoomStart) this.finishZoom(x, y);
+            else {
+                this.zoomStart = { x: this.deps.zoomSnapX?.(x) ?? x, y, px: x };
+                this.zoomCursor = { x, y };
+                this.render();
+            }
+            return;
+        }
         if (this.eraserMode) {
             this.erasing = true; // hold to drag-erase across multiple drawings
             this.deleteAt(x, y);
@@ -640,6 +681,13 @@ export class UserDrawingController implements IDrawingsRendererPort {
     }
 
     pointerMove(x: number, y: number, snap: SnapMode = 'off', shift = false, mod = false): void {
+        if (this.zoomMode) {
+            if (this.zoomStart) {
+                this.zoomCursor = { x, y };
+                this.render();
+            }
+            return;
+        }
         if (this.eraserMode) {
             if (this.erasing) this.deleteAt(x, y); // erase only while the button is held (not on hover)
             return;
@@ -676,6 +724,12 @@ export class UserDrawingController implements IDrawingsRendererPort {
     }
 
     pointerUp(x: number, y: number, snap: SnapMode = 'off'): void {
+        if (this.zoomMode) {
+            // A press-drag-release zooms in one gesture; a click leaves the box open for the second click.
+            const s = this.zoomStart;
+            if (s && (Math.abs(x - s.px) > 3 || Math.abs(y - s.y) > 3)) this.finishZoom(x, y);
+            return;
+        }
         if (this.eraserMode) {
             this.erasing = false;
             return;
@@ -704,6 +758,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
             return;
         }
         if (this.eraserMode) this.exitEraser(); // only one renderer-local mode at a time
+        if (this.zoomMode) this.exitZoom();
         this.measure.clear();
         this.measureMode = true;
         this.emit({ kind: 'arm', type: null }); // clear any armed drawing tool (core-authoritative)
@@ -720,12 +775,82 @@ export class UserDrawingController implements IDrawingsRendererPort {
             return;
         }
         if (this.measureMode) this.exitMeasure();
+        if (this.zoomMode) this.exitZoom();
         this.eraserMode = true;
         this.erasing = false;
         this.emit({ kind: 'arm', type: null }); // drop any armed drawing tool
         this.clearSelection();
         this.toolbar.setEraserActive(true);
         this.render();
+    }
+
+    /** Arm or disarm Zoom In (the toolbar button). Arming drops any other tool or mode, like the ruler. */
+    private toggleZoom(): void {
+        if (this.zoomMode) {
+            this.exitZoom();
+            return;
+        }
+        if (this.measureMode) this.exitMeasure();
+        if (this.eraserMode) this.exitEraser();
+        this.emit({ kind: 'arm', type: null });
+        this.clearSelection();
+        this.zoomMode = true;
+        this.toolbar.setZoomActive(true);
+        this.render();
+    }
+
+    /** Leave Zoom In, dropping an unfinished box (TradingView's `cancelZoom` plus the cursor tool). */
+    private exitZoom(): void {
+        this.zoomMode = false;
+        this.zoomStart = null;
+        this.zoomCursor = null;
+        this.toolbar.setZoomActive(false);
+        this.render();
+    }
+
+    /** End the box at (x, y): zoom to it (unless both ends are on one bar), then back to the cursor, as TradingView. */
+    private finishZoom(x: number, y: number): void {
+        const s = this.zoomStart;
+        if (!s) return;
+        const snap = this.deps.zoomToBox?.(s.x, s.y, x, y) ?? null;
+        if (snap) {
+            this.zoomStack.push(snap);
+            this.toolbar.setZoomOutShown(true);
+        }
+        this.withModeIntent(() => this.exitZoom());
+    }
+
+    /** Zoom Out (the toolbar button shown while there is a zoom to undo): back to the view before the last Zoom In. */
+    zoomOut(): boolean {
+        const snap = this.zoomStack.pop();
+        if (!snap) return false;
+        this.deps.restoreZoom?.(snap);
+        this.toolbar.setZoomOutShown(this.zoomStack.length > 0);
+        return true;
+    }
+
+    /** True while there is a Zoom In to go back from. */
+    canZoomOut(): boolean {
+        return this.zoomStack.length > 0;
+    }
+
+    /** The Zoom In box, bar centre to bar centre (TradingView's crosshair selection rectangle). */
+    private paintZoomBox(ctx: CanvasRenderingContext2D): void {
+        const s = this.zoomStart;
+        const c = this.zoomCursor;
+        if (!s || !c) return;
+        const x1 = this.deps.zoomSnapX?.(c.x) ?? c.x;
+        const left = Math.min(s.x, x1);
+        const top = Math.min(s.y, c.y);
+        const w = Math.abs(x1 - s.x);
+        const h = Math.abs(c.y - s.y);
+        ctx.save();
+        ctx.fillStyle = ZOOM_BOX_FILL;
+        ctx.fillRect(left, top, w, h);
+        ctx.strokeStyle = ZOOM_BOX_LINE;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(w), Math.round(h));
+        ctx.restore();
     }
 
     private exitEraser(): void {
@@ -983,6 +1108,10 @@ export class UserDrawingController implements IDrawingsRendererPort {
      *  whether the press was consumed; false lets the host's context menu open
      *  normally. */
     cancelPlacement(): boolean {
+        if (this.zoomMode) {
+            this.withModeIntent(() => this.exitZoom());
+            return true;
+        }
         if (this.measureMode || this.eraserMode) {
             this.withModeIntent(() => (this.measureMode ? this.exitMeasure() : this.exitEraser()));
             return true;
@@ -1029,6 +1158,10 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 return true;
             }
             if (this.interaction.cancel()) return true;
+            if (this.zoomMode) {
+                this.withModeIntent(() => this.exitZoom());
+                return true;
+            }
             if (this.measureMode) {
                 this.withModeIntent(() => this.exitMeasure());
                 return true;
@@ -1273,6 +1406,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
         if (m && my != null) this.painter.paintSnapRing(ctx, proj.xOf(m.point.time), my, this.deps.theme());
         // The transient ruler paints on top of everything (until cleared on the next press/pan/zoom).
         if (this.measure.isActive()) this.measure.paint(ctx, proj, this.deps.theme());
+        this.paintZoomBox(ctx);
         const marquee = this.interaction.marqueeRect();
         if (marquee) this.painter.paintMarquee(ctx, marquee);
     }

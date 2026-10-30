@@ -10,7 +10,7 @@ import type { ToolbarDefinition } from './toolbar';
  * the renderer owns that exclusion; the core mirrors the outcome (see the `mode`
  * intent) so external UIs (a shared workspace toolbar) can reflect and drive it.
  */
-export type DrawingMode = 'measure' | 'eraser' | null;
+export type DrawingMode = 'measure' | 'eraser' | 'zoom' | null;
 
 /**
  * Renderer→core INTENT. The renderer proposes a change from a user gesture; the
@@ -97,6 +97,10 @@ export interface IDrawingsRendererPort {
      *  renderer keeps owning the mutual exclusion (with armed tools too) and reports
      *  every actual change back through the `mode` intent. Optional. */
     setMode?(mode: DrawingMode): void;
+    /** Zoom Out: back to the view before the last Zoom In. False when there is none. Optional. */
+    zoomOut?(): boolean;
+    /** True while a Zoom In can be gone back from (the toolbar then shows Zoom Out). Optional. */
+    canZoomOut?(): boolean;
     /** Hand the renderer the core's series gateway so data-driven drawings can read bars
      *  of a finer timeframe (exposed to them as `Projector.seriesInRange`). Optional — a
      *  renderer without it simply never resolves lower-timeframe series. */

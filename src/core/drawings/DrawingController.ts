@@ -144,6 +144,15 @@ export class DrawingController {
         this.events.emit('drawing:mode', { mode });
     }
 
+    /** Zoom Out: back to the view before the last Zoom In (false when there is none). */
+    zoomOut(): boolean {
+        return this.port?.zoomOut?.() ?? false;
+    }
+
+    canZoomOut(): boolean {
+        return this.port?.canZoomOut?.() ?? false;
+    }
+
     showToolbar(visible: boolean): void {
         this.port?.showToolbar(visible);
     }

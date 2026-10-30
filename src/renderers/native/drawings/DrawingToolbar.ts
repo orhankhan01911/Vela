@@ -34,6 +34,10 @@ export interface DrawingToolbarOptions {
     /** Collapse/expand notification — a docked host resizes its gutter reservation to
      *  {@link TOOLBAR_COLLAPSED_WIDTH} / the full width (a static bar reflows on its own). */
     onCollapse?: (collapsed: boolean) => void;
+    /** TradingView's Zoom In button (under Measure): arms or disarms the zoom box. No button without it. */
+    onZoom?: () => void;
+    /** TradingView's Zoom Out button, shown under Zoom In while there is a zoom to go back from. */
+    onZoomOut?: () => void;
     /** When given, a drawings-sync toggle renders below the stay button: enabled, every
      *  NEWLY CREATED drawing is copied onto the other linked charts and the set stays
      *  linked — edits and removals follow (a multi-chart host's concern — a
@@ -84,6 +88,12 @@ export class DrawingToolbar {
     private lastMagnetOn: SnapMode = 'weak'; // strength restored when the magnet icon toggles back on
     private measureBtn: HTMLButtonElement | null = null;
     private measureActive = false;
+    private zoomBtn: HTMLButtonElement | null = null;
+    private zoomActive = false;
+    private zoomOutBtn: HTMLButtonElement | null = null;
+    private zoomOutShown = false;
+    private readonly onZoom: (() => void) | null;
+    private readonly onZoomOut: (() => void) | null;
     private eraserBtn: HTMLButtonElement | null = null;
     private eraserActive = false;
     private stayBtn: HTMLButtonElement | null = null;
@@ -123,6 +133,8 @@ export class DrawingToolbar {
         this.dock = options.dock ?? 'absolute';
         this.onCollapse = options.onCollapse ?? (() => {});
         this.onDrawingsSync = options.onDrawingsSync ?? null;
+        this.onZoom = options.onZoom ?? null;
+        this.onZoomOut = options.onZoomOut ?? null;
         ensureStyles();
         this.root = document.createElement('div');
         this.root.className = 'vela-dtb';
@@ -261,6 +273,16 @@ export class DrawingToolbar {
         this.root.appendChild(this.divider());
         this.measureBtn = this.makeButton(RULER_ICON, 'Measure', () => this.onMeasure());
         this.root.appendChild(this.measureBtn);
+        if (this.onZoom) {
+            const onZoom = this.onZoom;
+            this.zoomBtn = this.makeButton(ZOOM_IN_ICON, 'Zoom in', () => onZoom());
+            this.root.appendChild(this.zoomBtn);
+        }
+        if (this.onZoomOut) {
+            const onZoomOut = this.onZoomOut;
+            this.zoomOutBtn = this.makeButton(ZOOM_OUT_ICON, 'Zoom out', () => onZoomOut());
+            this.root.appendChild(this.zoomOutBtn);
+        }
         this.eraserBtn = this.makeButton(ERASER_ICON, 'Eraser (click/drag to delete)', () => this.onEraser());
         this.root.appendChild(this.eraserBtn);
         this.root.appendChild(this.makeMagnetCell());
@@ -282,6 +304,7 @@ export class DrawingToolbar {
         this.collapseBtn.classList.add('vela-dtb-collapse');
         this.root.appendChild(this.collapseBtn);
         this.paintMeasure();
+        this.paintZoom();
         this.paintEraser();
         this.paintMagnet();
         this.paintStay();
@@ -390,6 +413,7 @@ export class DrawingToolbar {
     private onCursorClick(): void {
         if (this.measureActive) this.onMeasure();
         if (this.eraserActive) this.onEraser();
+        if (this.zoomActive) this.onZoom?.();
         this.onArm(null);
     }
 
@@ -474,6 +498,24 @@ export class DrawingToolbar {
         const b = this.measureBtn;
         if (!b) return;
         b.dataset.active = this.measureActive ? '1' : '';
+    }
+
+    /** Highlight Zoom In while its box is armed. */
+    setZoomActive(active: boolean): void {
+        this.zoomActive = active;
+        this.paintZoom();
+        this.highlight();
+    }
+
+    /** Show Zoom Out while there is a Zoom In to go back from (TradingView hides it otherwise). */
+    setZoomOutShown(shown: boolean): void {
+        this.zoomOutShown = shown;
+        this.paintZoom();
+    }
+
+    private paintZoom(): void {
+        if (this.zoomBtn) this.zoomBtn.dataset.active = this.zoomActive ? '1' : '';
+        if (this.zoomOutBtn) this.zoomOutBtn.style.display = this.zoomOutShown ? '' : 'none';
     }
 
     /** Highlight the Eraser button while erase mode is active. */
@@ -774,7 +816,7 @@ export class DrawingToolbar {
             const on = id === activeGroup?.id; // armed group only — flyout-open tints the chevron via vela-open
             cell.dataset.active = on ? '1' : '';
         }
-        if (this.cursorBtn) this.cursorBtn.dataset.active = this.active == null && !this.measureActive && !this.eraserActive ? '1' : '';
+        if (this.cursorBtn) this.cursorBtn.dataset.active = this.active == null && !this.measureActive && !this.eraserActive && !this.zoomActive ? '1' : '';
         this.paintMeasure();
         this.paintEraser();
         this.paintMagnet();
@@ -867,6 +909,8 @@ function ensureStyles(): void {
 
 const CURSOR_ICON = icon('cursor');
 const RULER_ICON = icon('ruler');
+const ZOOM_IN_ICON = icon('zoom-in');
+const ZOOM_OUT_ICON = icon('zoom-out');
 /** Double chevrons for the bottom collapse/expand toggle. */
 const COLLAPSE_ICON = icon('chevrons-left');
 const EXPAND_ICON = icon('chevrons-right');

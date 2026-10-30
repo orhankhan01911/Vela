@@ -1,3 +1,4 @@
+import { vt } from '../../../i18n';
 import { EMOJI_GROUPS } from '../../../core/drawings/assets/emojiGroups';
 import { FA_GLYPHS, ICON_GROUPS } from '../../../core/drawings/assets/faIcons';
 import { emojiUrl } from './emojiArt';
@@ -132,8 +133,8 @@ export function buildIconsPanel(onPick: (p: IconsPick) => void, initial: 'emoji'
             a.href = 'https://github.com/jdecked/twemoji';
             a.target = '_blank';
             a.rel = 'noopener noreferrer';
-            a.textContent = 'Twemoji';
-            credit.append('Emoji art: ', a, ' (CC-BY 4.0)');
+            a.textContent = vt('Emoji art: {name} (CC-BY 4.0)', { name: 'Twemoji' });
+            credit.append(a);
             const sections: Section<string>[] = [
                 { title: 'Recently used', tab: emojiTab('🕘'), items: recent.emoji },
                 ...EMOJI_GROUPS.map((g) => ({ title: g.title, tab: emojiTab(g.tab, g.emojis[0]), items: g.emojis })),
@@ -163,10 +164,10 @@ export function buildIconsPanel(onPick: (p: IconsPick) => void, initial: 'emoji'
         sections.forEach((s, i) => {
             s.tab.className = 'vela-icons-cat';
             s.tab.title = s.title;
-            s.tab.setAttribute('aria-label', s.title);
+            s.tab.setAttribute('aria-label', vt(s.title));
             const title = document.createElement('div');
             title.className = 'vela-icons-title';
-            title.textContent = s.title;
+            title.textContent = vt(s.title);
             titles.push(title);
             s.tab.addEventListener('click', () => {
                 list.scrollTop = title.offsetTop - list.offsetTop;
@@ -176,14 +177,14 @@ export function buildIconsPanel(onPick: (p: IconsPick) => void, initial: 'emoji'
             if (s.items.length === 0) {
                 const empty = document.createElement('div');
                 empty.className = 'vela-icons-empty';
-                empty.textContent = i === 0 ? 'Nothing picked yet' : '';
+                empty.textContent = i === 0 ? vt('Nothing picked yet') : '';
                 list.append(empty);
                 return;
             }
             const grid = document.createElement('div') as HTMLDivElement & { fill?: () => void };
             grid.className = 'vela-icons-grid';
             grid.setAttribute('role', 'listbox');
-            grid.setAttribute('aria-label', s.title);
+            grid.setAttribute('aria-label', vt(s.title));
             // Reserve the rows so the scroll height is right before the cells exist.
             grid.style.minHeight = `${Math.ceil(s.items.length / 8) * CELL}px`;
             grid.fill = () => {
@@ -213,7 +214,7 @@ export function buildIconsPanel(onPick: (p: IconsPick) => void, initial: 'emoji'
         b.className = 'vela-icons-tab';
         b.setAttribute('role', 'tab');
         b.dataset.kind = kind;
-        b.textContent = label;
+        b.textContent = vt(label);
         b.addEventListener('click', () => show(kind));
         tabs.append(b);
     }
@@ -266,7 +267,7 @@ function iconCell(code: number, onClick: () => void): HTMLElement {
     b.type = 'button';
     b.className = 'vela-icons-cell';
     b.setAttribute('role', 'option');
-    b.setAttribute('aria-label', `Icon ${code.toString(16)}`);
+    b.setAttribute('aria-label', vt('Icon {code}', { code: code.toString(16) }));
     b.dataset.icon = String(code);
     const svg = glyphSvg(code, 24);
     if (svg) b.append(svg);

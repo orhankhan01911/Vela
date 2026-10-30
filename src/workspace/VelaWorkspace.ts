@@ -706,6 +706,17 @@ export class VelaWorkspace {
                       this.refocusActive();
                   },
                   {
+                      onZoom: () => {
+                          const d = this.active.chart.drawings;
+                          d.setMode(d.getMode() === 'zoom' ? null : 'zoom');
+                          this.refocusActive();
+                      },
+                      onZoomOut: () => {
+                          const d = this.active.chart.drawings;
+                          d.zoomOut();
+                          this.drawToolbar?.setZoomOutShown(d.canZoomOut());
+                          this.refocusActive();
+                      },
                       dock: 'static',
                       // Drawings sync is a WORKSPACE link (same model as the layout
                       // dropdown's switches) — the bar only hosts its toggle.
@@ -1475,6 +1486,8 @@ export class VelaWorkspace {
             const mode = d.getMode();
             this.drawToolbar.setMeasureActive(mode === 'measure');
             this.drawToolbar.setEraserActive(mode === 'eraser');
+            this.drawToolbar.setZoomActive(mode === 'zoom');
+            this.drawToolbar.setZoomOutShown(d.canZoomOut());
             this.drawToolbar.setFavorites(d.favorites());
         }
     }
@@ -1833,6 +1846,8 @@ export class VelaWorkspace {
             if (cell.id !== this.activeId) return;
             this.drawToolbar?.setMeasureActive(mode === 'measure');
             this.drawToolbar?.setEraserActive(mode === 'eraser');
+            this.drawToolbar?.setZoomActive(mode === 'zoom');
+            this.drawToolbar?.setZoomOutShown(chart.drawings.canZoomOut()); // a finished Zoom In leaves the mode
         });
         // Viewport sync: every applied pan/zoom/fit propagates to the same-group cells.
         chart.on('viewport:changed', (range) => this.propagateViewport(cell.id, range));

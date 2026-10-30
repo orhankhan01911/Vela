@@ -88,7 +88,7 @@ describe('emoji / icon frame and handles (TradingView: corners resize, just outs
         expect(d.frameSide()).toBe(80);
         const h = (80 + 0.75) / 2;
         const k = d.corners(proj).map(([x, y]) => [Math.round(x * 100) / 100, Math.round(y * 100) / 100]);
-        expect(k).toEqual([[500 + h, 500 - h], [500 - h, 500 - h], [500 - h, 500 + h], [500 + h, 500 + h]].map(([x, y]) => [Math.round(x * 100) / 100, Math.round(y * 100) / 100]));
+        expect(k).toEqual(([[500 + h, 500 - h], [500 - h, 500 - h], [500 - h, 500 + h], [500 + h, 500 + h]] as Array<[number, number]>).map(([x, y]) => [Math.round(x * 100) / 100, Math.round(y * 100) / 100]));
     });
 
     it('inside the frame drags it; a corner resizes; 20 px out from a corner rotates', () => {

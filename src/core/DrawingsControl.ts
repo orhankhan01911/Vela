@@ -79,6 +79,16 @@ export class DrawingsControl {
         return this.ctrl.getMode();
     }
 
+    /** Zoom Out: back to the view before the last Zoom In (the `'zoom'` mode). False when there is none. */
+    zoomOut(): boolean {
+        return this.ok('zoomOut') && this.ctrl.zoomOut();
+    }
+
+    /** True while a Zoom In can be gone back from (a toolbar shows its Zoom Out button then). */
+    canZoomOut(): boolean {
+        return this.ctrl.canZoomOut();
+    }
+
     /** Show or hide the on-chart drawing toolbar. */
     showToolbar(visible = true): this {
         if (this.ok('showToolbar')) this.ctrl.showToolbar(visible);

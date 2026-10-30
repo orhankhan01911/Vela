@@ -69,7 +69,7 @@ import { AXIS_MASTER_W, AXIS_MERGED_W, LEFT_SCALE_COL_W, nextMasterWidth } from 
 import { LeftScaleColumn, valueFormat } from './chrome/LeftScaleColumn';
 import { CrosshairRenderer } from './chrome/CrosshairRenderer';
 import { SettingsDialog } from './chrome/SettingsDialog';
-import { UserDrawingController } from './drawings/UserDrawingController';
+import { UserDrawingController, type ZoomSnapshot } from './drawings/UserDrawingController';
 import { IndicatorDrawingSlices, mergeSlices } from './drawings/IndicatorDrawingSlices';
 import { createProjector } from './drawings/Projector';
 import type { BarAxis, Projector, SnapMode } from '../../core/drawings';
@@ -1817,6 +1817,9 @@ export class NativeRenderer implements IChartRenderer {
             snap: (pt, paneId, mode, cursorPx) => this.snapToCandle(pt, paneId, mode, cursorPx),
             setSnapMode: (mode) => this.setSnapMode(mode),
             setToolbarGutter: (px) => this.setToolbarGutter(px),
+            zoomSnapX: (x) => this.zoomSnapX(x),
+            zoomToBox: (x0, y0, x1, y1) => this.zoomToBox(x0, y0, x1, y1),
+            restoreZoom: (snap) => this.restoreZoom(snap),
             // The crosshair chip's formatter and face (CrosshairRenderer), so a drawing's price chip matches it.
             axisLabel: (paneId, price) => {
                 const pane = this.scene.panes.get(paneId);
@@ -2799,6 +2802,46 @@ export class NativeRenderer implements IChartRenderer {
         const barSpacing = clampBarSpacing(this.coords.width / (span * this.coords.spacingScale));
         const rightOffset = toL - (this.coords.barCount - 1);
         this.applyViewport({ barSpacing, rightOffset });
+    }
+
+    /** The x of the bar centre nearest to `x` (the Zoom In box runs between bar centres). */
+    zoomSnapX(x: number): number {
+        return this.coords.logicalToX(Math.round(this.coords.xToLogical(x)));
+    }
+
+    /**
+     * TradingView's Zoom In (`zoomToViewport`, module 649873): the bars from the press to the release fill the
+     * width, and the pane under the press shows the two prices top to bottom with autoscale off. Returns what
+     * {@link restoreZoom} needs to put the view back (the zoom stack's entry), or null when both ends sit on the
+     * same bar (TradingView then does nothing).
+     */
+    zoomToBox(x0: number, y0: number, x1: number, y1: number): ZoomSnapshot | null {
+        const pane = this.paneNodeAtY(y0);
+        const i0 = Math.round(this.coords.xToLogical(x0));
+        const i1 = Math.round(this.coords.xToLogical(x1));
+        if (!pane || i0 === i1 || this.coords.width <= 0) return null;
+        const snap: ZoomSnapshot = { viewport: { ...this.coords.getViewport() }, paneId: pane.id, manual: pane.manualScale ? { ...pane.manualScale } : null };
+        const lo = Math.min(i0, i1) - 0.5;
+        const hi = Math.max(i0, i1) + 0.5;
+        const barSpacing = clampBarSpacing(this.coords.width / ((hi - lo) * this.coords.spacingScale));
+        this.applyViewport({ barSpacing, rightOffset: hi - (this.coords.barCount - 1) });
+        const p0 = this.coords.yToPrice(y0, pane.scale, pane.bounds);
+        const p1 = this.coords.yToPrice(Math.min(Math.max(y1, pane.bounds.top), pane.bounds.top + pane.bounds.height), pane.scale, pane.bounds);
+        if (p0 !== p1) this.setManualScale(pane, { ...pane.scale, min: Math.min(p0, p1), max: Math.max(p0, p1) });
+        this.axisScaleButtons?.reposition();
+        return snap;
+    }
+
+    /** Zoom Out: back to the view a {@link zoomToBox} left (its bar spacing and offset, and the pane's scale mode). */
+    restoreZoom(snap: ZoomSnapshot): void {
+        this.applyViewport(snap.viewport);
+        const pane = this.scene.panes.get(snap.paneId);
+        if (pane) {
+            if (snap.manual) this.setManualScale(pane, snap.manual);
+            else pane.manualScale = null;
+        }
+        this.axisScaleButtons?.reposition();
+        this.scheduler.invalidate(InvalidateLevel.Full);
     }
 
     /** Pan by a fraction of the visible width at constant zoom (positive ⇒ toward the

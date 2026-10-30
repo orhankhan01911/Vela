@@ -203,6 +203,9 @@ registerIcon(
     // A long diagonal ruler with ticks along its upper edge.
     svg24('<path d="M3.5 16.5 16.5 3.5l4 4-13 13Z"/><path d="m6 14 1.5 1.5M8.5 11.5l2 2M11 9l1.5 1.5M13.5 6.5l2 2"/>'),
 );
+// Zoom In / Zoom Out: a magnifying glass with a plus or a minus (TradingView's left toolbar pair).
+registerIcon('zoom-in', svg24('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M10.5 7.5v6M7.5 10.5h6"/>'));
+registerIcon('zoom-out', svg24('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M7.5 10.5h6"/>'));
 registerIcon(
     'magnet',
     // Upright horseshoe magnet with its two pole bands.
