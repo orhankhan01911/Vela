@@ -114,6 +114,8 @@ registerIcon(
 );
 // Drawing templates: four tiles, the last one a plus.
 registerIcon('drawing-templates', S('<rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><path d="M11.25 9v4.5M9 11.25h4.5"/>'));
+// Add alert: an alarm clock with a plus.
+registerIcon('alarm-add', S('<circle cx="7.5" cy="8.5" r="5"/><path d="M7.5 6v2.5l1.6 1.2M2.5 3.2 4.2 1.8M12.5 3.2 10.8 1.8"/><path d="M13 10.5v4M11 12.5h4"/>'));
 registerIcon('pencil', S('<path d="M10.7 2.9a1.7 1.7 0 0 1 2.4 2.4L5.6 12.8l-3.1.7.7-3.1Z"/><path d="m9.5 4.1 2.4 2.4"/>'));
 registerIcon('search', S('<circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3.5 3.5"/>'));
 registerIcon('bell', S('<path d="M8 2a4 4 0 0 0-4 4v2.5L2.5 11v1h11v-1L12 8.5V6a4 4 0 0 0-4-4z"/><path d="M6.5 13.5a1.5 1.5 0 0 0 3 0"/>'));

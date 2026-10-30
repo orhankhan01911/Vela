@@ -303,6 +303,21 @@ describe('settings dialog', () => {
         expect(rows()).toEqual(['Save Drawing Template As…', 'Apply Default Drawing Template']);
     });
 
+    it("Add Alert: right after Settings when the host can alert on the type; absent otherwise", () => {
+        const host = document.createElement('div');
+        document.body.append(host);
+        const popup = new DrawingSettingsPopup(host, DARK_THEME);
+        const c = chart(trend());
+        let asked = 0;
+        popup.open([c.live()], null, { ...c.actions, addAlert: () => (asked += 1) });
+        const tips = [...host.querySelectorAll<HTMLElement>('.vela-dpop [data-tip]')].map((e) => e.dataset.tip);
+        expect(tips.slice(tips.indexOf('Settings'), tips.indexOf('Settings') + 3)).toEqual(['Settings', 'Add Alert', 'Lock']);
+        host.querySelector<HTMLButtonElement>('.vela-dpop [data-action="add-alert"]')!.click();
+        expect(asked).toBe(1);
+        const s = setup(trend()); // no addAlert in the actions: no button
+        expect(s.tips()).not.toContain('Add Alert');
+    });
+
     it('opening from More > Visibility on intervals lands on that tab', async () => {
         const s = setup(trend());
         s.host.querySelector<HTMLButtonElement>('.vela-dpop [data-tip="More"]')!.click();

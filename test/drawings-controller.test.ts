@@ -771,6 +771,20 @@ describe('DrawingController — tool/mode seams (the external-toolbar surface)',
         expect(modes).toEqual(['measure', null]);
     });
 
+    it("Add Alert: setAlertTypes reaches the port; the toolbar's intent emits drawing:alert with the drawing", () => {
+        const { port, events, ctrl } = setup();
+        const pushed: string[][] = [];
+        (port as unknown as { setAlertTypes: (t: readonly string[]) => void }).setAlertTypes = (t) => pushed.push([...t]);
+        ctrl.setAlertTypes(['trendline', 'hline']);
+        expect(pushed).toEqual([['trendline', 'hline']]);
+        const d = ctrl.add('trendline', { anchors: [{ time: 1, price: 10 }, { time: 2, price: 20 }] })!;
+        const got: Array<{ id: string; type: string }> = [];
+        events.on('drawing:alert', (e) => got.push({ id: e.id, type: e.drawing.type }));
+        port.fire({ kind: 'alert', id: d.id });
+        port.fire({ kind: 'alert', id: 'gone' }); // a drawing that is not there: nothing
+        expect(got).toEqual([{ id: d.id, type: 'trendline' }]);
+    });
+
     it('mode/snap/stay setters are inert without a port (headless), like the other interactive ops', () => {
         const { ctrl } = setup(false);
         ctrl.setSnapMode('strong');

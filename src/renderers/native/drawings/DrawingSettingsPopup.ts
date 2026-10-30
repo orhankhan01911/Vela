@@ -51,6 +51,8 @@ export interface SettingsActions {
     restore?(doc: SerializedDrawing): void;
     /** Open the drawing's indicator-style dialog ({@link Drawing.inputsDialog}); false when it has none. */
     openInputs?(): boolean;
+    /** Add an alert on this drawing (the host's alert dialog). Present only on types the host can alert on. */
+    addAlert?(): void;
     /** Put a saved template's look on the drawing and rebuild the toolbar (the Templates button). Optional. */
     applyTemplate?(look: TemplateLook): void;
 }
@@ -409,6 +411,13 @@ export class DrawingSettingsPopup {
             this.settingsDialog.open(drawing, actions, dialogKind, undefined, tab);
         };
         if (!multi) bar.appendChild(this.iconBtn('Settings', GEAR_ICON, () => openSettings()));
+        // TradingView's Add Alert, right after the settings wheel (one drawing, a type the host can alert on).
+        if (!multi && actions.addAlert) {
+            const add = actions.addAlert;
+            const alertBtn = this.iconBtn('Add Alert', ALERT_ADD_ICON, () => add());
+            alertBtn.dataset.action = 'add-alert';
+            bar.appendChild(alertBtn);
+        }
         bar.appendChild(this.toggle('Lock', LOCK_ICON, common((d) => d.locked), (v) => actions.setLocked(v), UNLOCK_ICON));
         const del = this.iconBtn('Delete', TRASH_ICON, () => actions.remove());
         del.style.color = 'var(--vela-danger)';
@@ -1206,6 +1215,7 @@ export class DrawingSettingsPopup {
 // live style value rather than a fixed concept.
 const BRUSH_ICON = icon('brush');
 const TEMPLATES_ICON = icon('drawing-templates');
+const ALERT_ADD_ICON = icon('alarm-add');
 const BUCKET_ICON = icon('bucket');
 const TYPE_ICON = icon('type');
 const PRICE_DELTA_ICON = icon('price-delta');

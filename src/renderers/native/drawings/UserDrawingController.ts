@@ -173,6 +173,8 @@ export class UserDrawingController implements IDrawingsRendererPort {
     private zoomCursor: { x: number; y: number } | null = null;
     /** Zoom Out goes back through these, newest last (TradingView's zoom stack). */
     private readonly zoomStack: ZoomSnapshot[] = [];
+    /** Drawing types the host can put an alert on (their toolbar shows Add Alert). */
+    private alertTypes: ReadonlySet<string> = new Set();
     private eraserMode = false; // click/drag over a drawing deletes it
     private erasing = false; // a button is held during eraser mode (so a drag erases multiple)
     // The inline on-chart text editor: its element, the id of the drawing it edits, the text it
@@ -835,6 +837,11 @@ export class UserDrawingController implements IDrawingsRendererPort {
         this.deps.restoreZoom?.(snap);
         this.toolbar.setZoomOutShown(this.zoomStack.length > 0);
         return true;
+    }
+
+    /** The types whose floating toolbar shows Add Alert (the host's list). */
+    setAlertTypes(types: readonly string[]): void {
+        this.alertTypes = new Set(types);
     }
 
     /** True while there is a Zoom In to go back from. */
@@ -1570,6 +1577,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 // Rebuild the toolbar so controls reflect the restored defaults.
                 this.openSettingsById(id, 0, 0);
             },
+            ...(this.alertTypes.has(live()?.type ?? '') ? { addAlert: () => this.emit({ kind: 'alert', id }) } : {}),
             applyTemplate: (look) => {
                 const d = live();
                 if (!d) return;

@@ -35,6 +35,7 @@ export type DrawingIntent =
     | { kind: 'settings'; id: string }
     | { kind: 'tool-finished'; type: DrawingTypeKey }
     | { kind: 'favorite'; type: DrawingTypeKey; on: boolean } // flyout star toggled
+    | { kind: 'alert'; id: string } // the drawing toolbar's Add Alert button
     // The renderer-local magnet / mode state changed (in-chart toolbar click, or a
     // mutual-exclusion side effect — arming a tool exits measure/eraser). The core
     // mirrors the value and re-emits it as a chart event; an equal value is a no-op,
@@ -97,6 +98,8 @@ export interface IDrawingsRendererPort {
      *  renderer keeps owning the mutual exclusion (with armed tools too) and reports
      *  every actual change back through the `mode` intent. Optional. */
     setMode?(mode: DrawingMode): void;
+    /** The drawing types whose toolbar shows Add Alert (the host can alert on them); empty = none. Optional. */
+    setAlertTypes?(types: readonly string[]): void;
     /** Zoom Out: back to the view before the last Zoom In. False when there is none. Optional. */
     zoomOut?(): boolean;
     /** True while a Zoom In can be gone back from (the toolbar then shows Zoom Out). Optional. */

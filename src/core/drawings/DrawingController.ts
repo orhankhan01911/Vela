@@ -144,6 +144,11 @@ export class DrawingController {
         this.events.emit('drawing:mode', { mode });
     }
 
+    /** The drawing types whose toolbar offers Add Alert (the host listens on `drawing:alert`). */
+    setAlertTypes(types: readonly string[]): void {
+        this.port?.setAlertTypes?.(types);
+    }
+
     /** Zoom Out: back to the view before the last Zoom In (false when there is none). */
     zoomOut(): boolean {
         return this.port?.zoomOut?.() ?? false;
@@ -555,6 +560,11 @@ export class DrawingController {
             case 'favorite':
                 this.setFavorite(i.type, i.on);
                 break;
+            case 'alert': {
+                const d = this.store.get(i.id);
+                if (d) this.events.emit('drawing:alert', { id: i.id, drawing: d.serialize() });
+                break;
+            }
             case 'snap-mode':
                 // In-chart magnet click (already applied renderer-side) — mirror + announce.
                 if (i.mode !== this.snapMode) {

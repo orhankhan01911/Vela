@@ -109,6 +109,9 @@ export interface VelaEventMap extends Record<string, unknown> {
   "drawing:removed": { id: string };
   /** The user requested a drawing's settings popup. */
   "drawing:settings": { id: string };
+  /** The drawing toolbar's Add Alert button (TradingView's alert on a drawing): the host creates the alert. Shown
+   *  only on the types the host listed with `chart.drawings.setAlertTypes`. */
+  "drawing:alert": { id: string; drawing: SerializedDrawing };
   /** A timeline-mark glyph was clicked — `ids` lists every mark under it (a cluster). Fires
    *  before the popup opens; a mark without content opens none, so this is the host's hook. */
   "mark:click": MarkClickEvent;

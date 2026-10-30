@@ -79,6 +79,13 @@ export class DrawingsControl {
         return this.ctrl.getMode();
     }
 
+    /** TradingView's Add Alert on the drawing toolbar, for these drawing types (e.g. `['trendline', 'hline']`):
+     *  pressing it emits `drawing:alert` with the drawing, and the host creates the alert. Empty = no button. */
+    setAlertTypes(types: readonly string[]): this {
+        if (this.ok('setAlertTypes')) this.ctrl.setAlertTypes(types);
+        return this;
+    }
+
     /** Zoom Out: back to the view before the last Zoom In (the `'zoom'` mode). False when there is none. */
     zoomOut(): boolean {
         return this.ok('zoomOut') && this.ctrl.zoomOut();
