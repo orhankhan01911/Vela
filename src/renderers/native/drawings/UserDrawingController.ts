@@ -128,7 +128,9 @@ export function sliceKeyFor(zIndex: number, boundaries: readonly number[]): numb
  * state beyond the current projection.
  */
 /** TradingView's "Anchor drawing" toggle: each text / note and its screen-pinned twin. */
-const ANCHOR_TWIN: Readonly<Record<string, DrawingTypeKey>> = { text: 'anchoredtext', anchoredtext: 'text', note: 'anchorednote', anchorednote: 'note' };
+const ANCHOR_TWIN: Readonly<Record<string, DrawingTypeKey>> = Object.fromEntries(
+    ([['text', 'anchoredtext'], ['note', 'anchorednote']] as const).flatMap(([a, b]) => [[a, b], [b, a]]),
+);
 
 export class UserDrawingController implements IDrawingsRendererPort {
     private ctx: CanvasRenderingContext2D | null = null;
