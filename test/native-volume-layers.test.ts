@@ -142,18 +142,18 @@ describe('VpvrRenderer (visible-range volume profile)', () => {
         expect(render(bars, { ...DATA, showPoc: false }).filter((r) => r.op === 'stroke')).toHaveLength(0);
     });
 
-    it('splits each row into up (left) and down (right, against the axis) segments', () => {
+    it('splits each row into up (against the axis, as TradingView) and down (left of it) segments', () => {
         // Equal up/down volume over one flat price range → each row = two half-width segments.
         const rects = render([upBar(0, 100), downBar(1, 100)]).filter((r) => r.op === 'fill');
         const upSegs = rects.filter((r) => r.style === DATA.upColor);
         const downSegs = rects.filter((r) => r.style === DATA.downColor);
         expect(upSegs.length).toBeGreaterThan(0);
         expect(upSegs.length).toBe(downSegs.length);
-        for (const d of downSegs) expect(d.x + d.w).toBeCloseTo(W, 6); // down hugs the axis
-        for (const u of upSegs) {
-            const mate = downSegs.find((d) => Math.abs(d.y - u.y) < 1e-6)!;
-            expect(u.x + u.w).toBeCloseTo(mate.x, 6); // up sits immediately left of down
-            expect(u.w).toBeCloseTo(mate.w, 6); // equal volume → equal halves
+        for (const u of upSegs) expect(u.x + u.w).toBeCloseTo(W, 6); // up hugs the axis
+        for (const d of downSegs) {
+            const mate = upSegs.find((u) => Math.abs(u.y - d.y) < 1e-6)!;
+            expect(d.x + d.w).toBeCloseTo(mate.x, 6); // down sits immediately left of up
+            expect(d.w).toBeCloseTo(mate.w, 6); // equal volume → equal halves
         }
     });
 

@@ -52,7 +52,7 @@ export function formatVpvrVolume(v: number): string {
 /**
  * Paint the visible-range volume profile: one horizontal row per price bucket, anchored to the right edge (or the
  * left, TradingView's "Placement"), length proportional to the row's volume relative to the largest row.
- * - "Up/Down": each row splits into a down segment (against the anchored edge) and an up segment beyond it.
+ * - "Up/Down": each row splits into an up segment (against the anchored edge) and a down segment beyond it.
  * - "Total": one segment in the up colour.
  * - "Delta": one segment of |up - down|, in the up colour when buying won and the down colour when selling did.
  * Rows inside the value area use the value-area colours. The POC row is outlined when asked (TradingView draws the
@@ -105,15 +105,16 @@ export function paintVpvr(
                     ctx.fillRect(seg(0, w), yTop, w, h);
                 }
             } else {
+                // TradingView: up volume against the anchored edge, down volume beyond it
                 w = (total / maxLen) * maxW;
-                const downW = (row.down / total) * w;
-                if (downW > 0) {
-                    ctx.fillStyle = down;
-                    ctx.fillRect(seg(0, downW), yTop, downW, h);
-                }
-                if (w - downW > 0) {
+                const upW = (row.up / total) * w;
+                if (upW > 0) {
                     ctx.fillStyle = up;
-                    ctx.fillRect(seg(downW, w - downW), yTop, w - downW, h);
+                    ctx.fillRect(seg(0, upW), yTop, upW, h);
+                }
+                if (w - upW > 0) {
+                    ctx.fillStyle = down;
+                    ctx.fillRect(seg(upW, w - upW), yTop, w - upW, h);
                 }
             }
             if (style.showValues && h >= 7) {
