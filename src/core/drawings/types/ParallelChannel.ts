@@ -148,6 +148,11 @@ export class ParallelChannel extends SegmentDrawing {
         return [a, b, { time: a.time, price: a.price + d }, { time: b.time, price: b.price + d }];
     }
 
+    /** TradingView: the corners show the plain arrow, the two middle squares the up-down resize cursor. */
+    override handleCursor(index: number): string | null {
+        return index === 4 || index === 5 ? 'ns-resize' : null;
+    }
+
     override handleShapes(): ReadonlyArray<'circle' | 'square'> {
         return ['circle', 'circle', 'circle', 'circle', 'square', 'square'];
     }

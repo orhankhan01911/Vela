@@ -75,6 +75,8 @@ export interface InputControllerDeps {
     drawingsPointerMove?(x: number, y: number, snap: SnapMode, shift: boolean, mod: boolean): void;
     /** Cursor to show while hovering the drawings layer (e.g. `'pointer'` over a drawing), or null. */
     drawingsCursor?(x: number, y: number): string | null;
+    /** The cursor while a drawing is being dragged, or null to keep the hover cursor. */
+    drawingsDragCursor?(): string | null;
     /** Pointer is on a price alert's hover tag: the crosshair is hidden there. */
     drawingsOverAlertTag?(x: number, y: number): boolean;
     /** The sticky magnet mode set on the toolbar (off/weak/strong) — Ctrl/Cmd overrides it to strong. */
@@ -646,6 +648,8 @@ export class InputController {
             } else if (this.region === 'drawing') {
                 if (Math.abs(x - this.startX) > slop || Math.abs(y - this.startY) > slop) this.moved = true;
                 this.deps.drawingsPointerMove?.(x, y, this.snapMode(e), e.shiftKey, e.ctrlKey || e.metaKey);
+                const grab = this.deps.drawingsDragCursor?.();
+                if (grab && this.el) this.el.style.cursor = grab;
             } else {
                 this.panSideways(x, y, e, slop);
             }

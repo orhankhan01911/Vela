@@ -126,7 +126,8 @@ describe('drawings/long and short position tools', () => {
 
     it('each handle has TradingView\'s cursor', () => {
         const d = place('long-position', 50, 30);
-        expect([0, 1, 2, 3].map((i) => d.handleCursor(i))).toEqual(['move', 'ns-resize', 'ns-resize', 'ew-resize']);
+        // read from TradingView's anchor renderer: entry has no cursor type (the arrow), levels ns-resize, edge ew-resize
+        expect([0, 1, 2, 3].map((i) => d.handleCursor(i))).toEqual([null, 'ns-resize', 'ns-resize', 'ew-resize']);
     });
 
     it('typed levels on the wrong side are clamped and Direction is not offered on the fixed tools', () => {

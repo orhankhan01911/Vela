@@ -57,6 +57,15 @@ export class VerticalLine extends Drawing {
         return y == null ? [] : [[x, y]];
     }
 
+    /** TradingView's vertical-line handle is a rounded square with the left-right resize cursor. */
+    override handleShapes(): ReadonlyArray<'circle' | 'square'> {
+        return ['square'];
+    }
+
+    override handleCursor(): string | null {
+        return 'ew-resize';
+    }
+
     hitHandle(px: number, py: number, proj: Projector, tol: number): number {
         return handleAt(px, py, this.handlePoints(proj), tol + 3);
     }

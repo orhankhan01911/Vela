@@ -41,9 +41,13 @@ export class HorizontalLine extends Drawing {
         return [[proj.xOf(a.time), y]];
     }
 
-    /** TradingView's horizontal-line handle is a rounded square. */
+    /** TradingView's horizontal-line handle is a rounded square with the up-down resize cursor. */
     override handleShapes(): ReadonlyArray<'circle' | 'square'> {
         return ['square'];
+    }
+
+    override handleCursor(): string | null {
+        return 'ns-resize';
     }
 
     hitHandle(px: number, py: number, proj: Projector, tol: number): number {

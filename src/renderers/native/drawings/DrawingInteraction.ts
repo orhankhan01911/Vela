@@ -191,9 +191,16 @@ export class DrawingInteraction {
         const proj = this.deps.projector();
         for (const d of this.handleDrawings()) {
             const i = d.hitHandle(x, y, proj, HIT_TOLERANCE);
-            if (i >= 0) return d.handleCursor(i) ?? 'pointer'; // a handle can name its own cursor (a resize arrow)
+            // TradingView: a handle shows the arrow unless it names a resize cursor; the body shows the pointer.
+            if (i >= 0) return d.handleCursor(i) ?? 'default';
         }
         return this.hitAt(x, y) ? 'pointer' : null;
+    }
+
+    /** The cursor while a drag is under way: TradingView's grabbing hand for a body drag; a handle drag keeps the
+     *  handle's own cursor (null). */
+    dragCursor(): string | null {
+        return this.state.kind === 'pressed' && this.state.moved && this.state.handle < 0 ? 'grabbing' : null;
     }
 
     isPlacing(): boolean {

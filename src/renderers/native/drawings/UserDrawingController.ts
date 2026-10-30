@@ -916,6 +916,11 @@ export class UserDrawingController implements IDrawingsRendererPort {
         this.render();
     }
 
+    /** The cursor while dragging a drawing (TradingView's grabbing hand for a body drag), or null to keep the hover one. */
+    dragCursor(): string | null {
+        return this.interaction.dragCursor();
+    }
+
     /** Cursor hint while hovering — `'pointer'` over a drawing/handle, else null. */
     cursorAt(x: number, y: number): string | null {
         if (this.eraserMode) return 'pointer'; // signal "click to delete" while erasing

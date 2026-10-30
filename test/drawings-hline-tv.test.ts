@@ -258,3 +258,20 @@ describe('parallel channel (TradingView)', () => {
         expect(s.body('coordinates').querySelector('[data-role="channel-offset"]')).not.toBeNull();
     });
 });
+
+describe('handle cursors (read from TradingView\'s anchor renderer, 2026-10-30)', () => {
+    const mk = (type: string, n: number) =>
+        createDrawing(type as never, { paneId: 'price', anchors: Array.from({ length: n }, (_, i) => ({ time: 100 + i * 100, price: 500 + i * 10 })) })!;
+    it('plain ends are the arrow; the horizontal line\'s square is ns-resize, the vertical line\'s ew-resize', () => {
+        for (const t of ['trendline', 'ray', 'infoline']) expect([0, 1].map((i) => mk(t, 2).handleCursor(i)), t).toEqual([null, null]);
+        expect(mk('hray', 1).handleCursor(0)).toBeNull();
+        expect(mk('hline', 1).handleCursor(0)).toBe('ns-resize');
+        expect(mk('hline', 1).handleShapes()).toEqual(['square']);
+        expect(mk('vline', 1).handleCursor(0)).toBe('ew-resize');
+        expect(mk('vline', 1).handleShapes()).toEqual(['square']);
+    });
+    it('channel corners are the arrow, its middle squares ns-resize', () => {
+        const c = mk('parallelchannel', 3);
+        expect([0, 1, 2, 3, 4, 5].map((i) => c.handleCursor(i))).toEqual([null, null, null, null, 'ns-resize', 'ns-resize']);
+    });
+});

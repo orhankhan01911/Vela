@@ -500,7 +500,8 @@ export class PositionTool extends Drawing {
     /** TradingView's cursors: move on the entry circle, up/down on the stop and target, left/right on the width. */
     override handleCursor(index: number): string | null {
         if (this.anchors.length < 3) return null;
-        return index === 0 ? 'move' : index === 3 ? 'ew-resize' : index === 1 || index === 2 ? 'ns-resize' : null;
+        // TradingView (its anchor renderer's cursor types): entry the plain arrow, right edge ew-resize, stop / target ns-resize.
+        return index === 3 ? 'ew-resize' : index === 1 || index === 2 ? 'ns-resize' : null;
     }
 
     /** Handle shapes in {@link handlePoints} order, as TradingView draws them. */

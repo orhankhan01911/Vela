@@ -17,8 +17,9 @@ const HANDLE_BORDER = DEFAULT_DRAWING_COLOR;
 const HANDLE_FILL = withAlpha(NEUTRAL, 0.55);
 const GHOST_ALPHA = 0.7;
 /** TradingView's handle ring color and half-size (the position tools wear TradingView's handles). */
-const TV_HANDLE_RING = '#2962ff'; // palette-exempt: TradingView drawing-handle blue
-const TV_HANDLE_HALF = 5;
+const TV_AXIS_BLUE = '#2962ff'; // palette-exempt: TradingView's selection marks on the axes
+const TV_HANDLE_RING = '#1e53e5'; // palette-exempt: TradingView's handle ring (its anchor renderer's color)
+const TV_HANDLE_HALF = 6; // TradingView's anchor radius
 /** The selected drawing's shaded spans on the axes (TradingView's): how far into the price scale / time axis. */
 const AXIS_HIGHLIGHT_W = 80;
 const AXIS_HIGHLIGHT_H = 24;
@@ -871,7 +872,7 @@ export class DrawingPainter {
             const timeOnly = d.type === 'vline';
             ctx.save();
             ctx.setLineDash([]);
-            ctx.fillStyle = withAlpha(TV_HANDLE_RING, 0.25);
+            ctx.fillStyle = withAlpha(TV_AXIS_BLUE, 0.25);
             if (ys.length >= 2 && !timeOnly) {
                 const top = Math.max(rect.top, Math.min(...ys));
                 const bot = Math.min(rect.top + rect.height, Math.max(...ys));
@@ -887,7 +888,7 @@ export class DrawingPainter {
                     for (const price of new Set(pts.map((p) => p.price))) {
                         const y = proj.yOf(price, d.paneId);
                         if (y == null || y < rect.top || y > rect.top + rect.height) continue;
-                        this.paintAxisChip(ctx, d, y, proj, theme, TV_HANDLE_RING, price);
+                        this.paintAxisChip(ctx, d, y, proj, theme, TV_AXIS_BLUE, price);
                     }
                 }
                 if (!priceOnly && !showsAxisTime(d)) {
@@ -901,7 +902,7 @@ export class DrawingPainter {
                         const w = Math.ceil(ctx.measureText(label).width + 14);
                         const cx = Math.max(w / 2 + 1, Math.min(proj.width - w / 2 - 1, x));
                         roundRect(ctx, Math.round(cx - w / 2), proj.height + 2, w, 18, 4);
-                        ctx.fillStyle = TV_HANDLE_RING;
+                        ctx.fillStyle = TV_AXIS_BLUE;
                         ctx.fill();
                         ctx.fillStyle = '#ffffff'; // palette-exempt: TradingView's white chip text
                         ctx.fillText(label, Math.round(cx), proj.height + 11.5);

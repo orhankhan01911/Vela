@@ -1744,6 +1744,7 @@ export class NativeRenderer implements IChartRenderer {
             drawingsPointerMove: (x, y, snap, shift, mod) => this.userDrawings?.pointerMove(x, y, snap, shift, mod),
             drawingsPointerUp: (x, y, snap) => this.userDrawings?.pointerUp(x, y, snap),
             drawingsCursor: (x, y) => (this.drawingsInteractive ? this.userDrawings?.cursorAt(x, y) : null) ?? (this.chrome.markGlyphAt(x, y) ? 'pointer' : null),
+            drawingsDragCursor: () => (this.drawingsInteractive ? this.userDrawings?.dragCursor() ?? null : null),
             drawingsOverAlertTag: (x, y) => this.userDrawings?.overAlertTag(x, y) ?? false,
             drawingsDblClick: (x, y) => this.userDrawings?.dblClick(x, y) ?? false,
             drawingsClearTransient: () => this.userDrawings?.clearTransient(),
