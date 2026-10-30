@@ -1197,6 +1197,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
         const dragged = this.interaction.activeDragId();
         if (dragged) active.add(dragged);
         this.painter.paintLineStats(ctx, this.drawings, proj, this.deps.theme(), active);
+        this.painter.paintRangePlates(ctx, this.drawings, proj, this.deps.theme()); // price range numbers, over the candles
         // A Ctrl-drag moves COPIES that are not in the store yet: paint them here, in full and with
         // handles, so they read as the real drawings they are about to become.
         const clones = this.interaction.dragClones();

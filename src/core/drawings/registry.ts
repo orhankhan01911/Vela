@@ -1136,7 +1136,8 @@ registerDrawingType({ type: 'cycliclines', group: 'measure', label: 'Cyclic Line
 registerDrawingType({ type: 'timecycles', group: 'measure', label: 'Time Cycles', icon: TIME_CYCLES_ICON, defaultStyle: SOLID, create: (init) => new TimeCycles(init) });
 registerDrawingType({ type: 'sineline', group: 'measure', label: 'Sine Line', icon: SINE_ICON, defaultStyle: SOLID, create: (init) => new SineLine(init) });
 registerDrawingType({ type: 'daterange', group: 'measure', label: 'Date Range', icon: DATE_RANGE_ICON, defaultStyle: SOLID, create: (init) => new DateRange(init) });
-registerDrawingType({ type: 'pricerange', group: 'measure', label: 'Price Range', icon: PRICE_RANGE_ICON, defaultStyle: SOLID, create: (init) => new PriceRange(init) });
+// TradingView's price range: 2 px blue lines, its blue at 15 % behind.
+registerDrawingType({ type: 'pricerange', group: 'measure', label: 'Price Range', icon: PRICE_RANGE_ICON, defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid', fillColor: `${TV_LINE_COLOR}26` }, create: (init) => new PriceRange(init) });
 registerDrawingType({
     type: 'arrowmarker',
     group: 'shapes',

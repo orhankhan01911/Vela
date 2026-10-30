@@ -9,6 +9,8 @@ import {
     GannSquare,
     PitchforkBase,
     PITCHFORK_STYLES,
+    PriceRange,
+    PRICE_RANGE_PARTS,
     FixedRangeVolumeProfile,
     FixedRangeTpoProfile,
     INTERVAL_UNITS,
@@ -73,7 +75,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { pricerange: 'Price range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -266,6 +268,10 @@ export class DrawingSettingsDialog {
             this.buildPitchforkStyle(grid, drawing, actions);
             return;
         }
+        if (drawing instanceof PriceRange && drawing.tv) {
+            this.buildPriceRangeStyle(grid, drawing, actions);
+            return;
+        }
         const fields = styleFields(drawing);
         const has = (p: string): boolean => fields.some((f) => f.path === p);
         const done = new Set<string>();
@@ -314,6 +320,56 @@ export class DrawingSettingsDialog {
             }
             this.buildLevels(grid, drawing, actions);
         }
+    }
+
+    /** TradingView's price range Style tab: Line, Background (a switch and its color), Extend, then INFO: Stats (price
+     *  range, percent change, change in pips), Label (color and size) and Label background (a switch and its color). */
+    private buildPriceRangeStyle(grid: HTMLElement, pr: PriceRange, actions: SettingsActions): void {
+        grid.appendChild(fieldRow({ label: 'Line', control: [this.lineButton(pr, actions, true, true)], fit: true }));
+        const bg = fieldRow({
+            label: 'Background',
+            toggle: { id: uid(), checked: pr.fillBackground, onChange: (v) => actions.patch({ fillBackground: v }) },
+            control: [this.colorControl(pr, 'style.fillColor', actions, pr.style.fillColor ?? DEFAULT_DRAWING_COLOR)],
+            fit: true,
+        });
+        bg.dataset.role = 'background';
+        grid.appendChild(bg);
+        grid.appendChild(fieldRow({ label: 'Extend', control: [this.extendDropdown(pr, actions)], fit: true }));
+        grid.appendChild(fieldSection('Info'));
+        const now = (): PriceRange => ((actions.resolve() ?? pr) as PriceRange);
+        const statsLabel = (): string => {
+            const on = PRICE_RANGE_PARTS.filter((p) => now().info[p.key]).map((p) => vt(p.label));
+            return on.length ? joinChoices(on) : 'Hidden';
+        };
+        const dd = dropdownTrigger(statsLabel());
+        dd.el.dataset.role = 'stats';
+        dd.button.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleChecks(
+                dd.button,
+                PRICE_RANGE_PARTS.map((p) => ({ label: p.label, checked: () => now().info[p.key], set: (v: boolean) => actions.patch({ [`info.${p.key}`]: v }) })),
+                () => dd.setLabel(statsLabel()),
+            );
+        });
+        grid.appendChild(fieldRow({ label: 'Stats', control: [dd.el], fit: true }));
+        const label = fieldRow({
+            label: 'Label',
+            control: [
+                this.colorControl(pr, 'labelColor', actions, pr.labelColor),
+                this.selectControl('labelSize', PX_SIZE_OPTIONS, String(pr.labelSize), actions, (v) => Number(v)),
+            ],
+            fit: true,
+        });
+        label.dataset.role = 'label';
+        grid.appendChild(label);
+        const lbg = fieldRow({
+            label: 'Label background',
+            toggle: { id: uid(), checked: pr.labelBackground, onChange: (v) => actions.patch({ labelBackground: v }) },
+            control: [this.colorControl(pr, 'labelBgColor', actions, pr.labelBgColor)],
+            fit: true,
+        });
+        lbg.dataset.role = 'label-background';
+        grid.appendChild(lbg);
     }
 
     /** TradingView's parallel channel Style tab: its seven level rows (a switch, except on the two lines themselves; the

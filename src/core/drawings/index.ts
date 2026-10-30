@@ -35,7 +35,7 @@ export { TimeCycles } from './types/TimeCycles';
 export { SineLine } from './types/SineLine';
 export { ArrowMarker } from './types/ArrowMarker';
 export { DateRange } from './types/DateRange';
-export { PriceRange } from './types/PriceRange';
+export { PriceRange, PRICE_RANGE_PARTS, PRICE_RANGE_LABEL, priceRangeText, type PriceRangeInfo } from './types/PriceRange';
 export { TrianglePattern } from './types/TrianglePattern';
 export { ElliottTriangle, ElliottDoubleCombo, ElliottTripleCombo } from './types/ElliottCombo';
 export { ELLIOTT_DEGREES, DEFAULT_DEGREE } from './types/elliottDegree';
