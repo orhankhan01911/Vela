@@ -18,7 +18,7 @@ export function arrowMarkerStroke(len: number): number {
 
 /**
  * TradingView's arrow marker: a filled arrow from a point at the first anchor to its head at the second, with optional
- * text at the tail. New ones (`tv`) are TradingView's, read from its code 2026-10-30: one color (#1E53E5) for the arrow
+ * text at the tail. New ones (`tv`) are TradingView's, read from its code 2026-10-30: one color (its blue 600) for the arrow
  * and its outline, a head that grows with the length (18-106 px), an outline 2-5 px, at least 22 px long, a 9 px dot
  * when both points coincide, the text bold 16 px 10 px off the tail on the side away from the head. Markers saved
  * before keep their border, fill and shape.
