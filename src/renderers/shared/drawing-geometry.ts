@@ -192,3 +192,24 @@ export function autoFontSize(lines: readonly string[], boxW: number, boxH: numbe
     const byHeight = (boxH * 0.85) / (lines.length * 1.3);
     return Math.max(6, Math.min(byWidth, byHeight, 48));
 }
+
+/** A plain CSS color from a drawing (saved layouts are untrusted): letters, digits, `#(),.%` and spaces, no `url(`, and
+ *  a color the browser accepts. Anything else gives `fallback`. Use before putting a drawing's color into CSS text. */
+export function isSafeCssColor(v: unknown): v is string {
+    return (
+        typeof v === 'string' &&
+        v.length <= 64 &&
+        /^[#a-z0-9(),.%\s]+$/i.test(v) &&
+        !/url\(/i.test(v) &&
+        (typeof CSS === 'undefined' || !CSS.supports || CSS.supports('color', v))
+    );
+}
+
+export function safeCssColor(v: unknown, fallback: string): string {
+    return isSafeCssColor(v) ? v : fallback;
+}
+
+/** A finite number clamped to [min, max] (a drawing's width before it goes into CSS text), else `fallback`. */
+export function safeCssPx(v: unknown, fallback: number, min: number, max: number): number {
+    return typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
+}

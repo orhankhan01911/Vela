@@ -47,7 +47,7 @@ import {
 import { BEARISH, BULLISH } from '../../../core/palette';
 import { ALONG_LINE_TEXT_TYPES, type SettingsField } from '../../../core/drawings/schema';
 import { Menu } from '../../../ui/components/menu';
-import { contrastColor } from '../../shared/drawing-geometry';
+import { contrastColor, isSafeCssColor } from '../../shared/drawing-geometry';
 import { applyChromeTokens } from '../../shared/theme-tokens';
 import { Dialog } from '../../../ui/components/dialog';
 import { Popover, closeOpenPopovers, eventDismissedPopover, isPopoverOpen, openPopoverTrigger } from '../../../ui/components/popover';
@@ -1904,7 +1904,7 @@ function opacitySlider(value: number, onChange: (n: number) => void, color?: str
     wrap.className = 'vela-range2';
     // TradingView's track fades from clear to the fill's color.
     // Only a plain color reaches the gradient: a saved level color comes from the layout file (no url() / extra layers).
-    if (color && /^[#a-z0-9(),.%\s]+$/i.test(color) && !/url\(/i.test(color) && (typeof CSS === 'undefined' || !CSS.supports || CSS.supports('color', color))) {
+    if (isSafeCssColor(color)) {
         wrap.classList.add('vela-range-fade');
         wrap.style.setProperty('--vela-range-track', `linear-gradient(to right, transparent, ${color})`);
     }

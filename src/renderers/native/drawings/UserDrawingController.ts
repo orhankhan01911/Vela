@@ -14,7 +14,7 @@ import type {
 } from '../../../core/drawings';
 import { deserializeDrawing, getDrawingType, resetDrawingSettings, shownOnBarMs, resolveAnchors, writeAnchor, Callout, CALLOUT_RADIUS, CALLOUT_MARGIN, Magnifier, PriceAlert, TextLabel, type BarAxis } from '../../../core/drawings';
 import type { Unsubscribe } from '../../../core/util/types';
-import { contrastColor, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE } from '../../shared/drawing-geometry';
+import { contrastColor, namedFontSize, labelLineHeight, safeCssColor, safeCssPx, TEXT_FRAME_INSET, TEXT_FRAME_RISE } from '../../shared/drawing-geometry';
 import { withAlpha } from '../core/chartConfig';
 import { blendOver, splitColor } from '../../../ui/components/color-picker';
 import { DrawingPainter, handleIdsFor, wrapLines, type PaintTargets } from './DrawingPainter';
@@ -878,13 +878,14 @@ export class UserDrawingController implements IDrawingsRendererPort {
             const pad = 2 * (CALLOUT_RADIUS + CALLOUT_MARGIN);
             const w = Math.ceil(tw) + pad;
             const h = rows * fs + pad;
-            const lw = d.style.lineWidth ?? 2;
+            // A saved layout is untrusted: only a plain color and a clamped width reach the CSS text.
+            const lw = safeCssPx(d.style.lineWidth, 2, 0, 10);
             const fill = d.style.fillColor ?? theme.background;
             return (
                 base +
                 `left:${Math.round(p[1][0] - w / 2)}px;top:${Math.round(p[1][1] - h / 2)}px;width:${w}px;height:${h}px;` +
-                `padding:${Math.max(0, pad / 2 - lw)}px;border-radius:${CALLOUT_RADIUS}px;border:${lw}px solid ${d.style.lineColor ?? theme.borderColor};line-height:${fs}px;` +
-                `background:${blendOver(fill, theme.background, splitColor(fill).alpha)};color:${text?.color ?? theme.textColor};font:${font};`
+                `padding:${Math.max(0, pad / 2 - lw)}px;border-radius:${CALLOUT_RADIUS}px;border:${lw}px solid ${safeCssColor(d.style.lineColor, theme.borderColor)};line-height:${fs}px;` +
+                `background:${blendOver(fill, theme.background, splitColor(fill).alpha)};color:${safeCssColor(text?.color, theme.textColor)};font:${font};`
             );
         }
         if (d instanceof Callout) {
@@ -894,8 +895,8 @@ export class UserDrawingController implements IDrawingsRendererPort {
             return (
                 base +
                 `left:${Math.round(box.x)}px;top:${Math.round(box.y)}px;width:${Math.round(box.w)}px;height:${Math.round(box.h)}px;` +
-                `padding:5px 8px;border-radius:5px;border:1px solid ${d.style.lineColor ?? theme.borderColor};` +
-                `background:${blendOver(fill, theme.background, splitColor(fill).alpha)};color:${text?.color ?? theme.textColor};font:${font};`
+                `padding:5px 8px;border-radius:5px;border:1px solid ${safeCssColor(d.style.lineColor, theme.borderColor)};` +
+                `background:${blendOver(fill, theme.background, splitColor(fill).alpha)};color:${safeCssColor(text?.color, theme.textColor)};font:${font};`
             );
         }
         const anchor = d.handlePoints(proj)[0];
@@ -912,7 +913,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
             `width:${w + TEXT_FRAME_INSET * 2}px;height:${lines.length * lh + TEXT_FRAME_RISE * 2}px;` +
             `padding:${TEXT_FRAME_RISE - EDITOR_BORDER}px ${TEXT_FRAME_INSET - EDITOR_BORDER}px;` +
             `border:${EDITOR_BORDER}px solid ${withAlpha(theme.textColor, 0.3)};border-radius:4px;` +
-            `background:transparent;color:${text?.color ?? theme.textColor};font:${font};line-height:${lh}px;white-space:pre;`
+            `background:transparent;color:${safeCssColor(text?.color, theme.textColor)};font:${font};line-height:${lh}px;white-space:pre;`
         );
     }
 
