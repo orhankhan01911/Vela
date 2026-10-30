@@ -191,3 +191,15 @@ describe('pitchfork dialog', () => {
         expect(s.body('style').querySelector('[data-role="fork-style"]')!.textContent).toContain('Schiff');
     });
 });
+
+describe('pitchfork dialog safety', () => {
+    it('a level color that is not a plain color never reaches the slider\'s gradient', async () => {
+        const d = pf();
+        d.levels[5]!.color = 'red), url(https://example.invalid/x.png';
+        const s = setup(d);
+        s.gear().click();
+        await settled();
+        const track = s.body('style').querySelector<HTMLElement>('[data-role="background"] .vela-range2')!;
+        expect(track.style.getPropertyValue('--vela-range-track')).toBe('');
+    });
+});

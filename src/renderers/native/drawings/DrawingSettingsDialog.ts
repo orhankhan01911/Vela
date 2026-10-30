@@ -1733,7 +1733,8 @@ function opacitySlider(value: number, onChange: (n: number) => void, color?: str
     const wrap = document.createElement('div');
     wrap.className = 'vela-range2';
     // TradingView's track fades from clear to the fill's color.
-    if (color) {
+    // Only a plain color reaches the gradient: a saved level color comes from the layout file (no url() / extra layers).
+    if (color && /^[#a-z0-9(),.%\s]+$/i.test(color) && !/url\(/i.test(color) && (typeof CSS === 'undefined' || !CSS.supports || CSS.supports('color', color))) {
         wrap.classList.add('vela-range-fade');
         wrap.style.setProperty('--vela-range-track', `linear-gradient(to right, transparent, ${color})`);
     }
