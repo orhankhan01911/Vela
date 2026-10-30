@@ -1990,6 +1990,30 @@ describe('EngineOrchestrator — built-in volume native indicators', () => {
         expect(chart.inspect().indicators.some((s) => s.nativeType === 'vpvr')).toBe(true);
     });
 
+    it('the VRVP draws its POC line for the visible window, and gets that window when added after it', async () => {
+        const { chart, renderer } = await makeChart();
+        const H = 3_600_000; // makeBars is hourly from 1_700_000_000_000
+        renderer.fireViewport({ from: 1_700_000_000_000, to: 1_700_000_000_000 + 20 * H });
+        await new Promise((r) => setTimeout(r, 400)); // the viewport debounce
+        chart.addNativeIndicator('vpvr');
+        await flush();
+        // the POC level moves with the window, and a value patch cannot carry a level: each change remounts
+        const poc = (): IndicatorModel => { const all = renderer.mountedModels.filter((m) => m.native?.type === 'vpvr'); return all[all.length - 1]!; };
+        expect(poc().priceLines).toHaveLength(1);
+        expect(poc().priceLines[0]!.color).toBe('#f44336');
+        expect(poc().series.map((s) => s.title)).toEqual(['POC']);
+        const mounts = renderer.mountedModels.length;
+        const before = poc().priceLines[0]!.price;
+        renderer.fireViewport({ from: 1_700_000_000_000 + 25 * H, to: 1_700_000_000_000 + 45 * H });
+        await new Promise((r) => setTimeout(r, 400));
+        expect(renderer.mountedModels.length).toBeGreaterThan(mounts);
+        expect(poc().priceLines[0]!.price).not.toBe(before);
+        // switching VAH on adds its line the same way
+        chart.indicators().find((i) => i.nativeType === 'vpvr')!.setInput('showVah', true);
+        await flush();
+        expect(poc().priceLines).toHaveLength(2);
+    });
+
     it('hide suspends via the renderer flag; show re-pushes the config', async () => {
         const { chart, renderer } = await makeChart();
         const native = chart.inspect().indicators.find((s) => s.nativeType === 'volume')!;

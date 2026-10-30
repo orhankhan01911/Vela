@@ -2861,8 +2861,13 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     /** Hand a range-aware native (`reactsToViewport`) the current window: viewport changes only reach it after it
      *  started, so without this it would know no window until the user next scrolls. */
     private sendViewport(record: IndicatorRecord): void {
-        const w = this.visibleRange;
-        if (w && record.native?.descriptor.reactsToViewport) record.native.instance.onViewport({ from: w.left, to: w.right });
+        if (!record.native?.descriptor.reactsToViewport) return;
+        // No viewport event yet (the chart has not been scrolled since it loaded): ask the renderer.
+        const w = this.visibleRange ?? (() => {
+            const r = this.renderer.getVisibleRange();
+            return r ? { left: r.from, right: r.to } : null;
+        })();
+        if (w) record.native.instance.onViewport({ from: w.left, to: w.right });
     }
 
     /** The renderer-layer channel a native instance's `pushData` lands on: the type itself
@@ -3281,6 +3286,9 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (!record.native && this.styleModel(record, model) && record.renderHandle) record.pendingStructural = true;
         // A native's pane axis (e.g. row labels that arrive with its data) is not in the value patch: remount on change.
         if (record.native && record.renderHandle && JSON.stringify(model.paneAxis ?? null) !== JSON.stringify(record.model?.paneAxis ?? null)) record.pendingStructural = true;
+        // Nor are its levels or the set and look of its series: a native whose lines move or switch on and off (the
+        // VRVP's POC / VAH / VAL follow the visible window) remounts when they change.
+        if (record.native && record.renderHandle && record.model && EngineOrchestrator.nativeShape(model) !== EngineOrchestrator.nativeShape(record.model)) record.pendingStructural = true;
 
         if (!record.renderHandle) {
             const paneId = this.routePane(id, model, record.options ?? {});
@@ -3328,6 +3336,14 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (record.loading) this.setLoading(record, false);
         this.announce(record, handle);
         return true;
+    }
+
+    /** What of a native's model a value patch cannot carry: its levels, and each series' id, kind and look. */
+    private static nativeShape(model: IndicatorModel): string {
+        return JSON.stringify([
+            model.priceLines,
+            model.series.map((s) => [s.id, s.kind, s.visible, s.display, s.axisTag, isLineLikeSeries(s) ? s.style : null]),
+        ]);
     }
 
     /** True when the model carries ANY executed output — series, drawings, bar colors, or trades. */
