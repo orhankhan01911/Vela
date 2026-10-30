@@ -63,6 +63,7 @@ import { fieldGrid, fieldRow, fieldSection, buildFieldControl } from '../../../u
 import type { SelectOption } from '../../../ui/components/select';
 import type { SettingsActions } from './DrawingSettingsPopup';
 import { vt } from '../../../i18n';
+import { TEMPLATE_NAME_MAX, deleteTemplate, pickLook, saveTemplate, templateLook, templateNames, withLook, type TemplateLook } from './drawingTemplates';
 
 /** Which builder fills the dialog: `settings` is the generic tabbed dialog every drawing has; the others are
  *  the older single-purpose names, kept so callers still work (they open the same dialog on the right tab). */
@@ -1107,8 +1108,7 @@ export class DrawingSettingsDialog {
         const live = (): Drawing => actions.resolve() ?? drawing;
         const repaint = (): void => this.open(live(), actions, kind, snapshot);
         const applyLook = (look: TemplateLook): void => {
-            const d = live().serialize();
-            actions.restore?.({ ...d, style: { ...look.style }, text: look.text ? { ...look.text } : d.text, props: look.props ?? d.props });
+            actions.restore?.(withLook(live().serialize(), look));
             repaint();
         };
         const showSaveRow = (): void => {
@@ -1116,16 +1116,13 @@ export class DrawingSettingsDialog {
             const input = document.createElement('input');
             input.type = 'text';
             input.placeholder = vt("Template name");
-            input.maxLength = 40;
+            input.maxLength = TEMPLATE_NAME_MAX;
             input.style.cssText =
                 'min-width:0;width:130px;padding:6px 10px;border-radius:8px;border:1px solid var(--vela-border);background:transparent;color:inherit;font:inherit;';
             const save = btn('Save', true, () => {
                 const name = input.value.trim();
                 if (!name) { input.focus(); return; }
-                const d = live().serialize();
-                const all = readTemplates();
-                (all[type] ??= {})[name] = clonePlain({ style: d.style, text: d.text, props: d.props });
-                writeTemplates(all);
+                saveTemplate(type, name, live().serialize());
                 repaint();
             });
             input.addEventListener('keydown', (e) => {
@@ -1144,22 +1141,18 @@ export class DrawingSettingsDialog {
             onSelect: (id) => {
                 if (id === 'reset') {
                     const fresh = createDrawing(type, { paneId: live().paneId });
-                    if (fresh) actions.restore?.({ ...live().serialize(), ...pick(fresh.serialize()) });
+                    if (fresh) actions.restore?.({ ...live().serialize(), ...pickLook(fresh.serialize()) });
                     repaint();
                 } else if (id === 'save') showSaveRow();
                 else if (id.startsWith('apply:')) {
-                    const look = readTemplates()[type]?.[id.slice(6)];
+                    const look = templateLook(type, id.slice(6));
                     if (look) applyLook(look);
-                } else if (id.startsWith('del:')) {
-                    const all = readTemplates();
-                    if (all[type]) delete all[type][id.slice(4)];
-                    writeTemplates(all);
-                }
+                } else if (id.startsWith('del:')) deleteTemplate(type, id.slice(4));
             },
         });
         // Rebuild the list each time it opens so saves/deletes show immediately.
         trigger.addEventListener('click', () => {
-            const saved = Object.keys(readTemplates()[type] ?? {}).sort((a, b) => a.localeCompare(b));
+            const saved = templateNames(type);
             // TradingView's order: Save as…, Apply defaults, then the saved templates.
             menu.setItems([
                 { id: 'save', label: 'Save as\u2026' },
@@ -1752,32 +1745,6 @@ export class DrawingSettingsDialog {
             grid.appendChild(row);
         });
     }
-}
-
-interface TemplateLook {
-    style: SerializedDrawing['style'];
-    text?: SerializedDrawing['text'];
-    props?: Record<string, unknown>;
-}
-const TEMPLATE_KEY = 'vela.drawingTemplates.v1';
-function readTemplates(): Record<string, Record<string, TemplateLook>> {
-    try {
-        const raw = JSON.parse(localStorage.getItem(TEMPLATE_KEY) ?? '{}') as unknown;
-        return raw && typeof raw === 'object' ? (raw as Record<string, Record<string, TemplateLook>>) : {};
-    } catch {
-        return {};
-    }
-}
-function writeTemplates(all: Record<string, Record<string, TemplateLook>>): void {
-    try {
-        localStorage.setItem(TEMPLATE_KEY, JSON.stringify(all));
-    } catch {
-        /* storage blocked (private mode) — templates simply don't persist */
-    }
-}
-/** Just the look fields of a serialized drawing (never anchors/ids). */
-function pick(d: SerializedDrawing): Pick<SerializedDrawing, 'style' | 'text' | 'props'> {
-    return { style: d.style, text: d.text, props: d.props };
 }
 
 /** A position tool's line switch (its dashed trade line): a Style-tab setting, not an Inputs one. */

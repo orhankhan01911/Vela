@@ -1,3 +1,4 @@
+import { TEMPLATE_NAME_MAX, deleteTemplate, saveTemplate, templateLook, templateNames, type TemplateLook } from './drawingTemplates';
 import type { VelaTheme } from '../../../core/options';
 import type { Drawing, RegressionStyle, VwapStyle, SerializedDrawing } from '../../../core/drawings';
 import {
@@ -50,6 +51,8 @@ export interface SettingsActions {
     restore?(doc: SerializedDrawing): void;
     /** Open the drawing's indicator-style dialog ({@link Drawing.inputsDialog}); false when it has none. */
     openInputs?(): boolean;
+    /** Put a saved template's look on the drawing and rebuild the toolbar (the Templates button). Optional. */
+    applyTemplate?(look: TemplateLook): void;
 }
 
 /** The value of a control whose drawings disagree — the bar shows it as "mixed" and the first
@@ -109,6 +112,10 @@ function ensureStyles(): void {
 .vela-dpop-btn[data-active='mixed']{background:var(--vela-hover-strong);color:var(--vela-fg-bright);outline:1px dashed var(--vela-fg-muted);outline-offset:-2px;}
 .vela-dpop-item{background:transparent;transition:background var(--vela-dur-fast) ease;}
 .vela-dpop-item:hover{background:var(--vela-hover-strong);}
+.vela-dpop-tpl-del{display:flex;flex:none;align-items:center;justify-content:center;width:24px;height:24px;margin:-3px -4px -3px 0;border-radius:4px;color:var(--vela-fg-muted);opacity:0;}
+.vela-dpop-item:hover .vela-dpop-tpl-del,.vela-dpop-tpl-del:focus-visible{opacity:1;}
+.vela-dpop-tpl-del:hover{color:var(--vela-fg-bright);background:var(--vela-hover);}
+@media (hover:none){.vela-dpop-tpl-del{opacity:1;}}
 .vela-dpop-item[data-active='1']{background:var(--vela-active);}
 /* A finger needs a wider grab zone than a cursor — grow the move handle on touch-first
    devices (the glyph stays centered; only the hit target widens). */
@@ -224,6 +231,8 @@ export class DrawingSettingsPopup {
 
         // Leading move handle — drag the whole toolbar anywhere on the chart.
         bar.appendChild(this.dragHandle());
+        // TradingView's first button: the drawing templates (one drawing at a time).
+        if (!multi && actions.applyTemplate) bar.appendChild(this.templatesButton(drawing, actions));
 
         if (paths.has('glyph')) {
             const cur = common((d) => (d as unknown as { glyph?: string }).glyph ?? GLYPH_OPTIONS[0]!);
@@ -641,6 +650,123 @@ export class DrawingSettingsPopup {
             window.addEventListener('pointermove', move);
             window.addEventListener('pointerup', up);
             window.addEventListener('pointercancel', up);
+        });
+        return b;
+    }
+
+    /**
+     * TradingView's Templates button: "Save Drawing Template As…" (a name field in the menu), "Apply Default Drawing
+     * Template", then this type's saved templates, each with a trash button on hover. The dialog's Template menu reads
+     * and writes the same templates.
+     */
+    private templatesButton(drawing: Drawing, actions: SettingsActions): HTMLButtonElement {
+        const b = this.base('Templates');
+        b.dataset.action = 'templates';
+        b.innerHTML = sized(TEMPLATES_ICON);
+        b.addEventListener('pointerdown', (e) => e.stopPropagation()); // else the bar's own pointerdown pre-closes the menu
+        b.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (this.menuOwner === b) {
+                this.closeMenu();
+                return;
+            }
+            const type = drawing.type;
+            const live = (): Drawing => actions.resolve() ?? drawing;
+            this.menuPop = this.hostFloat(b, {
+                zIndex: 26,
+                padding: '4px',
+                fill: (menu, pop) => {
+                    const item = (label: string, run: () => void): HTMLButtonElement => {
+                        const it = document.createElement('button');
+                        it.type = 'button';
+                        it.className = 'vela-dpop-item';
+                        it.style.cssText = 'display:flex;align-items:center;gap:8px;min-width:210px;padding:6px 9px;border:none;border-radius:5px;color:inherit;cursor:pointer;text-align:left;font:inherit;';
+                        const tx = document.createElement('span');
+                        tx.textContent = label;
+                        tx.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+                        it.appendChild(tx);
+                        it.addEventListener('click', (ev) => {
+                            ev.stopPropagation();
+                            run();
+                        });
+                        menu.appendChild(it);
+                        return it;
+                    };
+                    const list = (): void => {
+                        menu.replaceChildren();
+                        item(vt('Save Drawing Template As…'), saveRow);
+                        item(vt('Apply Default Drawing Template'), () => {
+                            pop.hide();
+                            actions.resetSettings();
+                        });
+                        const names = templateNames(type);
+                        if (names.length) {
+                            const sep = document.createElement('div');
+                            sep.style.cssText = 'height:1px;margin:4px 0;background:var(--vela-border);';
+                            menu.appendChild(sep);
+                        }
+                        for (const name of names) {
+                            const it = item(name, () => {
+                                const look = templateLook(type, name);
+                                pop.hide();
+                                if (look) actions.applyTemplate?.(look);
+                            });
+                            it.dataset.template = name;
+                            const del = document.createElement('span');
+                            del.className = 'vela-dpop-tpl-del';
+                            del.setAttribute('role', 'button');
+                            del.setAttribute('aria-label', vt('Delete template {name}', { name }));
+                            del.innerHTML = sized(TRASH_ICON, 16);
+                            del.addEventListener('click', (ev) => {
+                                ev.stopPropagation();
+                                deleteTemplate(type, name);
+                                list();
+                            });
+                            it.appendChild(del);
+                        }
+                    };
+                    const saveRow = (): void => {
+                        menu.replaceChildren();
+                        const row = document.createElement('div');
+                        row.style.cssText = 'display:flex;gap:6px;padding:4px;min-width:210px;';
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.placeholder = vt('Template name');
+                        input.maxLength = TEMPLATE_NAME_MAX;
+                        input.setAttribute('aria-label', vt('Template name'));
+                        input.style.cssText = 'flex:1;min-width:0;padding:5px 8px;border-radius:6px;border:1px solid var(--vela-border);background:transparent;color:inherit;font:inherit;';
+                        const save = document.createElement('button');
+                        save.type = 'button';
+                        save.textContent = vt('Save');
+                        save.className = 'vela-dpop-item';
+                        save.style.cssText = 'flex:none;padding:5px 10px;border:none;border-radius:6px;cursor:pointer;color:inherit;font:inherit;';
+                        const commit = (): void => {
+                            const name = input.value.trim();
+                            if (!name) {
+                                input.focus();
+                                return;
+                            }
+                            saveTemplate(type, name, live().serialize());
+                            pop.hide();
+                        };
+                        save.addEventListener('click', (ev) => {
+                            ev.stopPropagation();
+                            commit();
+                        });
+                        input.addEventListener('keydown', (ev) => {
+                            ev.stopPropagation(); // typing must not reach the chart's shortcuts
+                            if (ev.key === 'Enter') commit();
+                            else if (ev.key === 'Escape') list();
+                        });
+                        input.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+                        row.append(input, save);
+                        menu.appendChild(row);
+                        input.focus();
+                    };
+                    list();
+                },
+            });
+            this.menuOwner = b;
         });
         return b;
     }
@@ -1079,6 +1205,7 @@ export class DrawingSettingsPopup {
 // (a line at a given width, a stamp at a given size) are generated here, since they encode a
 // live style value rather than a fixed concept.
 const BRUSH_ICON = icon('brush');
+const TEMPLATES_ICON = icon('drawing-templates');
 const BUCKET_ICON = icon('bucket');
 const TYPE_ICON = icon('type');
 const PRICE_DELTA_ICON = icon('price-delta');

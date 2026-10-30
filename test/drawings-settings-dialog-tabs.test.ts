@@ -49,6 +49,11 @@ function chart(initial: Drawing): { actions: SettingsActions; live: () => Drawin
             if ('title' in doc) live.title = doc.title;
             sync();
         },
+        applyTemplate: (look) => {
+            live.style = { ...look.style };
+            if (look.text) live.text = { ...look.text };
+            sync();
+        },
         setLocked: () => {},
         reorder: () => {},
         duplicate: () => {},
@@ -268,6 +273,34 @@ describe('settings dialog', () => {
         // The object tree lists it by its name.
         expect(drawingLabel({ ...trend().serialize(), title: 'Support' })).toBe('Support');
         expect(drawingLabel(trend().serialize())).toBe('Trend Line');
+    });
+
+    it("toolbar Templates: TradingView's first button; save, apply, delete, shared with the dialog's Template menu", async () => {
+        localStorage.clear();
+        const s = setup(trend());
+        expect(s.tips()[0]).toBe('Templates');
+        const tpl = (): HTMLButtonElement => s.host.querySelector<HTMLButtonElement>('.vela-dpop [data-action="templates"]')!;
+        const rows = (): string[] => [...document.querySelectorAll<HTMLElement>('.vela-dpop-item')].map((e) => e.textContent!.trim());
+        tpl().click();
+        expect(rows()).toEqual(['Save Drawing Template As…', 'Apply Default Drawing Template']);
+        [...document.querySelectorAll<HTMLElement>('.vela-dpop-item')][0]!.click();
+        const input = document.querySelector<HTMLInputElement>('input[aria-label="Template name"]')!;
+        expect(document.activeElement).toBe(input);
+        s.live().style.lineColor = '#123456';
+        input.value = 'Blue support';
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+        s.live().style.lineColor = '#ffffff';
+        tpl().click();
+        expect(rows()).toEqual(['Save Drawing Template As…', 'Apply Default Drawing Template', 'Blue support']);
+        document.querySelector<HTMLElement>('[data-template="Blue support"]')!.click();
+        expect(s.live().style.lineColor).toBe('#123456');
+        // The dialog's Template menu lists the same template.
+        const { templateNames } = await import('../src/renderers/native/drawings/drawingTemplates');
+        expect(templateNames('trendline')).toEqual(['Blue support']);
+        tpl().click();
+        document.querySelector<HTMLElement>('[data-template="Blue support"] .vela-dpop-tpl-del')!.click();
+        expect(templateNames('trendline')).toEqual([]);
+        expect(rows()).toEqual(['Save Drawing Template As…', 'Apply Default Drawing Template']);
     });
 
     it('opening from More > Visibility on intervals lands on that tab', async () => {

@@ -1570,6 +1570,16 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 // Rebuild the toolbar so controls reflect the restored defaults.
                 this.openSettingsById(id, 0, 0);
             },
+            applyTemplate: (look) => {
+                const d = live();
+                if (!d) return;
+                d.style = { ...look.style };
+                if (look.text) d.text = { ...look.text };
+                if (look.props) d.applyProps(look.props);
+                this.render();
+                this.emit({ kind: 'edit', doc: d.serialize() });
+                this.openSettingsById(id, 0, 0); // the bar's swatches show the template's colours
+            },
             restore: (doc) => {
                 const d = live();
                 if (!d) return;
