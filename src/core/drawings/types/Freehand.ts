@@ -19,34 +19,47 @@ function chaikin(pts: Array<[number, number]>): Array<[number, number]> {
     return out;
 }
 
+/** Most points a smoothed stroke is built from (a stroke past it is drawn less densified, never stalls a frame). */
+const MAX_STROKE_POINTS = 20000;
+
 /**
  * TradingView's brush smoothing (its BrushBasePaneView): every segment split into up to 5 parts of about `t` px, then
- * each point averaged with its `t` neighbours on both sides; the last point stays.
+ * each point averaged with its `t` neighbours on both sides (ends clamped); the last point stays. The average runs on
+ * prefix sums, so the cost does not grow with `t`.
  */
 function tvSmooth(pts: Array<[number, number]>, t: number): Array<[number, number]> {
     if (pts.length < 2) return pts;
     const dense: Array<[number, number]> = [pts[0]!];
+    const densify = pts.length * 5 <= MAX_STROKE_POINTS;
     for (let i = 1; i < pts.length; i += 1) {
         const [x0, y0] = pts[i - 1]!;
         const [x1, y1] = pts[i]!;
-        const len = Math.hypot(x1 - x0, y1 - y0);
-        const n = Math.min(5, Math.floor(len / t));
+        const n = densify ? Math.min(5, Math.floor(Math.hypot(x1 - x0, y1 - y0) / t)) : 0;
         for (let k = 0; k < n - 1; k += 1) dense.push([x0 + ((x1 - x0) * k) / n, y0 + ((y1 - y0) * k) / n]);
         dense.push([x1, y1]);
     }
+    const n = dense.length;
+    const px = new Float64Array(n + 1);
+    const py = new Float64Array(n + 1);
+    for (let i = 0; i < n; i += 1) {
+        px[i + 1] = px[i]! + dense[i]![0];
+        py[i + 1] = py[i]! + dense[i]![1];
+    }
+    const [fx, fy] = dense[0]!;
+    const [lx, ly] = dense[n - 1]!;
     const out: Array<[number, number]> = [];
-    for (let r = 0; r < dense.length; r += 1) {
-        let sx = 0;
-        let sy = 0;
-        for (let k = 0; k < t; k += 1) {
-            const a = dense[Math.max(r - k, 0)]!;
-            const b = dense[Math.min(r + k, dense.length - 1)]!;
-            sx += a[0] + b[0];
-            sy += a[1] + b[1];
-        }
+    for (let r = 0; r < n; r += 1) {
+        // dense[max(r-k, 0)] for k < t: indices lo..r, plus dense[0] for the rest.
+        const lo = Math.max(0, r - t + 1);
+        const padLo = t - (r - lo + 1);
+        // dense[min(r+k, n-1)] for k < t: indices r..hi, plus dense[n-1] for the rest.
+        const hi = Math.min(n - 1, r + t - 1);
+        const padHi = t - (hi - r + 1);
+        const sx = px[r + 1]! - px[lo]! + padLo * fx + px[hi + 1]! - px[r]! + padHi * lx;
+        const sy = py[r + 1]! - py[lo]! + padLo * fy + py[hi + 1]! - py[r]! + padHi * ly;
         out.push([(0.5 * sx) / t, (0.5 * sy) / t]);
     }
-    out.push(dense[dense.length - 1]!);
+    out.push(dense[n - 1]!);
     return out;
 }
 
@@ -75,9 +88,12 @@ export abstract class BrushStroke extends PathDrawing {
             if (y == null) return null;
             pts.push([proj.xOf(a.time), y]);
         }
-        if (this.tv) return tvSmooth(pts, Math.max(1, Math.round(this.smooth ?? 5)));
+        if (this.tv) {
+            const t = Number.isFinite(this.smooth) ? Math.min(50, Math.max(1, Math.round(this.smooth))) : 5; // a saved value is untrusted
+            return tvSmooth(pts, t);
+        }
         const n = Math.min(MAX_SMOOTH, Math.max(0, Math.round(this.smooth ?? 0)));
-        for (let i = 0; i < n && pts.length < 20000; i += 1) pts = chaikin(pts);
+        for (let i = 0; i < n && pts.length < MAX_STROKE_POINTS; i += 1) pts = chaikin(pts);
         return pts;
     }
 
