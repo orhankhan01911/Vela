@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -88,6 +88,8 @@ export class DrawingPainter {
      *  series' own so the inset reads as a finer copy of the chart. */
     /** The chart's bar duration (ms): drawings limited to other timeframes (Visibility tab) are skipped. 0 = show all. */
     barMs = 0;
+    /** A tick or range chart (its Visibility row decides), else null. Set with `barMs`. */
+    barKind: BarKind | null = null;
     /** Load image drawings from https links. Off by default: a drawing shared or pasted from someone else would make
      *  every viewer's browser fetch its link (a tracking pixel). Inline image data always shows. */
     allowRemoteImages = false;
@@ -119,7 +121,7 @@ export class DrawingPainter {
     ): void {
         const byPane = new Map<string, Array<{ id: string; y: number }>>();
         for (const d of drawings) {
-            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs) || !(d instanceof PriceAlert || showsAxisPrice(d))) continue;
+            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs, this.barKind) || !(d instanceof PriceAlert || showsAxisPrice(d))) continue;
             const a = d.anchors[0];
             const y = a ? proj.yOf(a.price, d.paneId) : null;
             if (y == null) continue;
@@ -160,7 +162,7 @@ export class DrawingPainter {
         this.targets = targets;
         this.handleBg = theme.background;
         for (const d of drawings) {
-            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs)) continue;
+            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs, this.barKind)) continue;
             this.paintClipped(ctx, d, proj, () => this.paintOne(ctx, d, proj, theme));
         }
         this.targets = {};
@@ -868,7 +870,7 @@ export class DrawingPainter {
      *  every visible drawing: one painted under the candles lives on a plot-sized layer that cannot reach the axis. */
     paintAxisPrices(ctx: CanvasRenderingContext2D, drawings: readonly Drawing[], proj: Projector, theme: VelaTheme): void {
         for (const d of drawings) {
-            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs) || !showsAxisPrice(d)) continue;
+            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs, this.barKind) || !showsAxisPrice(d)) continue;
             const a = d.anchors[0];
             const y = a ? proj.yOf(a.price, d.paneId) : null;
             const rect = proj.paneRect?.(d.paneId);
@@ -877,7 +879,7 @@ export class DrawingPainter {
         }
         // TradingView's "Price labels" (trend line): every point's price in a chip of the line color on the scale.
         for (const d of drawings) {
-            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs) || !(d as { showPriceLabels?: boolean }).showPriceLabels) continue;
+            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs, this.barKind) || !(d as { showPriceLabels?: boolean }).showPriceLabels) continue;
             const rect = proj.paneRect?.(d.paneId);
             for (const a of d.anchors) {
                 const y = proj.yOf(a.price, d.paneId);
@@ -890,7 +892,7 @@ export class DrawingPainter {
         }
         // TradingView's time label for vertical lines / cross lines: the time in a chip of the line color on the time axis.
         for (const d of drawings) {
-            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs) || !showsAxisTime(d)) continue;
+            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs, this.barKind) || !showsAxisTime(d)) continue;
             const a = d.anchors[0];
             const x = a ? proj.xOf(a.time) : null;
             if (!a || x == null || x < 0 || x > proj.width) continue;
@@ -917,7 +919,7 @@ export class DrawingPainter {
      *  carries it across the rest of the plot. */
     paintVlineExtensions(ctx: CanvasRenderingContext2D, drawings: readonly Drawing[], proj: Projector): void {
         for (const d of drawings) {
-            if (d.type !== 'vline' || !d.visible || !(d as { extendLine?: boolean }).extendLine || !shownOnBarMs(d.intervals, this.barMs)) continue;
+            if (d.type !== 'vline' || !d.visible || !(d as { extendLine?: boolean }).extendLine || !shownOnBarMs(d.intervals, this.barMs, this.barKind)) continue;
             const a = d.anchors[0];
             if (!a) continue;
             const x = proj.xOf(a.time);
@@ -944,7 +946,7 @@ export class DrawingPainter {
     paintSelectionAxes(ctx: CanvasRenderingContext2D, drawings: readonly Drawing[], proj: Projector, theme: VelaTheme, selected: ReadonlySet<string>): void {
         if (selected.size === 0) return;
         for (const d of drawings) {
-            if (!selected.has(d.id) || !d.visible || d.anchors.length === 0 || !shownOnBarMs(d.intervals, this.barMs)) continue;
+            if (!selected.has(d.id) || !d.visible || d.anchors.length === 0 || !shownOnBarMs(d.intervals, this.barMs, this.barKind)) continue;
             const rect = proj.paneRect?.(d.paneId) ?? { top: 0, height: proj.height };
             if (rect.height <= 0) continue;
             // The marked points (a channel's four corners, else the anchors), each with its exact price and time.
@@ -1374,7 +1376,7 @@ export class DrawingPainter {
      *  pass on the top canvas like the axis prices, so the candles never cover it. */
     paintLineStats(ctx: CanvasRenderingContext2D, drawings: readonly Drawing[], proj: Projector, theme: VelaTheme, active?: ReadonlySet<string>): void {
         for (const d of drawings) {
-            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs)) continue;
+            if (!d.visible || !shownOnBarMs(d.intervals, this.barMs, this.barKind)) continue;
             const s = statsOf(d as Drawing & { stats?: unknown });
             const a = d.anchors[0];
             const b = d.anchors[1];
@@ -1755,7 +1757,7 @@ export class DrawingPainter {
      *  shadow (its RangeToolsConstants). */
     paintRangePlates(ctx: CanvasRenderingContext2D, drawings: readonly Drawing[], proj: Projector, theme: VelaTheme): void {
         for (const d of drawings) {
-            if (!(d instanceof MeasureBox) || !d.tv || !d.visible || !shownOnBarMs(d.intervals, this.barMs)) continue;
+            if (!(d instanceof MeasureBox) || !d.tv || !d.visible || !shownOnBarMs(d.intervals, this.barMs, this.barKind)) continue;
             const a = d.anchors[0];
             const b = d.anchors[1];
             const pts = d.handlePoints(proj);

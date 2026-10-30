@@ -126,6 +126,9 @@ export interface ChartTypeDefinition {
     /** Reached through the INTERVAL dropdown (an `interval-sections.ts` section such as ticks or
      *  ranges), so it is left out of the chart-type pickers. Still a normal price style otherwise. */
     intervalOnly?: boolean;
+    /** The bars are not a time span: a tick chart or a range chart. Drawings then follow TradingView's "Ticks" /
+     *  "Ranges" rows of their Visibility tab instead of the time rows. */
+    barKind?: 'ticks' | 'ranges';
     /** Raw `<svg>` markup for style pickers (surfaced as icon id `style-<id>`). */
     icon?: string;
     /** Optional SETTINGS SECTION rendered inside the chart-settings dialog — declarative

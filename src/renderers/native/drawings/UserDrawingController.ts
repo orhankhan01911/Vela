@@ -65,6 +65,8 @@ export interface UserDrawingDeps {
     seriesLook(): { style: string; upColor: string; downColor: string; lineColor: string };
     /** One chart bar in ms (the chart's own timeframe) — pickers drop choices at/above it. */
     chartBarMs(): number;
+    /** The chart is a tick or a range chart (its chart type's `barKind`), else null. Optional. */
+    chartBarKind?(): 'ticks' | 'ranges' | null;
     /** The chart's timezone — axis time labels on vertical lines match the crosshair's time chip. */
     timeZone?(): string;
     /** Open the renderer's indicator inputs dialog on a drawing's inputs (Drawing.inputsDialog). Optional. */
@@ -1324,6 +1326,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
             sctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
             this.painter.seriesLook = this.deps.seriesLook();
             this.painter.barMs = this.deps.chartBarMs();
+            this.painter.barKind = this.deps.chartBarKind?.() ?? null;
             this.painter.paintAll(sctx, drawings, proj, theme, EMPTY_TARGETS);
             const slices = out.get(paneId) ?? [];
             slices.push({ beforeZ, canvas });
@@ -1338,6 +1341,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
      *  paint them. The renderer asks before the chrome paint so the axis can skip the numbers a chip would cover. */
     axisChipCenters(): ReadonlyMap<string, readonly number[]> {
         this.painter.barMs = this.deps.chartBarMs();
+        this.painter.barKind = this.deps.chartBarKind?.() ?? null;
         this.painter.layoutAxisChips(this.drawings, this.deps.projector(), this.deps.priceBlock?.() ?? null);
         return this.painter.axisChipYs;
     }
@@ -1367,6 +1371,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
         // — buried under the candles they'd be unusable.
         this.painter.seriesLook = this.deps.seriesLook();
         this.painter.barMs = this.deps.chartBarMs();
+        this.painter.barKind = this.deps.chartBarKind?.() ?? null;
         const onTop = (d: Drawing) => !this.isInterleaved(d) || this.lifted.has(d.id);
         this.painter.layoutAxisChips(this.drawings, proj, this.deps.priceBlock?.() ?? null);
         this.painter.paintAll(ctx, this.drawings.filter(onTop), proj, this.deps.theme(), targets);
@@ -1517,7 +1522,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
     /** The drawings shown on the chart's current timeframe (the Visibility tab hides the rest): only these can be hit. */
     private shownDrawings(): Drawing[] {
         const barMs = this.deps.chartBarMs();
-        return this.drawings.filter((d) => shownOnBarMs(d.intervals, barMs));
+        return this.drawings.filter((d) => shownOnBarMs(d.intervals, barMs, this.deps.chartBarKind?.() ?? null));
     }
 
     /** A click on a drawing opens its settings toolbar (text labels edit text here too). */

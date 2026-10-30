@@ -45,6 +45,7 @@ import {
     getDrawingType,
     type IntervalRange,
     type IntervalUnit,
+    type BarKind,
     type IntervalVisibility,
 } from '../../../core/drawings';
 import { BEARISH, BULLISH } from '../../../core/palette';
@@ -876,13 +877,24 @@ export class DrawingSettingsDialog {
         });
     }
 
-    /** Visibility tab: TradingView's "visibility on intervals" — one row per timeframe unit, a switch and a range. */
+    /** Visibility tab: TradingView's "visibility on intervals": Ticks (a switch), one row per timeframe unit (a switch
+     *  and a range), then Ranges (a switch). */
     private buildVisibility(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
         const current = (): IntervalVisibility => ({ ...(actions.resolve() ?? drawing).intervals });
         const write = (unit: IntervalUnit, r: IntervalRange): void => {
             const next = compactIntervals({ ...current(), [unit]: r });
             actions.patch({ intervals: next });
         };
+        const kindRow = (unit: BarKind, label: string): void => {
+            const row = fieldRow({
+                label,
+                bool: true,
+                toggle: { id: uid(), checked: drawing.intervals?.[unit]?.on !== false, onChange: (v) => write(unit, { on: v, from: 1, to: 1 }) },
+            });
+            row.dataset.role = `interval-${unit}`;
+            grid.appendChild(row);
+        };
+        kindRow('ticks', 'Ticks');
         for (const m of INTERVAL_UNITS) {
             const r0 = drawing.intervals?.[m.unit] ?? defaultRange(m.unit);
             let r: IntervalRange = { ...r0 };
@@ -938,6 +950,7 @@ export class DrawingSettingsDialog {
             dim();
             grid.appendChild(row);
         }
+        kindRow('ranges', 'Ranges');
     }
 
     /** One generic row for a schema field (color, number, select, line style, switch, text). */

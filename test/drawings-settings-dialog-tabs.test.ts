@@ -178,8 +178,8 @@ describe('settings dialog', () => {
         const rows = s.body('visibility');
         expect(rows.textContent).toContain('Minutes');
         const sw = [...rows.querySelectorAll<HTMLElement>('[role="switch"], input[type="checkbox"]')];
-        expect(sw.length).toBe(6);
-        sw[1]!.click(); // Minutes
+        expect(sw.length).toBe(8); // Ticks, Seconds..Months, Ranges (TradingView's order)
+        sw[2]!.click(); // Minutes
         expect(s.live().intervals?.minutes?.on).toBe(false);
         expect(shownOnBarMs(s.live().intervals, 5 * 60_000)).toBe(false);
         expect(shownOnBarMs(s.live().intervals, H)).toBe(true);
@@ -191,6 +191,28 @@ describe('settings dialog', () => {
         s.button('Cancel').click();
         await settled();
         expect(s.live().intervals).toBeUndefined();
+    });
+
+    it('Visibility: Ticks first and Ranges last, plain switches that govern tick and range charts only', async () => {
+        const s = setup(trend());
+        s.gear().click();
+        await settled();
+        s.tab('Visibility').click();
+        const rows = s.body('visibility');
+        const labels = [...rows.querySelectorAll<HTMLElement>('[data-role^="interval-"]')].filter((e) => !/-(from|to|slider)$/.test(e.dataset.role!)).map((e) => e.dataset.role);
+        expect(labels).toEqual(['interval-ticks', 'interval-ranges']);
+        const sw = [...rows.querySelectorAll<HTMLElement>('[role="switch"], input[type="checkbox"]')];
+        sw[0]!.click(); // Ticks off
+        expect(s.live().intervals).toEqual({ ticks: { on: false, from: 1, to: 1 } });
+        expect(shownOnBarMs(s.live().intervals, 60_000, 'ticks')).toBe(false);
+        expect(shownOnBarMs(s.live().intervals, 60_000, 'ranges')).toBe(true);
+        expect(shownOnBarMs(s.live().intervals, 60_000)).toBe(true); // a time chart ignores it
+        sw[7]!.click(); // Ranges off
+        expect(shownOnBarMs(s.live().intervals, 60_000, 'ranges')).toBe(false);
+        sw[0]!.click(); // Ticks back on: the default row is dropped from the saved drawing
+        expect(s.live().intervals).toEqual({ ranges: { on: false, from: 1, to: 1 } });
+        // A time row switched off does not touch tick charts.
+        expect(shownOnBarMs({ minutes: { on: false, from: 1, to: 59 } }, 0, 'ticks')).toBe(true);
     });
 
     it('opening from More > Visibility on intervals lands on that tab', async () => {

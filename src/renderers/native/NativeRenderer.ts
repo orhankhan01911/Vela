@@ -19,7 +19,7 @@ import type {
     DataWindowReadout,
 } from '../../core/ports/IChartRenderer';
 import type { VelaTheme } from '../../core/options';
-import { replacesSeries } from '../../chart-types/registry';
+import { chartType, replacesSeries } from '../../chart-types/registry';
 import { getNativeIndicator } from '../../core/native-indicators/NativeIndicator';
 import type { OHLCV } from '../../core/model/ohlcv';
 import type { Millis } from '../../core/model/time';
@@ -1813,6 +1813,7 @@ export class NativeRenderer implements IChartRenderer {
                 };
             },
             chartBarMs: () => this.coords.barInterval,
+            chartBarKind: () => chartType(this.scene.priceStyle)?.barKind ?? null,
             timeZone: () => this.scene.timezone,
             snap: (pt, paneId, mode, cursorPx) => this.snapToCandle(pt, paneId, mode, cursorPx),
             setSnapMode: (mode) => this.setSnapMode(mode),

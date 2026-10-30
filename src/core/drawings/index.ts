@@ -9,7 +9,7 @@ export { defaultStyle, defaultText, DEFAULT_DRAWING_COLOR, textPx, TEXT_PX_SIZES
 export type { FieldKind, SettingsField, SettingsSchema } from './schema';
 export { LINE_FIELDS, FILL_FIELDS, LINE_STYLE_OPTIONS, TEXT_FIELDS, TEXT_SIZE_OPTIONS } from './schema';
 export { Drawing, setByPath, TV_TEXT_DEFAULTS } from './Drawing';
-export { INTERVAL_UNITS, barUnit, compactIntervals, defaultRange, shownOnBarMs, type IntervalRange, type IntervalUnit, type IntervalVisibility } from './intervals';
+export { INTERVAL_UNITS, BAR_KIND_UNITS, barUnit, compactIntervals, defaultRange, shownOnBarMs, type BarKind, type IntervalRange, type IntervalUnit, type IntervalVisibility } from './intervals';
 export type { DrawingTypeKey, AnchorSlot, SerializedDrawing, DrawingInputsDialog, DrawingToolbarAction } from './Drawing';
 export { toolSettings, rememberToolSettings, clearToolSettings, type ToolSettings } from './toolMemory';
 export { effectiveFillColor, VALID_FILL, INVALID_FILL, type EffectiveColorTheme } from './effectiveColor';

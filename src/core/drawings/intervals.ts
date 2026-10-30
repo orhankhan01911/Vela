@@ -3,11 +3,15 @@
  * timeframes, e.g. on 1-4 hour charts and daily charts but not on minute charts. Each unit has an on/off switch
  * and a from-to range in that unit. A drawing with no `intervals` is shown everywhere.
  *
- * The chart's timeframe comes in as its bar duration in ms. Tick and range charts have no fixed duration, so
- * TradingView's "Ticks" and "Ranges" rows are not offered here.
+ * The chart's timeframe comes in as its bar duration in ms. Tick and range charts have no fixed duration: TradingView
+ * gives them a plain on/off row each ("Ticks" first, "Ranges" last; its intervalsVisibilitiesDefaults, module 648442),
+ * and the renderer says when the chart is one (`BarKind`, from the chart type's `barKind`).
  */
 
-export type IntervalUnit = 'seconds' | 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
+export type TimeIntervalUnit = 'seconds' | 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
+/** Bars that are not a time span: a tick chart or a range chart. */
+export type BarKind = 'ticks' | 'ranges';
+export type IntervalUnit = TimeIntervalUnit | BarKind;
 
 export interface IntervalRange {
     on: boolean;
@@ -18,7 +22,7 @@ export interface IntervalRange {
 export type IntervalVisibility = Partial<Record<IntervalUnit, IntervalRange>>;
 
 export interface IntervalUnitMeta {
-    unit: IntervalUnit;
+    unit: TimeIntervalUnit;
     label: string;
     /** One unit in ms (a month counts as 30 days, a week as 7). */
     ms: number;
@@ -34,10 +38,16 @@ export const INTERVAL_UNITS: readonly IntervalUnitMeta[] = [
     { unit: 'months', label: 'Months', ms: 30 * 86_400_000, max: 12 },
 ];
 
+/** TradingView's on/off rows for tick and range charts (no range: `from` / `to` are not used). */
+export const BAR_KIND_UNITS: ReadonlyArray<{ unit: BarKind; label: string }> = [
+    { unit: 'ticks', label: 'Ticks' },
+    { unit: 'ranges', label: 'Ranges' },
+];
+
 /** The full range of a unit, switched on (the default for every row). */
 export function defaultRange(unit: IntervalUnit): IntervalRange {
-    const meta = INTERVAL_UNITS.find((m) => m.unit === unit)!;
-    return { on: true, from: 1, to: meta.max };
+    const meta = INTERVAL_UNITS.find((m) => m.unit === unit);
+    return { on: true, from: 1, to: meta?.max ?? 1 };
 }
 
 /** Which unit a bar duration belongs to and how many of it (a 4 h bar is hours 4; 28-31 days is months 1). */
@@ -51,9 +61,11 @@ export function barUnit(barMs: number): { unit: IntervalUnit; count: number } | 
     return { unit: 'seconds', count: Math.max(1, Math.round(barMs / 1_000)) };
 }
 
-/** True when a drawing with these settings shows on a chart whose bars last `barMs`. Unknown durations show. */
-export function shownOnBarMs(intervals: IntervalVisibility | undefined, barMs: number): boolean {
+/** True when a drawing with these settings shows on a chart whose bars last `barMs` (or, on a tick or range chart,
+ *  `kind`: then only that row's switch counts). Unknown durations show. */
+export function shownOnBarMs(intervals: IntervalVisibility | undefined, barMs: number, kind?: BarKind | null): boolean {
     if (!intervals) return true;
+    if (kind) return intervals[kind]?.on !== false;
     const u = barUnit(barMs);
     if (!u) return true;
     const r = intervals[u.unit];
@@ -65,6 +77,9 @@ export function shownOnBarMs(intervals: IntervalVisibility | undefined, barMs: n
 export function compactIntervals(intervals: IntervalVisibility | undefined): IntervalVisibility | undefined {
     if (!intervals) return undefined;
     const out: IntervalVisibility = {};
+    for (const { unit } of BAR_KIND_UNITS) {
+        if (intervals[unit]?.on === false) out[unit] = { on: false, from: 1, to: 1 };
+    }
     for (const m of INTERVAL_UNITS) {
         const r = intervals[m.unit];
         if (r && !(r.on && r.from <= 1 && r.to >= m.max)) out[m.unit] = { on: !!r.on, from: r.from, to: r.to };
