@@ -78,7 +78,8 @@ Use it for every tool in the audit list and for any other UI copied from Trading
    style, the floating-toolbar buttons, every dialog tab with its rows, and page errors. Screenshots go to `OUT`.
 2. `tv-read-dialogs.js` in `ui_evaluate`: the same from TradingView (toolbar `data-name`s, tabs, rows), on your own
    shapes, removed after.
-3. `sweep-compare.py DIR`: puts the two side by side and prints only the differences.
+3. `sweep-compare.py DIR`: puts the two side by side and prints `OK` or the real differences (known, expected ones
+   are skipped: bold/italic icons, "time" for "bar", values from TradingView's saved templates).
 4. Tile the screenshots into one sheet (`ffmpeg ... tile=6x4`) and look at it.
 
 **Alerts on drawings:** `alerts-probe.mjs OUT [type,type]` adds an alert to every drawing type that takes one, feeds
@@ -119,7 +120,10 @@ server was reloading: run it again.
 5. `ONLY=chromium ZOOMS=1,1.25,1.5 node e2e/text-zoom-matrix.mjs` in vela-sandbox.
 6. Anything on the top bar, the floating toolbar or a phone menu: `node e2e/phone-menus.mjs`, and check the toolbar
    fits at 360 and 393 px.
-7. New strings: run the sandbox `src/i18n` tests. Every `vt()` / menu label needs all 12 languages
+7. Anything touched by finger (toolbar buttons, text editing, panels): the emulators (Pixel 5, Fold, Tablet) with real
+   taps. A headless touch browser (`hasTouch`) finds most touch bugs faster; the emulator confirms. Make sure the price
+   pane is shown first (`chart.panes.maximize('price')`): a stray double tap can leave another pane enlarged.
+8. New strings: run the sandbox `src/i18n` tests. Every `vt()` / menu label needs all 12 languages
    (`src/i18n/locales/*.json`). Vela's drawing strings are scanned too.
 
 ## 6. Commit
@@ -164,9 +168,9 @@ on the same line: use the shared ship lock and build on top of what is live.
 | Note ("Pin") | 229151 | 24 × 30 pin; 236 px tooltip, caret 12 × 10, shadow; Label row |
 | Emoji / icon | 275496, 820690, 637188, 528863 | Twemoji SVG; FA4 glyph paths; size 72, angle π/2; 4 resize corners + rotate zones |
 | Zoom in / out | 649873 | box between bar centres, zoomToViewport (bars + prices, autoscale off), zoom stack + Zoom out button; box blue 30 %/80 % |
-| Ruler (Measure) | 649873, 516130, 847997 | 20 % blue/red box, blue-600 lines, arrows ≥ 50 px, label 12 px gap 8 pad 9, 10 px past the end; change (pct) ticks / bars, span / Vol |
+| Ruler (Measure) | 649873, 516130, 847997 | 20 % blue/red box, blue-600 lines, arrows ≥ 50 px, label 12 px gap 8 pad 9, 10 px past the end; change (pct) ticks / bars, span / Vol; its span shaded on both scales with blue chips at both ends |
 | Layout menu | (UI) | Save layout, Autosave, Share, Make a copy, Rename, Download data, Create, Recently used, Open (".") |
 | Coordinates rows | (UI) | "#1 (price, bar)"; ours say "#1 (price, time)" because our field is a date (the user's call) |
-| Floating toolbar | (UI) | order: templates, line colour, background, text colour, width, style, settings, add-alert, lock, anchor, remove, more |
+| Floating toolbar | (UI) | order: templates, line colour, background, text colour, width, style, settings, add-alert, lock, anchor, remove, more; no text-editing button (texts edit on double-click / double tap, a line's text in the dialog) |
 | Anchor drawing | (UI) | `toggle-anchor` on text, anchored text, note, anchored note; pressed = pinned to the screen |
 | Alerts on drawings | 772967, 338068, 240429 | lines: Crossing (default), Up, Down, Greater, Less; channels: Entering / Exiting / Inside / Outside; rectangle: those + Greater / Less; vertical line: Crossing only, no Trigger; Fib retracement: line conditions on one level or channel conditions between two (third field); position: "Hits entry, stop, or target level", once; anchored VWAP: line conditions on VWAP or a band; Fib channel: no alert |
