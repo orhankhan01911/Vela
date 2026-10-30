@@ -12,7 +12,7 @@ import type {
     SnapMode,
     ToolbarDefinition,
 } from '../../../core/drawings';
-import { deserializeDrawing, getDrawingType, resetDrawingSettings, shownOnBarMs, resolveAnchors, writeAnchor, Callout, CALLOUT_RADIUS, CALLOUT_MARGIN, Note, Magnifier, PriceAlert, TextLabel, type BarAxis } from '../../../core/drawings';
+import { createDrawing, deserializeDrawing, getDrawingType, resetDrawingSettings, shownOnBarMs, resolveAnchors, writeAnchor, Callout, CALLOUT_RADIUS, CALLOUT_MARGIN, Note, Magnifier, PriceAlert, TextLabel, type BarAxis } from '../../../core/drawings';
 import type { Unsubscribe } from '../../../core/util/types';
 import { contrastColor, namedFontSize, labelLineHeight, safeCssColor, safeCssPx, TEXT_FRAME_INSET, TEXT_FRAME_RISE } from '../../shared/drawing-geometry';
 import { withAlpha } from '../core/chartConfig';
@@ -127,6 +127,9 @@ export function sliceKeyFor(zIndex: number, boundaries: readonly number[]): numb
  * snapshots and reports gestures back as intents. It never holds authoritative
  * state beyond the current projection.
  */
+/** Id of the ruler's stand-in when its span is marked on the axes (never stored). */
+const RULER_ID = '__ruler';
+
 /** TradingView's "Anchor drawing" toggle: each text / note and its screen-pinned twin. */
 const ANCHOR_TWIN: Readonly<Record<string, DrawingTypeKey>> = Object.fromEntries(
     ([['text', 'anchoredtext'], ['note', 'anchorednote']] as const).flatMap(([a, b]) => [[a, b], [b, a]]),
@@ -1428,7 +1431,14 @@ export class UserDrawingController implements IDrawingsRendererPort {
         const my = m ? proj.yOf(m.point.price, m.paneId) : null;
         if (m && my != null) this.painter.paintSnapRing(ctx, proj.xOf(m.point.time), my, this.deps.theme());
         // The transient ruler paints on top of everything (until cleared on the next press/pan/zoom).
-        if (this.measure.isActive()) this.measure.paint(ctx, proj, this.deps.theme(), (paneId, price) => this.painter.priceTick(paneId, price));
+        if (this.measure.isActive()) {
+            this.measure.paint(ctx, proj, this.deps.theme(), (paneId, price) => this.painter.priceTick(paneId, price));
+            // TradingView shades the ruler's span on the price scale and the time axis, with both ends in blue chips,
+            // as it does for a selected drawing.
+            const ends = this.measure.chartPoints(proj);
+            const span = ends ? createDrawing('trendline', { id: RULER_ID, paneId: ends.paneId, anchors: [ends.a, ends.b] }) : null;
+            if (span) this.painter.paintSelectionAxes(ctx, [span], proj, this.deps.theme(), new Set([RULER_ID]));
+        }
         this.paintZoomBox(ctx);
         const marquee = this.interaction.marqueeRect();
         if (marquee) this.painter.paintMarquee(ctx, marquee);

@@ -105,6 +105,16 @@ export class MeasureOverlay {
         this.end = null;
     }
 
+    /** The ruler's two ends as chart points (and their pane), or null when it is not drawn. */
+    chartPoints(proj: Projector): { paneId: string; a: { time: number; price: number }; b: { time: number; price: number } } | null {
+        if (!this.start || !this.end) return null;
+        const paneId = proj.paneIdAtY(this.start.y) ?? proj.paneIdAtY(this.end.y);
+        if (!paneId) return null;
+        const a = proj.pxToPoint(this.start.x, this.start.y, paneId);
+        const b = proj.pxToPoint(this.end.x, this.end.y, paneId);
+        return { paneId, a: { time: a.time, price: a.price }, b: { time: b.time, price: b.price } };
+    }
+
     /**
      * TradingView's ruler (module 649873, read 2026-10-30): a box from the start to the end at 20 % of its blue (up) or
      * red (down); a 1 px line across and one up and down through its middle, each with an open arrow at the end the

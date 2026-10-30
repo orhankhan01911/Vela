@@ -117,3 +117,11 @@ describe('ruler: TradingView look', () => {
         expect(box[2]).toBe(200 + 10);
     });
 });
+
+describe('ruler: its span on the axes (TradingView shades both scales and labels both ends)', () => {
+    it('chartPoints gives the two ends as chart points in their pane, for the axis marks', () => {
+        const m = measure(100, 300, 160, 250);
+        expect(m.chartPoints(projector())).toEqual({ paneId: 'price', a: { time: 100 * 60_000, price: 700 }, b: { time: 160 * 60_000, price: 750 } });
+        expect(new MeasureOverlay().chartPoints(projector())).toBeNull();
+    });
+});
