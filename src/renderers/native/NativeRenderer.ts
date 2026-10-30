@@ -4823,6 +4823,7 @@ function applyPatch(model: IndicatorModel, patch: ScenePatch): void {
         if (patch.linefills) model.linefills = patch.linefills;
         if (patch.tables) model.tables = patch.tables;
         if (patch.trades) model.trades = patch.trades;
+        if (patch.fills) model.fills = patch.fills;
         return;
     }
     for (const id of patch.removed) {

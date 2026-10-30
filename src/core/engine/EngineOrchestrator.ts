@@ -3582,5 +3582,6 @@ function modelToValuePatch(model: IndicatorModel): ValuePatch {
         linefills: model.linefills ?? [],
         tables: model.tables ?? [],
         trades: model.trades ?? [],
+        fills: model.fills,
     };
 }

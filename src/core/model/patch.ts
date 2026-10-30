@@ -3,6 +3,7 @@ import type { OHLCV } from './ohlcv';
 import type { SeriesPoint, SeriesSpec, MarkerPoint } from './series';
 import type { DrawingLine, DrawingBox, DrawingLabel, DrawingPolyline, DrawingLinefill, DrawingTable } from './drawings';
 import type { TradeExecution } from './trades';
+import type { Fill } from './scene';
 
 export interface DirtyRange {
     from: Millis;
@@ -45,6 +46,12 @@ export interface ValuePatch {
     tables?: DrawingTable[];
     /** Trade executions follow the same full-snapshot-per-tick pattern as the drawings. */
     trades?: TradeExecution[];
+    /**
+     * Fills between two series, also a full snapshot: a fill's per-bar `colors` are indexed like the series'
+     * points, so a re-run whose points changed length (older bars loaded) must carry its fills too, or the
+     * first run's colours land on the wrong bars and the fill disappears.
+     */
+    fills?: Fill[];
 }
 
 /**
