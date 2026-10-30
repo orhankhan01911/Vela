@@ -424,6 +424,23 @@ export class DrawingSettingsPopup {
         bar.appendChild(del);
         bar.appendChild(this.kebabButton(actions, multi ? null : openSettings));
 
+        // TradingView's quick bar for the audited tools: which colour, width, style and size controls it shows, in its
+        // order (line colour, background, text colour, width, style). Built controls are reused; a missing one is made.
+        const tvBar = multi ? undefined : TV_QUICK_BAR[drawing.type];
+        if (tvBar) {
+            const make: Partial<Record<TvBarItem, () => HTMLElement | null>> = {
+                text: () => (paths.has('text.color') ? swatch('Text color', TYPE_ICON, (d) => d.text?.color || t.textColor, 'text.color') : null),
+                size: () => (paths.has('text.size') ? this.dropdown('Text size', TEXT_SIZE_OPTIONS.map((o) => o.value), common((d) => d.text?.size ?? 'normal'), (sz) => labelSizeIcon(sz), (v) => actions.patch({ 'text.size': v }), { label: sizeLabel }) : null),
+                // A text's background is its own colour plus a switch: picking a colour turns the background on.
+                fill: () => {
+                    if (!paths.has('backgroundColor')) return null;
+                    const bg = (d: Drawing): string => (d as unknown as { backgroundColor?: string }).backgroundColor || DEFAULT_DRAWING_COLOR;
+                    return this.colorButton('Fill', BUCKET_ICON, common(bg), (v) => actions.patch({ backgroundColor: v, background: true }), undefined, distinctValues(drawings, bg));
+                },
+            };
+            applyTvBar(bar, tvBar, make);
+        }
+
         el.append(bar);
         this.host.appendChild(el);
         this.el = el;
@@ -1213,6 +1230,59 @@ export class DrawingSettingsPopup {
 // The toolbar's glyphs all come from the shared registry; only the PARAMETERIZED ones below
 // (a line at a given width, a stamp at a given size) are generated here, since they encode a
 // live style value rather than a fixed concept.
+/** One control of TradingView's quick bar: line colour, background, text colour, line width, line style, text size. */
+type TvBarItem = 'line' | 'fill' | 'text' | 'width' | 'style' | 'size';
+const TV_BAR_TIP: Record<TvBarItem, string> = { line: 'Line color', fill: 'Fill', text: 'Text color', width: 'Line width', style: 'Line style', size: 'Text size' };
+const LINE_BAR: readonly TvBarItem[] = ['line', 'text', 'width', 'style'];
+const AREA_BAR: readonly TvBarItem[] = ['line', 'fill', 'text', 'width'];
+/** TradingView's floating toolbar per tool (read from TradingView Desktop's toolbar data-names, 2026-10-30). */
+const TV_QUICK_BAR: Readonly<Record<string, readonly TvBarItem[]>> = {
+    trendline: LINE_BAR,
+    hline: LINE_BAR,
+    ray: LINE_BAR,
+    vline: LINE_BAR,
+    hray: LINE_BAR,
+    infoline: LINE_BAR,
+    parallelchannel: AREA_BAR,
+    pricerange: AREA_BAR,
+    datepricerange: AREA_BAR,
+    daterange: AREA_BAR,
+    box: ['line', 'fill', 'text', 'width', 'style'],
+    pitchfork: ['line', 'width'],
+    freehand: ['line', 'width'],
+    highlighter: ['line', 'width'],
+    path: ['line', 'width', 'style'],
+    arrowmarker: ['line', 'text'],
+    arrowmarkup: ['line', 'text'],
+    arrowmarkdown: ['line', 'text'],
+    text: ['text', 'size'],
+    anchoredtext: ['text', 'fill', 'size'],
+    callout: ['text', 'fill', 'size'],
+    note: ['line', 'text', 'size'],
+    anchorednote: ['line', 'text', 'size'],
+    emoji: [],
+};
+
+/** Put the bar's colour / width / style / size controls in TradingView's set and order, where the first of them was. */
+function applyTvBar(bar: HTMLElement, items: readonly TvBarItem[], make: Partial<Record<TvBarItem, () => HTMLElement | null>>): void {
+    const kids = [...bar.children] as HTMLElement[];
+    const find = (tip: string): HTMLElement | undefined => kids.find((k) => k.dataset.tip === tip || k.querySelector(`[data-tip="${tip}"]`) != null);
+    const managed = (Object.keys(TV_BAR_TIP) as TvBarItem[]).map((i) => find(TV_BAR_TIP[i])).filter((k): k is HTMLElement => !!k);
+    const first = kids.find((k) => managed.includes(k));
+    const at = document.createComment('tv-bar');
+    if (first) bar.insertBefore(at, first);
+    else {
+        const tpl = kids.find((k) => k.dataset.action === 'templates');
+        bar.insertBefore(at, tpl ? tpl.nextSibling : bar.firstChild);
+    }
+    for (const k of managed) k.remove();
+    for (const i of items) {
+        const el = find(TV_BAR_TIP[i]) ?? make[i]?.() ?? null;
+        if (el) bar.insertBefore(el, at);
+    }
+    at.remove();
+}
+
 const BRUSH_ICON = icon('brush');
 const TEMPLATES_ICON = icon('drawing-templates');
 const ALERT_ADD_ICON = icon('alarm-add');
