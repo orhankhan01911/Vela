@@ -284,6 +284,8 @@ export class InputController {
     private pinchAnchorLogical = 0;
     // Last clean touch tap (for double-tap pairing). Time 0 = no pending first tap.
     private lastTapT = 0;
+    /** When the last finger double tap fired (its browser dblclick that follows is ignored). */
+    private lastDoubleTapT = -Infinity;
     private lastTapX = 0;
     private lastTapY = 0;
     // Whether the last two primary presses were claimed by the drawings layer. A double-click
@@ -741,6 +743,7 @@ export class InputController {
         const paired = this.lastTapT > 0 && t - this.lastTapT <= DOUBLE_TAP_MS && Math.hypot(x - this.lastTapX, y - this.lastTapY) <= DOUBLE_TAP_SLOP;
         if (paired) {
             this.lastTapT = 0; // a triple tap starts a fresh pair, not two doubles
+            this.lastDoubleTapT = t;
             // Route by the FIRST tap: that one was aimed; the second is the sloppier
             // confirmation and can drift onto a neighboring region (a separator band,
             // an axis strip) and mis-route the pair.
@@ -779,6 +782,10 @@ export class InputController {
     };
 
     private readonly onDblClick = (e: MouseEvent): void => {
+        // After a finger double tap the browser also fires its own dblclick, often on the text editor the tap just
+        // opened: handled again, it reopened things and a menu took the focus, closing the editor (2026-10-30).
+        if (e.timeStamp - this.lastDoubleTapT < DOUBLE_TAP_MS * 2) return;
+        if ((e.target as Element | null)?.closest?.('textarea, input, [contenteditable="true"]')) return;
         const { x, y } = this.local(e);
         this.doubleActivate(x, y);
     };

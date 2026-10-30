@@ -65,6 +65,9 @@ export class ChartContextMenu {
     /** The pane whose scale the open price-axis menu targets (null ⇒ the main scale). */
     private lastPane: PaneScaleInfo | null = null;
     private readonly onContextMenu = (e: MouseEvent): void => {
+        // A text field on the chart (a drawing's text editor) keeps the browser's own edit menu: the chart menu there
+        // took the focus and closed the editor a finger double tap had just opened (2026-10-30).
+        if ((e.target as Element | null)?.closest?.('textarea, input, [contenteditable="true"]')) return;
         e.preventDefault();
         if (!this.chart) return;
         this.pointer = this.crosshair;

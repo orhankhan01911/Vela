@@ -185,3 +185,14 @@ describe('ChartContextMenu — the pointer on the action context', () => {
         expect(menus[0]!.opened).toBe(1);
     });
 });
+
+describe('ChartContextMenu — text fields keep their own menu', () => {
+    it('a right-click / long-press on a drawing text editor does not open the chart menu', () => {
+        const { host } = setup();
+        const field = { closest: (sel: string) => (sel.includes('textarea') ? field : null) };
+        host.fire('contextmenu', { clientX: 300, clientY: 200, target: field });
+        expect(menus.every((m) => m.opened === 0)).toBe(true);
+        host.fire('contextmenu', { clientX: 300, clientY: 200, target: { closest: () => null } });
+        expect(menus.some((m) => m.opened === 1)).toBe(true);
+    });
+});
