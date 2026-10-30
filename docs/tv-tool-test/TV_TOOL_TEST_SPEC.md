@@ -144,7 +144,7 @@ Steps 1 to 4 run in the Vela fork (`vela-alert-pin`); steps 5 and 6 in `vela-san
    fits at 360 and 393 px.
 7. Anything touched by finger (toolbar buttons, text editing, panels): the emulators (Pixel 5, Fold, Tablet) with real
    taps. A headless touch browser (`hasTouch`) finds most touch bugs faster; the emulator confirms. Make sure the price
-   pane is shown first (`chart.panes.maximize('price')`; it is a toggle, so look at a screenshot first: a second call shrinks it back): a stray double tap can leave another pane enlarged.
+   pane is shown first (`chart.panes.maximize(null)` then `chart.panes.maximize('price')`: the first restores the normal layout, so the result is the same every run): a stray double tap can leave another pane enlarged.
 8. New strings: run the sandbox `src/i18n` tests. Every `vt()` / menu label needs all 12 languages
    (`src/i18n/locales/*.json`). Vela's drawing strings are scanned too.
 
