@@ -116,6 +116,11 @@ export abstract class BrushStroke extends PathDrawing {
         return { start: [pts[k]!, pts[0]!], end: [pts[pts.length - 1 - k]!, pts[pts.length - 1]!] };
     }
 
+    /** TradingView hits the whole width of the stroke (a 20 px highlighter is clickable 10 px from its middle). */
+    override hitTest(px: number, py: number, proj: Projector, tol: number): boolean {
+        return super.hitTest(px, py, proj, this.tv ? Math.max(tol, Math.ceil((this.style.lineWidth ?? 1) / 2)) : tol);
+    }
+
     /** TradingView marks a selected brush's first and last points (not draggable). */
     override selectionMarkers(proj: Projector): Array<[number, number]> {
         if (!this.tv) return [];

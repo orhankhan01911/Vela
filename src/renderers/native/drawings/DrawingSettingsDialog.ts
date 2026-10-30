@@ -14,6 +14,8 @@ import {
     DateRange,
     MeasureBox,
     Freehand,
+    Highlighter,
+    HIGHLIGHTER_WIDTHS,
     ArrowMarker,
     ArrowMark,
     FixedRangeVolumeProfile,
@@ -80,7 +82,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -138,8 +140,8 @@ export class DrawingSettingsDialog {
         if (custom) tabs.push('inputs');
         if (drawing.editableLevels() || styleFields(drawing).length > 0) tabs.push('style');
         if (drawing.schema().fields.some((f) => f.path.startsWith('text.'))) tabs.push('text');
-        // TradingView's brush has no Coordinates tab (hundreds of points).
-        const brush = drawing instanceof Freehand && drawing.tv;
+        // TradingView's brush and highlighter have no Coordinates tab (hundreds of points).
+        const brush = (drawing instanceof Freehand || drawing instanceof Highlighter) && drawing.tv;
         if (!(drawing instanceof PositionTool) && !brush && drawing.anchors.length > 0) tabs.push('coordinates');
         tabs.push('visibility');
         return tabs;
@@ -284,6 +286,16 @@ export class DrawingSettingsDialog {
             const row = fieldRow({ label: 'Color', control: [this.colorControl(drawing, 'style.lineColor', actions, drawing.style.lineColor || DEFAULT_DRAWING_COLOR)], fit: true });
             row.dataset.role = 'color';
             grid.appendChild(row);
+            return;
+        }
+        if (drawing instanceof Highlighter && drawing.tv) {
+            // TradingView's highlighter: Line (a color) and Thickness (its px list).
+            const line = fieldRow({ label: 'Line', control: [this.colorControl(drawing, 'style.lineColor', actions, drawing.style.lineColor || DEFAULT_DRAWING_COLOR)], fit: true });
+            line.dataset.role = 'line';
+            const widths = HIGHLIGHTER_WIDTHS.map((w) => ({ value: String(w), label: `${w}px` }));
+            const thick = fieldRow({ label: 'Thickness', control: [this.selectControl('style.lineWidth', widths, String(drawing.style.lineWidth ?? 20), actions, (v) => Number(v))], fit: true });
+            thick.dataset.role = 'thickness';
+            grid.append(line, thick);
             return;
         }
         const fields = styleFields(drawing);

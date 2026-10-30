@@ -18,6 +18,7 @@ import {
     magnifierTimeframeLabel,
     effectiveFillColor,
     Freehand,
+    HIGHLIGHTER_WIDTHS,
 } from '../../../core/drawings';
 import { icon, svg24, svg24Solid } from '../../../core/icons';
 import { applyChromeTokens } from '../../shared/theme-tokens';
@@ -266,7 +267,11 @@ export class DrawingSettingsPopup {
                 const f = widthField(d);
                 return f?.kind === 'number' && (f.min ?? 1) > 1;
             });
-            if (markers && wf?.kind === 'number') {
+            // TradingView's highlighter: its thickness list.
+            const tvMarkers = every((d) => widthField(d)?.kind === 'select');
+            if (tvMarkers) {
+                bar.appendChild(this.dropdown('Line width', [...HIGHLIGHTER_WIDTHS], width, (w) => lineIcon(Math.min(4, Math.max(1, Math.round(Number(w) / 16))), 'solid'), (v) => actions.patch({ 'style.lineWidth': v }), { label: (v) => `${v}px`, labelInTrigger: true }));
+            } else if (markers && wf?.kind === 'number') {
                 bar.appendChild(this.widthInput('Line width', width, wf.min ?? 1, wf.max ?? 60, wf.step ?? 1, (v) => actions.patch({ 'style.lineWidth': v })));
             } else {
                 bar.appendChild(this.dropdown('Line width', [1, 2, 3, 4], width, (w) => lineIcon(w, 'solid'), (v) => actions.patch({ 'style.lineWidth': v }), { label: (v) => `${v}px`, labelInTrigger: true }));

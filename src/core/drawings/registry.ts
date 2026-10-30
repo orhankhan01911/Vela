@@ -2,7 +2,7 @@ import { Drawing, type DrawingTypeKey, type SerializedDrawing } from './Drawing'
 import type { DrawingStyle } from './style';
 import { DEFAULT_DRAWING_COLOR, TV_LINE_COLOR } from './style';
 import { svg24 } from '../icons';
-import { ACCENT, BEARISH, BULLISH, INFO, MARKER, NEUTRAL } from '../palette';
+import { ACCENT, BEARISH, BULLISH, INFO, NEUTRAL } from '../palette';
 import { TrendLine } from './types/TrendLine';
 import { CyclicLines } from './types/CyclicLines';
 import { Projection } from './types/Projection';
@@ -165,7 +165,7 @@ export function resetDrawingSettings(drawing: Drawing): void {
 /** Rehydrate a {@link Drawing} from a plain record, or null for an unknown type. */
 export function deserializeDrawing(doc: SerializedDrawing): Drawing | null {
     const meta = REGISTRY.get(doc.type);
-    return meta ? meta.create(legacyArrowMarker(legacyEllipse(legacyPitchfork(legacyComment(legacyElliott(doc)))))) : null;
+    return meta ? meta.create(legacyStroke(legacyArrowMarker(legacyEllipse(legacyPitchfork(legacyComment(legacyElliott(doc))))))) : null;
 }
 
 /** Elliott waves gained TradingView's unlabelled origin point (impulse 5 → 6 points, correction 3 → 4). A record
@@ -196,6 +196,12 @@ const PITCHFORK_TYPES: ReadonlySet<string> = new Set(['pitchfork', 'schiffpitchf
  *  its border, fill and shape (a fresh marker has no props and starts as TradingView's). */
 function legacyArrowMarker(doc: SerializedDrawing): SerializedDrawing {
     return doc.type === 'arrowmarker' && doc.props === undefined ? { ...doc, props: {} } : doc;
+}
+
+/** Brush and highlighter strokes became TradingView's (2026-10-30). One saved before with no smoothing has no props:
+ *  give it an empty bag so it keeps its look (a fresh stroke has no props and starts as TradingView's). */
+function legacyStroke(doc: SerializedDrawing): SerializedDrawing {
+    return (doc.type === 'freehand' || doc.type === 'highlighter') && doc.props === undefined ? { ...doc, props: {} } : doc;
 }
 
 /** Ellipses became TradingView's tilted three-point ellipse. A record saved before has two corners and no `axis`
@@ -560,8 +566,8 @@ registerDrawingType({
     group: 'shapes',
     label: 'Highlighter',
     icon: HIGHLIGHTER_ICON,
-    // A marker: wide + translucent by default (the alpha in the color is the highlight's see-through).
-    defaultStyle: { lineColor: `${MARKER}59`, lineWidth: 14, lineStyle: 'solid' },
+    // TradingView's highlighter: its red at 20 %, 20 px.
+    defaultStyle: { lineColor: '#f2364533', lineWidth: 20, lineStyle: 'solid' }, // palette-exempt: TradingView's red
     create: (init) => new Highlighter(init),
 });
 

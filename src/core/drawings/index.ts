@@ -87,7 +87,7 @@ export { Triangle } from './types/Triangle';
 export { PathDrawing, MAX_PATH_POINTS } from './types/PathDrawing';
 export { Polyline } from './types/Polyline';
 export { Freehand, BrushStroke } from './types/Freehand';
-export { Highlighter } from './types/Highlighter';
+export { Highlighter, HIGHLIGHTER_WIDTHS } from './types/Highlighter';
 export { Circle } from './types/Circle';
 export { RotatedRect } from './types/RotatedRect';
 export { Path } from './types/Path';
