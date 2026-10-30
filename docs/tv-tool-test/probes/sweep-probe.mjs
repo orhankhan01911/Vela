@@ -51,7 +51,9 @@ for (const [tool, spec] of TOOLS) {
       await bar.waitFor({ state: "visible", timeout: 4000 }).catch(() => {});
       r.bar = await p.locator('.vela-dpop [data-action], .vela-dpop [data-tip]').evaluateAll((es) => es.filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.dataset.action || e.dataset.tip));
       await p.locator('.vela-dpop [data-tip="Settings"]').first().click({ timeout: 3000 });
-      await p.waitForTimeout(400);
+      // wait for the dialog itself (a fixed pause was sometimes too short on a busy page)
+      await p.locator('.vela-drawing-dialog [role="tab"]').first().waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+      await p.waitForTimeout(200);
       r.tabs = await p.locator('.vela-drawing-dialog [role="tab"]').allTextContents();
       r.rows = {};
       for (const t of r.tabs) {
