@@ -131,12 +131,14 @@ describe('arrow mark up / down (TradingView, read from its code)', () => {
         expect(d.hitTest(100, 510, proj, 2)).toBe(true);
     });
 
-    it('dialog: one Color row, title "Arrow mark up"', async () => {
+    it('dialog: one "Arrow" colour row (TradingView\'s label), title "Arrow mark up"; "#1 (price, time)"', async () => {
         const s = setup(mark('arrowmarkup'));
         s.gear().click();
         await settled();
         s.tab('Style').click();
-        expect(s.body('style').querySelector('[data-role="color"]')).not.toBeNull();
+        expect(s.body('style').querySelector('[data-role="color"]')!.textContent).toContain('Arrow');
+        s.tab('Coordinates').click();
+        expect(s.body('coordinates').textContent).toContain('#1 (price, time)');
         expect(document.querySelector('.vela-drawing-dialog')!.textContent).toContain('Arrow mark up');
     });
 });

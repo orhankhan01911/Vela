@@ -295,8 +295,8 @@ export class DrawingSettingsDialog {
             return;
         }
         if ((drawing instanceof ArrowMarker && drawing.tv) || drawing instanceof ArrowMark || drawing instanceof IconDrawing) {
-            // TradingView's arrow marker, arrow marks and icon: one Color row.
-            const row = fieldRow({ label: 'Color', control: [this.colorControl(drawing, 'style.lineColor', actions, drawing.style.lineColor || DEFAULT_DRAWING_COLOR)], fit: true });
+            // TradingView's arrow marker, arrow marks and icon: one colour row ("Arrow" on the arrow marks, module 100077).
+            const row = fieldRow({ label: drawing instanceof ArrowMark ? 'Arrow' : 'Color', control: [this.colorControl(drawing, 'style.lineColor', actions, drawing.style.lineColor || DEFAULT_DRAWING_COLOR)], fit: true });
             row.dataset.role = 'color';
             grid.appendChild(row);
             return;
@@ -875,8 +875,8 @@ export class DrawingSettingsDialog {
                 t.el.style.flex = 'none';
                 controls.push(t.el);
             }
-            // TradingView's "#1 (price)" for a price-only point; the time stays a date (the user's call, 2026-10-30).
-            const label = priceOnly ? `#${i + 1} (price)` : timeOnly ? `#${i + 1} (time)` : `#${i + 1}`;
+            // TradingView's "#1 (price, bar)" form; our second field is a date, not a bar number (the user's call, 2026-10-30).
+            const label = priceOnly ? `#${i + 1} (price)` : timeOnly ? `#${i + 1} (time)` : `#${i + 1} (price, time)`;
             grid.appendChild(fieldRow({ label, control: controls, fit: true }));
         });
     }
