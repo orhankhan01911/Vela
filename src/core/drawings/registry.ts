@@ -165,7 +165,7 @@ export function resetDrawingSettings(drawing: Drawing): void {
 /** Rehydrate a {@link Drawing} from a plain record, or null for an unknown type. */
 export function deserializeDrawing(doc: SerializedDrawing): Drawing | null {
     const meta = REGISTRY.get(doc.type);
-    return meta ? meta.create(legacyEllipse(legacyPitchfork(legacyComment(legacyElliott(doc))))) : null;
+    return meta ? meta.create(legacyArrowMarker(legacyEllipse(legacyPitchfork(legacyComment(legacyElliott(doc)))))) : null;
 }
 
 /** Elliott waves gained TradingView's unlabelled origin point (impulse 5 → 6 points, correction 3 → 4). A record
@@ -191,6 +191,12 @@ function legacyPitchfork(doc: SerializedDrawing): SerializedDrawing {
     return { ...doc, props: { ...(doc.props ?? {}), levels: [{ ratio: 1, color: ink, enabled: true }], background: false, medianColor: '' } };
 }
 const PITCHFORK_TYPES: ReadonlySet<string> = new Set(['pitchfork', 'schiffpitchfork', 'modifiedschiffpitchfork', 'insidepitchfork']);
+
+/** Arrow markers became TradingView's (2026-10-30). One saved before has no props: give it an empty bag so it keeps
+ *  its border, fill and shape (a fresh marker has no props and starts as TradingView's). */
+function legacyArrowMarker(doc: SerializedDrawing): SerializedDrawing {
+    return doc.type === 'arrowmarker' && doc.props === undefined ? { ...doc, props: {} } : doc;
+}
 
 /** Ellipses became TradingView's tilted three-point ellipse. A record saved before has two corners and no `axis`
  *  flag: mark it so it keeps its level box shape. */
@@ -1147,7 +1153,8 @@ registerDrawingType({
     label: 'Arrow Marker',
     icon: ARROW_MARKER_ICON,
     coversSeries: true, // a marker pointing at a candle reads over it, like TradingView's
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}99` },
+    // TradingView's arrow marker: one color, its blue 600 (the outline and the fill).
+    defaultStyle: { lineColor: '#1e53e5', lineWidth: 2, lineStyle: 'solid' }, // palette-exempt: TradingView's blue 600
     create: (init) => new ArrowMarker(init),
 });
 const lettered = { group: 'patterns' as const, coversSeries: true, defaultStyle: SOLID };

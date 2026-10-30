@@ -33,7 +33,7 @@ export { BarsPattern, type PatternBar } from './types/BarsPattern';
 export { Forecast, type ForecastStatus } from './types/Forecast';
 export { TimeCycles } from './types/TimeCycles';
 export { SineLine } from './types/SineLine';
-export { ArrowMarker } from './types/ArrowMarker';
+export { ArrowMarker, arrowMarkerStroke } from './types/ArrowMarker';
 export { DateRange } from './types/DateRange';
 export { PriceRange } from './types/PriceRange';
 export { RANGE_PARTS, RANGE_LABEL, rangeInfoLines, formatRangeVolume, type RangeInfo, type RangePart, type RangeFacts } from './types/rangeInfo';

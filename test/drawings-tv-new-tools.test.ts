@@ -43,7 +43,7 @@ describe("TradingView's tools Vela lacked", () => {
         const g = d.geometry(proj())!;
         expect(g.fill!.some(([x, y]) => x === 120 && y === 50)).toBe(true); // the tip
         expect(d.hitTest(100, 50, proj(), 1)).toBe(true); // inside the filled body
-        expect(getDrawingType('arrowmarker')!.defaultStyle.fillColor).toBeTruthy();
+        expect(getDrawingType('arrowmarker')!.defaultStyle.lineColor).toBe('#1e53e5'); // TradingView: one color for the arrow
     });
 
     it('date range / price range read only their own measure', () => {

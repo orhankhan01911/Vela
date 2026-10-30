@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, Box, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP, XPOST_DARK, XPOST_LIGHT } from '../../../core/palette';
@@ -301,6 +301,10 @@ export class DrawingPainter {
         }
         if (d instanceof GhostFeed) {
             this.paintGhostFeed(ctx, d, proj);
+            return;
+        }
+        if (d instanceof ArrowMarker && d.tv) {
+            this.paintTvArrowMarker(ctx, d, proj, theme);
             return;
         }
         if (d instanceof SegmentDrawing) {
@@ -1533,6 +1537,63 @@ export class DrawingPainter {
             ctx.stroke();
         }
         ctx.setLineDash([]);
+        ctx.restore();
+    }
+
+    /** TradingView's arrow marker (its renderer, read 2026-10-30): the polygon filled and outlined in one color (2-5 px,
+     *  round joins), or a 9 px dot; the text 10 px off the tail on the side away from the head: above it when the arrow
+     *  points down, below when it points up, beside it when it points sideways. */
+    private paintTvArrowMarker(ctx: CanvasRenderingContext2D, d: ArrowMarker, proj: Projector, theme: VelaTheme): void {
+        const sh = d.tvShape(proj);
+        if (!sh) return;
+        const color = d.style.lineColor;
+        ctx.save();
+        ctx.fillStyle = color;
+        ctx.strokeStyle = color;
+        ctx.setLineDash([]);
+        if (sh.dot) {
+            ctx.beginPath();
+            ctx.arc(sh.dot[0], sh.dot[1], 9, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.lineWidth = arrowMarkerStroke(sh.len);
+            ctx.beginPath();
+            sh.poly.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+            ctx.closePath();
+            ctx.stroke();
+            ctx.fill();
+        }
+        ctx.restore();
+        const value = d.text?.value?.trim() ?? '';
+        const pts = d.handlePoints(proj);
+        if (!value || pts.length < 2) return;
+        const t = d.text!;
+        const fs = textPx(t.size ?? 16);
+        const [ax, ay] = pts[0]!;
+        const [bx, by] = pts[1]!;
+        let h: CanvasTextAlign = 'center';
+        let v: 'top' | 'middle' | 'bottom' = 'middle';
+        if (!sh.dot) {
+            // TradingView's angle: atan2(dx, dy), nudged 1 degree toward zero.
+            let ang = Math.atan2(bx - ax, by - ay);
+            ang -= 0.017444444444444446 * Math.sign(ang);
+            if (ang > -Math.PI / 4 && ang < Math.PI / 4) v = 'bottom';
+            else if (ang > (3 * Math.PI) / 4 || ang < (-3 * Math.PI) / 4) v = 'top';
+            else h = ang < 0 ? 'left' : 'right';
+        } else h = 'left';
+        const lines = value.split('\n');
+        const lh = Math.round(fs * 1.2);
+        const blockH = lines.length * lh;
+        const x = h === 'left' ? ax + 10 : h === 'right' ? ax - 10 : ax;
+        const top = v === 'bottom' ? ay - 10 - blockH : v === 'top' ? ay + 10 : ay - blockH / 2;
+        ctx.save();
+        ctx.font = `${t.italic ? 'italic ' : ''}${t.bold ? '700 ' : ''}${fs}px ${theme.fontFamily}`;
+        ctx.fillStyle = t.color || color;
+        ctx.textAlign = h;
+        ctx.textBaseline = 'middle';
+        lines.forEach((l, i) => ctx.fillText(l, x, top + lh / 2 + i * lh));
         ctx.restore();
     }
 

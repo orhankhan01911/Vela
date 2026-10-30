@@ -149,3 +149,4 @@ describe('brush smoothing safety', () => {
         });
     });
 });
+
