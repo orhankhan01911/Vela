@@ -384,11 +384,16 @@ export abstract class Drawing {
         return null;
     }
 
+    /** TradingView's text for this tool (color, size, alignment), used when text is first added. */
+    textDefaults(): Partial<DrawingText> | undefined {
+        return TV_TEXT_DEFAULTS[this.type];
+    }
+
     /** Apply a `{ 'dot.path': value }` patch (the popup emits these). */
     applySettings(patch: Record<string, unknown>): void {
         for (const [path, value] of Object.entries(patch)) {
             // A tool's text starts as TradingView's (TV_TEXT_DEFAULTS); other lines' text starts centered along them.
-            if (path.startsWith('text.') && !this.text) this.text = { ...defaultText(), ...(ALONG_LINE_TEXT_TYPES.has(this.type) ? { hAlign: 'center' as const } : {}), ...TV_TEXT_DEFAULTS[this.type] };
+            if (path.startsWith('text.') && !this.text) this.text = { ...defaultText(), ...(ALONG_LINE_TEXT_TYPES.has(this.type) ? { hAlign: 'center' as const } : {}), ...this.textDefaults() };
             setByPath(this as unknown as Record<string, unknown>, path, value);
         }
     }

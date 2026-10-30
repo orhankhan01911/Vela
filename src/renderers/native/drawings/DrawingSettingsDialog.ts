@@ -14,6 +14,7 @@ import {
     DateRange,
     MeasureBox,
     Freehand,
+    Box,
     Highlighter,
     HIGHLIGHTER_WIDTHS,
     ArrowMarker,
@@ -25,7 +26,6 @@ import {
     DEFAULT_DRAWING_COLOR,
     TEXT_SIZE_OPTIONS,
     TEXT_PX_SIZES,
-    TV_TEXT_DEFAULTS,
     STATS_PARTS,
     textPx,
     MachFigure,
@@ -90,9 +90,6 @@ const ORIENTATION_OPTIONS: readonly SelectOption[] = [
 ];
 const STATS_PATHS = new Set(['stats.position', 'stats.always', ...STATS_PARTS.map((p) => `stats.${p.key}`)]);
 /** TradingView's Extend dropdown label for each left/right combination. */
-function extendLabel(left: boolean, right: boolean): string {
-    return left && right ? 'Extend left line, extend right line' : left ? 'Extend left line' : right ? 'Extend right line' : "Don't extend";
-}
 /** TradingView's summary of ticked choices: the first as written, the rest lower-cased ("Price range, percent change"). */
 function joinChoices(labels: readonly string[]): string {
     return labels.map((l, i) => (i === 0 ? l : l.charAt(0).toLowerCase() + l.slice(1))).join(', ');
@@ -286,6 +283,10 @@ export class DrawingSettingsDialog {
             const row = fieldRow({ label: 'Color', control: [this.colorControl(drawing, 'style.lineColor', actions, drawing.style.lineColor || DEFAULT_DRAWING_COLOR)], fit: true });
             row.dataset.role = 'color';
             grid.appendChild(row);
+            return;
+        }
+        if (drawing instanceof Box && drawing.tv) {
+            this.buildRectangleStyle(grid, drawing, actions);
             return;
         }
         if (drawing instanceof Highlighter && drawing.tv) {
@@ -600,18 +601,19 @@ export class DrawingSettingsDialog {
     }
 
     /** TradingView's Extend dropdown: "Extend left line" / "Extend right line" checkboxes; the button names the mix. */
-    private extendDropdown(drawing: Drawing, actions: SettingsActions): HTMLElement {
+    private extendDropdown(drawing: Drawing, actions: SettingsActions, words: { left: string; right: string } = { left: 'Extend left line', right: 'Extend right line' }): HTMLElement {
         const cur = drawing as unknown as { extendLeft?: boolean; extendRight?: boolean };
         let left = !!cur.extendLeft;
         let right = !!cur.extendRight;
-        const dd = dropdownTrigger(extendLabel(left, right));
+        const label = (l: boolean, r: boolean): string => (l && r ? joinChoices([words.left, words.right]) : l ? words.left : r ? words.right : "Don't extend");
+        const dd = dropdownTrigger(label(left, right));
         dd.el.dataset.role = 'extend';
         dd.button.addEventListener('click', (e) => {
             e.stopPropagation();
             this.toggleChecks(dd.button, [
-                { label: 'Extend left line', checked: () => left, set: (v) => { left = v; actions.patch({ extendLeft: v }); } },
-                { label: 'Extend right line', checked: () => right, set: (v) => { right = v; actions.patch({ extendRight: v }); } },
-            ], () => dd.setLabel(extendLabel(left, right)));
+                { label: words.left, checked: () => left, set: (v) => { left = v; actions.patch({ extendLeft: v }); } },
+                { label: words.right, checked: () => right, set: (v) => { right = v; actions.patch({ extendRight: v }); } },
+            ], () => dd.setLabel(label(left, right)));
         });
         return dd.el;
     }
@@ -692,7 +694,7 @@ export class DrawingSettingsDialog {
         const text = drawing.text;
         const px = drawing.schema().fields.find((f) => f.path === 'fontSize' && f.kind === 'number');
         const style: HTMLElement[] = [];
-        const tv = TV_TEXT_DEFAULTS[drawing.type];
+        const tv = drawing.textDefaults();
         const textDefault = tv?.color ?? this.theme.textColor;
         if (has('text.color')) style.push(this.colorControl(drawing, 'text.color', actions, text?.color || textDefault));
         if (has('text.size')) style.push(this.selectControl('text.size', PX_SIZE_OPTIONS, String(textPx(text?.size ?? tv?.size)), actions, (v) => Number(v)));
@@ -1444,6 +1446,25 @@ export class DrawingSettingsDialog {
             toggle('Bottom labels', 'labelsBottom', g.labelsBottom);
         } else toggle('Labels', 'showLabels', g.showLabels);
         grid.appendChild(fieldSection('Levels', { variant: 'inputs' }));
+    }
+
+    /** TradingView's rectangle Style tab: Extend, Border (its line button), Middle line (a switch and its own line
+     *  button) and Background (a switch and its color). */
+    private buildRectangleStyle(grid: HTMLElement, bx: Box, actions: SettingsActions): void {
+        const extend = fieldRow({ label: 'Extend', control: [this.extendDropdown(bx, actions, { left: 'Extend left', right: 'Extend right' })], fit: true });
+        const border = fieldRow({ label: 'Border', control: [this.lineButton(bx, actions, true, true)], fit: true });
+        border.dataset.role = 'border';
+        const mid = this.pathLineButton(
+            { color: bx.middleColor || bx.style.lineColor || DEFAULT_DRAWING_COLOR, width: bx.middleWidth ?? 1, style: bx.middleStyle ?? 'dashed' },
+            { color: 'middleColor', width: 'middleWidth', style: 'middleStyle' },
+            actions,
+        );
+        const middle = fieldRow({ label: 'Middle line', toggle: { id: uid(), checked: !!bx.middleLine, onChange: (v) => actions.patch({ middleLine: v }) }, control: [mid], fit: true });
+        middle.dataset.role = 'middle-line';
+        const fill = this.colorControl(bx, 'style.fillColor', actions, bx.style.fillColor ?? DEFAULT_DRAWING_COLOR);
+        const back = fieldRow({ label: 'Background', toggle: { id: uid(), checked: bx.fillBackground === true, onChange: (v) => actions.patch({ fillBackground: v }) }, control: [fill], fit: true });
+        back.dataset.role = 'background';
+        grid.append(extend, border, middle, back);
     }
 
     /** TradingView's pitchfork Style tab: Extend lines, the median's line button, the nine level rows (a switch, the

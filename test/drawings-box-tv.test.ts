@@ -23,7 +23,8 @@ const box = (h: H, v: V, props?: Record<string, unknown>) =>
         paneId: 'price',
         anchors: [{ time: 40, price: 80 }, { time: 120, price: 40 }], // x 40..120, y 20..60
         text: { value: 'label', size: 'normal', hAlign: h, vAlign: v },
-        ...(props ? { props } : {}),
+        // A box saved before TradingView's look (inside-only text); `tv` boxes are covered in drawings-rectangle-tv.
+        props: props ?? {},
     })! as Box;
 
 describe("box like TradingView's rectangle", () => {

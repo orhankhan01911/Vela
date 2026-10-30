@@ -198,10 +198,10 @@ function legacyArrowMarker(doc: SerializedDrawing): SerializedDrawing {
     return doc.type === 'arrowmarker' && doc.props === undefined ? { ...doc, props: {} } : doc;
 }
 
-/** Brush and highlighter strokes became TradingView's (2026-10-30). One saved before with no smoothing has no props:
+/** Brush and highlighter strokes and rectangles became TradingView's (2026-10-30). One saved before with no props:
  *  give it an empty bag so it keeps its look (a fresh stroke has no props and starts as TradingView's). */
 function legacyStroke(doc: SerializedDrawing): SerializedDrawing {
-    return (doc.type === 'freehand' || doc.type === 'highlighter') && doc.props === undefined ? { ...doc, props: {} } : doc;
+    return (doc.type === 'freehand' || doc.type === 'highlighter' || doc.type === 'box') && doc.props === undefined ? { ...doc, props: {} } : doc;
 }
 
 /** Ellipses became TradingView's tilted three-point ellipse. A record saved before has two corners and no `axis`
@@ -324,7 +324,8 @@ registerDrawingType({
     group: 'shapes',
     label: 'Rectangle',
     icon: BOX_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}26` },
+    // TradingView's rectangle: purple 2 px, the purple at 20 % behind.
+    defaultStyle: { lineColor: '#9c27b0', lineWidth: 2, lineStyle: 'solid', fillColor: '#9c27b033' }, // palette-exempt: TradingView's rectangle
     create: (init) => new Box(init),
 });
 

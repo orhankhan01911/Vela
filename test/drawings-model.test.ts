@@ -114,7 +114,7 @@ describe('drawings/Ray Box TextLabel', () => {
         expect(b.style.fillColor).toBeTruthy(); // default fill
         expect(b.hitTest(25, 75, proj, 5)).toBe(true); // inside the filled rect
         expect(b.priceRange()).toEqual({ min: 0, max: 50 });
-        expect(b.handlePoints(proj)).toEqual([[0, 100], [50, 50]]);
+        expect(b.handlePoints(proj).slice(0, 2)).toEqual([[0, 100], [50, 50]]); // then TradingView's 6 more
     });
     it('TextLabel starts empty (typed inline) with an approximate hit box', () => {
         const t = createDrawing('text', { paneId: 'price', anchors: [{ time: 10, price: 50 }] })!;
@@ -236,10 +236,10 @@ describe('drawings/resetDrawingSettings', () => {
         resetDrawingSettings(d);
         store.update(d.id, d.serialize());
         const live = store.get(d.id)!;
-        expect(live.style.lineColor).toBe(DEFAULT_DRAWING_COLOR);
-        expect(live.style.lineWidth).toBe(1);
+        expect(live.style.lineColor).toBe('#9c27b0'); // TradingView's rectangle
+        expect(live.style.lineWidth).toBe(2);
         expect(live.style.lineStyle).toBe('solid');
-        expect(live.style.fillColor).toBe(`${DEFAULT_DRAWING_COLOR}26`);
+        expect(live.style.fillColor).toBe('#9c27b033');
     });
 });
 

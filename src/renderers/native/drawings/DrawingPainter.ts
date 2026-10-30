@@ -1,6 +1,6 @@
-import type { Drawing, Projector, DrawingStyle, Box, TextLabel, Ellipse } from '../../../core/drawings';
+import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP, XPOST_DARK, XPOST_LIGHT } from '../../../core/palette';
@@ -571,10 +571,9 @@ export class DrawingPainter {
                 const y = Math.min(pts[0]![1], pts[1]![1]);
                 const w = span.x2 - span.x1;
                 const h = Math.abs(pts[1]![1] - pts[0]![1]);
-                if (d.style.fillColor) {
+                if (bx.filled()) {
                     ctx.save();
-                    ctx.fillStyle = d.style.fillColor; // alpha lives in the fill color itself
-
+                    ctx.fillStyle = d.style.fillColor!; // alpha lives in the fill color itself
                     ctx.fillRect(x, y, w, h);
                     ctx.restore();
                 }
@@ -593,9 +592,16 @@ export class DrawingPainter {
                 ctx.setLineDash([]);
                 if (bx.middleLine) {
                     ctx.save();
-                    this.applyStroke(ctx, { ...d.style, lineStyle: 'dashed', lineWidth: 1 });
+                    if (bx.tv) this.applyStroke(ctx, { ...d.style, lineColor: bx.middleColor || d.style.lineColor, lineStyle: bx.middleStyle ?? 'dashed', lineWidth: bx.middleWidth ?? 1 });
+                    else this.applyStroke(ctx, { ...d.style, lineStyle: 'dashed', lineWidth: 1 });
+                    // TradingView leaves a gap where text sits inside the box on the middle line.
+                    const gap = bx.tv ? this.tvBoxText(ctx, bx, proj, theme)?.span ?? null : null;
                     ctx.beginPath();
-                    ctx.moveTo(x, y + h / 2);
+                    if (gap && gap[0] > x && gap[1] < x + w) {
+                        ctx.moveTo(x, y + h / 2);
+                        ctx.lineTo(gap[0], y + h / 2);
+                        ctx.moveTo(gap[1], y + h / 2);
+                    } else ctx.moveTo(x, y + h / 2);
                     ctx.lineTo(x + w, y + h / 2);
                     ctx.stroke();
                     ctx.restore();
@@ -655,9 +661,57 @@ export class DrawingPainter {
 
     /** Draw a drawing's optional text label at a type-appropriate anchor (multi-line aware).
      *  Two-point line tools rotate the glyphs to follow the segment, kept upright. */
+    /** TradingView's rectangle text: above the box ("Top"), below it ("Bottom") or inside ("Inside", wrapped to the
+     *  box less a third of the font size each side and cut at the box), a third of the font size off the box.
+     *  Returns the lines, where they start, and (inside only) the x span the middle line leaves free. */
+    private tvBoxText(ctx: CanvasRenderingContext2D, d: Box, proj: Projector, theme: VelaTheme): { lines: string[]; x: number; top: number; align: CanvasTextAlign; clip: [number, number, number, number] | null; span: [number, number] | null; fs: number } | null {
+        const text = d.text;
+        if (!text || !text.value) return null;
+        const pts = d.handlePoints(proj);
+        const sx = d.spanX(proj);
+        if (pts.length < 2 || !sx) return null;
+        const y1 = Math.min(pts[0]![1], pts[1]![1]);
+        const y2 = Math.max(pts[0]![1], pts[1]![1]);
+        const fs = namedFontSize(text.size);
+        const m = fs / 3;
+        const lh = labelLineHeight(fs);
+        const inside = (text.vAlign ?? 'center') === 'center';
+        const pad = inside ? m : 0;
+        const ha = text.hAlign ?? 'center';
+        const align: CanvasTextAlign = ha;
+        const x = ha === 'left' ? sx.x1 + pad : ha === 'right' ? sx.x2 - pad : (sx.x1 + sx.x2) / 2;
+        ctx.save();
+        ctx.font = labelFont(text, fs, theme);
+        const lines = inside ? wrapLines(ctx, text.value, Math.max(1, sx.x2 - sx.x1 - 2 * m)) : text.value.split('\n');
+        const w = Math.max(...lines.map((l) => ctx.measureText(l).width));
+        ctx.restore();
+        const h = lines.length * lh;
+        const top = inside ? (y1 + y2) / 2 - h / 2 : text.vAlign === 'top' ? y1 - m - h : y2 + m;
+        const left = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
+        return { lines, x, top, align, fs, clip: inside ? [sx.x1, y1, sx.x2 - sx.x1, y2 - y1] : null, span: inside ? [left - m, left + w + m] : null };
+    }
+
     private paintLabel(ctx: CanvasRenderingContext2D, d: Drawing, proj: Projector, theme: VelaTheme): void {
         const text = d.text;
         if (!text || !text.value || d.id === this.targets.mutedLabel) return;
+        if (d instanceof Box && d.tv) {
+            const t = this.tvBoxText(ctx, d, proj, theme);
+            if (!t) return;
+            ctx.save();
+            if (t.clip) {
+                ctx.beginPath();
+                ctx.rect(...t.clip);
+                ctx.clip();
+            }
+            ctx.font = labelFont(text, t.fs, theme);
+            ctx.textBaseline = 'top';
+            ctx.textAlign = t.align;
+            ctx.fillStyle = text.color ?? theme.textColor;
+            const lh = labelLineHeight(t.fs);
+            t.lines.forEach((line, i) => ctx.fillText(line, t.x, t.top + i * lh));
+            ctx.restore();
+            return;
+        }
         const layout = labelLayout(d, proj);
         if (!layout) return;
         const fs = namedFontSize(text.size);
@@ -3567,8 +3621,17 @@ export function labelLayout(d: Drawing, proj: Projector): {
             const y1 = Math.min(pts[0]![1], pts[1]![1]);
             const y2 = Math.max(pts[0]![1], pts[1]![1]);
             const h = lh * lines;
-            const pad = 4;
             const ha = text.hAlign ?? 'center';
+            if ((d as Box).tv) {
+                // TradingView's: above ("Top"), inside ("Inside") or below ("Bottom") the box (see tvBoxText).
+                const m = namedFontSize(text.size) / 3;
+                const inside = (text.vAlign ?? 'center') === 'center';
+                const pad = inside ? m : 0;
+                const x = ha === 'left' ? x1 + pad : ha === 'right' ? x2 - pad : (x1 + x2) / 2;
+                const top = inside ? (y1 + y2) / 2 - h / 2 : text.vAlign === 'top' ? y1 - m - h : y2 + m;
+                return { x, top, align: ha };
+            }
+            const pad = 4;
             const x = ha === 'left' ? x1 + pad : ha === 'right' ? x2 - pad : (x1 + x2) / 2;
             const top = text.vAlign === 'top' ? y1 + pad : text.vAlign === 'bottom' ? y2 - pad - h : (y1 + y2) / 2 - h / 2;
             return { x, top, align: ha };
