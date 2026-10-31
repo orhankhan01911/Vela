@@ -4,6 +4,7 @@ import {
     DIRECTION_OPTIONS,
     FibLevels,
     FibRetracement,
+    FibExtensionTrend,
     TV_FIB_FONT_SIZES,
     GannBox,
     GannFan,
@@ -108,7 +109,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -1661,7 +1662,7 @@ export class DrawingSettingsDialog {
             grid.appendChild(row);
             return row;
         };
-        if (fib instanceof FibRetracement) check('Reverse', 'reverse', fib.reverse);
+        if (fib instanceof FibRetracement || fib instanceof FibExtensionTrend) check('Reverse', 'reverse', fib.reverse === true);
         check('Prices', 'showPrices', fib.showPrices);
         const levelsAs = this.selectControl('levelsAsPercent', FIB_LEVELS_AS, fib.levelsAsPercent ? 'percents' : 'values', actions, (v) => v === 'percents');
         grid.appendChild(fieldRow({ label: 'Levels', toggle: { id: uid(), checked: fib.showLevels, onChange: (v) => actions.patch({ showLevels: v }) }, control: [levelsAs], fit: true }));
@@ -1817,7 +1818,8 @@ export class DrawingSettingsDialog {
                 },
             }));
         }
-        if (drawing instanceof FibLevels) this.buildFibStyle(grid, drawing, actions);
+        // A trend-based extension saved before TradingView's look draws its own fixed way: no Fib style rows.
+        if (drawing instanceof FibLevels && !(drawing instanceof FibExtensionTrend && !drawing.tv)) this.buildFibStyle(grid, drawing, actions);
         if (drawing instanceof GannFan || drawing instanceof GannSquare || drawing instanceof GannBox) this.buildGannStyle(grid, drawing, actions);
         if (drawing instanceof FibRetracement) {
             const fib = drawing;

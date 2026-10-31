@@ -170,10 +170,11 @@ describe('drawings/FibExtensionTrend', () => {
     it('projects the A→B move from C across three anchors', () => {
         const d = make();
         expect(d.anchorSchema().min).toBe(3);
-        expect(d.editableLevels()!.length).toBe(7);
+        // TradingView's 24 levels on a new one (2026-10-31), 0 .. 4.236 shown.
+        expect(d.editableLevels()!.length).toBe(24);
         const pr = d.priceRange()!;
         expect(pr.min).toBe(0); // includes anchor A
-        expect(pr.max).toBeCloseTo(230.9, 1); // the 2.618 level: 100 + 2.618·50
+        expect(pr.max).toBeCloseTo(311.8, 1); // the 4.236 level: 100 + 4.236·50
     });
 
     it('round-trips through serialize', () => {

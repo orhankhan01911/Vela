@@ -36,6 +36,33 @@ export const TV_FIB_RETRACEMENT_LEVELS: readonly FibLevel[] = (
 export const TV_FIB_TREND_COLOR = TV_GRAY;
 
 /**
+ * TradingView's factory look for its 24-level Fib tools (retracement 984358, trend-based extension 268335, the same
+ * defaults): 24 levels, a dashed grey 2 px trend line, 2 px solid level lines, background at 80 % transparency,
+ * coefficient + price labels on the left, middle, 12 px, level texts centered on their lines.
+ */
+export function applyTvFibLook(d: FibLevels): void {
+    d.tv = true;
+    d.levels = TV_FIB_RETRACEMENT_LEVELS.map((l) => ({ ...l }));
+    d.trendline = true;
+    d.trendColor = TV_FIB_TREND_COLOR;
+    d.trendWidth = 2;
+    d.trendStyle = 'dashed';
+    d.style = { ...d.style, lineWidth: 2, lineStyle: 'solid' };
+    d.background = true;
+    d.fillOpacity = 0.2;
+    d.showLevels = true;
+    d.levelsAsPercent = false;
+    d.showPrices = true;
+    d.labelH = 'left';
+    d.labelV = 'middle';
+    d.showText = true;
+    d.textH = 'center';
+    d.textV = 'middle';
+    d.fontSize = 12;
+    d.logScale = false;
+}
+
+/**
  * Fibonacci retracement: horizontal levels between two swing anchors. Level 0 sits on the
  * second anchor and level 1 on the first, so the levels measure the pullback from the
  * point just placed; `reverse` puts level 0 on the first anchor instead.
@@ -49,30 +76,8 @@ export class FibRetracement extends FibLevels {
     constructor(init: ConstructorParameters<typeof FibLevels>[0]) {
         super(init);
         if (this.reverse === undefined) this.reverse = false;
-        if (!init.props) {
-            // A new retracement is TradingView's (module 984358 factory defaults): 24 levels, a dashed grey trend
-            // line, 2 px solid level lines, background at 80 % transparency, coefficient + price labels on the left,
-            // middle, 12 px, level texts centered on their lines.
-            this.tv = true;
-            this.levels = TV_FIB_RETRACEMENT_LEVELS.map((l) => ({ ...l }));
-            this.trendline = true;
-            this.trendColor = TV_FIB_TREND_COLOR;
-            this.trendWidth = 2;
-            this.trendStyle = 'dashed';
-            this.style = { ...this.style, lineWidth: 2, lineStyle: 'solid' };
-            this.background = true;
-            this.fillOpacity = 0.2;
-            this.showLevels = true;
-            this.levelsAsPercent = false;
-            this.showPrices = true;
-            this.labelH = 'left';
-            this.labelV = 'middle';
-            this.showText = true;
-            this.textH = 'center';
-            this.textV = 'middle';
-            this.fontSize = 12;
-            this.logScale = false;
-        }
+        // A new retracement is TradingView's (module 984358 factory defaults).
+        if (!init.props) applyTvFibLook(this);
     }
 
     defaultLevels(): readonly FibLevel[] {

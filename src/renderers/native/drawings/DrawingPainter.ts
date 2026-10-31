@@ -822,13 +822,15 @@ export class DrawingPainter {
             // TradingView's optional trend line: the swing the levels measure, dashed between the two anchors
             // (its own colour, width and style on TradingView-look drawings).
             const pts = d.handlePoints(proj);
-            if (pts.length === 2) {
+            // A trend-based extension (3 points) draws two: A→B and B→C (TradingView's module 268335).
+            if (pts.length === 2 || (tvFib.tv && pts.length === 3)) {
                 const trend = tvFib.tv
                     ? { lineColor: tvFib.trendColor || theme.textColor, lineStyle: tvFib.trendStyle ?? 'dashed', lineWidth: tvFib.trendWidth ?? 2 }
                     : { lineColor: theme.textColor, lineStyle: 'dashed' as const, lineWidth: 1 };
                 this.stroke(ctx, { ...d.style, ...trend }, () => {
                     ctx.moveTo(pts[0]![0], pts[0]![1]);
                     ctx.lineTo(pts[1]![0], pts[1]![1]);
+                    if (pts[2]) ctx.lineTo(pts[2][0], pts[2][1]);
                 });
             }
         }
