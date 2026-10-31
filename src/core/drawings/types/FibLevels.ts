@@ -43,6 +43,18 @@ export const FIB_STYLE_DEFAULTS = {
 /** TradingView's label font sizes (px) for the Fib level tools (its Font size dropdown). */
 export const TV_FIB_FONT_SIZES: readonly number[] = [8, 10, 11, 12, 14, 16, 18, 20, 22, 24];
 
+/** A Fib level's label, TradingView's (module 897716): the coefficient (or percent) and/or " (price)". With the price
+ *  scale's step the price has its decimals and thousands commas ("0.236 (77,055.3)"), else 2 decimals. */
+export function fibLabelText(o: { showLevels: boolean; levelsAsPercent: boolean; showPrices: boolean }, ratio: number, price: number, tick?: number): string {
+    const lvl = o.levelsAsPercent ? `${(ratio * 100).toFixed(2)}%` : String(ratio); // TradingView: 61.80%
+    const dp = tick && tick > 0 ? Math.max(0, Math.min(10, Math.round(-Math.log10(tick)))) : 2;
+    const pr = tick && tick > 0 ? price.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp }) : price.toFixed(2);
+    if (o.showLevels && o.showPrices) return `${lvl} (${pr})`;
+    if (o.showLevels) return lvl;
+    if (o.showPrices) return pr;
+    return '';
+}
+
 const isH = (v: unknown): v is FibLabelH => v === 'left' || v === 'center' || v === 'right';
 const isV = (v: unknown): v is FibLabelV => v === 'top' || v === 'middle' || v === 'bottom';
 const isStyle = (v: unknown): v is LineStyle => v === 'solid' || v === 'dashed' || v === 'dotted';
@@ -107,14 +119,7 @@ export abstract class FibLevels extends FibRatios {
 
     /** The number shown beside a level: its ratio (or percent) and/or its price, as the settings choose. */
     levelText(ratio: number, price: number, tick?: number): string {
-        const lvl = this.levelsAsPercent ? `${(ratio * 100).toFixed(2)}%` : String(ratio); // TradingView: 61.80%
-        // With the price scale's step (TradingView-look drawings): its decimals and thousands commas, "77,055.3".
-        const dp = tick && tick > 0 ? Math.max(0, Math.min(10, Math.round(-Math.log10(tick)))) : 2;
-        const pr = tick && tick > 0 ? price.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp }) : price.toFixed(2);
-        if (this.showLevels && this.showPrices) return `${lvl} (${pr})`;
-        if (this.showLevels) return lvl;
-        if (this.showPrices) return pr;
-        return '';
+        return fibLabelText(this, ratio, price, tick);
     }
 
     entryLines(proj: Projector): FibEntryLine[] | null {

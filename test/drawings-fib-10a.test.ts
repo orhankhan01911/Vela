@@ -39,7 +39,7 @@ describe('drawings/FibChannel', () => {
     it('reports a price range spanning the enabled levels + round-trips', () => {
         const pr = make().priceRange()!;
         expect(pr.min).toBe(50);
-        expect(pr.max).toBeCloseTo(50 + 2.618 * 30, 1); // outermost enabled level (2.618)
+        expect(pr.max).toBeCloseTo(50 + 4.236 * 30, 1); // outermost shown level (TradingView's 4.236, 2026-10-31)
         const a = make().serialize();
         expect(deserializeDrawing(a)!.serialize()).toEqual(a);
         expect(a.type).toBe('fibchannel');
