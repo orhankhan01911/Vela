@@ -9,8 +9,8 @@ import { LINE_STATS_FIELDS, statsOf, type LineStats } from './lineStats';
  *  either point to the pane edge and carry an arrow at either end. */
 export class TrendLine extends Drawing {
     // A ray (extended right), an extended line (both ways) and an info line (every stat on) are the same tool in
-    // TradingView.
-    readonly type: 'trendline' | 'ray' | 'extendedline' | 'infoline' = 'trendline';
+    // TradingView; its trend angle is built on it.
+    readonly type: 'trendline' | 'ray' | 'extendedline' | 'infoline' | 'trendangle' = 'trendline';
     // `!` (no initializer): the base constructor runs readProps before subclass fields would initialize.
     extendLeft!: boolean;
     extendRight!: boolean;
@@ -43,7 +43,7 @@ export class TrendLine extends Drawing {
         if (typeof props.showPriceLabels === 'boolean') this.showPriceLabels = props.showPriceLabels;
     }
 
-    private pixels(proj: Projector): [number, number, number, number] | null {
+    protected pixels(proj: Projector): [number, number, number, number] | null {
         const a = this.anchors[0];
         const b = this.anchors[1];
         if (!a || !b) return null;

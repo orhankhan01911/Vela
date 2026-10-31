@@ -70,6 +70,7 @@ import {
     RegressionChannel,
     REGRESSION_SOURCES,
     TrendFigure,
+    TrendAngle,
     type RegressionTrendLine,
 } from '../../../core/drawings';
 import { BEARISH, BULLISH } from '../../../core/palette';
@@ -129,7 +130,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', trianglepattern: 'Triangle pattern', threedrives: 'Three drives pattern', elliottimpulse: 'Elliott impulse wave (12345)', elliottcorrection: 'Elliott correction wave (ABC)', elliotttriangle: 'Elliott triangle wave (ABCDE)', elliottdoublecombo: 'Elliott double combo wave (WXY)', elliotttriplecombo: 'Elliott triple combo wave (WXYXZ)', regressionchannel: 'Regression trend', flattopbottom: 'Flat top/bottom', disjointchannel: 'Disjoint channel', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', extendedline: 'Extended line', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', trianglepattern: 'Triangle pattern', threedrives: 'Three drives pattern', elliottimpulse: 'Elliott impulse wave (12345)', elliottcorrection: 'Elliott correction wave (ABC)', elliotttriangle: 'Elliott triangle wave (ABCDE)', elliottdoublecombo: 'Elliott double combo wave (WXY)', elliotttriplecombo: 'Elliott triple combo wave (WXYXZ)', regressionchannel: 'Regression trend', flattopbottom: 'Flat top/bottom', disjointchannel: 'Disjoint channel', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', extendedline: 'Extended line', trendangle: 'Trend angle', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's source names (its price sources). */
 const REGRESSION_SOURCE_LABEL: Record<(typeof REGRESSION_SOURCES)[number], string> = { open: 'Open', high: 'High', low: 'Low', close: 'Close', hl2: '(H + L)/2', hlc3: '(H + L + C)/3', ohlc4: '(O + H + L + C)/4' };
 /** TradingView's Text orientation dropdown (vertical line). */
@@ -729,9 +730,12 @@ export class DrawingSettingsDialog {
      *  Always show stats. */
     private buildStats(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
         const now = (): Record<string, unknown> => ({ ...((actions.resolve() ?? drawing) as unknown as { stats?: Record<string, unknown> }).stats });
+        // The tool's own parts (TradingView's trend angle has no time, distance or angle).
+        const listed = new Set(drawing.schema().fields.map((f) => f.path));
+        const parts = STATS_PARTS.filter((p) => listed.has(`stats.${p.key}`));
         const statsLabel = (): string => {
             const st = now();
-            const on = STATS_PARTS.filter((p) => st[p.key] === true).map((p) => vt(p.label));
+            const on = parts.filter((p) => st[p.key] === true).map((p) => vt(p.label));
             return on.length ? joinChoices(on) : 'Hidden';
         };
         grid.appendChild(fieldSection('Info'));
@@ -741,7 +745,7 @@ export class DrawingSettingsDialog {
             e.stopPropagation();
             this.toggleChecks(
                 dd.button,
-                STATS_PARTS.map((p) => ({
+                parts.map((p) => ({
                     label: p.label,
                     checked: () => now()[p.key] === true,
                     set: (v: boolean) => actions.patch({ [`stats.${p.key}`]: v }),
@@ -897,6 +901,15 @@ export class DrawingSettingsDialog {
         const priceOnly = PRICE_ONLY.has(drawing.type);
         const timeOnly = TIME_ONLY.has(drawing.type);
         drawing.anchors.forEach((a, i) => {
+            if (drawing instanceof TrendAngle && drawing.tv && i === 1) {
+                // TradingView's trend angle: its first point, then "Angle" (degrees, -360..360) in place of the second.
+                const ang = buildFieldControl({ kind: 'number', value: drawing.angleDeg, min: -360, max: 360, step: 1, fill: false, commit: 'blur', onChange: (v) => { if (Number.isFinite(v)) actions.patch({ angleDeg: v }); } });
+                ang.el.dataset.role = 'angle';
+                ang.el.style.width = '120px';
+                ang.el.style.flex = 'none';
+                grid.appendChild(fieldRow({ label: 'Angle', control: [ang.el], fit: true }));
+                return;
+            }
             if (drawing instanceof ParallelChannel && i === 2) {
                 // TradingView's "Price offset": the parallel line's distance from the baseline, in price
                 const off = buildFieldControl({

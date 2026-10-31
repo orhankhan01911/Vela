@@ -66,7 +66,8 @@ describe('drawing text alignment (TradingView: left / center / right, top / midd
     });
 
     it('every line tool with text offers both alignment settings', () => {
-        for (const type of ['hline', 'hray', 'vline', 'trendline', 'ray', 'extendedline', 'infoline', 'trendangle', 'arrow'] as DrawingTypeKey[]) {
+        // TradingView's trend angle has no text (its Style, Coordinates and Visibility only).
+        for (const type of ['hline', 'hray', 'vline', 'trendline', 'ray', 'extendedline', 'infoline', 'arrow'] as DrawingTypeKey[]) {
             const anchors = [{ time: 20, price: 50 }, { time: 120, price: 60 }];
             const d = createDrawing(type, { id: type, paneId: 'price', anchors })!;
             const paths = d.schema().fields.map((f) => f.path);

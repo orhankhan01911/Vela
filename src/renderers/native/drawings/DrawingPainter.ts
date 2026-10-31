@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TrendFigure, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TrendFigure, TrendAngle, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -544,7 +544,8 @@ export class DrawingPainter {
                 break;
             }
             case 'trendangle':
-                this.paintTrendAngle(ctx, d, proj, theme);
+                if (d instanceof TrendAngle && d.tv) this.paintTvTrendAngle(ctx, d, proj, theme);
+                else this.paintTrendAngle(ctx, d, proj, theme);
                 break;
             case 'circle': {
                 const pts = d.handlePoints(proj);
@@ -890,7 +891,9 @@ export class DrawingPainter {
         for (const d of drawings) {
             if (!d.visible || !shownOnBarMs(d.intervals, this.barMs, this.barKind) || !(d as { showPriceLabels?: boolean }).showPriceLabels) continue;
             const rect = proj.paneRect?.(d.paneId);
-            for (const a of d.anchors) {
+            // A TradingView trend angle labels the end it draws.
+            const end = d instanceof TrendAngle && d.tv ? d.drawnEnd(proj) : null;
+            for (const a of end && d.anchors[0] ? [d.anchors[0], end] : d.anchors) {
                 const y = proj.yOf(a.price, d.paneId);
                 if (y == null || (rect && (rect.height <= 0 || y < rect.top || y > rect.top + rect.height))) continue;
                 ctx.save();
@@ -1388,7 +1391,8 @@ export class DrawingPainter {
             if (!d.visible || !shownOnBarMs(d.intervals, this.barMs, this.barKind)) continue;
             const s = statsOf(d as Drawing & { stats?: unknown });
             const a = d.anchors[0];
-            const b = d.anchors[1];
+            // TradingView's trend angle measures to the end it draws (its angle and length), not the stored point.
+            const b = d instanceof TrendAngle && d.tv ? (d.drawnEnd(proj) ?? d.anchors[1]) : d.anchors[1];
             if (!s || !anyStats(s) || !a || !b) continue;
             // TradingView: without "Always show stats" the box shows only while the line is selected, hovered or dragged.
             if (!s.always && active && !active.has(d.id)) continue;
@@ -3592,6 +3596,37 @@ export class DrawingPainter {
                 ctx.lineTo(s[2], s[3]);
             });
         }
+    }
+
+    /** TradingView's trend angle (module 598177): its line (extended as set), a dotted 1-2 arc of radius 50 from the
+     *  horizontal at the first point to the line, and the angle ("33.69º", 0.01 steps) 5 px right of the arc's end, 12 px,
+     *  all in the line colour. */
+    private paintTvTrendAngle(ctx: CanvasRenderingContext2D, d: TrendAngle, proj: Projector, theme: VelaTheme): void {
+        const seg = d.drawnPixels(proj);
+        const pts = d.handlePoints(proj);
+        if (!seg || pts.length < 2) return;
+        this.stroke(ctx, d.style, () => {
+            ctx.moveTo(seg[0], seg[1]);
+            ctx.lineTo(seg[2], seg[3]);
+        });
+        const [x0, y0] = pts[0]!;
+        const angle = d.angle ?? Math.atan2(-(pts[1]![1] - y0), pts[1]![0] - x0);
+        ctx.save();
+        ctx.strokeStyle = d.style.lineColor;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([1, 2]);
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x0 + 50, y0);
+        ctx.arc(x0, y0, 50, 0, -angle, angle > 0);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = `12px ${theme.fontFamily}`;
+        ctx.fillStyle = d.style.lineColor;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${Math.round((angle * 180) / Math.PI * 100) / 100}º`, x0 + 55, y0);
+        ctx.restore();
     }
 
     /** Paint a trend angle: the segment + a faint dashed baseline, an arc, and a degree readout at
