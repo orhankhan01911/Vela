@@ -158,6 +158,24 @@ describe('extended line = the trend line extended both ways (TradingView, module
     });
 });
 
+describe('arrow = the trend line with an arrow end (TradingView, module 556973)', () => {
+    const arr = (props?: Record<string, unknown>): Drawing =>
+        createDrawing('arrow', { paneId: 'price', anchors: [{ time: 0, price: 1 }, { time: 1, price: 2 }], ...(props ? { props } : {}) })!;
+    it('starts with the right end an arrow, in TradingView blue 2 px, not extended, with the trend line settings', () => {
+        const d = arr() as Drawing & { extendLeft?: boolean; extendRight?: boolean };
+        expect([d.type, d.style.arrowRight, !!d.style.arrowLeft, !!d.extendLeft, !!d.extendRight, d.style.lineColor, d.style.lineWidth]).toEqual(['arrow', true, false, false, false, TV_LINE_COLOR, 2]);
+        const paths = d.schema().fields.map((f) => f.path);
+        for (const p of ['style.arrowLeft', 'style.arrowRight', 'extendLeft', 'extendRight', 'showMiddlePoint', 'showPriceLabels', 'stats.pips']) expect(paths).toContain(p);
+    });
+    it('its text starts like the trend line; one saved before (no props) reloads as it was', () => {
+        const d = arr();
+        d.applySettings({ 'text.value': 'x' });
+        expect(d.text).toMatchObject({ size: 14, color: TV_LINE_COLOR, hAlign: 'center', vAlign: 'top' });
+        const old = deserializeDrawing({ ...arr().serialize(), props: undefined }) as Drawing & { extendRight?: boolean };
+        expect([old.style.arrowRight, !!old.extendRight]).toEqual([true, false]);
+    });
+});
+
 describe('text sizes in px', () => {
     it('reads px and the older names', () => {
         expect(textPx(22)).toBe(22);

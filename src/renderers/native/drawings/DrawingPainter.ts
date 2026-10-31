@@ -480,8 +480,8 @@ export class DrawingPainter {
             case 'arrow': {
                 const pts = d.handlePoints(proj);
                 if (pts.length < 2) return;
-                // A trend line (and a ray or extended line, TradingView's trend line extended right or both ways) may
-                // extend past either point; the arrow tool never does.
+                // A trend line (and its ray, extended line and arrow, TradingView's trend line extended right, both ways
+                // or with an arrow end) may extend past either point.
                 const tl = d instanceof TrendLine ? d : null;
                 const seg = tl?.drawnPixels(proj) ?? [pts[0]![0], pts[0]![1], pts[1]![0], pts[1]![1]];
                 this.stroke(ctx, d.style, () => {

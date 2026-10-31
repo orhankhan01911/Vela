@@ -555,7 +555,8 @@ registerDrawingType({
     group: 'shapes',
     label: 'Arrow',
     icon: ARROW_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid', arrowRight: true },
+    // TradingView's arrow: its trend line, 2 px solid TradingView blue, the right end an arrow.
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid', arrowRight: true },
     create: (init) => new Arrow(init),
 });
 

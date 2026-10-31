@@ -54,7 +54,7 @@ export function statsOf(d: { type: string; stats?: unknown }): LineStats | null 
     return readStats(d.stats, d.type === 'infoline' ? ALL_STATS : NO_STATS);
 }
 
-export const STATS_TYPES: ReadonlySet<string> = new Set(['trendline', 'ray', 'extendedline', 'infoline', 'trendangle']);
+export const STATS_TYPES: ReadonlySet<string> = new Set(['trendline', 'ray', 'extendedline', 'infoline', 'trendangle', 'arrow']);
 
 export function anyStats(s: LineStats | undefined): boolean {
     return !!s && (s.price || s.percent || s.pips || s.bars || s.date || s.distance || s.angle);

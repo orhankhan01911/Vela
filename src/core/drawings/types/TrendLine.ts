@@ -9,8 +9,8 @@ import { LINE_STATS_FIELDS, statsOf, type LineStats } from './lineStats';
  *  either point to the pane edge and carry an arrow at either end. */
 export class TrendLine extends Drawing {
     // A ray (extended right), an extended line (both ways) and an info line (every stat on) are the same tool in
-    // TradingView; its trend angle is built on it.
-    readonly type: 'trendline' | 'ray' | 'extendedline' | 'infoline' | 'trendangle' = 'trendline';
+    // TradingView, and so is its arrow (the right end an arrow); its trend angle is built on it.
+    readonly type: 'trendline' | 'ray' | 'extendedline' | 'infoline' | 'trendangle' | 'arrow' = 'trendline';
     // `!` (no initializer): the base constructor runs readProps before subclass fields would initialize.
     extendLeft!: boolean;
     extendRight!: boolean;
