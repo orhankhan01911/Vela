@@ -1321,6 +1321,7 @@ const TV_QUICK_BAR: Readonly<Record<string, readonly TvBarItem[]>> = {
     gannbox: ['line', 'width', 'style'],
     gannsquare: ['line', 'width'],
     gannfan: ['line', 'width'],
+    gannsquarefixed: ['line', 'width'],
     fibspiral: ['line', 'width'],
     freehand: ['line', 'width'],
     highlighter: ['line', 'width'],

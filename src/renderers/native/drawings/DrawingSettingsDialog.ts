@@ -19,6 +19,7 @@ import {
     TV_GANN_ANGLES,
     GannFan,
     GannSquare,
+    GannSquareFixed,
     PitchforkBase,
     Pitchfan,
     PITCHFORK_STYLES,
@@ -120,7 +121,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -1881,6 +1882,7 @@ export class DrawingSettingsDialog {
         const reverse = fieldRow({ label: 'Reverse', bool: true, toggle: { id: uid(), checked: gs.reverse === true, onChange: (v) => actions.patch({ reverse: v }) } });
         reverse.dataset.role = 'reverse';
         grid.appendChild(reverse);
+        if (gs instanceof GannSquareFixed) return; // the fixed square has no price/bar ratio and prints no ranges
         let curRatio = gs.scaleRatio ?? 1;
         const ratio = buildFieldControl({
             kind: 'number',

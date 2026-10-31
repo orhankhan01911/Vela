@@ -77,6 +77,7 @@ import { FibSpiral } from './types/FibSpiral';
 import { GannFan } from './types/GannFan';
 import { GannBox } from './types/GannBox';
 import { GannSquare } from './types/GannSquare';
+import { GannSquareFixed } from './types/GannSquareFixed';
 import { DedekindTessellation } from './types/DedekindTessellation';
 import { Sonic, Supersonic } from './types/MachFigure';
 import { GoldenSonic, GoldenSupersonic } from './types/GoldenMach';
@@ -896,6 +897,19 @@ registerDrawingType({
     icon: GANN_SQUARE_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new GannSquare(init),
+});
+
+// Gann square fixed: a square grid with arcs from its corner (our own glyph).
+const GANN_SQUARE_FIXED_ICON =
+    svg24('<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 12h16M12 4v16" opacity="0.7"/><path d="M4 12a8 8 0 0 1 8-8M4 20a16 16 0 0 1 16-16" opacity="0.5"/>');
+
+registerDrawingType({
+    type: 'gannsquarefixed',
+    group: 'fibonacci',
+    label: 'Gann Square Fixed',
+    icon: GANN_SQUARE_FIXED_ICON,
+    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    create: (init) => new GannSquareFixed(init),
 });
 
 const DEDEKIND_ICON = svg24(

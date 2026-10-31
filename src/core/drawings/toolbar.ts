@@ -63,7 +63,8 @@ const FIBONACCI_TYPES: DrawingTypeKey[] = [
     'fibspiral',
 ];
 
-const GANN_TYPES: DrawingTypeKey[] = ['gannfan', 'gannbox', 'gannsquare'];
+// TradingView's order: Gann box, Gann square fixed, Gann square, Gann fan.
+const GANN_TYPES: DrawingTypeKey[] = ['gannbox', 'gannsquarefixed', 'gannsquare', 'gannfan'];
 
 const GEOMETRY_TYPES: DrawingTypeKey[] = ['dedekind', 'sonic', 'supersonic', 'goldensonic', 'goldensupersonic'];
 

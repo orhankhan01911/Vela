@@ -120,6 +120,7 @@ export { GannFan, TV_GANN_FAN_LEVELS } from './types/GannFan';
 export { PitchforkBase, PITCHFORK_LEVELS, PITCHFORK_MEDIAN, PITCHFORK_STYLES, type PitchforkFrame, type PitchforkLevel, type PitchforkStyle } from './types/PitchforkBase';
 export { GannBox, TV_GANN_BOX_LEVELS, TV_GANN_ANGLES } from './types/GannBox';
 export { GannSquare, GANN_SQUARE_ARCS, TV_GANN_SQUARE_LEVELS, TV_GANN_SQUARE_FANS, TV_GANN_SQUARE_ARCS, type GannRatioLine } from './types/GannSquare';
+export { GannSquareFixed } from './types/GannSquareFixed';
 export {
     DedekindTessellation,
     isDedekindCenter,

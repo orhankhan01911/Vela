@@ -105,7 +105,8 @@ interface GannBox {
  * box square: the second point's price is the first's ± bars × ratio (the chart's own at placement, then the dialog's).
  */
 export class GannSquare extends FibRatios {
-    readonly type = 'gannsquare' as const;
+    // The fixed square (GannSquareFixed) is this drawing on a box of its own.
+    readonly type: 'gannsquare' | 'gannsquarefixed' = 'gannsquare';
     /** TradingView's look (new drawings). */
     declare tv?: boolean;
     declare fanLines?: GannRatioLine[];

@@ -129,6 +129,7 @@ export type DrawingTypeKey =
     | 'gannfan'
     | 'gannbox'
     | 'gannsquare'
+    | 'gannsquarefixed'
     | 'dedekind'
     | 'sonic'
     | 'supersonic'
