@@ -130,7 +130,7 @@ describe('drawing settings TradingView has', () => {
         fan.background = false;
         expect(fan.fillPolygons(proj())).toEqual([]);
         expect(deserializeDrawing(fan.serialize())!.serialize().props).toMatchObject({ background: false, showLabels: true });
-        const sq = createDrawing('gannsquare', { paneId: 'price', anchors: two })! as GannSquare;
+        const sq = createDrawing('gannsquare', { paneId: 'price', anchors: two, props: {} })! as GannSquare; // saved before (new: gannsquare-tv)
         expect(sq.fillPolygons(proj()).length).toBe(4); // one ring per arc
         // New boxes are TradingView's, both backgrounds on (test/drawings-gannbox-tv.test.ts); one saved before keeps them off.
         const box = createDrawing('gannbox', { paneId: 'price', anchors: two, props: {} })! as GannBox;

@@ -120,7 +120,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -316,6 +316,10 @@ export class DrawingSettingsDialog {
         }
         if (drawing instanceof GannBox && drawing.tv) {
             this.buildGannBoxTvStyle(grid, drawing, actions);
+            return;
+        }
+        if (drawing instanceof GannSquare && drawing.tv) {
+            this.buildGannSquareTvStyle(grid, drawing, actions);
             return;
         }
         if (drawing instanceof RadialFib && drawing.tv) {
@@ -1792,6 +1796,82 @@ export class DrawingSettingsDialog {
         paint();
         oneColor.el.dataset.role = 'one-color';
         return { el: oneColor.el, paint };
+    }
+
+    /** TradingView's Gann square Style tab (module 206315): LEVELS, FANS and ARCS (each row a switch, its name and a
+     *  colour-and-width button), Use one color, Background, Reverse, Price/bar ratio, Ranges and ratio (a switch, the
+     *  font size, bold, italic). */
+    private buildGannSquareTvStyle(grid: HTMLElement, gs: GannSquare, actions: SettingsActions): void {
+        const colors: string[] = [];
+        const setters: Array<(c: string) => void> = [];
+        const group = (title: string, path: string, items: ReadonlyArray<{ color: string; enabled: boolean; lineWidth?: number }>, name: (i: number) => string, first = false): void => {
+            grid.appendChild(fieldSection(title, { variant: 'inputs', ...(first ? { first: true } : {}) }));
+            items.forEach((it, i) => {
+                const at = colors.push(it.color) - 1;
+                const line = this.pathLineButton({ color: it.color, width: it.lineWidth ?? 2, style: 'solid' }, { color: `${path}.${i}.color`, width: `${path}.${i}.lineWidth` }, actions, (set) =>
+                    setters.push((c) => {
+                        colors[at] = c;
+                        set(c);
+                    }),
+                );
+                const row = fieldRow({ label: name(i), toggle: { id: uid(), checked: it.enabled, onChange: (v) => actions.patch({ [`${path}.${i}.enabled`]: v }) }, control: [line], fit: true });
+                row.dataset.role = `${path}-${i}`;
+                grid.appendChild(row);
+            });
+        };
+        const ratioName = (l: { x: number; y: number }): string => `${l.x}x${l.y}`;
+        const fans = gs.fanLines ?? [];
+        const arcs = gs.arcs ?? [];
+        group('Levels', 'levels', gs.levels, (i) => String(i), true);
+        group('Fans', 'fanLines', fans, (i) => ratioName(fans[i]!));
+        group('Arcs', 'arcs', arcs, (i) => ratioName(arcs[i]!));
+        const one = this.fibOneColor(colors, () => ['style.lineColor'], actions, () => {
+            for (const set of setters) set(colors[0]!);
+        });
+        grid.appendChild(fieldRow({ label: 'Use one color', control: [one.el], fit: true }));
+        const bg = fieldRow({
+            label: 'Background',
+            toggle: { id: uid(), checked: gs.background, onChange: (v) => actions.patch({ background: v }) },
+            control: [opacitySlider(Math.round(gs.fillOpacity * 100), (n) => actions.patch({ fillOpacity: n / 100 }))],
+            fit: true,
+        });
+        bg.dataset.role = 'background';
+        grid.appendChild(bg);
+        const reverse = fieldRow({ label: 'Reverse', bool: true, toggle: { id: uid(), checked: gs.reverse === true, onChange: (v) => actions.patch({ reverse: v }) } });
+        reverse.dataset.role = 'reverse';
+        grid.appendChild(reverse);
+        let curRatio = gs.scaleRatio ?? 1;
+        const ratio = buildFieldControl({
+            kind: 'number',
+            value: curRatio,
+            min: 1e-7,
+            step: 1e-7,
+            fill: false,
+            commit: 'blur',
+            onChange: (n) => {
+                if (!Number.isFinite(n) || n <= 0) {
+                    ratio.setValue?.(curRatio);
+                    return;
+                }
+                curRatio = n;
+                actions.patch({ scaleRatio: n });
+            },
+        });
+        ratio.el.dataset.role = 'scale-ratio';
+        grid.appendChild(fieldRow({ label: 'Price/bar ratio', control: [ratio.el], fit: true }));
+        const sizes = TV_FIB_FONT_SIZES.map((n) => ({ value: String(n), label: String(n) }));
+        const labels = fieldRow({
+            label: 'Ranges and ratio',
+            toggle: { id: uid(), checked: gs.showLabels !== false, onChange: (v) => actions.patch({ showLabels: v }) },
+            control: [
+                this.selectControl('fontSize', sizes, String(gs.fontSize ?? 12), actions, (v) => Number(v)),
+                styleToggle('B', 'Bold', 'font-weight:700;', gs.labelBold === true, (v) => actions.patch({ labelBold: v })),
+                styleToggle('I', 'Italic', 'font-style:italic;font-family:serif;', gs.labelItalic === true, (v) => actions.patch({ labelItalic: v })),
+            ],
+            fit: true,
+        });
+        labels.dataset.role = 'labels';
+        grid.appendChild(labels);
     }
 
     /** TradingView's Gann box Style tab (module 850509): PRICE LEVELS (two per row, Left and Right labels, Background),

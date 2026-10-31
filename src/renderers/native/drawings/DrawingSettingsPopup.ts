@@ -25,6 +25,7 @@ import {
     FibTimeZones,
     FibVerticalLevels,
     GannBox,
+    GannSquare,
     TrendFibTime,
     RadialFib,
     FibSpeedFan,
@@ -480,11 +481,11 @@ export class DrawingSettingsPopup {
                                   : null,
                       }
                     : {}),
-                // TradingView's Gann box colour: every price and time level and the Angles (its collected colours).
-                ...(!multi && drawing instanceof GannBox && drawing.tv
+                // TradingView's Gann box / square colour: every line it has (its collected colours).
+                ...(!multi && (drawing instanceof GannBox || drawing instanceof GannSquare) && drawing.tv
                     ? {
                           line: () => {
-                              const read = (d: Drawing): string => (d as GannBox).levels.find((l) => l.enabled)?.color ?? DEFAULT_DRAWING_COLOR;
+                              const read = (d: Drawing): string => (d as GannBox | GannSquare).levels.find((l) => l.enabled)?.color ?? DEFAULT_DRAWING_COLOR;
                               return this.colorButton('Line color', BRUSH_ICON, read(drawing), (v) => actions.patch({ 'style.lineColor': v }), undefined, distinctValues([drawing], read));
                           },
                       }
@@ -1317,6 +1318,7 @@ const TV_QUICK_BAR: Readonly<Record<string, readonly TvBarItem[]>> = {
     pitchfork: ['line', 'width'],
     pitchfan: ['line', 'width'],
     gannbox: ['line', 'width', 'style'],
+    gannsquare: ['line', 'width'],
     fibspiral: ['line', 'width'],
     freehand: ['line', 'width'],
     highlighter: ['line', 'width'],

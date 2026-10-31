@@ -836,7 +836,9 @@ export class DrawingPainter {
         }
         ctx.textBaseline = 'middle';
         // TradingView-look Fibs: one px size (its Font size) for the labels and the level texts.
-        const numFont = `${tvFib.tv ? tvFib.fontSize ?? 12 : namedFontSize(d.numbersSize)}px ${theme.fontFamily}`;
+        // A Gann square's labels can be bold or italic (TradingView's Ranges and ratio row).
+        const look = d as { labelBold?: boolean; labelItalic?: boolean };
+        const numFont = `${look.labelItalic ? 'italic ' : ''}${look.labelBold ? 'bold ' : ''}${tvFib.tv ? tvFib.fontSize ?? 12 : namedFontSize(d.numbersSize)}px ${theme.fontFamily}`;
         const lblFont = `${tvFib.tv ? tvFib.fontSize ?? 12 : namedFontSize(d.labelsSize)}px ${theme.fontFamily}`;
         const fmt = (d as { levelText?: (r: number, p: number, tick?: number) => string }).levelText;
         if (tvFib.tv && fmt) {
@@ -1551,9 +1553,56 @@ export class DrawingPainter {
         }
     }
 
+    /** TradingView's Gann square arcs (module 977036): each a quarter ellipse from the first point toward the second
+     *  with semi-axes k·|box width| and k·|box height|, clipped to the box; with the background on, the ring out from the
+     *  previous shown arc filled in the arc's colour. */
+    private paintTvGannArcs(ctx: CanvasRenderingContext2D, d: GannSquare, proj: Projector): void {
+        const f = d.tvFrame(proj);
+        if (!f || Math.abs(f.rx) < 1 || Math.abs(f.ry) < 1) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(f.left, f.top, f.right - f.left, f.bot - f.top);
+        ctx.clip();
+        // In the box's own unit frame the arc runs from 0 to a quarter turn; the frame's signs point it at the second point.
+        const unit = (build: () => void): void => {
+            ctx.save();
+            ctx.translate(f.sx, f.sy);
+            ctx.scale(f.rx, f.ry);
+            ctx.beginPath();
+            build();
+            ctx.restore();
+        };
+        for (const a of d.tvArcs()) {
+            if (d.background) {
+                unit(() => {
+                    ctx.moveTo(a.prevK, 0);
+                    ctx.lineTo(a.k, 0);
+                    ctx.arc(0, 0, a.k, 0, Math.PI / 2);
+                    ctx.lineTo(0, a.prevK);
+                    if (a.prevK > 0) ctx.arc(0, 0, a.prevK, Math.PI / 2, 0, true);
+                    ctx.closePath();
+                });
+                ctx.save();
+                ctx.globalAlpha *= d.fillOpacity;
+                ctx.fillStyle = a.color;
+                ctx.fill();
+                ctx.restore();
+            }
+            unit(() => ctx.arc(0, 0, a.k, 0, Math.PI / 2));
+            this.applyStroke(ctx, { ...d.style, lineColor: a.color, lineWidth: a.lineWidth, lineStyle: 'solid' });
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        ctx.restore();
+    }
+
     /** Paint a Gann square's concentric quarter-ellipse arcs, centered on the origin corner and
      *  sized as fractions of the box (so they match its pixel aspect). */
     private paintGannArcs(ctx: CanvasRenderingContext2D, d: GannSquare, proj: Projector): void {
+        if (d.tv) {
+            this.paintTvGannArcs(ctx, d, proj);
+            return;
+        }
         const g = d.arcGeom(proj);
         if (!g || Math.abs(g.bx) < 1 || Math.abs(g.py) < 1) return;
         const N = 24; // samples per quarter

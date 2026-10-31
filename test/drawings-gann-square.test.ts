@@ -16,7 +16,8 @@ function fakeProjector(): Projector {
 describe('drawings/GannSquare', () => {
     const proj = fakeProjector();
     // c1 (10,60)→px(10,40); c2 (50,20)→px(50,80) → box 10..50 × 40..80, origin corner (10,40)
-    const make = () => createDrawing('gannsquare', { paneId: 'price', anchors: [{ time: 10, price: 60 }, { time: 50, price: 20 }] })! as GannSquare;
+    // A square saved before TradingView's look (new ones: test/drawings-gannsquare-tv.test.ts).
+    const make = () => createDrawing('gannsquare', { paneId: 'price', anchors: [{ time: 10, price: 60 }, { time: 50, price: 20 }], props: {} })! as GannSquare;
 
     it('has a 2-anchor schema + click-move-click placement', () => {
         const d = make();
