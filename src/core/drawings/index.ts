@@ -101,10 +101,10 @@ export { FibRetracement, TV_FIB_RETRACEMENT_LEVELS, TV_FIB_TREND_COLOR } from '.
 export { FibExtension } from './types/FibExtension';
 export { FibExtensionTrend } from './types/FibExtensionTrend';
 export { FibFan, type FibFanLine } from './types/FibFan';
-export { FibTimeZones, type FibZoneLine, TV_FIB_TIME_ZONE_LEVELS } from './types/FibTimeZones';
+export { FibTimeZones, FibVerticalLevels, type FibZoneLine, TV_FIB_TIME_ZONE_LEVELS } from './types/FibTimeZones';
 export { FibChannel } from './types/FibChannel';
 export { FibSpeedFan, TV_SPEED_FAN_LEVELS, TV_SPEED_FAN_GRID } from './types/FibSpeedFan';
-export { TrendFibTime } from './types/TrendFibTime';
+export { TrendFibTime, TV_TREND_FIB_TIME_LEVELS } from './types/TrendFibTime';
 export { RadialFib, type RadialGeom } from './types/RadialFib';
 export { FibCircles } from './types/FibCircles';
 export { FibArcs } from './types/FibArcs';

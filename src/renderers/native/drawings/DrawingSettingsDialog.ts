@@ -6,7 +6,8 @@ import {
     FibRetracement,
     FibExtensionTrend,
     FibChannel,
-    FibTimeZones,
+    FibVerticalLevels,
+    TrendFibTime,
     FibSpeedFan,
     TV_SPEED_FAN_GRID,
     type FibLevel,
@@ -114,7 +115,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', fibspeedfan: 'Fib speed resistance fan', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -308,7 +309,7 @@ export class DrawingSettingsDialog {
             this.buildSpeedFanStyle(grid, drawing, actions);
             return;
         }
-        if (drawing instanceof FibTimeZones && drawing.tv) {
+        if (drawing instanceof FibVerticalLevels && drawing.tv) {
             this.buildFibTimeZoneStyle(grid, drawing, actions);
             return;
         }
@@ -1593,7 +1594,18 @@ export class DrawingSettingsDialog {
     /** TradingView's Fib time zone Style tab (module 308132, FibTimezoneDefinitionsViewModel): the 11 levels (a switch,
      *  the value, its line button), Use one color, Background (a switch and its transparency) and Labels (a switch, its
      *  horizontal and vertical place). */
-    private buildFibTimeZoneStyle(grid: HTMLElement, tz: FibTimeZones, actions: SettingsActions): void {
+    /** TradingView's time zone and trend-based fib time dialogs (the latter opens with its Trend line row). */
+    private buildFibTimeZoneStyle(grid: HTMLElement, tz: FibVerticalLevels, actions: SettingsActions): void {
+        const trendBased = tz instanceof TrendFibTime;
+        if (trendBased) {
+            const trend = this.pathLineButton(
+                { color: tz.trendColor || DEFAULT_DRAWING_COLOR, width: tz.trendWidth ?? 2, style: tz.trendStyle ?? 'dashed' },
+                { color: 'trendColor', width: 'trendWidth', style: 'trendStyle' },
+                actions,
+            );
+            trend.dataset.role = 'trend-line';
+            grid.appendChild(fieldRow({ label: 'Trend line', toggle: { id: uid(), checked: tz.trendline !== false, onChange: (v) => actions.patch({ trendline: v }) }, control: [trend], fit: true }));
+        }
         const setters: Array<(c: string) => void> = [];
         const colors = tz.levels.map((l) => l.color);
         tz.levels.forEach((lv, i) => {
@@ -1602,7 +1614,7 @@ export class DrawingSettingsDialog {
                 kind: 'number',
                 value: cur,
                 min: 0,
-                step: 1,
+                step: trendBased ? 0.001 : 1,
                 fill: false,
                 commit: 'blur',
                 onChange: (n) => {

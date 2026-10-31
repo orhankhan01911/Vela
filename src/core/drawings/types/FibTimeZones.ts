@@ -28,16 +28,12 @@ export const TV_FIB_TIME_ZONE_LEVELS: readonly FibLevel[] = [0, 1, 2, 3, 5, 8, 1
 const TZ_LEVELS: readonly FibLevel[] = [0, 1, 2, 3, 5, 8, 13, 21, 34].map((n) => ({ ratio: n, color: DEFAULT_DRAWING_COLOR, enabled: true }));
 
 /**
- * Fibonacci time zones: vertical lines at Fibonacci multiples of the base interval
- * (the time span between the two anchors), projecting forward. Each line is an editable
- * level (color / enabled / label) via the gear panel. Price-agnostic — the lines span
- * the full pane height and don't affect the price scale.
+ * The vertical-line Fib tools (time zone, trend-based fib time): each level a vertical line over the pane.
+ *
+ * TradingView's look (modules 308132 and 315360), new drawings only: levels with their own lines, the number beside
+ * each line, bands between them when Background is on, dashed trend line(s) between the points.
  */
-export class FibTimeZones extends FibRatios {
-    readonly type = 'fibtimezones' as const;
-
-    /** TradingView's look (module 308132), new drawings only: 11 levels with their own lines, the number beside each
-     *  line, bands between them when Background is on, a dashed grey trend line between the two points. */
+export abstract class FibVerticalLevels extends FibRatios {
     declare tv?: boolean;
     declare background?: boolean;
     declare fillOpacity?: number;
@@ -54,38 +50,15 @@ export class FibTimeZones extends FibRatios {
         super(init);
         if (!init.props) {
             this.tv = true;
-            this.levels = TV_FIB_TIME_ZONE_LEVELS.map((l) => ({ ...l }));
-            this.style = { ...this.style, lineWidth: 2, lineStyle: 'solid' };
-            this.background = false;
-            this.fillOpacity = 0.2;
-            this.showLabels = true;
-            this.labelH = 'right';
-            this.labelV = 'bottom';
-            this.trendline = true;
-            this.trendColor = TV_TZ_GRAY;
-            this.trendWidth = 1;
-            this.trendStyle = 'dashed';
-            this.fontSize = 12;
+            this.applyTvDefaults();
         }
     }
 
-    defaultLevels(): readonly FibLevel[] {
-        return TZ_LEVELS;
-    }
+    /** TradingView's factory defaults for a new drawing of the tool. */
+    protected abstract applyTvDefaults(): void;
 
-    zoneLines(proj: Projector): FibZoneLine[] | null {
-        const a = this.anchors[0];
-        const b = this.anchors[1];
-        if (!a || !b) return null;
-        const unit = b.time - a.time;
-        if (Math.abs(unit) < 1e-9) return null;
-        const out: FibZoneLine[] = [];
-        for (const lv of this.levels) {
-            if (!lv.enabled) continue;
-            out.push({ n: lv.ratio, color: lv.color, label: lv.label, x: proj.xOf(timeBetween(proj, a.time, b.time, lv.ratio)) });
-        }
-        return out;
-    }
+    /** The shown levels as pixel x positions. */
+    abstract zoneLines(proj: Projector): FibZoneLine[] | null;
 
     entryLines(proj: Projector): FibEntryLine[] | null {
         const lines = this.zoneLines(proj);
@@ -191,5 +164,50 @@ export class FibTimeZones extends FibRatios {
 
     override timeExtent(): { min: number; max: number } | null {
         return null; // the zones project far forward → never time-cull
+    }
+}
+
+/**
+ * Fibonacci time zones: vertical lines at Fibonacci multiples of the base interval
+ * (the time span between the two anchors), projecting forward. Each line is an editable
+ * level (color / enabled / label) via the gear panel. Price-agnostic — the lines span
+ * the full pane height and don't affect the price scale.
+ *
+ * A new one is TradingView's (module 308132): 11 levels, background off, a dashed grey 1 px trend line.
+ */
+export class FibTimeZones extends FibVerticalLevels {
+    readonly type = 'fibtimezones' as const;
+
+    protected applyTvDefaults(): void {
+        this.levels = TV_FIB_TIME_ZONE_LEVELS.map((l) => ({ ...l }));
+        this.style = { ...this.style, lineWidth: 2, lineStyle: 'solid' };
+        this.background = false;
+        this.fillOpacity = 0.2;
+        this.showLabels = true;
+        this.labelH = 'right';
+        this.labelV = 'bottom';
+        this.trendline = true;
+        this.trendColor = TV_TZ_GRAY;
+        this.trendWidth = 1;
+        this.trendStyle = 'dashed';
+        this.fontSize = 12;
+    }
+
+    defaultLevels(): readonly FibLevel[] {
+        return TZ_LEVELS;
+    }
+
+    zoneLines(proj: Projector): FibZoneLine[] | null {
+        const a = this.anchors[0];
+        const b = this.anchors[1];
+        if (!a || !b) return null;
+        const unit = b.time - a.time;
+        if (Math.abs(unit) < 1e-9) return null;
+        const out: FibZoneLine[] = [];
+        for (const lv of this.levels) {
+            if (!lv.enabled) continue;
+            out.push({ n: lv.ratio, color: lv.color, label: lv.label, x: proj.xOf(timeBetween(proj, a.time, b.time, lv.ratio)) });
+        }
+        return out;
     }
 }
