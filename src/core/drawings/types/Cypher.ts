@@ -1,4 +1,5 @@
 import { HarmonicPattern, type HarmonicRanges, type RatioBand } from './HarmonicPattern';
+import { legRatio } from './PatternDrawing';
 
 const XC_OVER_XA: RatioBand = { min: 1.272, max: 1.414 }; // C extends the XA leg
 const CD_OVER_XC: RatioBand = { min: 0.74, max: 0.83 }; // D retraces the XC line by ≈0.786
@@ -7,9 +8,25 @@ const CD_OVER_XC: RatioBand = { min: 0.74, max: 0.83 }; // D retraces the XC lin
  * Cypher: AB 0.382–0.618 XA, then two NON-ADJACENT rules — XC/XA 1.272–1.414 (C beyond A) and
  * CD/XC ≈ 0.786. Its C and D measure against XA / XC (not the previous leg), so it overrides the
  * standard harmonic checks.
+ *
+ * A new one is TradingView's Cypher pattern (module 262261): the XABCD look with its ratios XB = AB/XA, AC = XC/XA,
+ * BD = CD/BC and XD = CD/XC, and no validity badge.
  */
 export class Cypher extends HarmonicPattern {
     readonly type = 'cypher' as const;
+
+    protected override tvPattern(): boolean {
+        return true;
+    }
+
+    override tvRatioLines(): Array<{ from: number; to: number; ratio: number }> {
+        const p = this.anchors.map((a) => a.price);
+        const out: Array<{ from: number; to: number; ratio: number }> = [];
+        if (p.length >= 3) out.push({ from: 0, to: 2, ratio: legRatio(p[0]!, p[1]!, p[2]!) });
+        if (p.length >= 4) out.push({ from: 1, to: 3, ratio: legRatio(p[1]!, p[0]!, p[3]!) }); // |C − X| / |A − X|
+        if (p.length >= 5) out.push({ from: 2, to: 4, ratio: legRatio(p[2]!, p[3]!, p[4]!) }, { from: 0, to: 4, ratio: legRatio(p[0]!, p[3]!, p[4]!) }); // |D − C| / |X − C|
+        return out;
+    }
 
     patternName(): string {
         return 'Cypher';

@@ -171,9 +171,9 @@ export function deserializeDrawing(doc: SerializedDrawing): Drawing | null {
     return meta ? meta.create(legacyPattern(legacyFibSpiral(legacyStroke(legacyArrowMarker(legacyEllipse(legacyPitchfork(legacyComment(legacyElliott(doc))))))))) : null;
 }
 
-/** Patterns that became TradingView's look (XABCD so far): a record saved before has no `tv` flag (they saved no props):
+/** Patterns that became TradingView's look (XABCD, Cypher so far): a record saved before has no `tv` flag (they saved no props):
  *  mark it so it keeps its look. */
-const TV_PATTERN_TYPES: ReadonlySet<string> = new Set(['xabcd']);
+const TV_PATTERN_TYPES: ReadonlySet<string> = new Set(['xabcd', 'cypher']);
 function legacyPattern(doc: SerializedDrawing): SerializedDrawing {
     if (!TV_PATTERN_TYPES.has(doc.type) || doc.props?.tv !== undefined) return doc;
     return { ...doc, props: { ...(doc.props ?? {}), tv: false } };
@@ -1062,7 +1062,14 @@ registerDrawingType({ type: 'bat', label: 'Bat', ...harmonic, create: (init) => 
 registerDrawingType({ type: 'butterfly', label: 'Butterfly', ...harmonic, create: (init) => new Butterfly(init) });
 registerDrawingType({ type: 'crab', label: 'Crab', ...harmonic, create: (init) => new Crab(init) });
 registerDrawingType({ type: 'shark', label: 'Shark', ...harmonic, create: (init) => new Shark(init) });
-registerDrawingType({ type: 'cypher', label: 'Cypher', ...harmonic, create: (init) => new Cypher(init) });
+// TradingView's Cypher pattern (a plain pattern there): its blue line and background at 85 % transparency.
+registerDrawingType({
+    type: 'cypher',
+    label: 'Cypher',
+    ...harmonic,
+    defaultStyle: { lineColor: '#2962ff', lineWidth: 2, lineStyle: 'solid', fillColor: '#2962ff26' }, // palette-exempt: TradingView's tv-blue-500
+    create: (init) => new Cypher(init),
+});
 
 // ── measurement ──
 const MEASURE_ICON =

@@ -68,9 +68,10 @@ const GANN_TYPES: DrawingTypeKey[] = ['gannbox', 'gannsquarefixed', 'gannsquare'
 
 const GEOMETRY_TYPES: DrawingTypeKey[] = ['dedekind', 'sonic', 'supersonic', 'goldensonic', 'goldensupersonic'];
 
-const PATTERN_TYPES: DrawingTypeKey[] = ['xabcd', 'abcd', 'trianglepattern', 'headshoulders'];
+// TradingView's order: XABCD, Cypher, Head and shoulders, ABCD, Triangle.
+const PATTERN_TYPES: DrawingTypeKey[] = ['xabcd', 'cypher', 'headshoulders', 'abcd', 'trianglepattern'];
 const ELLIOTT_TYPES: DrawingTypeKey[] = ['elliottimpulse', 'elliottcorrection', 'elliotttriangle', 'elliottdoublecombo', 'elliotttriplecombo'];
-const HARMONIC_TYPES: DrawingTypeKey[] = ['gartley', 'bat', 'butterfly', 'crab', 'shark', 'cypher'];
+const HARMONIC_TYPES: DrawingTypeKey[] = ['gartley', 'bat', 'butterfly', 'crab', 'shark'];
 
 const MEASUREMENT_TYPES: DrawingTypeKey[] = ['long-position', 'short-position', 'forecast', 'projection', 'daterange', 'pricerange', 'datepricerange', 'magnifier'];
 const CYCLE_TYPES: DrawingTypeKey[] = ['cycliclines', 'timecycles', 'sineline', 'barspattern', 'ghostfeed'];

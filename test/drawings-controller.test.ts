@@ -586,7 +586,6 @@ describe('buildToolbar grouping', () => {
             'butterfly',
             'crab',
             'shark',
-            'cypher',
         ]);
 
         const shapesGroup = definition.groups.find((g) => g.id === 'brushes-arrows-shapes');
