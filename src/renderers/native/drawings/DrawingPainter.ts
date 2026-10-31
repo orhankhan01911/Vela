@@ -1575,6 +1575,14 @@ export class DrawingPainter {
 
     /** Paint a Fibonacci spiral as a sampled polyline. */
     private paintFibSpiral(ctx: CanvasRenderingContext2D, d: FibSpiral, proj: Projector): void {
+        // TradingView's ray from the first point through the second, under the spiral, in the same line.
+        const ray = d.rayPoints(proj);
+        if (ray) {
+            this.stroke(ctx, d.style, () => {
+                ctx.moveTo(ray[0], ray[1]);
+                ctx.lineTo(ray[2], ray[3]);
+            });
+        }
         const pts = d.spiralPoints(proj);
         if (!pts || pts.length < 2) return;
         this.stroke(ctx, d.style, () => {

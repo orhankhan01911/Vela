@@ -1305,6 +1305,7 @@ const TV_QUICK_BAR: Readonly<Record<string, readonly TvBarItem[]>> = {
     daterange: AREA_BAR,
     box: ['line', 'fill', 'text', 'width', 'style'],
     pitchfork: ['line', 'width'],
+    fibspiral: ['line', 'width'],
     freehand: ['line', 'width'],
     highlighter: ['line', 'width'],
     path: ['line', 'width', 'style'],

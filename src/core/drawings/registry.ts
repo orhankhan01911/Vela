@@ -166,7 +166,14 @@ export function resetDrawingSettings(drawing: Drawing): void {
 /** Rehydrate a {@link Drawing} from a plain record, or null for an unknown type. */
 export function deserializeDrawing(doc: SerializedDrawing): Drawing | null {
     const meta = REGISTRY.get(doc.type);
-    return meta ? meta.create(legacyStroke(legacyArrowMarker(legacyEllipse(legacyPitchfork(legacyComment(legacyElliott(doc))))))) : null;
+    return meta ? meta.create(legacyFibSpiral(legacyStroke(legacyArrowMarker(legacyEllipse(legacyPitchfork(legacyComment(legacyElliott(doc)))))))) : null;
+}
+
+/** The Fib spiral became TradingView's (Fibonacci radii plus a ray). A record saved before has no `tv` flag: mark it so
+ *  it keeps its golden spiral. */
+function legacyFibSpiral(doc: SerializedDrawing): SerializedDrawing {
+    if (doc.type !== 'fibspiral' || doc.props?.tv !== undefined) return doc;
+    return { ...doc, props: { ...(doc.props ?? {}), tv: false } };
 }
 
 /** Elliott waves gained TradingView's unlabelled origin point (impulse 5 → 6 points, correction 3 → 4). A record
@@ -837,7 +844,7 @@ registerDrawingType({
     group: 'fibonacci',
     label: 'Fib Spiral',
     icon: FIB_SPIRAL_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    defaultStyle: { lineColor: '#00bcd4', lineWidth: 2, lineStyle: 'solid' }, // palette-exempt: TradingView's sky blue 500 (module 337648)
     create: (init) => new FibSpiral(init),
 });
 
