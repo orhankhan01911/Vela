@@ -31,8 +31,53 @@ export function angleInSweep(ang: number, a0: number, a1: number): boolean {
  * the painter draws each enabled level as `ctx.arc(cx, cy, R0·ratio, a0, a1)`.
  */
 export abstract class RadialFib extends FibRatios {
+    /** TradingView's look (new drawings of a tool that has one): per-level lines, bands, a trend line, its labels. */
+    declare tv?: boolean;
+    declare background?: boolean;
+    declare fillOpacity?: number;
+    declare showLevels?: boolean;
+    declare levelsAsPercent?: boolean;
+    declare trendline?: boolean;
+    declare trendColor?: string;
+    declare trendWidth?: number;
+    declare trendStyle?: 'solid' | 'dashed' | 'dotted';
+
+    constructor(init: ConstructorParameters<typeof FibRatios>[0]) {
+        super(init);
+        if (!init.props && this.applyTvDefaults()) this.tv = true;
+    }
+
+    /** Set TradingView's factory defaults on a new drawing; false when the tool has no TradingView look yet. */
+    protected applyTvDefaults(): boolean {
+        return false;
+    }
+
     /** Center, base pixel radius, and the arc sweep — null until enough anchors are placed. */
     abstract radial(proj: Projector): RadialGeom | null;
+
+    /** Where a level's number goes on its ring of horizontal radius `r` (the old look: just past the sweep's middle). */
+    ringLabel(g: RadialGeom, r: number): { x: number; y: number; align: 'left' | 'right' | 'center' } {
+        const mid = (g.a0 + g.a1) / 2;
+        return { x: g.cx + Math.cos(mid) * r + 3, y: g.cy + Math.sin(mid) * r * (g.sy ?? 1), align: 'left' };
+    }
+
+    /** A level's number: its coefficient, or TradingView's percent (61.80%); empty with Levels off. */
+    ringText(ratio: number): string {
+        if (this.tv && this.showLevels === false) return '';
+        return this.tv && this.levelsAsPercent ? `${(ratio * 100).toFixed(2)}%` : String(ratio);
+    }
+
+    /** The trend line between the two points (TradingView-look drawings with it on), in pixels. */
+    trendSegment(proj: Projector): [number, number, number, number] | null {
+        if (!this.tv || this.trendline === false) return null;
+        const a = this.anchors[0];
+        const b = this.anchors[1];
+        if (!a || !b) return null;
+        const ay = proj.yOf(a.price, this.paneId);
+        const by = proj.yOf(b.price, this.paneId);
+        if (ay == null || by == null) return null;
+        return [proj.xOf(a.time), ay, proj.xOf(b.time), by];
+    }
 
     /** Straight lines drawn alongside the rings (baseline / wedge rays); previewed before `radial` resolves. */
     boundingLines(_proj: Projector): Array<[number, number, number, number]> {
@@ -60,6 +105,36 @@ export abstract class RadialFib extends FibRatios {
             }
         }
         return this.boundingLines(proj).some((b) => distToSegment(px, py, b[0], b[1], b[2], b[3]) <= tol);
+    }
+
+    protected override writeProps(): Record<string, unknown> {
+        const out = super.writeProps();
+        if (this.tv) {
+            Object.assign(out, {
+                tv: true,
+                background: this.background === true,
+                fillOpacity: this.fillOpacity,
+                showLevels: this.showLevels !== false,
+                levelsAsPercent: this.levelsAsPercent === true,
+                trendline: this.trendline !== false,
+                trendColor: this.trendColor,
+                trendWidth: this.trendWidth,
+                trendStyle: this.trendStyle,
+            });
+        }
+        return out;
+    }
+
+    protected override readProps(props: Record<string, unknown>): void {
+        super.readProps(props);
+        if (props.tv === true) this.tv = true;
+        for (const k of ['background', 'showLevels', 'levelsAsPercent', 'trendline'] as const) if (typeof props[k] === 'boolean') this[k] = props[k] as boolean;
+        if (typeof props.fillOpacity === 'number' && Number.isFinite(props.fillOpacity)) this.fillOpacity = Math.min(1, Math.max(0, props.fillOpacity));
+        if (typeof props.trendColor === 'string') this.trendColor = props.trendColor;
+        if (typeof props.trendWidth === 'number' && Number.isFinite(props.trendWidth)) this.trendWidth = Math.min(10, Math.max(1, props.trendWidth));
+        if (props.trendStyle === 'solid' || props.trendStyle === 'dashed' || props.trendStyle === 'dotted') this.trendStyle = props.trendStyle;
+        // TradingView's levels each carry their own line; ones remembered from the old look get its 2 px solid.
+        if (this.tv) this.levels = this.levels.map((l) => ({ ...l, lineWidth: l.lineWidth ?? 2, lineStyle: l.lineStyle ?? 'solid' }));
     }
 
     priceRange(): { min: number; max: number } | null {

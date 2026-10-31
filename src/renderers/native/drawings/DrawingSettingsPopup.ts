@@ -25,6 +25,7 @@ import {
     FibTimeZones,
     FibVerticalLevels,
     TrendFibTime,
+    RadialFib,
     FibSpeedFan,
 } from '../../../core/drawings';
 import { icon, svg24, svg24Solid } from '../../../core/icons';
@@ -442,11 +443,11 @@ export class DrawingSettingsPopup {
 
         // TradingView's quick bar for the audited tools: which colour, width, style and size controls it shows, in its
         // order (line colour, background, text colour, width, style). Built controls are reused; a missing one is made.
-        const tvFib = !multi && (drawing instanceof FibLevels || drawing instanceof FibChannel || drawing instanceof FibVerticalLevels || drawing instanceof FibSpeedFan) && drawing.tv === true ? drawing : null;
+        const tvFib = !multi && (drawing instanceof FibLevels || drawing instanceof FibChannel || drawing instanceof FibVerticalLevels || drawing instanceof FibSpeedFan || drawing instanceof RadialFib) && drawing.tv === true ? drawing : null;
         // TradingView's Fib channel bar has the line colour only (its collected colours; no width); the time zone's
         // colour, width and style set every level.
-        const tvBar = multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : TV_QUICK_BAR[drawing.type];
-        if (tvFib instanceof FibVerticalLevels) bar.querySelectorAll<HTMLElement>('[data-tip="Line style"]').forEach((k) => k.remove());
+        const tvBar = multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : TV_QUICK_BAR[drawing.type];
+        if (tvFib instanceof FibVerticalLevels || tvFib instanceof RadialFib) bar.querySelectorAll<HTMLElement>('[data-tip="Line style"]').forEach((k) => k.remove());
         if (tvFib) {
             // TradingView's Fib bar: one colour for the trend line and every level, one width for both (its collected
             // line colour / width properties). The generic width button only sets the levels, so it is replaced.
@@ -460,14 +461,16 @@ export class DrawingSettingsPopup {
                               const read = (d: Drawing): string => (d as FibLevels).levels.find((l) => l.enabled)?.color ?? DEFAULT_DRAWING_COLOR;
                               return this.colorButton('Line color', BRUSH_ICON, read(tvFib), (v) =>
                                   actions.patch({
-                                      ...(tvFib instanceof FibLevels ? { trendColor: v } : {}),
+                                      ...(tvFib instanceof FibLevels || tvFib instanceof RadialFib ? { trendColor: v } : {}),
                                       // A speed fan's colour also sets its grid and time levels (TradingView's collected colours).
                                       ...(tvFib instanceof FibSpeedFan ? { gridColor: v, ...Object.fromEntries((tvFib.timeLevels ?? []).map((_, i) => [`timeLevels.${i}.color`, v])) } : {}),
                                       ...Object.fromEntries(tvFib.levels.map((_, i) => [`levels.${i}.color`, v])),
                                   }), undefined, distinctValues([tvFib], read));
                           },
                           width: () =>
-                              tvFib instanceof FibVerticalLevels
+                              tvFib instanceof RadialFib
+                                  ? this.dropdown('Line width', [1, 2, 3, 4], tvFib.levels[0]?.lineWidth ?? 2, (w) => lineIcon(w, 'solid'), (v) => actions.patch({ trendWidth: v, ...Object.fromEntries(tvFib.levels.map((_, i) => [`levels.${i}.lineWidth`, v])) }), { label: (v) => `${v}px`, labelInTrigger: true })
+                                  : tvFib instanceof FibVerticalLevels
                                   ? this.dropdown('Line width', [1, 2, 3, 4], tvFib.levels[0]?.lineWidth ?? 2, (w) => lineIcon(w, 'solid'), (v) => actions.patch(Object.fromEntries(tvFib.levels.map((_, i) => [`levels.${i}.lineWidth`, v]))), { label: (v) => `${v}px`, labelInTrigger: true })
                                   : this.dropdown('Line width', [1, 2, 3, 4], tvFib.style.lineWidth ?? 2, (w) => lineIcon(w, 'solid'), (v) => actions.patch({ 'style.lineWidth': v, ...(tvFib instanceof FibLevels ? { trendWidth: v } : {}) }), { label: (v) => `${v}px`, labelInTrigger: true }),
                           style: () =>
@@ -1287,7 +1290,7 @@ const AREA_BAR: readonly TvBarItem[] = ['line', 'fill', 'text', 'width'];
 const TV_FIB_BAR: readonly TvBarItem[] = ['line', 'width'];
 const TV_FIB_CHANNEL_BAR: readonly TvBarItem[] = ['line'];
 const TV_FIB_TZ_BAR: readonly TvBarItem[] = ['line', 'width', 'style'];
-/** TradingView's trend-based fib time bar (module 315360): colour and width, no style. */
+/** TradingView's trend-based fib time and Fib circles bars (modules 315360, 289525): colour and width, no style. */
 const TV_TREND_FIB_TIME_BAR: readonly TvBarItem[] = ['line', 'width'];
 const TV_QUICK_BAR: Readonly<Record<string, readonly TvBarItem[]>> = {
     trendline: LINE_BAR,

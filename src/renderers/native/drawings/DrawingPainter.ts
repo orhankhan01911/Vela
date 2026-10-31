@@ -1491,24 +1491,48 @@ export class DrawingPainter {
     private paintRadialFib(ctx: CanvasRenderingContext2D, d: RadialFib, proj: Projector, theme: VelaTheme): void {
         const g = d.radial(proj);
         if (g && g.R0 >= 1) {
-            const font = `${namedFontSize(d.numbersSize)}px ${theme.fontFamily}`;
-            const mid = (g.a0 + g.a1) / 2;
+            const sy = g.sy ?? 1;
+            const ring = (r: number, ccw: boolean): void => {
+                if (sy === 1) ctx.arc(g.cx, g.cy, r, ccw ? g.a1 : g.a0, ccw ? g.a0 : g.a1, ccw);
+                else ctx.ellipse(g.cx, g.cy, r, r * sy, 0, ccw ? g.a1 : g.a0, ccw ? g.a0 : g.a1, ccw);
+            };
+            const shown = d.levels.filter((lv) => lv.enabled && g.R0 * lv.ratio >= 0.5);
+            if (d.tv && d.background) {
+                // TradingView's bands: each ring filled out to the previous shown one (the first one whole), in its own
+                // colour; the level order, not the size order, picks the previous ring.
+                const full = g.a1 - g.a0 >= Math.PI * 2 - 1e-3;
+                shown.forEach((lv, i) => {
+                    const prev = shown[i - 1];
+                    ctx.save();
+                    ctx.globalAlpha *= d.fillOpacity ?? 0.2;
+                    ctx.fillStyle = lv.color;
+                    ctx.beginPath();
+                    ring(g.R0 * lv.ratio, false);
+                    if (prev) {
+                        if (full) ctx.moveTo(g.cx + g.R0 * prev.ratio * Math.cos(g.a1), g.cy + g.R0 * prev.ratio * sy * Math.sin(g.a1));
+                        ring(g.R0 * prev.ratio, true);
+                    } else if (!full) ctx.lineTo(g.cx, g.cy);
+                    ctx.closePath();
+                    ctx.fill('evenodd');
+                    ctx.restore();
+                });
+            }
+            const font = `${d.tv ? 12 : namedFontSize(d.numbersSize)}px ${theme.fontFamily}`;
             ctx.textBaseline = 'middle';
-            for (const lv of d.levels) {
-                if (!lv.enabled) continue;
+            for (const lv of shown) {
                 const r = g.R0 * lv.ratio;
-                if (r < 0.5) continue;
-                this.applyStroke(ctx, { ...d.style, lineColor: lv.color });
-                const sy = g.sy ?? 1;
+                this.applyStroke(ctx, { ...d.style, lineColor: lv.color, ...(d.tv && lv.lineWidth ? { lineWidth: lv.lineWidth } : {}), ...(d.tv && lv.lineStyle ? { lineStyle: lv.lineStyle } : {}) });
                 ctx.beginPath();
-                if (sy === 1) ctx.arc(g.cx, g.cy, r, g.a0, g.a1);
-                else ctx.ellipse(g.cx, g.cy, r, r * sy, 0, g.a0, g.a1);
+                ring(r, false);
                 ctx.stroke();
                 ctx.setLineDash([]);
+                const text = d.ringText(lv.ratio);
+                if (!text) continue;
+                const at = d.ringLabel(g, r);
                 ctx.fillStyle = lv.color;
                 ctx.font = font;
-                ctx.textAlign = 'left';
-                ctx.fillText(String(lv.ratio), g.cx + Math.cos(mid) * r + 3, g.cy + Math.sin(mid) * r * sy);
+                ctx.textAlign = at.align;
+                ctx.fillText(text, at.x, at.y);
             }
             ctx.textBaseline = 'alphabetic';
             ctx.textAlign = 'left';
@@ -1517,6 +1541,13 @@ export class DrawingPainter {
             this.stroke(ctx, d.style, () => {
                 ctx.moveTo(b[0], b[1]);
                 ctx.lineTo(b[2], b[3]);
+            });
+        }
+        const t = d.trendSegment(proj);
+        if (t) {
+            this.stroke(ctx, { ...d.style, lineColor: d.trendColor || theme.textColor, lineWidth: d.trendWidth ?? 2, lineStyle: d.trendStyle ?? 'dashed' }, () => {
+                ctx.moveTo(t[0], t[1]);
+                ctx.lineTo(t[2], t[3]);
             });
         }
     }

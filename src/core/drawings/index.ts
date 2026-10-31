@@ -106,7 +106,7 @@ export { FibChannel } from './types/FibChannel';
 export { FibSpeedFan, TV_SPEED_FAN_LEVELS, TV_SPEED_FAN_GRID } from './types/FibSpeedFan';
 export { TrendFibTime, TV_TREND_FIB_TIME_LEVELS } from './types/TrendFibTime';
 export { RadialFib, type RadialGeom } from './types/RadialFib';
-export { FibCircles } from './types/FibCircles';
+export { FibCircles, TV_FIB_CIRCLE_LEVELS } from './types/FibCircles';
 export { FibArcs } from './types/FibArcs';
 export { FibWedge } from './types/FibWedge';
 export { FibSpiral } from './types/FibSpiral';

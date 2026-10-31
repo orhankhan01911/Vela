@@ -8,6 +8,7 @@ import {
     FibChannel,
     FibVerticalLevels,
     TrendFibTime,
+    RadialFib,
     FibSpeedFan,
     TV_SPEED_FAN_GRID,
     type FibLevel,
@@ -115,7 +116,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -307,6 +308,10 @@ export class DrawingSettingsDialog {
     private buildStyle(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
         if (drawing instanceof FibSpeedFan && drawing.tv) {
             this.buildSpeedFanStyle(grid, drawing, actions);
+            return;
+        }
+        if (drawing instanceof RadialFib && drawing.tv) {
+            this.buildRadialFibStyle(grid, drawing, actions);
             return;
         }
         if (drawing instanceof FibVerticalLevels && drawing.tv) {
@@ -1597,24 +1602,58 @@ export class DrawingSettingsDialog {
     /** TradingView's time zone and trend-based fib time dialogs (the latter opens with its Trend line row). */
     private buildFibTimeZoneStyle(grid: HTMLElement, tz: FibVerticalLevels, actions: SettingsActions): void {
         const trendBased = tz instanceof TrendFibTime;
-        if (trendBased) {
-            const trend = this.pathLineButton(
-                { color: tz.trendColor || DEFAULT_DRAWING_COLOR, width: tz.trendWidth ?? 2, style: tz.trendStyle ?? 'dashed' },
-                { color: 'trendColor', width: 'trendWidth', style: 'trendStyle' },
-                actions,
-            );
-            trend.dataset.role = 'trend-line';
-            grid.appendChild(fieldRow({ label: 'Trend line', toggle: { id: uid(), checked: tz.trendline !== false, onChange: (v) => actions.patch({ trendline: v }) }, control: [trend], fit: true }));
+        if (trendBased) this.buildFibTrendRow(grid, tz, actions);
+        this.fibLevelLineRows(grid, tz.levels, actions, { step: trendBased ? 0.001 : 1, styled: true });
+        const bg = fieldRow({
+            label: 'Background',
+            toggle: { id: uid(), checked: tz.background === true, onChange: (v) => actions.patch({ background: v }) },
+            control: [opacitySlider(Math.round((tz.fillOpacity ?? 0.2) * 100), (n) => actions.patch({ fillOpacity: n / 100 }))],
+            fit: true,
+        });
+        bg.dataset.role = 'background';
+        grid.appendChild(bg);
+        const labelH = this.selectControl('labelH', FIB_H, tz.labelH ?? 'right', actions);
+        const labelV = this.selectControl('labelV', FIB_V, tz.labelV ?? 'bottom', actions);
+        const labels = fieldRow({ label: 'Labels', toggle: { id: uid(), checked: tz.showLabels !== false, onChange: (v) => actions.patch({ showLabels: v }) }, control: [labelH, labelV], fit: true });
+        labels.dataset.role = 'labels';
+        grid.appendChild(labels);
+    }
+
+    /** TradingView's ring Fibs (Fib circles, module 289525): Trend line, the levels (colour and width), Use one color,
+     *  Background, Levels, Coeffs as percents. */
+    private buildRadialFibStyle(grid: HTMLElement, d: RadialFib, actions: SettingsActions): void {
+        this.buildFibTrendRow(grid, d, actions);
+        this.fibLevelLineRows(grid, d.levels, actions, { step: 0.001, styled: false });
+        const bg = fieldRow({
+            label: 'Background',
+            toggle: { id: uid(), checked: d.background === true, onChange: (v) => actions.patch({ background: v }) },
+            control: [opacitySlider(Math.round((d.fillOpacity ?? 0.2) * 100), (n) => actions.patch({ fillOpacity: n / 100 }))],
+            fit: true,
+        });
+        bg.dataset.role = 'background';
+        grid.appendChild(bg);
+        for (const [label, key, on, role] of [
+            ['Levels', 'showLevels', d.showLevels !== false, 'levels'],
+            ['Coeffs as percents', 'levelsAsPercent', d.levelsAsPercent === true, 'percents'],
+        ] as const) {
+            const row = fieldRow({ label, bool: true, toggle: { checked: on, onChange: (v) => actions.patch({ [key]: v }) } });
+            row.dataset.role = role;
+            grid.appendChild(row);
         }
+    }
+
+    /** TradingView's leveled lines, one per row (a switch, the coefficient, the line: colour and width, plus style when
+     *  `styled`), then Use one color. */
+    private fibLevelLineRows(grid: HTMLElement, levels: readonly FibLevel[], actions: SettingsActions, opts: { step: number; styled: boolean }): void {
         const setters: Array<(c: string) => void> = [];
-        const colors = tz.levels.map((l) => l.color);
-        tz.levels.forEach((lv, i) => {
+        const colors = levels.map((l) => l.color);
+        levels.forEach((lv, i) => {
             let cur = lv.ratio;
             const coeff = buildFieldControl({
                 kind: 'number',
                 value: cur,
                 min: 0,
-                step: trendBased ? 0.001 : 1,
+                step: opts.step,
                 fill: false,
                 commit: 'blur',
                 onChange: (n) => {
@@ -1631,7 +1670,7 @@ export class DrawingSettingsDialog {
             coeff.el.dataset.role = `level-${i}-coeff`;
             const line = this.pathLineButton(
                 { color: lv.color, width: lv.lineWidth ?? 2, style: lv.lineStyle ?? 'solid' },
-                { color: `levels.${i}.color`, width: `levels.${i}.lineWidth`, style: `levels.${i}.lineStyle` },
+                { color: `levels.${i}.color`, width: `levels.${i}.lineWidth`, ...(opts.styled ? { style: `levels.${i}.lineStyle` } : {}) },
                 actions,
                 (set) => setters.push((c) => { colors[i] = c; set(c); }),
             );
@@ -1644,7 +1683,7 @@ export class DrawingSettingsDialog {
             theme: this.theme,
             getVal: () => colors[0] ?? DEFAULT_DRAWING_COLOR,
             onVal: (v) => {
-                actions.patch(Object.fromEntries(tz.levels.map((_, i) => [`levels.${i}.color`, v])));
+                actions.patch(Object.fromEntries(levels.map((_, i) => [`levels.${i}.color`, v])));
                 for (const set of setters) set(v);
                 paintOne();
             },
@@ -1658,29 +1697,16 @@ export class DrawingSettingsDialog {
         paintOne();
         oneColor.el.dataset.role = 'one-color';
         grid.appendChild(fieldRow({ label: 'Use one color', control: [oneColor.el], fit: true }));
-        const bg = fieldRow({
-            label: 'Background',
-            toggle: { id: uid(), checked: tz.background === true, onChange: (v) => actions.patch({ background: v }) },
-            control: [opacitySlider(Math.round((tz.fillOpacity ?? 0.2) * 100), (n) => actions.patch({ fillOpacity: n / 100 }))],
-            fit: true,
-        });
-        bg.dataset.role = 'background';
-        grid.appendChild(bg);
-        const labelH = this.selectControl('labelH', FIB_H, tz.labelH ?? 'right', actions);
-        const labelV = this.selectControl('labelV', FIB_V, tz.labelV ?? 'bottom', actions);
-        const labels = fieldRow({ label: 'Labels', toggle: { id: uid(), checked: tz.showLabels !== false, onChange: (v) => actions.patch({ showLabels: v }) }, control: [labelH, labelV], fit: true });
-        labels.dataset.role = 'labels';
-        grid.appendChild(labels);
     }
 
-    private buildFibTrendRow(grid: HTMLElement, fib: FibLevels, actions: SettingsActions): void {
+    private buildFibTrendRow(grid: HTMLElement, fib: { trendline?: boolean; trendColor?: string; trendWidth?: number; trendStyle?: string }, actions: SettingsActions): void {
         const trend = this.pathLineButton(
             { color: fib.trendColor || DEFAULT_DRAWING_COLOR, width: fib.trendWidth ?? 2, style: fib.trendStyle ?? 'dashed' },
             { color: 'trendColor', width: 'trendWidth', style: 'trendStyle' },
             actions,
         );
         trend.dataset.role = 'trend-line';
-        grid.appendChild(fieldRow({ label: 'Trend line', toggle: { id: uid(), checked: fib.trendline, onChange: (v) => actions.patch({ trendline: v }) }, control: [trend], fit: true }));
+        grid.appendChild(fieldRow({ label: 'Trend line', toggle: { id: uid(), checked: fib.trendline === true, onChange: (v) => actions.patch({ trendline: v }) }, control: [trend], fit: true }));
     }
 
     /** TradingView's leveled lines group: the levels two per row (a switch, the coefficient, the colour). `colors` is
