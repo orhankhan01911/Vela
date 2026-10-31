@@ -228,6 +228,13 @@ export function fieldRow(opts: FieldRowOptions): HTMLElement {
         }
     } else {
         wrap.appendChild(labelEl(opts.label, { id: opts.id, size }));
+        // No id to link the words to: name the row's first unnamed control with them (screen readers, agent-desktop).
+        if (!opts.id) {
+            const c = controls[0]?.matches('input,button,select,textarea')
+                ? controls[0]
+                : controls[0]?.querySelector('input,button,select,textarea');
+            if (c && !c.hasAttribute('aria-label') && !c.hasAttribute('aria-labelledby')) c.setAttribute('aria-label', vt(opts.label));
+        }
     }
 
     const cell = document.createElement('div');
