@@ -501,6 +501,9 @@ export class DrawingSettingsPopup {
                 size: () => (paths.has('text.size') ? this.dropdown('Text size', TEXT_SIZE_OPTIONS.map((o) => o.value), common((d) => d.text?.size ?? 'normal'), (sz) => labelSizeIcon(sz), (v) => actions.patch({ 'text.size': v }), { label: sizeLabel }) : null),
                 // A text's background is its own colour plus a switch: picking a colour turns the background on.
                 fill: () => {
+                    // TradingView's pattern background colour (its fill colour; picking one turns the background on).
+                    if (!multi && drawing instanceof PatternDrawing && drawing.tv)
+                        return this.colorButton('Fill', BUCKET_ICON, drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'style.fillColor': v, fillBackground: true }));
                     if (!paths.has('backgroundColor')) return null;
                     const bg = (d: Drawing): string => (d as unknown as { backgroundColor?: string }).backgroundColor || DEFAULT_DRAWING_COLOR;
                     return this.colorButton('Fill', BUCKET_ICON, common(bg), (v) => actions.patch({ backgroundColor: v, background: true }), undefined, distinctValues(drawings, bg));
@@ -1330,6 +1333,7 @@ const TV_QUICK_BAR: Readonly<Record<string, readonly TvBarItem[]>> = {
     gannsquarefixed: ['line', 'width'],
     xabcd: ['line', 'text', 'width'],
     cypher: ['line', 'text', 'width'],
+    headshoulders: ['line', 'fill', 'text', 'width'],
     fibspiral: ['line', 'width'],
     freehand: ['line', 'width'],
     highlighter: ['line', 'width'],

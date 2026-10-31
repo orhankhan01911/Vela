@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -3192,11 +3192,24 @@ export class DrawingPainter {
         const pts = d.handlePoints(proj);
         if (pts.length < 2) return;
         const line = d.style.lineColor || theme.textColor;
+        // Head and shoulders: the neckline through the troughs, cut where it meets the outer legs (null: it misses).
+        const nl = d.necklineIndices();
+        const ta = nl ? pts[nl[0]] : undefined;
+        const th = nl ? pts[nl[1]] : undefined;
+        const cut = (p: [number, number] | undefined, q: [number, number] | undefined): [number, number] | null =>
+            ta && th && p && q ? lineSegmentIntersection(ta[0], ta[1], th[0], th[1], p[0], p[1], q[0], q[1]) : null;
+        const leftCut = nl ? cut(pts[0], pts[1]) : null;
+        const rightCut = nl && pts.length >= 7 ? cut(pts[5], pts[6]) : null;
+        // TradingView fills the head's triangle and each shoulder's triangle against the neckline, only where it is cut.
+        const triangles: Array<Array<[number, number] | null | undefined>> = nl
+            ? [
+                  [ta, pts[3], th],
+                  ...(leftCut ? [[leftCut, pts[1], ta]] : []),
+                  ...(rightCut ? [[th, pts[5], rightCut]] : []),
+              ]
+            : d.fillTriangles().map(([i, j, k]) => [pts[i], pts[j], pts[k]]);
         if (d.fillBackground !== false && d.style.fillColor) {
-            for (const [i, j, k] of d.fillTriangles()) {
-                const a = pts[i];
-                const b = pts[j];
-                const c = pts[k];
+            for (const [a, b, c] of triangles) {
                 if (!a || !b || !c) continue;
                 ctx.save();
                 ctx.fillStyle = d.style.fillColor; // its opacity lives in the colour
@@ -3213,6 +3226,15 @@ export class DrawingPainter {
             ctx.moveTo(pts[0]![0], pts[0]![1]);
             for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i]![0], pts[i]![1]);
         });
+        if (ta && th && pts.length >= 5) {
+            // The dotted neckline: from the left cut (or run on left from the first trough) to the right cut (or on right).
+            const [x1, y1] = leftCut ?? extendRay(ta[0], ta[1], th[0], th[1], 'left', proj.width, proj.height).slice(0, 2);
+            const [x2, y2] = rightCut ?? extendRay(ta[0], ta[1], th[0], th[1], 'right', proj.width, proj.height).slice(2, 4);
+            this.stroke(ctx, { ...d.style, lineStyle: 'dotted' }, () => {
+                ctx.moveTo(x1!, y1!);
+                ctx.lineTo(x2!, y2!);
+            });
+        }
         const ratios = d.tvRatioLines();
         for (const r of ratios) {
             const a = pts[r.from];
