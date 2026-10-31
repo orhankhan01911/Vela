@@ -2,10 +2,13 @@ import type { SettingsSchema } from '../schema';
 import { LINE_FIELDS } from '../schema';
 import { ELLIOTT_DEGREES, ELLIOTT_DEGREE_FIELD, degreeOf } from './elliottDegree';
 import { PatternDrawing } from './PatternDrawing';
+import { TV_CORRECTION_LABELS, type ElliottLabelGroups } from './elliottTv';
 
 /**
  * Elliott corrective wave — like TradingView's: an unlabelled origin, then A–C (4 points). Drawings saved before the
  * origin point existed (3 points labelled A–C, no `origin` flag) keep their old shape.
+ *
+ * A new one is TradingView's (module 356806): the impulse's degrees and look, labelled (0) (A) (B) (C) at Intermediate.
  */
 export class ElliottCorrection extends PatternDrawing {
     readonly type = 'elliottcorrection' as const;
@@ -13,6 +16,14 @@ export class ElliottCorrection extends PatternDrawing {
     private legacy!: boolean;
     /** TradingView's wave degree: the label style (Minor = 1–5 / A–C). */
     degree!: string;
+
+    protected override tvPattern(): boolean {
+        return true;
+    }
+
+    override tvElliottLabels(): ElliottLabelGroups {
+        return TV_CORRECTION_LABELS;
+    }
 
     vertexLabels(): readonly string[] {
         const labels = ELLIOTT_DEGREES[degreeOf(this.degree)]!.correction;

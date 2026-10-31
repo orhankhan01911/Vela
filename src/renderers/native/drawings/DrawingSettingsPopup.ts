@@ -1351,6 +1351,7 @@ const TV_QUICK_BAR: Readonly<Record<string, readonly TvBarItem[]>> = {
     trianglepattern: ['line', 'fill', 'text', 'width'],
     threedrives: ['line', 'text', 'width'],
     elliottimpulse: ['line', 'width'],
+    elliottcorrection: ['line', 'width'],
     fibspiral: ['line', 'width'],
     freehand: ['line', 'width'],
     highlighter: ['line', 'width'],
