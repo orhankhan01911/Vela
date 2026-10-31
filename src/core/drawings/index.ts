@@ -141,7 +141,7 @@ export {
     type MachGeom,
 } from './types/MachFigure';
 export { GoldenSonic, GoldenSupersonic, GOLDEN_MACH_LEVELS } from './types/GoldenMach';
-export { PatternDrawing } from './types/PatternDrawing';
+export { PatternDrawing, TV_PATTERN_TEXT, legRatio } from './types/PatternDrawing';
 export { XABCD } from './types/XABCD';
 export { HarmonicPattern, type RatioBand, type HarmonicRanges } from './types/HarmonicPattern';
 export { Gartley } from './types/Gartley';

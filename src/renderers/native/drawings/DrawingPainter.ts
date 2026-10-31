@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -3185,7 +3185,84 @@ export class DrawingPainter {
 
     /** Paint a pattern: optional tinted body triangles, the labelled polyline, an extended
      *  neckline (head & shoulders), and consecutive-leg ratios (harmonic patterns). */
+    /** TradingView's pattern look (module 465795): the background triangles, the line, dotted ratio lines with their
+     *  ratios in boxes of the line colour at their middles, and each point's name in such a box, above the point when it
+     *  rises from the one before (the first point: when the second lies below it), else below. */
+    private paintTvPattern(ctx: CanvasRenderingContext2D, d: PatternDrawing, proj: Projector, theme: VelaTheme): void {
+        const pts = d.handlePoints(proj);
+        if (pts.length < 2) return;
+        const line = d.style.lineColor || theme.textColor;
+        if (d.fillBackground !== false && d.style.fillColor) {
+            for (const [i, j, k] of d.fillTriangles()) {
+                const a = pts[i];
+                const b = pts[j];
+                const c = pts[k];
+                if (!a || !b || !c) continue;
+                ctx.save();
+                ctx.fillStyle = d.style.fillColor; // its opacity lives in the colour
+                ctx.beginPath();
+                ctx.moveTo(a[0], a[1]);
+                ctx.lineTo(b[0], b[1]);
+                ctx.lineTo(c[0], c[1]);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+        this.stroke(ctx, { ...d.style, lineStyle: 'solid' }, () => {
+            ctx.moveTo(pts[0]![0], pts[0]![1]);
+            for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i]![0], pts[i]![1]);
+        });
+        const ratios = d.tvRatioLines();
+        for (const r of ratios) {
+            const a = pts[r.from];
+            const b = pts[r.to];
+            if (!a || !b) continue;
+            this.stroke(ctx, { lineColor: line, lineWidth: 1, lineStyle: 'dotted' }, () => {
+                ctx.moveTo(a[0], a[1]);
+                ctx.lineTo(b[0], b[1]);
+            });
+        }
+        const fs = d.fontSize ?? 12;
+        ctx.font = `${d.labelItalic ? 'italic ' : ''}${d.labelBold ? 'bold ' : ''}${fs}px ${theme.fontFamily}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        // A box in the line colour, 4 px round, the text in the label colour; `place`: above / below the point by 5 px, or on it.
+        const box = (text: string, x: number, y: number, place: 'above' | 'below' | 'on'): void => {
+            const w = ctx.measureText(text).width + 10;
+            const h = fs + 6;
+            const top = place === 'above' ? y - 5 - h : place === 'below' ? y + 5 : y - h / 2;
+            ctx.save();
+            ctx.setLineDash([]);
+            roundRect(ctx, x - w / 2, top, w, h, 4);
+            ctx.fillStyle = line;
+            ctx.fill();
+            ctx.fillStyle = d.textColor || TV_PATTERN_TEXT;
+            ctx.fillText(text, x, top + h / 2 + 0.5);
+            ctx.restore();
+        };
+        for (const r of ratios) {
+            const a = pts[r.from];
+            const b = pts[r.to];
+            if (a && b && Number.isFinite(r.ratio)) box(String(r.ratio), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 'on');
+        }
+        const labels = d.vertexLabels();
+        pts.forEach((p, i) => {
+            const lbl = labels[i];
+            if (!lbl) return;
+            const ref = i === 0 ? pts[1] : pts[i - 1];
+            const above = ref ? (i === 0 ? ref[1] > p[1] : p[1] < ref[1]) : true;
+            box(lbl, p[0], p[1], above ? 'above' : 'below');
+        });
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+    }
+
     private paintPattern(ctx: CanvasRenderingContext2D, d: PatternDrawing, proj: Projector, theme: VelaTheme): void {
+        if (d.tv) {
+            this.paintTvPattern(ctx, d, proj, theme);
+            return;
+        }
         const pts = d.handlePoints(proj);
         if (pts.length < 2) return;
         const valid = d.valid(); // harmonic validity (null for plain patterns)

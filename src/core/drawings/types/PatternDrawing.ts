@@ -4,6 +4,14 @@ import type { SettingsSchema } from '../schema';
 import { LINE_FIELDS, FILL_FIELDS } from '../schema';
 import { distToPolyline, handleAt } from '../hittest';
 
+/** TradingView's pattern label text (white). */
+export const TV_PATTERN_TEXT = '#FFFFFF'; // palette-exempt: TradingView's white label text
+
+/** A price-leg ratio as TradingView prints it: |b − a| / |a − before|, to 3 decimals (NaN when the base leg is flat). */
+export function legRatio(before: number, a: number, b: number): number {
+    return Math.round((1e3 * Math.abs(b - a)) / Math.abs(a - before)) / 1e3;
+}
+
 /**
  * Shared base for the pattern tools (harmonic XABCD / ABCD, Elliott waves, head &
  * shoulders): a fixed-vertex polyline whose anchors are labelled, optionally tinted,
@@ -11,6 +19,37 @@ import { distToPolyline, handleAt } from '../hittest';
  * vertex labels (which fix the anchor count) and toggles ratios / fill / neckline.
  */
 export abstract class PatternDrawing extends Drawing {
+    /** TradingView's look (new drawings of a tool that has one, see {@link tvPattern}): the point names and ratios in
+     *  boxes of the line colour, dotted ratio lines, the background its own switch. */
+    declare tv?: boolean;
+    declare fillBackground?: boolean;
+    declare textColor?: string;
+    declare fontSize?: number;
+    declare labelBold?: boolean;
+    declare labelItalic?: boolean;
+
+    constructor(init: ConstructorParameters<typeof Drawing>[0]) {
+        super(init);
+        if (!init.props && this.tvPattern()) {
+            this.tv = true;
+            this.fillBackground = true;
+            this.textColor = TV_PATTERN_TEXT;
+            this.fontSize = 12;
+            this.labelBold = false;
+            this.labelItalic = false;
+        }
+    }
+
+    /** Whether a new one takes TradingView's look (the tools audited so far). */
+    protected tvPattern(): boolean {
+        return false;
+    }
+
+    /** TradingView's dotted ratio lines: the two points each joins and the ratio printed at its middle. */
+    tvRatioLines(): Array<{ from: number; to: number; ratio: number }> {
+        return [];
+    }
+
     /** The label drawn at each anchor (empty string ⇒ no label). Its length is the vertex count. */
     abstract vertexLabels(): readonly string[];
     /** Show consecutive-leg retracement ratios (harmonic patterns). */
@@ -98,5 +137,25 @@ export abstract class PatternDrawing extends Drawing {
 
     schema(): SettingsSchema {
         return { fields: [...LINE_FIELDS, ...(this.fillTriangles().length ? FILL_FIELDS : [])] };
+    }
+
+    protected override writeProps(): Record<string, unknown> | undefined {
+        if (!this.tv) return super.writeProps();
+        return {
+            tv: true,
+            fillBackground: this.fillBackground !== false,
+            textColor: this.textColor,
+            fontSize: this.fontSize,
+            labelBold: this.labelBold === true,
+            labelItalic: this.labelItalic === true,
+        };
+    }
+
+    protected override readProps(props: Record<string, unknown>): void {
+        super.readProps(props);
+        if (props.tv === true) this.tv = true;
+        for (const k of ['fillBackground', 'labelBold', 'labelItalic'] as const) if (typeof props[k] === 'boolean') this[k] = props[k] as boolean;
+        if (typeof props.textColor === 'string') this.textColor = props.textColor;
+        if (typeof props.fontSize === 'number' && Number.isFinite(props.fontSize)) this.fontSize = Math.min(48, Math.max(6, props.fontSize));
     }
 }

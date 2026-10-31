@@ -168,7 +168,15 @@ export function resetDrawingSettings(drawing: Drawing): void {
 /** Rehydrate a {@link Drawing} from a plain record, or null for an unknown type. */
 export function deserializeDrawing(doc: SerializedDrawing): Drawing | null {
     const meta = REGISTRY.get(doc.type);
-    return meta ? meta.create(legacyFibSpiral(legacyStroke(legacyArrowMarker(legacyEllipse(legacyPitchfork(legacyComment(legacyElliott(doc)))))))) : null;
+    return meta ? meta.create(legacyPattern(legacyFibSpiral(legacyStroke(legacyArrowMarker(legacyEllipse(legacyPitchfork(legacyComment(legacyElliott(doc))))))))) : null;
+}
+
+/** Patterns that became TradingView's look (XABCD so far): a record saved before has no `tv` flag (they saved no props):
+ *  mark it so it keeps its look. */
+const TV_PATTERN_TYPES: ReadonlySet<string> = new Set(['xabcd']);
+function legacyPattern(doc: SerializedDrawing): SerializedDrawing {
+    if (!TV_PATTERN_TYPES.has(doc.type) || doc.props?.tv !== undefined) return doc;
+    return { ...doc, props: { ...(doc.props ?? {}), tv: false } };
 }
 
 /** The Fib spiral became TradingView's (Fibonacci radii plus a ray). A record saved before has no `tv` flag: mark it so
@@ -1000,7 +1008,7 @@ registerDrawingType({
     label: 'XABCD Pattern',
     icon: XABCD_ICON,
     coversSeries: true, // labelled pattern over the candles like TradingView's: a candle never hides a wave or point name
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    defaultStyle: { lineColor: '#2962ff', lineWidth: 2, lineStyle: 'solid', fillColor: '#2962ff26' }, // palette-exempt: TradingView's tv-blue-500, background at 85 % transparency
     create: (init) => new XABCD(init),
 });
 

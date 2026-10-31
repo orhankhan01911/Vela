@@ -25,6 +25,8 @@ import {
     FibTimeZones,
     FibVerticalLevels,
     GannBox,
+    PatternDrawing,
+    TV_PATTERN_TEXT,
     GannSquare,
     GannFan,
     TrendFibTime,
@@ -491,7 +493,11 @@ export class DrawingSettingsPopup {
                           },
                       }
                     : {}),
-                text: () => (paths.has('text.color') ? swatch('Text color', TYPE_ICON, (d) => d.text?.color || t.textColor, 'text.color') : null),
+                // TradingView's pattern labels: their text colour is its own property.
+                text: () =>
+                    !multi && drawing instanceof PatternDrawing && drawing.tv
+                        ? this.colorButton('Text color', TYPE_ICON, drawing.textColor || TV_PATTERN_TEXT, (v) => actions.patch({ textColor: v }))
+                        : paths.has('text.color') ? swatch('Text color', TYPE_ICON, (d) => d.text?.color || t.textColor, 'text.color') : null,
                 size: () => (paths.has('text.size') ? this.dropdown('Text size', TEXT_SIZE_OPTIONS.map((o) => o.value), common((d) => d.text?.size ?? 'normal'), (sz) => labelSizeIcon(sz), (v) => actions.patch({ 'text.size': v }), { label: sizeLabel }) : null),
                 // A text's background is its own colour plus a switch: picking a colour turns the background on.
                 fill: () => {
@@ -1322,6 +1328,7 @@ const TV_QUICK_BAR: Readonly<Record<string, readonly TvBarItem[]>> = {
     gannsquare: ['line', 'width'],
     gannfan: ['line', 'width'],
     gannsquarefixed: ['line', 'width'],
+    xabcd: ['line', 'text', 'width'],
     fibspiral: ['line', 'width'],
     freehand: ['line', 'width'],
     highlighter: ['line', 'width'],
