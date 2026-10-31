@@ -18,6 +18,7 @@ const TV_RED = '#f44336'; // palette-exempt: TradingView's VRVP POC and developi
 const VALUES_GRAY = '#787b86'; // palette-exempt: row values, readable on dark and light (TradingView themes this)
 
 const DEFAULT_ROWS = 24;
+const DEFAULT_LINE_ROWS = 120;
 const DEFAULT_WIDTH_PCT = 30;
 const DEFAULT_VALUE_AREA_PCT = 70;
 const DEFAULT_UP = transp(TV_BLUE, 75);
@@ -58,9 +59,12 @@ function rowSizeOf(inputs: Record<string, InputValue>, tick: number | undefined)
 /** Resolve the input record into the layer payload (clamped, fraction-normalized). `tick` = the symbol's tick. */
 export function vpvrLayerData(inputs: Record<string, InputValue>, tick?: number): VpvrLayerData {
     const mode = inputs.volume === 'Total' ? 'total' : inputs.volume === 'Delta' ? 'delta' : 'updown';
-    const rowSize = rowSizeOf(inputs, tick);
+    // The Line look has its own row count (0 = the Inputs tab's), so one click on Look gives a fine outline instead
+    // of 24 coarse steps (user 2026-10-31: no clicking through a ton of settings).
+    const lineRows = inputs.look === 'Line' ? Math.round(Math.min(2000, Math.max(0, num(inputs.lineRows, DEFAULT_LINE_ROWS)))) : 0;
+    const rowSize = lineRows > 0 ? undefined : rowSizeOf(inputs, tick);
     return {
-        rows: Math.round(Math.min(1_000_000, Math.max(1, num(inputs.rows, DEFAULT_ROWS)))),
+        rows: lineRows > 0 ? lineRows : Math.round(Math.min(1_000_000, Math.max(1, num(inputs.rows, DEFAULT_ROWS)))),
         ...(rowSize != null ? { rowSize } : {}),
         volumeMode: mode,
         widthFrac: Math.min(1, Math.max(0.01, num(inputs.widthPct, DEFAULT_WIDTH_PCT) / 100)),
@@ -466,6 +470,7 @@ function vpvrInputsSchema(): InputSchema[] {
         { key: 'look', title: 'Look', type: 'string', defval: LOOKS[0], options: LOOKS, tab: LINE_TAB },
         { key: 'lineUpColor', title: 'Line: buying won', type: 'color', defval: LINE_UP, tab: LINE_TAB, when: { key: 'look', equals: 'Line' } },
         { key: 'lineDownColor', title: 'Line: selling won', type: 'color', defval: LINE_DOWN, tab: LINE_TAB, when: { key: 'look', equals: 'Line' } },
+        { key: 'lineRows', title: 'Line rows (0 = Row Size)', type: 'int', defval: DEFAULT_LINE_ROWS, min: 0, max: 2000, step: 10, tab: LINE_TAB, when: { key: 'look', equals: 'Line' } },
         { key: 'lineWidth', title: 'Line width', type: 'int', defval: 1, options: WIDTHS, tab: LINE_TAB, when: { key: 'look', equals: 'Line' } },
         { key: 'lineFill', title: 'Fill under the line', type: 'bool', defval: false, tab: LINE_TAB, when: { key: 'look', equals: 'Line' } },
     ];

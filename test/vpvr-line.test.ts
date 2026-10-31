@@ -40,5 +40,9 @@ describe('VPVR line look', () => {
         expect(d.look).toBe('line');
         expect(d.lineWidth).toBe(4);
         expect(d.lineUpColor).toMatch(/^#/);
+        // one click: the line brings its own fine rows; 0 falls back to the Inputs tab's
+        expect(d.rows).toBe(120);
+        expect(vpvrLayerData({ look: 'Line', lineRows: 0, rows: 30 }).rows).toBe(30);
+        expect(vpvrLayerData({ rows: 30 }).rows).toBe(30);
     });
 });
