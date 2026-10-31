@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TrendFigure, TrendAngle, Circle, Ellipse, FlagMark, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TV_SIGNPOST, TrendFigure, TrendAngle, Circle, Ellipse, FlagMark, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -439,7 +439,8 @@ export class DrawingPainter {
             return;
         }
         if (d instanceof Signpost) {
-            this.paintSignpost(ctx, d, proj, theme);
+            if (d.tv) this.paintTvSignpost(ctx, d, proj, theme);
+            else this.paintSignpost(ctx, d, proj, theme);
             return;
         }
         if (d instanceof Callout) {
@@ -3048,7 +3049,8 @@ export class DrawingPainter {
         const [tx, ty] = p[0];
         const [cx, cy] = p[1];
         const priceStr = formatPriceTag(a.price);
-        const text = d.text;
+        // TradingView's price note styles its price label on its own (the text is its free text along the line).
+        const text = d.tv ? { ...d.text, color: d.labelColor, size: d.labelSize ?? 12, bold: d.labelBold, italic: d.labelItalic } : d.text;
         const fs = namedFontSize(text?.size ?? 'normal');
         ctx.font = `${text?.bold ? 'bold ' : ''}${text?.italic ? 'italic ' : ''}${fs}px ${theme.fontFamily}`;
         const padX = 9;
@@ -3079,10 +3081,66 @@ export class DrawingPainter {
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'center';
         ctx.fillText(priceStr, cx, cy + 0.5);
+        // TradingView's free text along the line.
+        if (d.tv && d.text?.value) this.paintLabel(ctx, d, proj, theme);
     }
 
     /** TradingView's signpost: a thin pole from the bar up (or down) to a round badge with a flag, its label in a plate
      *  above the badge. */
+    /** TradingView's signpost (module 624586): a 1 px grey pole from the candle to the label (on to the emoji plate's far
+     *  edge when it is shown), the label in a rounded box (12 px, padded 6 / 8, wrapped at 134 px, centred on the bar)
+     *  in the theme's colours, and the emoji on a 35 px plate of its colour. */
+    private paintTvSignpost(ctx: CanvasRenderingContext2D, d: Signpost, proj: Projector, theme: VelaTheme): void {
+        const text = d.text;
+        const fs = textPx(text?.size ?? 12);
+        ctx.save();
+        ctx.font = `${text?.italic ? 'italic ' : ''}${text?.bold ? 'bold ' : ''}${fs}px ${theme.fontFamily}`;
+        const lines = wrapLines(ctx, text?.value || '', TV_SIGNPOST.wrap);
+        const w = Math.max(...lines.map((l) => ctx.measureText(l).width), 0) + 2 * TV_SIGNPOST.padH;
+        const h = lines.length * fs + (lines.length - 1) * TV_SIGNPOST.lineGap + 2 * TV_SIGNPOST.padV;
+        const L = d.tvLayout(proj, { w, h });
+        if (!L) {
+            ctx.restore();
+            return;
+        }
+        const dark = isDarkColor(theme.background);
+        ctx.setLineDash([]);
+        ctx.strokeStyle = TV_SIGNPOST_POLE;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(Math.round(L.x) + 0.5, L.poleFrom);
+        ctx.lineTo(Math.round(L.x) + 0.5, L.poleTo);
+        ctx.stroke();
+        if (L.plate) {
+            ctx.save();
+            ctx.shadowOffsetY = 1;
+            ctx.shadowBlur = 4;
+            ctx.shadowColor = dark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.2)';
+            ctx.fillStyle = d.plateColor ?? TV_SIGNPOST_PLATE;
+            ctx.beginPath();
+            ctx.arc(L.plate.cx, L.plate.cy, L.plate.r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            const img = emojiImage(d.emoji ?? '🙂', () => proj.requestRepaint?.());
+            if (img) ctx.drawImage(img, L.plate.cx - 16, L.plate.cy - 16, 32, 32);
+            ctx.strokeStyle = dark ? TV_SIGNPOST_DARK.border : TV_SIGNPOST_LIGHT.circle;
+            ctx.beginPath();
+            ctx.arc(L.plate.cx, L.plate.cy, L.plate.r - 0.5, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        const ink = dark ? TV_SIGNPOST_DARK : TV_SIGNPOST_LIGHT;
+        roundRect(ctx, L.box.x + 0.5, L.box.y + 0.5, L.box.w - 1, L.box.h - 1, 4);
+        ctx.fillStyle = ink.back;
+        ctx.fill();
+        ctx.strokeStyle = ink.edge;
+        ctx.stroke();
+        ctx.fillStyle = ink.text;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        lines.forEach((line, i) => ctx.fillText(line, L.x, L.box.y + TV_SIGNPOST.padV + i * (fs + TV_SIGNPOST.lineGap)));
+        ctx.restore();
+    }
+
     private paintSignpost(ctx: CanvasRenderingContext2D, d: Signpost, proj: Projector, theme: VelaTheme): void {
         const p = d.points(proj);
         if (!p) return;
@@ -4305,6 +4363,7 @@ export function labelLayout(d: Drawing, proj: Projector): {
         case 'extendedline':
         case 'infoline':
         case 'trendangle':
+        case 'pricenote':
         case 'arrow': {
             // Along the segment between the anchors (left end / middle / right end, as seen on screen) and above /
             // on / below it; the glyphs follow the segment, kept upright.
@@ -4406,7 +4465,12 @@ export function labelLayout(d: Drawing, proj: Projector): {
 }
 
 /** TradingView's flag mark pole (its cold gray 500) and pennant (module 95256). */
-const TV_FLAG_POLE = '#787b86'; // palette-exempt: TradingView's cold gray 500
+const TV_FLAG_POLE = '#808080'; // palette-exempt: TradingView's cold gray 500
+/** TradingView's signpost colours (its cold grays; the plate defaults to its blue). */
+const TV_SIGNPOST_POLE = TV_FLAG_POLE;
+const TV_SIGNPOST_PLATE = '#2962FF'; // palette-exempt: TradingView's blue 500
+const TV_SIGNPOST_DARK = { back: '#000000', edge: '#1A1A1A', text: '#DBDBDB', border: '#000000', circle: '#000000' }; // palette-exempt: TradingView's cold grays 900 / 800 / 200
+const TV_SIGNPOST_LIGHT = { back: '#ffffff', edge: '#EBEBEB', text: '#000000', border: '#ffffff', circle: '#ffffff' }; // palette-exempt: TradingView's white, cold grays 150 / 900
 let flagPennant: Path2D | null = null;
 function TV_FLAG_PENNANT(): Path2D {
     flagPennant ??= new Path2D('M0 .5C0 .22.22 0 .5 0h16c.4 0 .64.46.4.8l-2.8 3.9a.5.5 0 0 0 0 .6l2.8 3.9a.5.5 0 0 1-.4.8H.5a.5.5 0 0 1-.5-.5z');

@@ -118,7 +118,7 @@ export { CalloutBase } from './types/CalloutBase';
 export { Callout, CALLOUT_RADIUS, CALLOUT_MARGIN } from './types/Callout';
 export { PriceNote } from './types/PriceNote';
 export { Comment } from './types/Comment';
-export { Signpost, SIGNPOST_R } from './types/Signpost';
+export { Signpost, SIGNPOST_R, TV_SIGNPOST, type SignpostLayout } from './types/Signpost';
 export { GannFan, TV_GANN_FAN_LEVELS } from './types/GannFan';
 export { PitchforkBase, PITCHFORK_LEVELS, PITCHFORK_MEDIAN, PITCHFORK_STYLES, type PitchforkFrame, type PitchforkLevel, type PitchforkStyle } from './types/PitchforkBase';
 export { GannBox, TV_GANN_BOX_LEVELS, TV_GANN_ANGLES } from './types/GannBox';

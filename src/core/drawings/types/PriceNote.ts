@@ -1,5 +1,5 @@
 import type { SettingsSchema } from '../schema';
-import { LINE_FIELDS, FILL_FIELDS, TEXT_FIELDS } from '../schema';
+import { LINE_FIELDS, FILL_FIELDS, TEXT_FIELDS, LINE_TEXT_ALIGN_FIELDS } from '../schema';
 import { CalloutBase } from './CalloutBase';
 import { TV_LINE_COLOR } from '../style';
 
@@ -17,25 +17,39 @@ export class PriceNote extends CalloutBase {
     declare tv?: boolean;
     /** TradingView's label border (its own colour; the line keeps style.lineColor). */
     declare labelBorder?: string;
+    /** TradingView's price label text (its own colour, size and weight); `text` is its free text along the line. */
+    declare labelColor?: string;
+    declare labelSize?: number;
+    declare labelBold?: boolean;
+    declare labelItalic?: boolean;
 
     constructor(init: ConstructorParameters<typeof CalloutBase>[0]) {
         super(init);
         if (!init.props) {
             this.tv = true;
             this.labelBorder = TV_LINE_COLOR;
-            // TradingView's label text: white, 12 px.
-            this.text = { ...this.text!, color: TV_WHITE, size: 12 };
+            this.labelColor = TV_WHITE;
+            this.labelSize = 12;
+            this.labelBold = false;
+            this.labelItalic = false;
+            // TradingView's free text: 14 px blue, centred over the line ("Top").
+            this.text = { ...this.text!, value: '', color: TV_LINE_COLOR, size: 14, hAlign: 'center', vAlign: 'top' };
         }
     }
 
     protected override writeProps(): Record<string, unknown> | undefined {
-        return this.tv ? { tv: true, labelBorder: this.labelBorder } : undefined;
+        if (!this.tv) return undefined;
+        return { tv: true, labelBorder: this.labelBorder, labelColor: this.labelColor, labelSize: this.labelSize, labelBold: this.labelBold === true, labelItalic: this.labelItalic === true };
     }
 
     protected override readProps(props: Record<string, unknown>): void {
         if (props.tv !== true) return;
         this.tv = true;
         if (typeof props.labelBorder === 'string') this.labelBorder = props.labelBorder;
+        if (typeof props.labelColor === 'string') this.labelColor = props.labelColor;
+        if (typeof props.labelSize === 'number' && Number.isFinite(props.labelSize)) this.labelSize = Math.min(48, Math.max(6, props.labelSize));
+        if (typeof props.labelBold === 'boolean') this.labelBold = props.labelBold;
+        if (typeof props.labelItalic === 'boolean') this.labelItalic = props.labelItalic;
     }
 
     protected override defaultLabel(): string {
@@ -50,6 +64,8 @@ export class PriceNote extends CalloutBase {
 
     /** The label is the auto price, so expose only styling — not a `text.value` field. */
     override schema(): SettingsSchema {
+        // TradingView's: the label on the Style tab, its free text (with alignment) on the Text tab.
+        if (this.tv) return { fields: [...LINE_FIELDS, ...FILL_FIELDS, ...TEXT_FIELDS, ...LINE_TEXT_ALIGN_FIELDS] };
         return { fields: [...LINE_FIELDS, ...FILL_FIELDS, ...TEXT_FIELDS.filter((f) => f.path !== 'text.value')] };
     }
 }

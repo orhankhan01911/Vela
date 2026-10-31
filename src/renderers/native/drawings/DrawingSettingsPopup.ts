@@ -14,6 +14,7 @@ import {
     PriceLabel,
     PriceNote,
     FlagMark,
+    Signpost,
     TEXT_SIZE_OPTIONS,
     LINE_STYLE_OPTIONS,
     GLYPH_OPTIONS,
@@ -488,7 +489,7 @@ export class DrawingSettingsPopup {
         const oldShape = drawing instanceof SegmentDrawing && !!drawing.tvShapeKind() && !drawing.tv;
         // TradingView's price label, price note and flag mark bars.
         const tvLabelBar: readonly TvBarItem[] | null =
-            multi ? null : drawing instanceof PriceLabel && drawing.tv ? ['text', 'fill', 'size'] : drawing instanceof PriceNote && drawing.tv ? ['line', 'fill', 'text'] : drawing instanceof FlagMark && drawing.tv ? ['fill'] : null;
+            multi ? null : drawing instanceof Signpost && drawing.tv ? ['fill', 'size'] : drawing instanceof PriceLabel && drawing.tv ? ['text', 'fill', 'size'] : drawing instanceof PriceNote && drawing.tv ? ['line', 'fill', 'text'] : drawing instanceof FlagMark && drawing.tv ? ['fill'] : null;
         const tvBar = tvLabelBar ? tvLabelBar : tvShapeBar ? tvShapeBar : oldShape || multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : tvFlat ? AREA_LINE_BAR : drawing instanceof TrendFigure || ((drawing instanceof TrendAngle || drawing instanceof CrossLine || drawing instanceof RotatedRect || drawing instanceof Circle || drawing instanceof Ellipse) && !drawing.tv) ? undefined : TV_QUICK_BAR[drawing.type];
         if (tvReg) bar.querySelectorAll<HTMLElement>('[data-tip="Line width"]').forEach((k) => k.remove());
         if (tvFib instanceof FibVerticalLevels || tvFib instanceof RadialFib) bar.querySelectorAll<HTMLElement>('[data-tip="Line style"]').forEach((k) => k.remove());
@@ -578,7 +579,9 @@ export class DrawingSettingsPopup {
             // TradingView's label backgrounds and the flag's colour win over the generic controls.
             if (tvLabelBar) Object.assign(make, {
                 fill: () =>
-                    drawing instanceof FlagMark
+                    drawing instanceof Signpost
+                        ? this.colorButton('Fill', BUCKET_ICON, drawing.plateColor ?? DEFAULT_DRAWING_COLOR, (v) => actions.patch({ plateColor: v }))
+                        : drawing instanceof FlagMark
                         ? this.colorButton('Fill', BUCKET_ICON, drawing.style.lineColor || DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'style.lineColor': v }))
                         : this.colorButton('Fill', BUCKET_ICON, drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'style.fillColor': v })),
                 text: () => this.colorButton('Text color', TYPE_ICON, drawing.text?.color || DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'text.color': v })),

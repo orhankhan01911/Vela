@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { createDrawing, deserializeDrawing, getDrawingType, CalloutBase, PinnedLabel, type DrawingTypeKey } from '../src/core/drawings';
 
-const mk = (type: DrawingTypeKey, n: number) =>
-    createDrawing(type, { paneId: 'price', anchors: Array.from({ length: n }, (_, i) => ({ time: i * 10, price: 100 + i })) })!;
+const mk = (type: DrawingTypeKey, n: number, props?: Record<string, unknown>) =>
+    createDrawing(type, { paneId: 'price', anchors: Array.from({ length: n }, (_, i) => ({ time: i * 10, price: 100 + i })), ...(props ? { props } : {}) })!;
 
 describe('drawings/annotations (Wave 13)', () => {
     it('registers all five new annotation tools in the annotations group', () => {
@@ -19,8 +19,9 @@ describe('drawings/annotations (Wave 13)', () => {
     });
 
     it('Price Note / Comment / Signpost share the CalloutBase rig (a new comment stands on one point, like TradingView\'s)', () => {
+        // Saved before the TradingView look (drawings-labels-tv covers TradingView's one-point signpost).
         for (const t of ['pricenote', 'signpost'] as const) {
-            const d = mk(t, 2);
+            const d = mk(t, 2, {});
             expect(d.anchorSchema()).toMatchObject({ min: 2, max: 2 });
             expect(d).toBeInstanceOf(CalloutBase); // siblings of Callout, each with its own painter branch
         }
@@ -29,8 +30,9 @@ describe('drawings/annotations (Wave 13)', () => {
     });
 
     it('Price Label + Price Note show the auto price — no text.value field, styling kept', () => {
+        // Saved before the TradingView look (TradingView's price note has its own free text: drawings-labels-tv).
         for (const [t, n] of [['pricelabel', 1], ['pricenote', 2]] as const) {
-            const paths = mk(t, n).schema().fields.map((f) => f.path);
+            const paths = mk(t, n, {}).schema().fields.map((f) => f.path);
             expect(paths).not.toContain('text.value');
             expect(paths).toContain('text.color');
             expect(paths).toContain('style.fillColor');

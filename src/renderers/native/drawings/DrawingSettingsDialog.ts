@@ -78,6 +78,7 @@ import {
     PriceLabel,
     PriceNote,
     FlagMark,
+    Signpost,
     type RegressionTrendLine,
 } from '../../../core/drawings';
 import { BEARISH, BULLISH } from '../../../core/palette';
@@ -137,7 +138,9 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', trianglepattern: 'Triangle pattern', threedrives: 'Three drives pattern', elliottimpulse: 'Elliott impulse wave (12345)', elliottcorrection: 'Elliott correction wave (ABC)', elliotttriangle: 'Elliott triangle wave (ABCDE)', elliottdoublecombo: 'Elliott double combo wave (WXY)', elliotttriplecombo: 'Elliott triple combo wave (WXYXZ)', regressionchannel: 'Regression trend', flattopbottom: 'Flat top/bottom', disjointchannel: 'Disjoint channel', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', extendedline: 'Extended line', arrow: 'Arrow', trendangle: 'Trend angle', crossline: 'Cross line', rotatedrect: 'Rotated rectangle', circle: 'Circle', ellipse: 'Ellipse', triangle: 'Triangle', polyline: 'Polyline', arc: 'Arc', curve: 'Curve', doublecurve: 'Double curve', cycliclines: 'Cyclic lines', timecycles: 'Time cycles', sineline: 'Sine line', pricenote: 'Price note', pricelabel: 'Price label', flagmark: 'Flag mark', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', trianglepattern: 'Triangle pattern', threedrives: 'Three drives pattern', elliottimpulse: 'Elliott impulse wave (12345)', elliottcorrection: 'Elliott correction wave (ABC)', elliotttriangle: 'Elliott triangle wave (ABCDE)', elliottdoublecombo: 'Elliott double combo wave (WXY)', elliotttriplecombo: 'Elliott triple combo wave (WXYXZ)', regressionchannel: 'Regression trend', flattopbottom: 'Flat top/bottom', disjointchannel: 'Disjoint channel', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', extendedline: 'Extended line', arrow: 'Arrow', trendangle: 'Trend angle', crossline: 'Cross line', rotatedrect: 'Rotated rectangle', circle: 'Circle', ellipse: 'Ellipse', triangle: 'Triangle', polyline: 'Polyline', arc: 'Arc', curve: 'Curve', doublecurve: 'Double curve', cycliclines: 'Cyclic lines', timecycles: 'Time cycles', sineline: 'Sine line', pricenote: 'Price note', pricelabel: 'Price label', flagmark: 'Flag mark', signpost: 'Signpost', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+/** Emojis offered for the signpost's pin (TradingView's default first). */
+const SIGNPOST_EMOJIS: readonly string[] = ['🙂', '🚀', '📈', '📉', '💰', '🔥', '⚠️', '✅', '❌', '⭐', '🎯', '🐂', '🐻', '💡', '📌', '🔔'];
 /** TradingView's source names (its price sources). */
 const REGRESSION_SOURCE_LABEL: Record<(typeof REGRESSION_SOURCES)[number], string> = { open: 'Open', high: 'High', low: 'Low', close: 'Close', hl2: '(H + L)/2', hlc3: '(H + L + C)/3', ohlc4: '(O + H + L + C)/4' };
 /** TradingView's Text orientation dropdown (vertical line). */
@@ -196,7 +199,7 @@ export class DrawingSettingsDialog {
         const tvText = (drawing instanceof TextLabel || drawing instanceof Callout) && drawing.tv === true;
         if (!tvText && (drawing.editableLevels() || styleFields(drawing).length > 0)) tabs.push('style');
         // TradingView's price note, price label and flag mark style their label on the Style tab.
-        const labelOnStyle = (drawing instanceof PriceLabel || drawing instanceof PriceNote || drawing instanceof FlagMark) && drawing.tv === true;
+        const labelOnStyle = (drawing instanceof PriceLabel || drawing instanceof FlagMark) && drawing.tv === true;
         if (!labelOnStyle && drawing.schema().fields.some((f) => f.path.startsWith('text.'))) tabs.push('text');
         // TradingView's brush, highlighter and path have no Coordinates tab.
         const brush = (drawing instanceof Freehand || drawing instanceof Highlighter || drawing instanceof Path) && drawing.tv;
@@ -357,14 +360,13 @@ export class DrawingSettingsDialog {
         if (drawing instanceof PriceNote && drawing.tv) {
             // TradingView's price note: Label text (colour, size, bold, italic), Label background, Label border, Line color.
             const sizes = TV_FIB_FONT_SIZES.map((n) => ({ value: String(n), label: String(n) }));
-            const t = drawing.text;
             const text = fieldRow({
                 label: 'Label text',
                 control: [
-                    this.colorControl(drawing, 'text.color', actions, t?.color ?? DEFAULT_DRAWING_COLOR),
-                    this.selectControl('text.size', sizes, String(textPx(t?.size)), actions, (v) => Number(v)),
-                    styleToggle('B', 'Bold', 'font-weight:700;', t?.bold === true, (v) => actions.patch({ 'text.bold': v })),
-                    styleToggle('I', 'Italic', 'font-style:italic;font-family:serif;', t?.italic === true, (v) => actions.patch({ 'text.italic': v })),
+                    this.colorControl(drawing, 'labelColor', actions, drawing.labelColor ?? DEFAULT_DRAWING_COLOR),
+                    this.selectControl('labelSize', sizes, String(drawing.labelSize ?? 12), actions, (v) => Number(v)),
+                    styleToggle('B', 'Bold', 'font-weight:700;', drawing.labelBold === true, (v) => actions.patch({ labelBold: v })),
+                    styleToggle('I', 'Italic', 'font-style:italic;font-family:serif;', drawing.labelItalic === true, (v) => actions.patch({ labelItalic: v })),
                 ],
                 fit: true,
             });
@@ -376,6 +378,19 @@ export class DrawingSettingsDialog {
             const line = fieldRow({ label: 'Line color', control: [this.colorControl(drawing, 'style.lineColor', actions, drawing.style.lineColor || DEFAULT_DRAWING_COLOR)], fit: true });
             line.dataset.role = 'line-color';
             grid.append(text, back, border, line);
+            return;
+        }
+        if (drawing instanceof Signpost && drawing.tv) {
+            // TradingView's signpost: one Emoji pin row (a switch, the plate's colour and the emoji).
+            const emoji = this.selectControl('emoji', SIGNPOST_EMOJIS.map((e) => ({ value: e, label: e })), drawing.emoji ?? '🙂', actions);
+            const row = fieldRow({
+                label: 'Emoji pin',
+                toggle: { id: uid(), checked: drawing.showImage === true, onChange: (v) => actions.patch({ showImage: v }) },
+                control: [this.colorControl(drawing, 'plateColor', actions, drawing.plateColor ?? DEFAULT_DRAWING_COLOR), emoji],
+                fit: true,
+            });
+            row.dataset.role = 'emoji-pin';
+            grid.appendChild(row);
             return;
         }
         if (drawing instanceof FlagMark && drawing.tv) {
@@ -986,6 +1001,22 @@ export class DrawingSettingsDialog {
     private buildCoordinates(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
         const priceOnly = PRICE_ONLY.has(drawing.type);
         const timeOnly = TIME_ONLY.has(drawing.type);
+        if (drawing instanceof Signpost && drawing.tv) {
+            // TradingView's "#1 (vertical position %, bar)": its position (-100..100) and the bar's time.
+            const a = drawing.anchors[0];
+            if (!a) return;
+            const pos = buildFieldControl({ kind: 'number', value: drawing.position ?? 50, min: -100, max: 100, step: 1, fill: false, commit: 'blur', onChange: (v) => { if (Number.isFinite(v)) actions.patch({ position: Math.max(-100, Math.min(100, v)) }); } });
+            pos.el.dataset.role = 'signpost-position';
+            pos.el.style.width = '120px';
+            pos.el.style.flex = 'none';
+            let cur = a.time;
+            const t = buildFieldControl({ kind: 'text', value: formatLocal(a.time), fill: false, placeholder: 'YYYY-MM-DD HH:MM', onChange: (v) => { const ms = parseLocal(v); if (ms == null) { t.setValue?.(formatLocal(cur)); return; } cur = ms; actions.patch({ 'anchors.0.time': ms }); } });
+            t.el.dataset.role = 'anchor-time';
+            t.el.style.width = '172px';
+            t.el.style.flex = 'none';
+            grid.appendChild(fieldRow({ label: '#1 (vertical position %, time)', control: [pos.el, t.el], fit: true }));
+            return;
+        }
         drawing.anchors.forEach((a, i) => {
             if (drawing instanceof TrendAngle && drawing.tv && i === 1) {
                 // TradingView's trend angle: its first point, then "Angle" (degrees, -360..360) in place of the second.
