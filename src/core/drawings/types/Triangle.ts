@@ -9,7 +9,7 @@ export class Triangle extends SegmentDrawing {
     readonly type = 'triangle' as const;
 
     /** TradingView's look on a new one (module 565760: minty green 2 px, the green at 20 % behind). */
-    override tvShapeKind(): 'area' | 'polyline' | 'curve' {
+    override tvShapeKind(): 'area' | 'polyline' | 'curve' | 'cycle' | 'lines' {
         return 'area';
     }
 

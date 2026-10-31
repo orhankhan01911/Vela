@@ -7,7 +7,7 @@ import { PathDrawing } from './PathDrawing';
 export class Polyline extends PathDrawing {
     readonly type = 'polyline' as const;
 
-    override tvShapeKind(): 'area' | 'polyline' | 'curve' {
+    override tvShapeKind(): 'area' | 'polyline' | 'curve' | 'cycle' | 'lines' {
         return 'polyline';
     }
 

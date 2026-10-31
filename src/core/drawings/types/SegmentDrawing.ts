@@ -5,8 +5,9 @@ import { LINE_FIELDS, FILL_FIELDS } from '../schema';
 import { distToSegment, handleAt, pointInPolygon } from '../hittest';
 
 /** How a tool takes TradingView's plain shape look: `area` (Border and Background, filled: triangle, arc), `polyline`
- *  (the same with a line style), `curve` (Line and Background, not filled: curve, double curve). */
-export type TvShapeKind = 'area' | 'polyline' | 'curve';
+ *  (the same with a line style), `curve` (Line and Background, not filled: curve, double curve), `cycle` (Line and
+ *  Background, filled: time cycles), `lines` (one Lines row: cyclic lines, sine line). */
+export type TvShapeKind = 'area' | 'polyline' | 'curve' | 'cycle' | 'lines';
 
 /**
  * Shared base for multi-line drawings (channels, pitchfork). The line math lives in
@@ -25,7 +26,7 @@ export abstract class SegmentDrawing extends Drawing {
         const kind = this.tvShapeKind();
         if (kind && !init.props) {
             this.tv = true;
-            this.fillBackground = kind !== 'curve';
+            this.fillBackground = kind !== 'curve' && kind !== 'lines';
         }
     }
 
@@ -44,9 +45,10 @@ export abstract class SegmentDrawing extends Drawing {
     protected tvShapeSchema(): SettingsSchema {
         const kind = this.tvShapeKind();
         const line: SettingsField[] = LINE_FIELDS.filter((f) => kind !== 'area' || f.path !== 'style.lineStyle');
+        if (kind === 'lines') return { fields: line };
         return {
             fields: [
-                ...(kind === 'curve' ? line : line.map((f) => ({ ...f, label: f.label.replace('Line', 'Border') }))),
+                ...(kind === 'curve' || kind === 'cycle' ? line : line.map((f) => ({ ...f, label: f.label.replace('Line', 'Border') }))),
                 ...FILL_FIELDS,
                 { path: 'fillBackground', label: 'Background', kind: 'boolean', group: 'fill' },
             ],

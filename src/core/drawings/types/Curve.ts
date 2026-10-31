@@ -15,7 +15,7 @@ export class Curve extends SegmentDrawing {
     readonly type = 'curve' as const;
 
     /** TradingView's look on a new one (module 499867: TradingView blue 2 px, no background). */
-    override tvShapeKind(): 'area' | 'polyline' | 'curve' {
+    override tvShapeKind(): 'area' | 'polyline' | 'curve' | 'cycle' | 'lines' {
         return 'curve';
     }
 

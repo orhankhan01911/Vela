@@ -9,6 +9,11 @@ import { SegmentDrawing } from './SegmentDrawing';
 export class SineLine extends SegmentDrawing {
     readonly type = 'sineline' as const;
 
+    /** TradingView's look on a new one (module 532591: its teal, 2 px). */
+    override tvShapeKind(): 'area' | 'polyline' | 'curve' | 'cycle' | 'lines' {
+        return 'lines';
+    }
+
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         return { min: 2, max: 2, slots: [{ role: 'crest', free: 'both' }, { role: 'trough', free: 'both' }] };
     }
@@ -49,6 +54,7 @@ export class SineLine extends SegmentDrawing {
     }
 
     schema(): SettingsSchema {
+        if (this.tv) return this.tvShapeSchema();
         return { fields: [...LINE_FIELDS] };
     }
 }

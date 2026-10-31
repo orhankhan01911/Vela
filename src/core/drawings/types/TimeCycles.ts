@@ -12,6 +12,11 @@ const ARC_STEPS = 32;
 export class TimeCycles extends SegmentDrawing {
     readonly type = 'timecycles' as const;
 
+    /** TradingView's look on a new one (module 34424: its teal 2 px, its green at 50 % behind). */
+    override tvShapeKind(): 'area' | 'polyline' | 'curve' | 'cycle' | 'lines' {
+        return 'cycle';
+    }
+
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         return { min: 2, max: 2, slots: [{ role: 'start', free: 'both' }, { role: 'period', free: 'both' }] };
     }
@@ -44,7 +49,8 @@ export class TimeCycles extends SegmentDrawing {
             for (let i = 1; i < pts.length; i += 1) segments.push([pts[i - 1]![0], pts[i - 1]![1], pts[i]![0], pts[i]![1]]);
             fills.push({ color, pts });
         }
-        return { segments, fill: null, fills, fillAlpha: this.style.fillColor ? 1 : 0.2 };
+        // TradingView's Background switch hides the fills.
+        return { segments, fill: null, fills: this.tv && this.fillBackground === false ? [] : fills, fillAlpha: this.style.fillColor ? 1 : 0.2 };
     }
 
     priceRange(): { min: number; max: number } | null {
@@ -57,6 +63,7 @@ export class TimeCycles extends SegmentDrawing {
     }
 
     schema(): SettingsSchema {
+        if (this.tv) return this.tvShapeSchema();
         return { fields: [...LINE_FIELDS, ...FILL_FIELDS] };
     }
 }

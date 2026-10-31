@@ -220,7 +220,7 @@ function legacyArrowMarker(doc: SerializedDrawing): SerializedDrawing {
 /** Brush and highlighter strokes, rectangles, paths, texts and callouts became TradingView's (2026-10-30), the flat
  *  top/bottom, disjoint channel, trend angle, cross line, rotated rectangle, circle and the plain shapes on 2026-10-31. One saved before with no props: give it an empty bag so it keeps its look (a fresh one
  *  has no props and starts as TradingView's). */
-const LEGACY_NO_PROPS: ReadonlySet<string> = new Set(['freehand', 'highlighter', 'box', 'path', 'text', 'callout', 'flattopbottom', 'disjointchannel', 'trendangle', 'crossline', 'rotatedrect', 'circle', 'triangle', 'polyline', 'arc', 'curve', 'doublecurve']);
+const LEGACY_NO_PROPS: ReadonlySet<string> = new Set(['freehand', 'highlighter', 'box', 'path', 'text', 'callout', 'flattopbottom', 'disjointchannel', 'trendangle', 'crossline', 'rotatedrect', 'circle', 'triangle', 'polyline', 'arc', 'curve', 'doublecurve', 'cycliclines', 'timecycles', 'sineline']);
 function legacyStroke(doc: SerializedDrawing): SerializedDrawing {
     return LEGACY_NO_PROPS.has(doc.type) && doc.props === undefined ? { ...doc, props: {} } : doc;
 }
@@ -1240,9 +1240,10 @@ const ELLIOTT_TRIANGLE_ICON = svg24('<path d="M3 20 7 5l3 12 3-9 3 6 3-3 2 2"/>'
 const ELLIOTT_COMBO_ICON = svg24('<path d="M3 19 8 8l4 8 4-11 5 10"/>');
 const SOLID = { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' as const };
 
-registerDrawingType({ type: 'cycliclines', group: 'measure', label: 'Cyclic Lines', icon: CYCLIC_ICON, defaultStyle: SOLID, create: (init) => new CyclicLines(init) });
-registerDrawingType({ type: 'timecycles', group: 'measure', label: 'Time Cycles', icon: TIME_CYCLES_ICON, defaultStyle: SOLID, create: (init) => new TimeCycles(init) });
-registerDrawingType({ type: 'sineline', group: 'measure', label: 'Sine Line', icon: SINE_ICON, defaultStyle: SOLID, create: (init) => new SineLine(init) });
+// TradingView's cycles: cyclic lines in its light teal, time cycles and the sine line in its teal, 2 px; time cycles' green at 50 % behind.
+registerDrawingType({ type: 'cycliclines', group: 'measure', label: 'Cyclic Lines', icon: CYCLIC_ICON, defaultStyle: { lineColor: '#80ccdb', lineWidth: 2, lineStyle: 'solid' }, create: (init) => new CyclicLines(init) }); // palette-exempt: TradingView's cyclic lines colour
+registerDrawingType({ type: 'timecycles', group: 'measure', label: 'Time Cycles', icon: TIME_CYCLES_ICON, defaultStyle: { lineColor: '#159980', lineWidth: 2, lineStyle: 'solid', fillColor: '#6aa84f80' }, create: (init) => new TimeCycles(init) }); // palette-exempt: TradingView's time cycles colours
+registerDrawingType({ type: 'sineline', group: 'measure', label: 'Sine Line', icon: SINE_ICON, defaultStyle: { lineColor: '#159980', lineWidth: 2, lineStyle: 'solid' }, create: (init) => new SineLine(init) }); // palette-exempt: TradingView's sine line colour
 // TradingView's date range: 2 px blue lines, its blue at 15 % behind.
 registerDrawingType({ type: 'daterange', group: 'measure', label: 'Date Range', icon: DATE_RANGE_ICON, defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid', fillColor: `${TV_LINE_COLOR}26` }, create: (init) => new DateRange(init) });
 // TradingView's price range: 2 px blue lines, its blue at 15 % behind.

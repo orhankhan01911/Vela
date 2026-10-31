@@ -470,7 +470,16 @@ export class DrawingSettingsPopup {
         const tvFlat = !multi && drawing instanceof TrendFigure && drawing.tv ? drawing : null;
         // TradingView's plain shapes (triangle, arc, polyline, curve, double curve; a saved one keeps ours).
         const tvShape = !multi && drawing instanceof SegmentDrawing && drawing.tv && drawing.tvShapeKind() ? drawing : null;
-        const tvShapeBar: readonly TvBarItem[] | null = tvShape ? (tvShape.tvShapeKind() === 'area' ? ['line', 'fill', 'width'] : tvShape.tvShapeKind() === 'polyline' ? ['line', 'fill', 'width', 'style'] : ['line', 'width', 'style']) : null;
+        const shapeKind = tvShape?.tvShapeKind();
+        const tvShapeBar: readonly TvBarItem[] | null = !tvShape
+            ? null
+            : shapeKind === 'area'
+              ? ['line', 'fill', 'width']
+              : shapeKind === 'polyline' || shapeKind === 'cycle'
+                ? ['line', 'fill', 'width', 'style']
+                : tvShape.type === 'cycliclines'
+                  ? ['line', 'width']
+                  : ['line', 'width', 'style'];
         const oldShape = drawing instanceof SegmentDrawing && !!drawing.tvShapeKind() && !drawing.tv;
         const tvBar = tvShapeBar ? tvShapeBar : oldShape || multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : tvFlat ? AREA_LINE_BAR : drawing instanceof TrendFigure || ((drawing instanceof TrendAngle || drawing instanceof CrossLine || drawing instanceof RotatedRect || drawing instanceof Circle || drawing instanceof Ellipse) && !drawing.tv) ? undefined : TV_QUICK_BAR[drawing.type];
         if (tvReg) bar.querySelectorAll<HTMLElement>('[data-tip="Line width"]').forEach((k) => k.remove());

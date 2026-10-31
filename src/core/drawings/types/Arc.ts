@@ -15,7 +15,7 @@ export class Arc extends SegmentDrawing {
     readonly type = 'arc' as const;
 
     /** TradingView's look on a new one (module 238807: berry pink 2 px, the pink at 20 % behind). */
-    override tvShapeKind(): 'area' | 'polyline' | 'curve' {
+    override tvShapeKind(): 'area' | 'polyline' | 'curve' | 'cycle' | 'lines' {
         return 'area';
     }
 

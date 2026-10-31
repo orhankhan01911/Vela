@@ -12,6 +12,11 @@ export const MAX_CYCLES = 400;
 export class CyclicLines extends SegmentDrawing {
     readonly type = 'cycliclines' as const;
 
+    /** TradingView's look on a new one (module 967139: its light teal, 2 px). */
+    override tvShapeKind(): 'area' | 'polyline' | 'curve' | 'cycle' | 'lines' {
+        return 'lines';
+    }
+
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         return { min: 2, max: 2, slots: [{ role: 'start', free: 'both' }, { role: 'period', free: 'both' }] };
     }
@@ -38,6 +43,7 @@ export class CyclicLines extends SegmentDrawing {
     }
 
     schema(): SettingsSchema {
+        if (this.tv) return this.tvShapeSchema();
         return { fields: [...LINE_FIELDS] };
     }
 }

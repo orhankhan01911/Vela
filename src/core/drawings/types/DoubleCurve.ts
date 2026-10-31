@@ -15,7 +15,7 @@ export class DoubleCurve extends SegmentDrawing {
     readonly type = 'doublecurve' as const;
 
     /** TradingView's look on a new one (module 481599: deep blue 2 px, no background). */
-    override tvShapeKind(): 'area' | 'polyline' | 'curve' {
+    override tvShapeKind(): 'area' | 'polyline' | 'curve' | 'cycle' | 'lines' {
         return 'curve';
     }
 

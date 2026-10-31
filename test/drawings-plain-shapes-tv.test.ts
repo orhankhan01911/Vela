@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// TradingView's plain shapes (audit 2026-10-31, factory defaults read from modules 565760 triangle, 631559 polyline,
-// 238807 arc, 499867 curve, 481599 double curve; dialogs and bars read on live shapes): colours, Background, no text,
+// TradingView's plain shapes and cycles (audit 2026-10-31, factory defaults read from modules 565760 triangle, 631559
+// polyline, 238807 arc, 499867 curve, 481599 double curve, 967139 cyclic lines, 34424 time cycles, 532591 sine line; dialogs and bars read on live shapes): colours, Background, no text,
 // dialog rows and tabs, and the bar of each. One saved before (no props) keeps its look.
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 
@@ -58,6 +58,10 @@ const CASES = [
     { type: 'arc', anchors: three, color: '#e91e63', fill: true, tabs: ['Style', 'Visibility'], rows: ['border', 'background'], bar: ['Line color', 'Fill', 'Line width'] },
     { type: 'curve', anchors: three, color: TV_LINE_COLOR, fill: false, tabs: ['Style', 'Coordinates', 'Visibility'], rows: ['line', 'background'], bar: ['Line color', 'Line width', 'Line style'] },
     { type: 'doublecurve', anchors: three.slice(0, 2), color: '#673ab7', fill: false, tabs: ['Style', 'Coordinates', 'Visibility'], rows: ['line', 'background'], bar: ['Line color', 'Line width', 'Line style'] },
+    // Cycles (modules 967139, 34424, 532591).
+    { type: 'cycliclines', anchors: three.slice(0, 2), color: '#80ccdb', fill: false, tabs: ['Style', 'Coordinates', 'Visibility'], rows: ['lines'], bar: ['Line color', 'Line width'] },
+    { type: 'timecycles', anchors: three.slice(0, 2), color: '#159980', fill: true, tabs: ['Style', 'Coordinates', 'Visibility'], rows: ['line', 'background'], bar: ['Line color', 'Fill', 'Line width', 'Line style'] },
+    { type: 'sineline', anchors: three.slice(0, 2), color: '#159980', fill: false, tabs: ['Style', 'Coordinates', 'Visibility'], rows: ['lines'], bar: ['Line color', 'Line width', 'Line style'] },
 ] as const;
 
 describe('TradingView\'s plain shapes', () => {
