@@ -4,7 +4,7 @@ import type { Drawing, RegressionStyle, VwapStyle, SerializedDrawing } from '../
 import {
     DEFAULT_DRAWING_COLOR,
     RegressionChannel,
-    FlatTopBottom,
+    TrendFigure,
     TEXT_SIZE_OPTIONS,
     LINE_STYLE_OPTIONS,
     GLYPH_OPTIONS,
@@ -460,8 +460,8 @@ export class DrawingSettingsPopup {
         // TradingView's regression trend bar: its width only (every line), no colour.
         const tvReg = !multi && drawing instanceof RegressionChannel && drawing.tv ? drawing : null;
         // TradingView's flat top/bottom bar: line colour, background, text colour, width, style (a saved one keeps ours).
-        const tvFlat = !multi && drawing instanceof FlatTopBottom && drawing.tv ? drawing : null;
-        const tvBar = multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : tvFlat ? AREA_LINE_BAR : drawing instanceof FlatTopBottom ? undefined : TV_QUICK_BAR[drawing.type];
+        const tvFlat = !multi && drawing instanceof TrendFigure && drawing.tv ? drawing : null;
+        const tvBar = multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : tvFlat ? AREA_LINE_BAR : drawing instanceof TrendFigure ? undefined : TV_QUICK_BAR[drawing.type];
         if (tvReg) bar.querySelectorAll<HTMLElement>('[data-tip="Line width"]').forEach((k) => k.remove());
         if (tvFib instanceof FibVerticalLevels || tvFib instanceof RadialFib) bar.querySelectorAll<HTMLElement>('[data-tip="Line style"]').forEach((k) => k.remove());
         if (tvFib) {

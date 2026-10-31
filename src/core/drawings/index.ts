@@ -53,6 +53,7 @@ export { SegmentDrawing } from './types/SegmentDrawing';
 export { ParallelChannel } from './types/ParallelChannel';
 export { DisjointChannel } from './types/DisjointChannel';
 export { FlatTopBottom } from './types/FlatTopBottom';
+export { TrendFigure, type FigureLines } from './types/TrendFigure';
 export { RegressionChannel, computeRegressionFit, computeTvRegression, defaultRegressionTrend, opaqueColor, REGRESSION_SOURCES, type RegressionFit, type RegressionStyle, type RegressionLayout, type RegressionTrend, type RegressionTrendLine, type RegressionSource, type RegressionTvLayout } from './types/RegressionChannel';
 export { AnchoredVwap, computeVwap, type VwapPoint, type VwapStyle, type VwapLayout } from './types/AnchoredVwap';
 export {

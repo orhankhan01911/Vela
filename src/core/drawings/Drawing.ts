@@ -24,6 +24,7 @@ export const TV_TEXT_DEFAULTS: Readonly<Record<string, Partial<DrawingText>>> = 
     hray: { color: TV_LINE_COLOR, size: 12, hAlign: 'center', vAlign: 'bottom' },
     parallelchannel: { color: TV_LINE_COLOR, size: 14, hAlign: 'left', vAlign: 'top' },
     flattopbottom: { color: '#FF9800', size: 14, hAlign: 'left', vAlign: 'top' }, // palette-exempt: TradingView's tan orange 500
+    disjointchannel: { color: '#089981', size: 14, hAlign: 'left', vAlign: 'top' }, // palette-exempt: TradingView's minty green 500
     vline: { color: TV_LINE_COLOR, size: 14, hAlign: 'center', vAlign: 'center' },
     pricerange: { color: TV_LINE_COLOR, size: 12 },
     datepricerange: { color: TV_LINE_COLOR, size: 12 },

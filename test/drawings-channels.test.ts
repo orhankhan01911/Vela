@@ -58,7 +58,8 @@ describe('drawings/ParallelChannel', () => {
 
 describe('drawings/DisjointChannel', () => {
     const proj = fakeProjector();
-    // top line at price 80, bottom line at price 20 (two independent horizontal-ish segments)
+    // top line at price 80, bottom line at price 20 (two independent horizontal-ish segments). One saved before the
+    // TradingView look (drawings-disjointchannel-tv covers that).
     const make = () =>
         createDrawing('disjointchannel', {
             paneId: 'price',
@@ -68,6 +69,7 @@ describe('drawings/DisjointChannel', () => {
                 { time: 0, price: 20 },
                 { time: 50, price: 20 },
             ],
+            props: {},
         })!;
 
     it('has a 4/4 anchor schema', () => {

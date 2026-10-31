@@ -218,9 +218,9 @@ function legacyArrowMarker(doc: SerializedDrawing): SerializedDrawing {
 }
 
 /** Brush and highlighter strokes, rectangles, paths, texts and callouts became TradingView's (2026-10-30), the flat
- *  top/bottom on 2026-10-31. One saved before with no props: give it an empty bag so it keeps its look (a fresh one
+ *  top/bottom and disjoint channel on 2026-10-31. One saved before with no props: give it an empty bag so it keeps its look (a fresh one
  *  has no props and starts as TradingView's). */
-const LEGACY_NO_PROPS: ReadonlySet<string> = new Set(['freehand', 'highlighter', 'box', 'path', 'text', 'callout', 'flattopbottom']);
+const LEGACY_NO_PROPS: ReadonlySet<string> = new Set(['freehand', 'highlighter', 'box', 'path', 'text', 'callout', 'flattopbottom', 'disjointchannel']);
 function legacyStroke(doc: SerializedDrawing): SerializedDrawing {
     return LEGACY_NO_PROPS.has(doc.type) && doc.props === undefined ? { ...doc, props: {} } : doc;
 }
@@ -454,7 +454,8 @@ registerDrawingType({
     group: 'channels',
     label: 'Disjoint Channel',
     icon: DISJOINT_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}1a` },
+    // TradingView's disjoint channel: its minty green 2 px, the same green at 20 % behind.
+    defaultStyle: { lineColor: '#089981', lineWidth: 2, lineStyle: 'solid', fillColor: '#08998133' }, // palette-exempt: TradingView's minty green 500
     create: (init) => new DisjointChannel(init),
 });
 

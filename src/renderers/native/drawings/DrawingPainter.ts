@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, FlatTopBottom, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TrendFigure, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -324,7 +324,7 @@ export class DrawingPainter {
                 const pts = d.handlePoints(proj); // a path ends in an arrowhead along its last segment
                 if (pts.length >= 2) this.paintArrowhead(ctx, pts[pts.length - 2]!, pts[pts.length - 1]!, d.style);
             }
-            if (d instanceof FlatTopBottom && d.tv) this.paintTvFlatExtras(ctx, d, proj, theme);
+            if (d instanceof TrendFigure && d.tv) this.paintTvFigureExtras(ctx, d, proj, theme);
             if (d instanceof Freehand && d.tv && (d.style.arrowLeft || d.style.arrowRight)) {
                 const ends = d.strokeEnds(proj); // TradingView's brush line ends: an open arrow at either end
                 if (ends && d.style.arrowLeft) this.paintChevron(ctx, ends.start[0], ends.start[1], d.style);
@@ -2150,19 +2150,19 @@ export class DrawingPainter {
         }
     }
 
-    /** TradingView's flat top/bottom extras (module 293769): each line's end arrows (not on an extended side) and, with
-     *  Prices on, each end's price 6 px outside it, vertically centred, in the price colour, size and weight. */
-    private paintTvFlatExtras(ctx: CanvasRenderingContext2D, d: FlatTopBottom, proj: Projector, theme: VelaTheme): void {
-        const L = d.flatLines(proj);
-        if (!L) return;
+    /** TradingView's flat top/bottom and disjoint channel extras (modules 293769, 817798): each line's end arrows (not
+     *  on an extended side) and, with Prices on, each end's price 6 px outside it, vertically centred, in the price
+     *  colour, size and weight. */
+    private paintTvFigureExtras(ctx: CanvasRenderingContext2D, d: TrendFigure, proj: Projector, theme: VelaTheme): void {
+        const L = d.figureLines(proj);
+        const prices = d.figurePrices();
+        if (!L || !prices) return;
         for (const [a, b] of [[L.p1, L.p2], [L.p, L.c]] as const) {
             const [lft, rgt] = a[0] <= b[0] ? [a, b] : [b, a];
             if (d.style.arrowLeft && !d.extendLeft) this.paintChevron(ctx, rgt, lft, d.style);
             if (d.style.arrowRight && !d.extendRight) this.paintChevron(ctx, lft, rgt, d.style);
         }
         if (!d.showPrices) return;
-        const [a, b, f] = d.anchors;
-        if (!a || !b || !f) return;
         const text = (price: number): string => this.axisLabel?.(d.paneId, price)?.text || formatPriceTag(price);
         ctx.save();
         ctx.font = `${d.priceItalic ? 'italic ' : ''}${d.priceBold ? 'bold ' : ''}${d.priceSize ?? 12}px ${theme.fontFamily}`;
@@ -2173,10 +2173,10 @@ export class DrawingPainter {
             ctx.textAlign = outRight ? 'left' : 'right';
             ctx.fillText(label, pt[0] + (outRight ? 6 : -6), pt[1]);
         };
-        put(L.p1, L.p2, text(a.price));
-        put(L.p2, L.p1, text(b.price));
-        put(L.c, L.p, text(f.price));
-        put(L.p, L.c, text(f.price));
+        put(L.p1, L.p2, text(prices[0]));
+        put(L.p2, L.p1, text(prices[1]));
+        put(L.c, L.p, text(prices[2]));
+        put(L.p, L.c, text(prices[3]));
         ctx.restore();
     }
 
@@ -4293,10 +4293,11 @@ export function labelLayout(d: Drawing, proj: Projector): {
             const top = text.vAlign === 'top' ? y1 + pad : text.vAlign === 'bottom' ? y2 - pad - h : (y1 + y2) / 2 - h / 2;
             return { x, top, align: ha };
         }
-        case 'flattopbottom': {
-            // TradingView's flat top/bottom text (module 293769): along the upper line over it (Top), the lower line
-            // under it (Bottom) or the middle between them (Inside), at the line's left / middle / right.
-            const L = (d as FlatTopBottom).tv ? (d as FlatTopBottom).flatLines(proj) : null;
+        case 'flattopbottom':
+        case 'disjointchannel': {
+            // TradingView's flat top/bottom and disjoint channel text (modules 293769, 817798): along the upper line over
+            // it (Top), the lower line under it (Bottom) or the middle between them (Inside), at its left / middle / right.
+            const L = (d as TrendFigure).tv ? (d as TrendFigure).figureLines(proj) : null;
             if (!L) return pts[0] ? { x: pts[0][0], top: pts[0][1], align: 'left' } : null;
             const slopedUp = (L.p1[1] + L.p2[1]) / 2 <= (L.p[1] + L.c[1]) / 2;
             type Pt = readonly [number, number];
