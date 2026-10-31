@@ -50,6 +50,11 @@ export abstract class PatternDrawing extends Drawing {
         return [];
     }
 
+    /** TradingView draws the dotted ratio lines 1 px (XABCD, Cypher) or in the line's width (ABCD). */
+    tvRatioLineWidth(): number {
+        return 1;
+    }
+
     /** The label drawn at each anchor (empty string ⇒ no label). Its length is the vertex count. */
     abstract vertexLabels(): readonly string[];
     /** Show consecutive-leg retracement ratios (harmonic patterns). */

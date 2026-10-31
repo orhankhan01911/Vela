@@ -3240,7 +3240,7 @@ export class DrawingPainter {
             const a = pts[r.from];
             const b = pts[r.to];
             if (!a || !b) continue;
-            this.stroke(ctx, { lineColor: line, lineWidth: 1, lineStyle: 'dotted' }, () => {
+            this.stroke(ctx, { lineColor: line, lineWidth: d.tvRatioLineWidth(), lineStyle: 'dotted' }, () => {
                 ctx.moveTo(a[0], a[1]);
                 ctx.lineTo(b[0], b[1]);
             });

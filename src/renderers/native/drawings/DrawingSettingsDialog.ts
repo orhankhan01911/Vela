@@ -123,7 +123,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -1810,7 +1810,7 @@ export class DrawingSettingsDialog {
     }
 
     /** TradingView's pattern Style tab (module 266806): Label (text colour, size, bold, italic), Border (colour and
-     *  width) and Background (a switch and its colour, opacity in the colour). */
+     *  width) and, on the patterns that fill, Background (a switch and its colour, opacity in the colour). */
     private buildPatternTvStyle(grid: HTMLElement, d: PatternDrawing, actions: SettingsActions): void {
         const sizes = TV_FIB_FONT_SIZES.map((n) => ({ value: String(n), label: String(n) }));
         const label = fieldRow({
@@ -1827,10 +1827,12 @@ export class DrawingSettingsDialog {
         const line = this.pathLineButton({ color: d.style.lineColor || DEFAULT_DRAWING_COLOR, width: d.style.lineWidth ?? 2, style: 'solid' }, { color: 'style.lineColor', width: 'style.lineWidth' }, actions);
         const border = fieldRow({ label: 'Border', control: [line], fit: true });
         border.dataset.role = 'border';
+        grid.append(label, border);
+        if (!d.fillTriangles().length) return; // TradingView's ABCD has no background
         const fill = this.colorControl(d, 'style.fillColor', actions, d.style.fillColor ?? DEFAULT_DRAWING_COLOR);
         const back = fieldRow({ label: 'Background', toggle: { id: uid(), checked: d.fillBackground !== false, onChange: (v) => actions.patch({ fillBackground: v }) }, control: [fill], fit: true });
         back.dataset.role = 'background';
-        grid.append(label, border, back);
+        grid.append(back);
     }
 
     /** TradingView's Gann fan Style tab (module 154448): the nine levels (a switch, its c1/c2 name and its line button),

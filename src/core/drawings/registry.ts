@@ -171,9 +171,9 @@ export function deserializeDrawing(doc: SerializedDrawing): Drawing | null {
     return meta ? meta.create(legacyPattern(legacyFibSpiral(legacyStroke(legacyArrowMarker(legacyEllipse(legacyPitchfork(legacyComment(legacyElliott(doc))))))))) : null;
 }
 
-/** Patterns that became TradingView's look (XABCD, Cypher, head and shoulders so far): a record saved before has no `tv` flag (they saved no props):
+/** Patterns that became TradingView's look (XABCD, Cypher, head and shoulders, ABCD so far): a record saved before has no `tv` flag (they saved no props):
  *  mark it so it keeps its look. */
-const TV_PATTERN_TYPES: ReadonlySet<string> = new Set(['xabcd', 'cypher', 'headshoulders']);
+const TV_PATTERN_TYPES: ReadonlySet<string> = new Set(['xabcd', 'cypher', 'headshoulders', 'abcd']);
 function legacyPattern(doc: SerializedDrawing): SerializedDrawing {
     if (!TV_PATTERN_TYPES.has(doc.type) || doc.props?.tv !== undefined) return doc;
     return { ...doc, props: { ...(doc.props ?? {}), tv: false } };
@@ -1018,7 +1018,7 @@ registerDrawingType({
     label: 'ABCD Pattern',
     icon: ABCD_ICON,
     coversSeries: true, // labelled pattern over the candles like TradingView's: a candle never hides a wave or point name
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    defaultStyle: { lineColor: '#089981', lineWidth: 2, lineStyle: 'solid' }, // palette-exempt: TradingView's minty-green-500
     create: (init) => new ABCDPattern(init),
 });
 

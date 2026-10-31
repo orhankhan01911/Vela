@@ -1334,6 +1334,7 @@ const TV_QUICK_BAR: Readonly<Record<string, readonly TvBarItem[]>> = {
     xabcd: ['line', 'text', 'width'],
     cypher: ['line', 'text', 'width'],
     headshoulders: ['line', 'fill', 'text', 'width'],
+    abcd: ['line', 'text', 'width'],
     fibspiral: ['line', 'width'],
     freehand: ['line', 'width'],
     highlighter: ['line', 'width'],
