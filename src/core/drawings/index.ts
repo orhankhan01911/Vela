@@ -118,7 +118,7 @@ export { Comment } from './types/Comment';
 export { Signpost, SIGNPOST_R } from './types/Signpost';
 export { GannFan } from './types/GannFan';
 export { PitchforkBase, PITCHFORK_LEVELS, PITCHFORK_MEDIAN, PITCHFORK_STYLES, type PitchforkFrame, type PitchforkLevel, type PitchforkStyle } from './types/PitchforkBase';
-export { GannBox } from './types/GannBox';
+export { GannBox, TV_GANN_BOX_LEVELS, TV_GANN_ANGLES } from './types/GannBox';
 export { GannSquare, GANN_SQUARE_ARCS } from './types/GannSquare';
 export {
     DedekindTessellation,

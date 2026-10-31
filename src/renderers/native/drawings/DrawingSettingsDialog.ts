@@ -16,6 +16,7 @@ import {
     type FibLevel,
     TV_FIB_FONT_SIZES,
     GannBox,
+    TV_GANN_ANGLES,
     GannFan,
     GannSquare,
     PitchforkBase,
@@ -119,7 +120,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -311,6 +312,10 @@ export class DrawingSettingsDialog {
     private buildStyle(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
         if (drawing instanceof FibSpeedFan && drawing.tv) {
             this.buildSpeedFanStyle(grid, drawing, actions);
+            return;
+        }
+        if (drawing instanceof GannBox && drawing.tv) {
+            this.buildGannBoxTvStyle(grid, drawing, actions);
             return;
         }
         if (drawing instanceof RadialFib && drawing.tv) {
@@ -1787,6 +1792,63 @@ export class DrawingSettingsDialog {
         paint();
         oneColor.el.dataset.role = 'one-color';
         return { el: oneColor.el, paint };
+    }
+
+    /** TradingView's Gann box Style tab (module 850509): PRICE LEVELS (two per row, Left and Right labels, Background),
+     *  TIME LEVELS (the same with Top and Bottom labels), Use one color, Angles (a switch and its colour), Reverse. */
+    private buildGannBoxTvStyle(grid: HTMLElement, gb: GannBox, actions: SettingsActions): void {
+        const check = (label: string, key: string, on: boolean, role: string): void => {
+            const row = fieldRow({ label, bool: true, toggle: { id: uid(), checked: on, onChange: (v) => actions.patch({ [key]: v }) } });
+            row.dataset.role = role;
+            grid.appendChild(row);
+        };
+        const background = (on: boolean, key: string, opacity: number, opKey: string, role: string): void => {
+            const row = fieldRow({
+                label: 'Background',
+                toggle: { id: uid(), checked: on, onChange: (v) => actions.patch({ [key]: v }) },
+                control: [opacitySlider(Math.round(opacity * 100), (n) => actions.patch({ [opKey]: n / 100 }))],
+                fit: true,
+            });
+            row.dataset.role = role;
+            grid.appendChild(row);
+        };
+        const time = gb.timeLevels ?? [];
+        const priceColors = gb.levels.map((l) => l.color);
+        const timeColors = time.map((l) => l.color);
+        const colors = [...priceColors, ...timeColors, gb.anglesColor || TV_GANN_ANGLES];
+        let one: { el: HTMLElement; paint: () => void } | null = null;
+        const repaint = (): void => {
+            colors.splice(0, colors.length - 1, ...priceColors, ...timeColors);
+            one?.paint();
+        };
+        grid.appendChild(fieldSection('Price levels', { variant: 'inputs', first: true }));
+        const price = this.fibLevelCells(gb.levels, 'levels', priceColors, actions, repaint);
+        grid.appendChild(price.el);
+        check('Left labels', 'labelsLeft', gb.labelsLeft, 'left-labels');
+        check('Right labels', 'labelsRight', gb.labelsRight, 'right-labels');
+        background(gb.fillPrice, 'fillPrice', gb.fillOpacity, 'fillOpacity', 'price-background');
+        grid.appendChild(fieldSection('Time levels', { variant: 'inputs' }));
+        const timeCells = this.fibLevelCells(time, 'timeLevels', timeColors, actions, repaint);
+        grid.appendChild(timeCells.el);
+        check('Top labels', 'labelsTop', gb.labelsTop, 'top-labels');
+        check('Bottom labels', 'labelsBottom', gb.labelsBottom, 'bottom-labels');
+        background(gb.fillTime, 'fillTime', gb.fillTimeOpacity ?? gb.fillOpacity, 'fillTimeOpacity', 'time-background');
+        const angles = this.colorControl(gb, 'anglesColor', actions, gb.anglesColor || TV_GANN_ANGLES);
+        one = this.fibOneColor(
+            colors,
+            () => [...gb.levels.map((_, i) => `levels.${i}.color`), ...time.map((_, i) => `timeLevels.${i}.color`), 'anglesColor'],
+            actions,
+            () => {
+                priceColors.fill(colors[0]!);
+                timeColors.fill(colors[0]!);
+                for (const sw of [...price.swatches, ...timeCells.swatches]) sw.paint();
+            },
+        );
+        grid.appendChild(fieldRow({ label: 'Use one color', control: [one.el], fit: true }));
+        const anglesRow = fieldRow({ label: 'Angles', toggle: { id: uid(), checked: gb.angles === true, onChange: (v) => actions.patch({ angles: v }) }, control: [angles], fit: true });
+        anglesRow.dataset.role = 'angles';
+        grid.appendChild(anglesRow);
+        check('Reverse', 'reverse', gb.reverse === true, 'reverse');
     }
 
     /** TradingView's Fib speed resistance fan Style tab (module 32895): PRICE LEVELS (the levels two per row, Left and

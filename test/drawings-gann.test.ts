@@ -47,8 +47,9 @@ describe('drawings/gann fan', () => {
 describe('drawings/gann box', () => {
     const proj = fakeProjector();
 
-    it('builds a grid (H+V per ratio) + the 2 diagonals; click-placed; grabbable inside', () => {
-        const d = createDrawing('gannbox', { paneId: 'price', anchors: [{ time: 0, price: 40 }, { time: 10 * HR, price: 60 }] })! as GannBox;
+    it('a saved one builds a grid (H+V per ratio) + the 2 diagonals; click-placed; grabbable inside', () => {
+        // New boxes are TradingView's (test/drawings-gannbox-tv.test.ts); one saved before (with props) keeps this look.
+        const d = createDrawing('gannbox', { paneId: 'price', anchors: [{ time: 0, price: 40 }, { time: 10 * HR, price: 60 }], props: {} })! as GannBox;
         const lines = d.entryLines(proj)!;
         expect(lines.length).toBe(7 * 2 + 2); // 7 ratios × (horizontal + vertical) + 2 diagonals
         expect(d.placementMode()).toBe('click'); // click-move-click, like the plain Rectangle

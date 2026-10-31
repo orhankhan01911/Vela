@@ -89,8 +89,9 @@ export abstract class FibRatios extends Drawing {
     abstract defaultLevels(): readonly FibLevel[];
     /** ENABLED entries resolved to pixel lines + label placement — the painter's input. */
     abstract entryLines(proj: Projector): FibEntryLine[] | null;
-    /** Optional fill bands between entries (retracement/extension override); default none. */
-    fillBands(_proj: Projector): Array<{ color: string; x: number; y: number; w: number; h: number }> {
+    /** Optional fill bands between entries (retracement/extension override); default none. A band's own `alpha`
+     *  overrides the drawing's fill opacity (a Gann box's price and time bands each have their own). */
+    fillBands(_proj: Projector): Array<{ color: string; x: number; y: number; w: number; h: number; alpha?: number }> {
         return [];
     }
 

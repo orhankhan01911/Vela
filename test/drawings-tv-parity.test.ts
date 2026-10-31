@@ -123,7 +123,7 @@ describe('drawing settings TradingView has', () => {
         expect(createDrawing('note', { paneId: 'price', anchors: [{ time: 50, price: 50 }], props: { showText: true } })!.serialize().props).toEqual({ showText: true });
     });
 
-    it('Gann fills like TradingView: fan wedges and square arc rings on, box rows / columns off until switched on', () => {
+    it('Gann fills like TradingView: fan wedges and square arc rings on; a saved box\'s rows / columns off until switched on', () => {
         const two = [{ time: 40, price: 40 }, { time: 80, price: 60 }];
         const fan = createDrawing('gannfan', { paneId: 'price', anchors: two })! as GannFan;
         expect(fan.fillPolygons(proj()).length).toBe(fan.levels.filter((l) => l.enabled).length - 1);
@@ -132,7 +132,8 @@ describe('drawing settings TradingView has', () => {
         expect(deserializeDrawing(fan.serialize())!.serialize().props).toMatchObject({ background: false, showLabels: true });
         const sq = createDrawing('gannsquare', { paneId: 'price', anchors: two })! as GannSquare;
         expect(sq.fillPolygons(proj()).length).toBe(4); // one ring per arc
-        const box = createDrawing('gannbox', { paneId: 'price', anchors: two })! as GannBox;
+        // New boxes are TradingView's, both backgrounds on (test/drawings-gannbox-tv.test.ts); one saved before keeps them off.
+        const box = createDrawing('gannbox', { paneId: 'price', anchors: two, props: {} })! as GannBox;
         expect(box.fillBands(proj())).toEqual([]);
         box.fillPrice = true;
         box.fillTime = true;

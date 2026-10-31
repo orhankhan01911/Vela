@@ -800,7 +800,7 @@ export class DrawingPainter {
         const fillAlpha = typeof fo === 'number' ? fo : 0.06;
         for (const band of d.fillBands(proj)) {
             ctx.save();
-            ctx.globalAlpha = fillAlpha * ctx.globalAlpha;
+            ctx.globalAlpha = (band.alpha ?? fillAlpha) * ctx.globalAlpha;
             ctx.fillStyle = band.color;
             ctx.fillRect(band.x, band.y, band.w, band.h);
             ctx.restore();
