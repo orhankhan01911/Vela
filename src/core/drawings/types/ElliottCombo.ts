@@ -2,7 +2,7 @@ import type { SettingsSchema } from '../schema';
 import { LINE_FIELDS } from '../schema';
 import { ELLIOTT_DEGREE_FIELD, degreeLetters, degreeOf } from './elliottDegree';
 import { PatternDrawing } from './PatternDrawing';
-import { TV_DOUBLE_COMBO_LABELS, TV_TRIANGLE_LABELS, type ElliottLabelGroups } from './elliottTv';
+import { TV_DOUBLE_COMBO_LABELS, TV_TRIANGLE_LABELS, TV_TRIPLE_COMBO_LABELS, type ElliottLabelGroups } from './elliottTv';
 
 /** Shared base of TradingView's Elliott triangle (A–E), double combo (W–X–Y) and triple combo (W–X–Y–X–Z): an
  *  unlabelled origin, then the lettered waves in the degree's style. */
@@ -57,8 +57,16 @@ export class ElliottDoubleCombo extends ElliottLettered {
     }
 }
 
+/** A new one is TradingView's (module 356806): the impulse's degrees and look, (0) (W) (X) (Y) (X) (Z) at Intermediate,
+ *  green. */
 export class ElliottTripleCombo extends ElliottLettered {
     readonly type = 'elliotttriplecombo' as const;
+    protected override tvPattern(): boolean {
+        return true;
+    }
+    override tvElliottLabels(): ElliottLabelGroups {
+        return TV_TRIPLE_COMBO_LABELS;
+    }
     protected letters(): readonly string[] {
         return ['W', 'X', 'Y', 'X', 'Z'];
     }

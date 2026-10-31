@@ -1277,7 +1277,14 @@ registerDrawingType({
     defaultStyle: { lineColor: '#6aa84f', lineWidth: 2, lineStyle: 'solid' }, // palette-exempt: TradingView's Elliott combo green
     create: (init) => new ElliottDoubleCombo(init),
 });
-registerDrawingType({ type: 'elliotttriplecombo', label: 'Elliott Triple Combo Wave (WXYXZ)', icon: ELLIOTT_COMBO_ICON, ...lettered, create: (init) => new ElliottTripleCombo(init) });
+registerDrawingType({
+    type: 'elliotttriplecombo',
+    label: 'Elliott Triple Combo Wave (WXYXZ)',
+    icon: ELLIOTT_COMBO_ICON,
+    ...lettered,
+    defaultStyle: { lineColor: '#6aa84f', lineWidth: 2, lineStyle: 'solid' }, // palette-exempt: TradingView's Elliott combo green
+    create: (init) => new ElliottTripleCombo(init),
+});
 const PROJECTION_ICON = svg24('<path d="M4 20 18 6a10 10 0 0 1 2 10Z"/>');
 const FORECAST_ICON = svg24('<path d="M3 18c6 0 12-2 17-12"/><circle cx="3" cy="18" r="1.6"/><circle cx="20" cy="6" r="1.6"/>');
 registerDrawingType({
