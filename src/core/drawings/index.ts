@@ -103,7 +103,7 @@ export { FibExtensionTrend } from './types/FibExtensionTrend';
 export { FibFan, type FibFanLine } from './types/FibFan';
 export { FibTimeZones, type FibZoneLine, TV_FIB_TIME_ZONE_LEVELS } from './types/FibTimeZones';
 export { FibChannel } from './types/FibChannel';
-export { FibSpeedFan } from './types/FibSpeedFan';
+export { FibSpeedFan, TV_SPEED_FAN_LEVELS, TV_SPEED_FAN_GRID } from './types/FibSpeedFan';
 export { TrendFibTime } from './types/TrendFibTime';
 export { RadialFib, type RadialGeom } from './types/RadialFib';
 export { FibCircles } from './types/FibCircles';

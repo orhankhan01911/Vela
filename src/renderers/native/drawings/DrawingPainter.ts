@@ -857,12 +857,15 @@ export class DrawingPainter {
                 onLine(l.numberText, numFont, l.numberX, l.numberY, l.numberAlign);
                 onLine(l.label, lblFont, l.labelX, l.labelY, l.labelAlign ?? 'center');
             }
-            const line = (): void => this.stroke(ctx, { ...d.style, lineColor: l.color, ...(l.lineWidth ? { lineWidth: l.lineWidth } : {}), ...(l.lineStyle ? { lineStyle: l.lineStyle } : {}) }, () => {
+            const line = (): void => this.stroke(ctx, { ...d.style, lineColor: l.strokeColor ?? l.color, ...(l.lineWidth ? { lineWidth: l.lineWidth } : {}), ...(l.lineStyle ? { lineStyle: l.lineStyle } : {}) }, () => {
                 ctx.moveTo(l.x1, l.y1);
                 ctx.lineTo(l.x2, l.y2);
             });
-            if (gaps.length) this.withGaps(ctx, gaps, line);
-            else line();
+            // A label-only entry (a speed fan's labels with its grid off) strokes nothing.
+            if (!l.noStroke) {
+                if (gaps.length) this.withGaps(ctx, gaps, line);
+                else line();
+            }
             ctx.fillStyle = l.color;
             ctx.font = numFont;
             ctx.textAlign = l.numberAlign;

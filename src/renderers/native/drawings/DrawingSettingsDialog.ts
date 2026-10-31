@@ -7,6 +7,9 @@ import {
     FibExtensionTrend,
     FibChannel,
     FibTimeZones,
+    FibSpeedFan,
+    TV_SPEED_FAN_GRID,
+    type FibLevel,
     TV_FIB_FONT_SIZES,
     GannBox,
     GannFan,
@@ -111,7 +114,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', fibspeedfan: 'Fib speed resistance fan', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -301,6 +304,10 @@ export class DrawingSettingsDialog {
      *  line-end buttons), Background, Extend, the tool's switches, then the INFO section (stats) and the tool's own
      *  sections (Fib, levels). */
     private buildStyle(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
+        if (drawing instanceof FibSpeedFan && drawing.tv) {
+            this.buildSpeedFanStyle(grid, drawing, actions);
+            return;
+        }
         if (drawing instanceof FibTimeZones && drawing.tv) {
             this.buildFibTimeZoneStyle(grid, drawing, actions);
             return;
@@ -1664,18 +1671,19 @@ export class DrawingSettingsDialog {
         grid.appendChild(fieldRow({ label: 'Trend line', toggle: { id: uid(), checked: fib.trendline, onChange: (v) => actions.patch({ trendline: v }) }, control: [trend], fit: true }));
     }
 
-    private buildFibTvRest(grid: HTMLElement, fib: FibLevels | FibChannel, lv: FibLevels | null, actions: SettingsActions): void {
+    /** TradingView's leveled lines group: the levels two per row (a switch, the coefficient, the colour). `colors` is
+     *  kept in step for Use one color; the returned swatches repaint after it. */
+    private fibLevelCells(levels: readonly FibLevel[], path: string, colors: string[], actions: SettingsActions, onColor: () => void): { el: HTMLElement; swatches: ColorField[] } {
         const cells = document.createElement('div');
         cells.className = 'vela-field-span';
-        cells.dataset.role = 'fib-levels';
+        cells.dataset.role = path === 'levels' ? 'fib-levels' : `fib-${path}`;
         cells.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;';
-        const colors = fib.levels.map((l) => l.color);
         const swatches: ColorField[] = [];
-        fib.levels.forEach((lv, i) => {
+        levels.forEach((lv, i) => {
             const cell = document.createElement('div');
             cell.style.cssText = 'display:flex;align-items:center;gap:8px;min-width:0;';
-            cell.dataset.role = `level-${i}`;
-            const sw = buildFieldControl({ kind: 'switch', checked: lv.enabled, onChange: (v) => actions.patch({ [`levels.${i}.enabled`]: v }) });
+            cell.dataset.role = path === 'levels' ? `level-${i}` : `${path}-${i}`;
+            const sw = buildFieldControl({ kind: 'switch', checked: lv.enabled, onChange: (v) => actions.patch({ [`${path}.${i}.enabled`]: v }) });
             let cur = lv.ratio;
             const coeff = buildFieldControl({
                 kind: 'number',
@@ -1691,7 +1699,7 @@ export class DrawingSettingsDialog {
                         return;
                     }
                     cur = n;
-                    actions.patch({ [`levels.${i}.ratio`]: n });
+                    actions.patch({ [`${path}.${i}.ratio`]: n });
                 },
             });
             coeff.el.dataset.role = 'level-ratio';
@@ -1702,8 +1710,8 @@ export class DrawingSettingsDialog {
                 getVal: () => colors[i] ?? DEFAULT_DRAWING_COLOR,
                 onVal: (v) => {
                     colors[i] = v;
-                    actions.patch({ [`levels.${i}.color`]: v });
-                    paintOne();
+                    actions.patch({ [`${path}.${i}.color`]: v });
+                    onColor();
                 },
                 popover: { align: 'start' },
             });
@@ -1712,6 +1720,90 @@ export class DrawingSettingsDialog {
             cell.append(sw.el, coeff.el, col.el);
             cells.appendChild(cell);
         });
+        return { el: cells, swatches };
+    }
+
+    /** Use one color: one pick sets every listed path; its swatch is split in two while the colours differ. */
+    private fibOneColor(colors: string[], paths: () => string[], actions: SettingsActions, after: () => void): { el: HTMLElement; paint: () => void } {
+        const oneColor: ColorField = new ColorField({
+            theme: this.theme,
+            getVal: () => colors[0] ?? DEFAULT_DRAWING_COLOR,
+            onVal: (v) => {
+                colors.fill(v);
+                actions.patch(Object.fromEntries(paths().map((p) => [p, v])));
+                after();
+                paint();
+            },
+            popover: { align: 'start' },
+        });
+        const paint = (): void => {
+            oneColor.paint();
+            const sw = oneColor.el.querySelector<HTMLElement>('.vela-color-field-swatch');
+            if (sw && new Set(colors.map((c) => c.toLowerCase())).size > 1) sw.style.background = `linear-gradient(135deg, ${BULLISH} 50%, ${BEARISH} 50%)`;
+        };
+        paint();
+        oneColor.el.dataset.role = 'one-color';
+        return { el: oneColor.el, paint };
+    }
+
+    /** TradingView's Fib speed resistance fan Style tab (module 32895): PRICE LEVELS (the levels two per row, Left and
+     *  Right labels), TIME LEVELS (the same, Top and Bottom labels), Use one color, Background, Grid (a switch and its
+     *  line button) and Reverse. */
+    private buildSpeedFanStyle(grid: HTMLElement, fan: FibSpeedFan, actions: SettingsActions): void {
+        const check = (label: string, key: string, on: boolean): void => {
+            grid.appendChild(fieldRow({ label, bool: true, toggle: { id: uid(), checked: on, onChange: (v) => actions.patch({ [key]: v }) } }));
+        };
+        const time = fan.timeLevels ?? [];
+        const colors = [...fan.levels.map((l) => l.color), ...time.map((l) => l.color)];
+        const priceColors = colors.slice(0, fan.levels.length);
+        const timeColors = colors.slice(fan.levels.length);
+        let one: { el: HTMLElement; paint: () => void } | null = null;
+        const repaint = (): void => {
+            colors.splice(0, colors.length, ...priceColors, ...timeColors);
+            one?.paint();
+        };
+        grid.appendChild(fieldSection('Price levels', { variant: 'inputs', first: true }));
+        const price = this.fibLevelCells(fan.levels, 'levels', priceColors, actions, repaint);
+        grid.appendChild(price.el);
+        check('Left labels', 'showLeftLabels', fan.showLeftLabels !== false);
+        check('Right labels', 'showRightLabels', fan.showRightLabels !== false);
+        grid.appendChild(fieldSection('Time levels', { variant: 'inputs' }));
+        const timeCells = this.fibLevelCells(time, 'timeLevels', timeColors, actions, repaint);
+        grid.appendChild(timeCells.el);
+        check('Top labels', 'showTopLabels', fan.showTopLabels !== false);
+        check('Bottom labels', 'showBottomLabels', fan.showBottomLabels !== false);
+        one = this.fibOneColor(
+            colors,
+            () => ['gridColor', ...fan.levels.map((_, i) => `levels.${i}.color`), ...time.map((_, i) => `timeLevels.${i}.color`)],
+            actions,
+            () => {
+                priceColors.fill(colors[0]!);
+                timeColors.fill(colors[0]!);
+                for (const sw of [...price.swatches, ...timeCells.swatches]) sw.paint();
+            },
+        );
+        grid.appendChild(fieldRow({ label: 'Use one color', control: [one.el], fit: true }));
+        const bg = fieldRow({
+            label: 'Background',
+            toggle: { id: uid(), checked: fan.background !== false, onChange: (v) => actions.patch({ background: v }) },
+            control: [opacitySlider(Math.round((fan.fillOpacity ?? 0.2) * 100), (n) => actions.patch({ fillOpacity: n / 100 }))],
+            fit: true,
+        });
+        bg.dataset.role = 'background';
+        grid.appendChild(bg);
+        const gridLine = this.pathLineButton(
+            { color: fan.gridColor || TV_SPEED_FAN_GRID, width: fan.gridWidth ?? 1, style: fan.gridStyle ?? 'solid' },
+            { color: 'gridColor', width: 'gridWidth', style: 'gridStyle' },
+            actions,
+        );
+        gridLine.dataset.role = 'grid';
+        grid.appendChild(fieldRow({ label: 'Grid', toggle: { id: uid(), checked: fan.grid !== false, onChange: (v) => actions.patch({ grid: v }) }, control: [gridLine], fit: true }));
+        check('Reverse', 'reverse', fan.reverse === true);
+    }
+
+    private buildFibTvRest(grid: HTMLElement, fib: FibLevels | FibChannel, lv: FibLevels | null, actions: SettingsActions): void {
+        const colors = fib.levels.map((l) => l.color);
+        const { el: cells, swatches } = this.fibLevelCells(fib.levels, 'levels', colors, actions, () => paintOne());
         grid.appendChild(cells);
 
         // Use one color: one pick recolors the trend line and every level (TradingView's collected line colours);

@@ -20,7 +20,7 @@ export type FibTextSize = 'small' | 'normal' | 'large' | 'huge';
 const isFibSize = (v: unknown): v is FibTextSize => v === 'small' || v === 'normal' || v === 'large' || v === 'huge';
 
 /** Coerce an untrusted value into a valid level (defensive, for persistence/round-trip). */
-function sanitizeLevel(v: unknown): FibLevel | null {
+export function sanitizeLevel(v: unknown): FibLevel | null {
     if (!v || typeof v !== 'object') return null;
     const o = v as Partial<FibLevel>;
     if (typeof o.ratio !== 'number' || typeof o.color !== 'string') return null;
@@ -51,6 +51,10 @@ export interface FibEntryLine {
     /** The level's ratio and price (TradingView-look Fibs), so the painter can format the price at the scale's step. */
     ratio?: number;
     price?: number;
+    /** The line's colour when it differs from the text's (a speed fan's grid line carries its level's labels). */
+    strokeColor?: string;
+    /** Labels only, no line (a speed fan's labels with its grid off). */
+    noStroke?: boolean;
     /** The level's own line width / style (else the drawing's). */
     lineWidth?: number;
     lineStyle?: 'solid' | 'dashed' | 'dotted';
@@ -106,7 +110,7 @@ export abstract class FibRatios extends Drawing {
 
     hitTest(px: number, py: number, proj: Projector, tol: number): boolean {
         const lines = this.entryLines(proj);
-        return lines != null && lines.some((l) => distToSegment(px, py, l.x1, l.y1, l.x2, l.y2) <= tol);
+        return lines != null && lines.some((l) => !l.noStroke && distToSegment(px, py, l.x1, l.y1, l.x2, l.y2) <= tol);
     }
 
     handlePoints(proj: Projector): Array<[number, number]> {
