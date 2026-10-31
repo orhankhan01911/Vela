@@ -102,6 +102,17 @@ describe('Fib time zone (TradingView)', () => {
         expect([b[0]!.x, b[0]!.w, b[0]!.h, b[0]!.color.toUpperCase()]).toEqual([100, 10, 800, '#2962FF']);
     });
 
+    it('levels remembered from the old look (no line of their own) get TradingView\'s 2 px solid, not the old dashed default', () => {
+        // The user's report (2026-10-31): a new time zone came out dashed, from settings remembered from an old one.
+        const d = createDrawing('fibtimezones', {
+            id: 't', paneId: 'price', anchors: two, style: { lineColor: '#2962ff', lineWidth: 1, lineStyle: 'dashed' },
+            props: { tv: true, levels: [0, 1, 2].map((n) => ({ ratio: n, color: '#2962ff', enabled: true })) },
+        })! as FibTimeZones;
+        expect(d.entryLines(proj)!.every((l) => l.lineStyle === 'solid' && l.lineWidth === 2)).toBe(true);
+        d.applySettings({ 'levels.1.lineStyle': 'dotted' });
+        expect((deserializeDrawing(d.serialize()) as FibTimeZones).entryLines(proj)![1]!.lineStyle).toBe('dotted');
+    });
+
     it('one saved before keeps its look (numbers centered at the top, no bands)', () => {
         const old = tz({ levels: [{ ratio: 0, color: '#123456', enabled: true }, { ratio: 1, color: '#123456', enabled: true }] });
         expect(old.tv).toBeUndefined();

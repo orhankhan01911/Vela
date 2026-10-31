@@ -180,6 +180,9 @@ export class FibTimeZones extends FibRatios {
         if (typeof props.trendWidth === 'number' && Number.isFinite(props.trendWidth)) this.trendWidth = Math.min(10, Math.max(1, props.trendWidth));
         if (props.trendStyle === 'solid' || props.trendStyle === 'dashed' || props.trendStyle === 'dotted') this.trendStyle = props.trendStyle;
         if (typeof props.fontSize === 'number' && Number.isFinite(props.fontSize)) this.fontSize = Math.min(48, Math.max(6, props.fontSize));
+        // TradingView's levels each carry their own line. Levels remembered from the old look have none and would take
+        // the drawing's old dashed default (the user's report, 2026-10-31): give them TradingView's 2 px solid.
+        if (this.tv) this.levels = this.levels.map((l) => ({ ...l, lineWidth: l.lineWidth ?? 2, lineStyle: l.lineStyle ?? 'solid' }));
     }
 
     priceRange(): { min: number; max: number } | null {
