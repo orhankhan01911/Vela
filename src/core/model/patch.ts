@@ -1,6 +1,6 @@
 import type { Millis } from './time';
 import type { OHLCV } from './ohlcv';
-import type { SeriesPoint, SeriesSpec, MarkerPoint } from './series';
+import type { CandleBarColor, SeriesPoint, SeriesSpec, MarkerPoint } from './series';
 import type { DrawingLine, DrawingBox, DrawingLabel, DrawingPolyline, DrawingLinefill, DrawingTable } from './drawings';
 import type { TradeExecution } from './trades';
 import type { Fill } from './scene';
@@ -13,7 +13,9 @@ export interface DirtyRange {
 /** Per-series changed tail in a value patch. */
 export type SeriesValueDelta =
     | { seriesId: string; kind: 'points'; points: SeriesPoint[] }
-    | { seriesId: string; kind: 'bars'; bars: OHLCV[] }
+    // `barColors` travel with the bars: a patch that replaced only the bars kept the old per-bar colours on the old
+    // indexes, so a recoloured candle series lost its colours once more history loaded (Delta Candles, 2026-10-31).
+    | { seriesId: string; kind: 'bars'; bars: OHLCV[]; barColors?: Array<CandleBarColor | null> }
     | { seriesId: string; kind: 'markers'; markers: MarkerPoint[] };
 
 /**

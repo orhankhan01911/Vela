@@ -40,6 +40,73 @@ export interface VpvrPaintStyle {
     valuesColor?: string;
     /** Font for the row values (the chart theme's family). */
     fontFamily?: string;
+    /** "line": one stepped outline along the rows' ends instead of the rows (see {@link paintVpvrLine}). */
+    look?: 'bars' | 'line';
+    lineUpColor?: string;
+    lineDownColor?: string;
+    lineWidth?: number;
+    lineFill?: boolean;
+}
+
+/**
+ * The stepped outline of a profile, anchored at `edge` and growing by `sign`: from the edge at the lowest row's bottom,
+ * up each row's whole height at its total's length (a step, as Delta Dynamics draws it, user 2026-10-31), back to the
+ * edge at the highest row's top. Each point carries whether buying won the row it belongs to (up > down). Pure.
+ */
+export function vpvrLinePoints(
+    profile: Pick<VpvrProfile, 'rows' | 'rowH' | 'maxTotal'>,
+    edge: number,
+    sign: number,
+    barMax: number,
+    yOf: (price: number) => number,
+): Array<{ x: number; y: number; up: boolean }> {
+    const { rows, rowH, maxTotal } = profile;
+    if (rows.length === 0 || maxTotal <= 0) return [];
+    const pts: Array<{ x: number; y: number; up: boolean }> = [{ x: edge, y: yOf(rows[0]!.price), up: false }];
+    for (const row of rows) {
+        const x = edge + (sign * barMax * (row.up + row.down)) / maxTotal;
+        const up = row.up > row.down;
+        pts.push({ x, y: yOf(row.price), up }, { x, y: yOf(row.price + rowH), up });
+    }
+    const top = rows[rows.length - 1]!;
+    pts.push({ x: edge, y: yOf(top.price + rowH), up: false });
+    return pts;
+}
+
+/** The Line look: the outline, each piece in the colour of the row it runs into; optionally a faint fill under it. */
+function paintVpvrLine(
+    ctx: CanvasRenderingContext2D,
+    pts: ReadonlyArray<{ x: number; y: number; up: boolean }>,
+    style: VpvrPaintStyle,
+): void {
+    if (pts.length < 3) return;
+    const up = style.lineUpColor ?? style.upColor;
+    const down = style.lineDownColor ?? style.downColor;
+    ctx.globalAlpha = 1;
+    if (style.lineFill) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0]!.x, pts[0]!.y);
+        for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i]!.x, pts[i]!.y);
+        ctx.closePath();
+        ctx.fillStyle = fadeColor(up, 0.12);
+        ctx.fill();
+    }
+    ctx.lineWidth = style.lineWidth ?? 1;
+    ctx.lineJoin = 'miter';
+    ctx.setLineDash([]);
+    // One path per run of the same colour: fewer strokes, no seams where pieces meet.
+    let i = 1;
+    while (i < pts.length - 1) {
+        const color = pts[i]!.up ? up : down;
+        ctx.beginPath();
+        ctx.moveTo(pts[i - 1]!.x, pts[i - 1]!.y);
+        while (i < pts.length - 1 && (pts[i]!.up ? up : down) === color) {
+            ctx.lineTo(pts[i]!.x, pts[i]!.y);
+            i += 1;
+        }
+        ctx.strokeStyle = color;
+        ctx.stroke();
+    }
 }
 
 /** `color` with its opacity multiplied by `f` (hex #rgb / #rrggbb / #rrggbbaa, rgb() / rgba()); unknown forms as is. */
@@ -110,6 +177,12 @@ export function paintVpvr(
     const gapDev = Math.floor(rowPx * dpr) >= dpr ? Math.floor(dpr) : 0;
     const edge = left ? leftX : rightX;
     const sign = left ? 1 : -1;
+
+    if (style.look === 'line') {
+        if (style.showProfile !== false) paintVpvrLine(ctx, vpvrLinePoints(profile, edge, sign, Math.max(maxW - 1, 0), yOf), style);
+        ctx.globalAlpha = 1;
+        return;
+    }
 
     const valueTexts: Array<{ text: string; y: number; h: number }> = [];
     const sums: [number, number] = [0, 0];

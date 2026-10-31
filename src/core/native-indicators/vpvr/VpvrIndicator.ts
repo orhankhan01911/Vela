@@ -28,8 +28,14 @@ const DEFAULT_VA_DOWN = transp(TV_YELLOW, 30);
 const ROWS_LAYOUTS = ['Number Of Rows', 'Ticks Per Row'] as const;
 const VOLUME_MODES = ['Up/Down', 'Total', 'Delta'] as const;
 const PLACEMENTS = ['Right', 'Left'] as const;
+const LOOKS = ['Bars', 'Line'] as const;
+// The Line look's colours: a row buying won, a row selling won (Delta Dynamics' outline profile, user 2026-10-31).
+const LINE_UP = '#2f8cff'; // palette-exempt: Line look, buying won the row
+const LINE_DOWN = '#8a8f98'; // palette-exempt: Line look, selling won the row
 const WIDTHS = ['1', '2', '3', '4'] as const;
 const STYLE = 'Style';
+// Our own tab, so the Style tab stays exactly TradingView's (test/vpvr-tv.test.ts).
+const LINE_TAB = 'Line';
 
 function num(v: InputValue | undefined, fallback: number): number {
     return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
@@ -63,6 +69,11 @@ export function vpvrLayerData(inputs: Record<string, InputValue>, tick?: number)
         downColor: str(inputs.downColor, DEFAULT_DOWN),
         vaUpColor: str(inputs.vaUpColor, DEFAULT_VA_UP),
         vaDownColor: str(inputs.vaDownColor, DEFAULT_VA_DOWN),
+        look: inputs.look === 'Line' ? 'line' : 'bars',
+        lineUpColor: str(inputs.lineUpColor, LINE_UP),
+        lineDownColor: str(inputs.lineDownColor, LINE_DOWN),
+        lineWidth: Math.min(4, Math.max(1, num(inputs.lineWidth, 1))),
+        lineFill: bool(inputs.lineFill, false),
         showProfile: bool(inputs.showProfile, true),
         showValues: bool(inputs.showValues, false),
         valuesColor: str(inputs.valuesColor, VALUES_GRAY),
@@ -452,6 +463,11 @@ function vpvrInputsSchema(): InputSchema[] {
         ...lineRow(LINE_ROWS.devVa, 'Developing VA', false, TV_BLUE, 1),
         { key: 'labelsOnScale', title: 'Labels on price scale', type: 'bool', defval: true, tab: STYLE },
         { key: 'valuesInStatusLine', title: 'Values in status line', type: 'bool', defval: true, tab: STYLE },
+        { key: 'look', title: 'Look', type: 'string', defval: LOOKS[0], options: LOOKS, tab: LINE_TAB },
+        { key: 'lineUpColor', title: 'Line: buying won', type: 'color', defval: LINE_UP, tab: LINE_TAB, when: { key: 'look', equals: 'Line' } },
+        { key: 'lineDownColor', title: 'Line: selling won', type: 'color', defval: LINE_DOWN, tab: LINE_TAB, when: { key: 'look', equals: 'Line' } },
+        { key: 'lineWidth', title: 'Line width', type: 'int', defval: 1, options: WIDTHS, tab: LINE_TAB, when: { key: 'look', equals: 'Line' } },
+        { key: 'lineFill', title: 'Fill under the line', type: 'bool', defval: false, tab: LINE_TAB, when: { key: 'look', equals: 'Line' } },
     ];
 }
 

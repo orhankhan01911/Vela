@@ -36,6 +36,13 @@ export interface VpvrLayerData {
     /** Write each row's volume on it, in `valuesColor`. */
     showValues?: boolean;
     valuesColor?: string;
+    /** "Bars" (TradingView's rows) or "Line": one stepped outline along every row's end, coloured by the side that won it. */
+    look?: 'bars' | 'line';
+    /** Line look: colours of a row buying won / selling won, the line width (CSS px) and a faint fill under it. */
+    lineUpColor?: string;
+    lineDownColor?: string;
+    lineWidth?: number;
+    lineFill?: boolean;
     /** Outline the point-of-control (highest-volume) row (the pre-TradingView look; its POC is a line now). */
     showPoc: boolean;
     /** Volume fraction (0..1) the highlighted value area covers. */

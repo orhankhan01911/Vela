@@ -3607,7 +3607,7 @@ function modelToValuePatch(model: IndicatorModel): ValuePatch {
     let to = 0;
     for (const s of model.series) {
         if (s.kind === 'candle' || s.kind === 'bar') {
-            series.push({ seriesId: s.id, kind: 'bars', bars: s.bars });
+            series.push({ seriesId: s.id, kind: 'bars', bars: s.bars, ...(s.barColors ? { barColors: s.barColors } : {}) });
             for (const b of s.bars) {
                 if (b.time < from) from = b.time;
                 if (b.time > to) to = b.time;
