@@ -171,9 +171,9 @@ export function deserializeDrawing(doc: SerializedDrawing): Drawing | null {
     return meta ? meta.create(legacyPattern(legacyFibSpiral(legacyStroke(legacyArrowMarker(legacyEllipse(legacyPitchfork(legacyComment(legacyElliott(doc))))))))) : null;
 }
 
-/** Patterns that became TradingView's look (XABCD, Cypher, head and shoulders, ABCD so far): a record saved before has no `tv` flag (they saved no props):
+/** Patterns that became TradingView's look (XABCD, Cypher, head and shoulders, ABCD, triangle so far): a record saved before has no `tv` flag (they saved no props):
  *  mark it so it keeps its look. */
-const TV_PATTERN_TYPES: ReadonlySet<string> = new Set(['xabcd', 'cypher', 'headshoulders', 'abcd']);
+const TV_PATTERN_TYPES: ReadonlySet<string> = new Set(['xabcd', 'cypher', 'headshoulders', 'abcd', 'trianglepattern']);
 function legacyPattern(doc: SerializedDrawing): SerializedDrawing {
     if (!TV_PATTERN_TYPES.has(doc.type) || doc.props?.tv !== undefined) return doc;
     return { ...doc, props: { ...(doc.props ?? {}), tv: false } };
@@ -1242,7 +1242,14 @@ registerDrawingType({
     create: (init) => new ArrowMarker(init),
 });
 const lettered = { group: 'patterns' as const, coversSeries: true, defaultStyle: SOLID };
-registerDrawingType({ type: 'trianglepattern', label: 'Triangle Pattern', icon: TRIANGLE_PATTERN_ICON, ...lettered, create: (init) => new TrianglePattern(init) });
+registerDrawingType({
+    type: 'trianglepattern',
+    label: 'Triangle Pattern',
+    icon: TRIANGLE_PATTERN_ICON,
+    ...lettered,
+    defaultStyle: { lineColor: '#673ab7', lineWidth: 2, lineStyle: 'solid', fillColor: '#673ab726' }, // palette-exempt: TradingView's deep-blue-500, background at 85 % transparency
+    create: (init) => new TrianglePattern(init),
+});
 registerDrawingType({ type: 'elliotttriangle', label: 'Elliott Triangle Wave (ABCDE)', icon: ELLIOTT_TRIANGLE_ICON, ...lettered, create: (init) => new ElliottTriangle(init) });
 registerDrawingType({ type: 'elliottdoublecombo', label: 'Elliott Double Combo Wave (WXY)', icon: ELLIOTT_COMBO_ICON, ...lettered, create: (init) => new ElliottDoubleCombo(init) });
 registerDrawingType({ type: 'elliotttriplecombo', label: 'Elliott Triple Combo Wave (WXYXZ)', icon: ELLIOTT_COMBO_ICON, ...lettered, create: (init) => new ElliottTripleCombo(init) });

@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -3226,6 +3226,25 @@ export class DrawingPainter {
             ctx.moveTo(pts[0]![0], pts[0]![1]);
             for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i]![0], pts[i]![1]);
         });
+        const conv = d instanceof TrianglePattern ? d.convergingTriangle(pts) : null;
+        if (conv) {
+            // TradingView's triangle pattern: the converging sides closed at their apex, filled, outlined dotted.
+            const path = (): void => {
+                ctx.moveTo(conv[0][0], conv[0][1]);
+                ctx.lineTo(conv[1][0], conv[1][1]);
+                ctx.lineTo(conv[2][0], conv[2][1]);
+                ctx.closePath();
+            };
+            if (d.fillBackground !== false && d.style.fillColor) {
+                ctx.save();
+                ctx.fillStyle = d.style.fillColor;
+                ctx.beginPath();
+                path();
+                ctx.fill();
+                ctx.restore();
+            }
+            this.stroke(ctx, { ...d.style, lineStyle: 'dotted' }, path);
+        }
         if (ta && th && pts.length >= 5) {
             // The dotted neckline: from the left cut (or run on left from the first trough) to the right cut (or on right).
             const [x1, y1] = leftCut ?? extendRay(ta[0], ta[1], th[0], th[1], 'left', proj.width, proj.height).slice(0, 2);

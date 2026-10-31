@@ -50,6 +50,16 @@ export abstract class PatternDrawing extends Drawing {
         return [];
     }
 
+    /** TradingView's triangle pattern: the A–C and B–D lines run to their apex, closed as a dotted, filled triangle. */
+    tvConverging(): boolean {
+        return false;
+    }
+
+    /** Whether TradingView's pattern has a Background (a filled part). */
+    tvBackground(): boolean {
+        return this.fillTriangles().length > 0 || this.tvConverging();
+    }
+
     /** TradingView draws the dotted ratio lines 1 px (XABCD, Cypher) or in the line's width (ABCD). */
     tvRatioLineWidth(): number {
         return 1;
