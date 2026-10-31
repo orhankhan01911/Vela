@@ -19,6 +19,7 @@ import {
     GannFan,
     GannSquare,
     PitchforkBase,
+    Pitchfan,
     PITCHFORK_STYLES,
     PriceRange,
     DatePriceRange,
@@ -1957,9 +1958,13 @@ export class DrawingSettingsDialog {
     /** TradingView's pitchfork Style tab: Extend lines, the median's line button, the nine level rows (a switch, the
      *  level's value, its line button), Use one color, Background (a switch and its opacity) and the Style dropdown. */
     private buildPitchforkStyle(grid: HTMLElement, pf: PitchforkBase, actions: SettingsActions): void {
-        const extend = fieldRow({ label: 'Extend lines', bool: true, toggle: { id: uid(), checked: pf.extendLines, onChange: (v) => actions.patch({ extendLines: v }) } });
-        extend.dataset.role = 'extend-lines';
-        grid.appendChild(extend);
+        // TradingView's Pitchfan has no Extend lines (its lines are rays from the pivot) and no Style.
+        const fan = pf instanceof Pitchfan;
+        if (!fan) {
+            const extend = fieldRow({ label: 'Extend lines', bool: true, toggle: { id: uid(), checked: pf.extendLines, onChange: (v) => actions.patch({ extendLines: v }) } });
+            extend.dataset.role = 'extend-lines';
+            grid.appendChild(extend);
+        }
         const median = this.pathLineButton(
             { color: pf.medianColor || pf.style.lineColor || DEFAULT_DRAWING_COLOR, width: pf.medianWidth ?? pf.style.lineWidth ?? 1, style: pf.medianStyle ?? pf.style.lineStyle ?? 'solid' },
             { color: 'medianColor', width: 'medianWidth', style: 'medianStyle' },
@@ -2021,6 +2026,7 @@ export class DrawingSettingsDialog {
         });
         bg.dataset.role = 'background';
         grid.appendChild(bg);
+        if (fan) return;
         const style = this.selectControl('forkStyle', PITCHFORK_STYLES, pf.currentForkStyle(), actions);
         style.dataset.role = 'fork-style';
         grid.appendChild(fieldRow({ label: 'Style', control: [style], fit: true }));

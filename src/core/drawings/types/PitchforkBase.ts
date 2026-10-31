@@ -82,10 +82,16 @@ export abstract class PitchforkBase extends SegmentDrawing {
     /** The style this tool places with. */
     protected abstract readonly defaultForkStyle: PitchforkStyle;
 
+    /** TradingView's levels for a new one of this tool (a method: the base constructor reads it before subclass fields
+     *  exist). */
+    protected factoryLevels(): readonly PitchforkLevel[] {
+        return PITCHFORK_LEVELS;
+    }
+
     constructor(init: ConstructorParameters<typeof SegmentDrawing>[0]) {
         super(init);
         const fresh = !init.props;
-        if (!this.levels) this.levels = PITCHFORK_LEVELS.map((l) => ({ ...l }));
+        if (!this.levels) this.levels = this.factoryLevels().map((l) => ({ ...l }));
         if (this.background === undefined) this.background = true;
         if (this.fillOpacity === undefined) this.fillOpacity = 0.2;
         if (this.extendLines === undefined) this.extendLines = false;

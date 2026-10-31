@@ -44,6 +44,7 @@ import { AnchoredVwap } from './types/AnchoredVwap';
 import { FixedRangeVolumeProfile, AnchoredVolumeProfile } from './types/FixedRangeVolumeProfile';
 import { FixedRangeTpoProfile } from './types/FixedRangeTpoProfile';
 import { Pitchfork } from './types/Pitchfork';
+import { Pitchfan } from './types/Pitchfan';
 import { SchiffPitchfork } from './types/SchiffPitchfork';
 import { ModifiedSchiffPitchfork } from './types/ModifiedSchiffPitchfork';
 import { InsidePitchfork } from './types/InsidePitchfork';
@@ -510,6 +511,19 @@ registerDrawingType({
     icon: INSIDE_ICON,
     defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' }, // TradingView: the toolbar's color is Use one color
     create: (init) => new InsidePitchfork(init),
+});
+
+// Pitchfan: rays from a pivot dot, fanning out to a vertical side line (our own glyph).
+const PITCHFAN_ICON =
+    svg24('<circle cx="4" cy="12" r="1.6" fill="currentColor"/><line x1="4" y1="12" x2="21" y2="12"/><line x1="4" y1="12" x2="20" y2="5"/><line x1="4" y1="12" x2="20" y2="19"/><line x1="15" y1="7" x2="15" y2="17"/>');
+
+registerDrawingType({
+    type: 'pitchfan',
+    group: 'pitchforks',
+    label: 'Pitchfan',
+    icon: PITCHFAN_ICON,
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' }, // TradingView: the toolbar's color is Use one color
+    create: (init) => new Pitchfan(init),
 });
 
 // ── shapes & annotations ──

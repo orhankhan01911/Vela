@@ -564,6 +564,7 @@ describe('buildToolbar grouping', () => {
             'schiffpitchfork',
             'modifiedschiffpitchfork',
             'insidepitchfork',
+            'pitchfan',
         ]);
 
         const fibGroup = definition.groups.find((g) => g.id === 'fibonacci-gann');

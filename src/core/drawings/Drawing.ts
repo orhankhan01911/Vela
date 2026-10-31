@@ -92,6 +92,7 @@ export type DrawingTypeKey =
     | 'fixedrangetpo'
     | 'pricealert'
     | 'pitchfork'
+    | 'pitchfan'
     | 'schiffpitchfork'
     | 'modifiedschiffpitchfork'
     | 'insidepitchfork'

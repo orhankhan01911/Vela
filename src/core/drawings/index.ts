@@ -77,6 +77,7 @@ export {
     type FrtpLayout,
 } from './types/FixedRangeTpoProfile';
 export { Pitchfork } from './types/Pitchfork';
+export { Pitchfan, PITCHFAN_LEVELS } from './types/Pitchfan';
 export { PitchforkVariant } from './types/PitchforkVariant';
 export { SchiffPitchfork } from './types/SchiffPitchfork';
 export { ModifiedSchiffPitchfork } from './types/ModifiedSchiffPitchfork';
