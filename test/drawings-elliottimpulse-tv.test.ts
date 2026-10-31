@@ -49,7 +49,7 @@ function setup(drawing: Drawing) {
     const gear = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.vela-dpop [data-tip="Settings"]')!;
     const body = (key: string): HTMLElement => host.querySelector<HTMLElement>(`.vela-drawing-dialog [data-tab="${key}"]:not([role="tab"])`)!;
     const dialog = (): string => host.querySelector('.vela-drawing-dialog')!.textContent!;
-    return { tips, gear, body, dialog };
+    return { tips, gear, body, dialog, live: () => live };
 }
 
 const proj: Projector = {
@@ -104,5 +104,21 @@ describe('Elliott impulse wave (TradingView)', () => {
         const roles = [...s.body('style').querySelectorAll<HTMLElement>('[data-role]')].map((e) => e.dataset.role!);
         expect(roles).toEqual(['color', 'line', 'degree']);
         expect(s.body('style').textContent).toContain('Intermediate');
+    });
+
+    it('the more menu has TradingView\'s Degree submenu: the 15 degrees, the current one checked, a pick sets it', async () => {
+        const s = setup(ew());
+        const more = document.querySelector<HTMLElement>('.vela-dpop [data-tip="More"]')!;
+        more.click();
+        await settled();
+        const items = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('.vela-dpop-item')];
+        items().find((e) => e.textContent === 'Degree')!.click();
+        await settled();
+        const names = items().map((e) => e.textContent);
+        expect(names).toEqual(TV_ELLIOTT_DEGREES);
+        expect(items()[7]!.querySelector('svg')).not.toBeNull(); // Intermediate checked
+        expect(items()[9]!.querySelector('svg')).toBeNull();
+        items()[9]!.click();
+        expect((s.live() as ElliottImpulse).tvDegree).toBe(9);
     });
 });

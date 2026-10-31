@@ -27,6 +27,8 @@ import {
     GannBox,
     PatternDrawing,
     TV_PATTERN_TEXT,
+    TV_ELLIOTT_DEGREES,
+    TV_ELLIOTT_DEFAULT_DEGREE,
     GannSquare,
     GannFan,
     TrendFibTime,
@@ -444,7 +446,9 @@ export class DrawingSettingsPopup {
         const del = this.iconBtn('Delete', TRASH_ICON, () => actions.remove());
         del.style.color = 'var(--vela-danger)';
         bar.appendChild(del);
-        bar.appendChild(this.kebabButton(actions, multi ? null : openSettings));
+        // TradingView's Elliott waves add a Degree submenu to the more menu.
+        const wave = !multi && drawing instanceof PatternDrawing && drawing.tv && drawing.tvElliottLabels() ? drawing : null;
+        bar.appendChild(this.kebabButton(actions, multi ? null : openSettings, wave));
 
         // TradingView's quick bar for the audited tools: which colour, width, style and size controls it shows, in its
         // order (line colour, background, text colour, width, style). Built controls are reused; a missing one is made.
@@ -869,7 +873,7 @@ export class DrawingSettingsPopup {
     }
 
     /** The trailing kebab overflow — duplicate, z-order actions, reset settings. */
-    private kebabButton(actions: SettingsActions, openDialog: ((tab?: DrawingDialogTab) => void) | null): HTMLButtonElement {
+    private kebabButton(actions: SettingsActions, openDialog: ((tab?: DrawingDialogTab) => void) | null, wave: PatternDrawing | null = null): HTMLButtonElement {
         const b = this.base('More');
         b.innerHTML = sized(KEBAB_ICON);
         // Stop the trigger's own pointerdown from reaching `el` (which would pre-close the menu),
@@ -881,6 +885,14 @@ export class DrawingSettingsPopup {
                 this.closeMenu();
                 return;
             }
+            // TradingView's Degree submenu (Elliott waves): its 15 degrees, the current one checked.
+            const degreeMenu = (): void => {
+                const cur = wave?.tvDegree ?? TV_ELLIOTT_DEFAULT_DEGREE;
+                this.openActionMenu(
+                    b,
+                    TV_ELLIOTT_DEGREES.map((label, i) => ({ icon: i === cur ? CHECK_ICON : '', label, onClick: () => actions.patch({ tvDegree: i }) })),
+                );
+            };
             this.openActionMenu(b, [
                 ...(openDialog
                     ? [
@@ -888,6 +900,7 @@ export class DrawingSettingsPopup {
                           { icon: EYE_ICON, label: 'Visibility on intervals\u2026', onClick: () => openDialog('visibility') },
                       ]
                     : []),
+                ...(wave ? [{ icon: ARROW_RIGHT_ICON, label: 'Degree', onClick: () => queueMicrotask(degreeMenu) }] : []),
                 { icon: CLONE_ICON, label: 'Duplicate', onClick: () => actions.duplicate() },
                 { icon: FRONT_ICON, label: 'Bring to front', onClick: () => actions.reorder('front') },
                 { icon: BACK_ICON, label: 'Send to back', onClick: () => actions.reorder('back') },
@@ -1376,6 +1389,10 @@ function applyTvBar(bar: HTMLElement, items: readonly TvBarItem[], make: Partial
 }
 
 const BRUSH_ICON = icon('brush');
+/** The current degree in the Elliott Degree submenu. */
+const CHECK_ICON = icon('check');
+/** The Degree row's arrow to its submenu. */
+const ARROW_RIGHT_ICON = icon('chevron-right');
 const TEMPLATES_ICON = icon('drawing-templates');
 const ALERT_ADD_ICON = icon('alarm-add');
 const ANCHOR_ICON = icon('anchor');
