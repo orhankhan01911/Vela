@@ -6,6 +6,7 @@ import {
     RegressionChannel,
     TrendFigure,
     TrendAngle,
+    CrossLine,
     TEXT_SIZE_OPTIONS,
     LINE_STYLE_OPTIONS,
     GLYPH_OPTIONS,
@@ -391,7 +392,8 @@ export class DrawingSettingsPopup {
         // Range toggles + computed-label text styling (drawings whose label is computed, not typed).
         const flags = (d: Drawing): { showPrice?: boolean; showDate?: boolean } => d as unknown as { showPrice?: boolean; showDate?: boolean };
         // TradingView keeps the horizontal line's and ray's price label in their settings only, not on the bar.
-        if (paths.has('showPrice') && !drawings.every((d) => d.type === 'hline' || d.type === 'hray')) bar.appendChild(this.toggle('Show price', PRICE_DELTA_ICON, common((d) => flags(d).showPrice !== false), (v) => actions.patch({ showPrice: v })));
+        // TradingView's horizontal lines and cross line keep their price label in the dialog, not on the bar.
+        if (paths.has('showPrice') && !drawings.every((d) => d.type === 'hline' || d.type === 'hray' || (d instanceof CrossLine && d.tv))) bar.appendChild(this.toggle('Show price', PRICE_DELTA_ICON, common((d) => flags(d).showPrice !== false), (v) => actions.patch({ showPrice: v })));
         if (paths.has('showDate')) bar.appendChild(this.toggle('Show date', DATE_DELTA_ICON, common((d) => flags(d).showDate !== false), (v) => actions.patch({ showDate: v })));
         if (paths.has('text.color') && textOnBar) bar.appendChild(swatch('Text color', TYPE_ICON, (d) => d.text?.color || t.textColor, 'text.color'));
         if (paths.has('text.size') && textOnBar) bar.appendChild(this.dropdown('Text size', TEXT_SIZE_OPTIONS.map((o) => o.value), common((d) => d.text?.size ?? 'normal'), (s) => labelSizeIcon(s), (v) => actions.patch({ 'text.size': v }), { label: sizeLabel }));
@@ -462,7 +464,7 @@ export class DrawingSettingsPopup {
         const tvReg = !multi && drawing instanceof RegressionChannel && drawing.tv ? drawing : null;
         // TradingView's flat top/bottom bar: line colour, background, text colour, width, style (a saved one keeps ours).
         const tvFlat = !multi && drawing instanceof TrendFigure && drawing.tv ? drawing : null;
-        const tvBar = multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : tvFlat ? AREA_LINE_BAR : drawing instanceof TrendFigure || (drawing instanceof TrendAngle && !drawing.tv) ? undefined : TV_QUICK_BAR[drawing.type];
+        const tvBar = multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : tvFlat ? AREA_LINE_BAR : drawing instanceof TrendFigure || ((drawing instanceof TrendAngle || drawing instanceof CrossLine) && !drawing.tv) ? undefined : TV_QUICK_BAR[drawing.type];
         if (tvReg) bar.querySelectorAll<HTMLElement>('[data-tip="Line width"]').forEach((k) => k.remove());
         if (tvFib instanceof FibVerticalLevels || tvFib instanceof RadialFib) bar.querySelectorAll<HTMLElement>('[data-tip="Line style"]').forEach((k) => k.remove());
         if (tvFib) {
@@ -1359,6 +1361,7 @@ const TV_QUICK_BAR: Readonly<Record<string, readonly TvBarItem[]>> = {
     ray: LINE_BAR,
     extendedline: LINE_BAR,
     trendangle: ['line', 'width', 'style'],
+    crossline: ['line', 'width', 'style'],
     vline: LINE_BAR,
     hray: LINE_BAR,
     infoline: LINE_BAR,

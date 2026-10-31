@@ -5,20 +5,31 @@ import { LINE_FIELDS, SHOW_PRICE_FIELD, SHOW_TIME_FIELD, TEXT_FIELDS } from '../
 import { handleAt } from '../hittest';
 
 /** A full-width horizontal + full-height vertical line crossing at a single anchor. Like TradingView's, it shows
- *  its price on the price scale and its time on the time axis unless `showPrice` / `showTime` is off. */
+ *  its price on the price scale and its time on the time axis unless `showPrice` / `showTime` is off.
+ *
+ *  A new one is TradingView's (module 75519): 2 px TradingView blue, no text (its dialog: Line, Price label, Time
+ *  label). One saved before keeps its text. */
 export class CrossLine extends Drawing {
     readonly type = 'crossline' as const;
     // `!` (no initializer): the base constructor runs readProps first. Absent ⇒ shown (TradingView's default).
     showPrice!: boolean;
     showTime!: boolean;
+    /** TradingView's cross line: a new one; one saved before keeps its text. */
+    declare tv?: boolean;
+
+    constructor(init: ConstructorParameters<typeof Drawing>[0]) {
+        super(init);
+        if (!init.props) this.tv = true;
+    }
 
     protected override writeProps(): Record<string, unknown> {
-        return { showPrice: this.showPrice !== false, showTime: this.showTime !== false };
+        return { showPrice: this.showPrice !== false, showTime: this.showTime !== false, ...(this.tv ? { tv: true } : {}) };
     }
 
     protected override readProps(props: Record<string, unknown>): void {
         if (typeof props.showPrice === 'boolean') this.showPrice = props.showPrice;
         if (typeof props.showTime === 'boolean') this.showTime = props.showTime;
+        if (props.tv === true) this.tv = true;
     }
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
@@ -62,6 +73,6 @@ export class CrossLine extends Drawing {
     }
 
     schema(): SettingsSchema {
-        return { fields: [...LINE_FIELDS, SHOW_PRICE_FIELD, SHOW_TIME_FIELD, ...TEXT_FIELDS] };
+        return { fields: [...LINE_FIELDS, SHOW_PRICE_FIELD, SHOW_TIME_FIELD, ...(this.tv ? [] : TEXT_FIELDS)] };
     }
 }
