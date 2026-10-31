@@ -84,6 +84,12 @@ export abstract class RadialFib extends FibRatios {
         return this.tv && this.levelsAsPercent ? `${(ratio * 100).toFixed(2)}%` : String(ratio);
     }
 
+    /** The trend lines (TradingView-look drawings with them on), in pixels: the one between the two points by default. */
+    trendSegments(proj: Projector): Array<[number, number, number, number]> {
+        const t = this.trendSegment(proj);
+        return t ? [t] : [];
+    }
+
     /** The trend line between the two points (TradingView-look drawings with it on), in pixels. */
     trendSegment(proj: Projector): [number, number, number, number] | null {
         if (!this.tv || this.trendline === false) return null;
@@ -121,7 +127,7 @@ export abstract class RadialFib extends FibRatios {
                 }
             }
         }
-        return this.boundingLines(proj).some((b) => distToSegment(px, py, b[0], b[1], b[2], b[3]) <= tol);
+        return [...this.boundingLines(proj), ...this.trendSegments(proj)].some((b) => distToSegment(px, py, b[0], b[1], b[2], b[3]) <= tol);
     }
 
     protected override writeProps(): Record<string, unknown> {

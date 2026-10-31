@@ -108,7 +108,7 @@ export { TrendFibTime, TV_TREND_FIB_TIME_LEVELS } from './types/TrendFibTime';
 export { RadialFib, type RadialGeom } from './types/RadialFib';
 export { FibCircles, TV_FIB_CIRCLE_LEVELS } from './types/FibCircles';
 export { FibArcs } from './types/FibArcs';
-export { FibWedge } from './types/FibWedge';
+export { FibWedge, TV_FIB_WEDGE_LEVELS } from './types/FibWedge';
 export { FibSpiral } from './types/FibSpiral';
 export { CalloutBase } from './types/CalloutBase';
 export { Callout, CALLOUT_RADIUS, CALLOUT_MARGIN } from './types/Callout';

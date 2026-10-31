@@ -28,6 +28,7 @@ describe('drawings/FibCircles', () => {
         const d = make();
         expect(d.hitTest(65, 35, proj, 2)).toBe(true); // ring 1 to the right of center
         expect(d.hitTest(50, 42.5, proj, 2)).toBe(true); // ring 0.5 (radius 7.5) below center
+        d.applySettings({ trendline: false }); // the trend line runs through the centre and is clickable
         expect(d.hitTest(50, 35, proj, 2)).toBe(false); // dead center — no zero-radius ring
     });
 
@@ -37,6 +38,7 @@ describe('drawings/FibCircles', () => {
         expect(d.hitTest(80, 40, proj, 2)).toBe(true); // level 1, right end
         expect(d.hitTest(50, 50, proj, 2)).toBe(true); // level 1, bottom
         expect(d.hitTest(65, 40, proj, 2)).toBe(true); // level 0.5, right end
+        d.applySettings({ trendline: false }); // the trend line runs through the centre and is clickable
         expect(d.hitTest(50, 40, proj, 2)).toBe(false);
     });
 

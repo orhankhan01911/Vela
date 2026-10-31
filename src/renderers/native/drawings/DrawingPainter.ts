@@ -1543,8 +1543,7 @@ export class DrawingPainter {
                 ctx.lineTo(b[2], b[3]);
             });
         }
-        const t = d.trendSegment(proj);
-        if (t) {
+        for (const t of d.trendSegments(proj)) {
             this.stroke(ctx, { ...d.style, lineColor: d.trendColor || theme.textColor, lineWidth: d.trendWidth ?? 2, lineStyle: d.trendStyle ?? 'dashed' }, () => {
                 ctx.moveTo(t[0], t[1]);
                 ctx.lineTo(t[2], t[3]);
