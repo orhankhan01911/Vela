@@ -2,7 +2,7 @@ import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../..
 import { TrendLine, textPx } from '../../../core/drawings';
 import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TrendFigure, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
-import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
+import { contrastColor, dashPattern, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
 import { BEARISH, BULLISH, NEUTRAL, SLATE, SLATE_DEEP, XPOST_DARK, XPOST_LIGHT } from '../../../core/palette';
 import { withAlpha } from '../../../core/color';
@@ -475,12 +475,13 @@ export class DrawingPainter {
             }
             case 'trendline':
             case 'ray':
+            case 'extendedline':
             case 'infoline':
             case 'arrow': {
                 const pts = d.handlePoints(proj);
                 if (pts.length < 2) return;
-                // A trend line (and a ray, TradingView's trend line extended right) may extend past either point; the
-                // arrow tool never does.
+                // A trend line (and a ray or extended line, TradingView's trend line extended right or both ways) may
+                // extend past either point; the arrow tool never does.
                 const tl = d instanceof TrendLine ? d : null;
                 const seg = tl?.drawnPixels(proj) ?? [pts[0]![0], pts[0]![1], pts[1]![0], pts[1]![1]];
                 this.stroke(ctx, d.style, () => {
@@ -511,16 +512,6 @@ export class DrawingPainter {
                 ctx.ellipse(o.cx, o.cy, o.rx, Math.max(0.5, o.ry), o.rot, 0, Math.PI * 2);
                 ctx.stroke();
                 ctx.setLineDash([]);
-                break;
-            }
-            case 'extendedline': {
-                const pts = d.handlePoints(proj);
-                if (pts.length < 2) return;
-                const [ex1, ey1, ex2, ey2] = extendEndpoints(pts[0]![0], pts[0]![1], pts[1]![0], pts[1]![1], 'both', proj.width, proj.height);
-                this.stroke(ctx, d.style, () => {
-                    ctx.moveTo(ex1, ey1);
-                    ctx.lineTo(ex2, ey2);
-                });
                 break;
             }
             case 'vline': {

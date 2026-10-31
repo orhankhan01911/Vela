@@ -288,7 +288,8 @@ registerDrawingType({
     group: 'lines',
     label: 'Extended Line',
     icon: EXTLINE_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid' },
+    // TradingView's extended line: its trend line, 2 px solid TradingView blue, extended both ways.
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 2, lineStyle: 'solid' },
     create: (init) => new ExtendedLine(init),
 });
 

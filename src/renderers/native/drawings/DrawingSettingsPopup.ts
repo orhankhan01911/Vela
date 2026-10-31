@@ -1356,6 +1356,7 @@ const TV_QUICK_BAR: Readonly<Record<string, readonly TvBarItem[]>> = {
     trendline: LINE_BAR,
     hline: LINE_BAR,
     ray: LINE_BAR,
+    extendedline: LINE_BAR,
     vline: LINE_BAR,
     hray: LINE_BAR,
     infoline: LINE_BAR,

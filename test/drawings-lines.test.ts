@@ -32,7 +32,7 @@ describe('drawings/ExtendedLine', () => {
     });
 
     it('spans all time (never culls) and reports its price span', () => {
-        expect(make().timeExtent()).toBeNull();
+        expect(make().timeExtent()).toEqual({ min: Number.NEGATIVE_INFINITY, max: Number.POSITIVE_INFINITY });
         expect(make().priceRange()).toEqual({ min: 50, max: 50 });
     });
 

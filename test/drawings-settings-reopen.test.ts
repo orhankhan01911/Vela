@@ -112,8 +112,8 @@ describe('drawing settings reopened from the same toolbar', () => {
     });
 
     it('the text panel shows the whole label typed before it was closed', () => {
-        // The extended line keeps the bar's Text panel (the audited TradingView tools edit text in the dialog instead).
-        const line = createDrawing('extendedline', { id: 't', paneId: 'price', anchors: [{ time: 0, price: 100 }, { time: 10, price: 200 }] })!;
+        // A tool of ours with no TradingView twin keeps the bar's Text panel (TradingView's tools edit text in the dialog).
+        const line = createDrawing('sonic', { id: 't', paneId: 'price', anchors: [{ time: 0, price: 100 }, { time: 10, price: 200 }] })!;
         const s = setup(line);
         s.barButton('Text').click();
         const field = (): HTMLTextAreaElement => s.host.querySelector<HTMLTextAreaElement>('.vela-dpop textarea')!;

@@ -137,6 +137,27 @@ describe('ray = the trend line extended right (TradingView)', () => {
     });
 });
 
+describe('extended line = the trend line extended both ways (TradingView, module 637561)', () => {
+    const ext = (props?: Record<string, unknown>): Drawing =>
+        createDrawing('extendedline', { paneId: 'price', anchors: [{ time: 0, price: 1 }, { time: 1, price: 2 }], ...(props ? { props } : {}) })!;
+    it('starts extended both ways, in TradingView blue 2 px, with the trend line settings', () => {
+        const d = ext() as Drawing & { extendLeft: boolean; extendRight: boolean };
+        expect([d.type, d.extendLeft, d.extendRight, d.style.lineColor, d.style.lineWidth]).toEqual(['extendedline', true, true, TV_LINE_COLOR, 2]);
+        const paths = d.schema().fields.map((f) => f.path);
+        for (const p of ['style.arrowLeft', 'extendLeft', 'extendRight', 'showMiddlePoint', 'showPriceLabels', 'stats.pips']) expect(paths).toContain(p);
+    });
+    it('one saved before (its stats only) still extends both ways; a side switched off stays off', () => {
+        const old = ext({ stats: {} }) as Drawing & { extendLeft: boolean; extendRight: boolean };
+        expect([old.extendLeft, old.extendRight]).toEqual([true, true]);
+        expect((ext({ extendLeft: false, extendRight: true }) as Drawing & { extendLeft: boolean }).extendLeft).toBe(false);
+    });
+    it('its text starts like the trend line', () => {
+        const d = ext();
+        d.applySettings({ 'text.value': 'x' });
+        expect(d.text).toMatchObject({ size: 14, color: TV_LINE_COLOR, hAlign: 'center', vAlign: 'top' });
+    });
+});
+
 describe('text sizes in px', () => {
     it('reads px and the older names', () => {
         expect(textPx(22)).toBe(22);
