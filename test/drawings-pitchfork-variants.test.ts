@@ -117,11 +117,13 @@ describe('drawings/pitchfork family · placing preview', () => {
 
 describe('drawings/FlatTopBottom', () => {
     const proj = fakeProjector();
-    // baseline (10,40)→px(10,60) and (50,60)→px(50,40); flat side at price 80 → px y 20
+    // baseline (10,40)→px(10,60) and (50,60)→px(50,40); flat side at price 80 → px y 20. One saved before the
+    // TradingView look (drawings-flattopbottom-tv covers that).
     const make = () =>
         createDrawing('flattopbottom', {
             paneId: 'price',
             anchors: [{ time: 10, price: 40 }, { time: 50, price: 60 }, { time: 30, price: 80 }],
+            props: {},
         })!;
 
     it('has a 3-anchor schema with a price-only flat handle', () => {

@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, FlatTopBottom, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -324,6 +324,7 @@ export class DrawingPainter {
                 const pts = d.handlePoints(proj); // a path ends in an arrowhead along its last segment
                 if (pts.length >= 2) this.paintArrowhead(ctx, pts[pts.length - 2]!, pts[pts.length - 1]!, d.style);
             }
+            if (d instanceof FlatTopBottom && d.tv) this.paintTvFlatExtras(ctx, d, proj, theme);
             if (d instanceof Freehand && d.tv && (d.style.arrowLeft || d.style.arrowRight)) {
                 const ends = d.strokeEnds(proj); // TradingView's brush line ends: an open arrow at either end
                 if (ends && d.style.arrowLeft) this.paintChevron(ctx, ends.start[0], ends.start[1], d.style);
@@ -2147,6 +2148,36 @@ export class DrawingPainter {
             ctx.fillText(txt, bx + pad, by);
             ctx.textBaseline = 'alphabetic';
         }
+    }
+
+    /** TradingView's flat top/bottom extras (module 293769): each line's end arrows (not on an extended side) and, with
+     *  Prices on, each end's price 6 px outside it, vertically centred, in the price colour, size and weight. */
+    private paintTvFlatExtras(ctx: CanvasRenderingContext2D, d: FlatTopBottom, proj: Projector, theme: VelaTheme): void {
+        const L = d.flatLines(proj);
+        if (!L) return;
+        for (const [a, b] of [[L.p1, L.p2], [L.p, L.c]] as const) {
+            const [lft, rgt] = a[0] <= b[0] ? [a, b] : [b, a];
+            if (d.style.arrowLeft && !d.extendLeft) this.paintChevron(ctx, rgt, lft, d.style);
+            if (d.style.arrowRight && !d.extendRight) this.paintChevron(ctx, lft, rgt, d.style);
+        }
+        if (!d.showPrices) return;
+        const [a, b, f] = d.anchors;
+        if (!a || !b || !f) return;
+        const text = (price: number): string => this.axisLabel?.(d.paneId, price)?.text || formatPriceTag(price);
+        ctx.save();
+        ctx.font = `${d.priceItalic ? 'italic ' : ''}${d.priceBold ? 'bold ' : ''}${d.priceSize ?? 12}px ${theme.fontFamily}`;
+        ctx.fillStyle = d.priceColor || d.style.lineColor;
+        ctx.textBaseline = 'middle';
+        const put = (pt: readonly [number, number], other: readonly [number, number], label: string): void => {
+            const outRight = pt[0] > other[0];
+            ctx.textAlign = outRight ? 'left' : 'right';
+            ctx.fillText(label, pt[0] + (outRight ? 6 : -6), pt[1]);
+        };
+        put(L.p1, L.p2, text(a.price));
+        put(L.p2, L.p1, text(b.price));
+        put(L.c, L.p, text(f.price));
+        put(L.p, L.c, text(f.price));
+        ctx.restore();
     }
 
     /** TradingView's regression trend (module 127345): between each pair of neighbouring lines (down, base, up) a fill
@@ -4261,6 +4292,32 @@ export function labelLayout(d: Drawing, proj: Projector): {
             const x = ha === 'left' ? x1 + pad : ha === 'right' ? x2 - pad : (x1 + x2) / 2;
             const top = text.vAlign === 'top' ? y1 + pad : text.vAlign === 'bottom' ? y2 - pad - h : (y1 + y2) / 2 - h / 2;
             return { x, top, align: ha };
+        }
+        case 'flattopbottom': {
+            // TradingView's flat top/bottom text (module 293769): along the upper line over it (Top), the lower line
+            // under it (Bottom) or the middle between them (Inside), at the line's left / middle / right.
+            const L = (d as FlatTopBottom).tv ? (d as FlatTopBottom).flatLines(proj) : null;
+            if (!L) return pts[0] ? { x: pts[0][0], top: pts[0][1], align: 'left' } : null;
+            const slopedUp = (L.p1[1] + L.p2[1]) / 2 <= (L.p[1] + L.c[1]) / 2;
+            type Pt = readonly [number, number];
+            const upper: [Pt, Pt] = slopedUp ? [L.p1, L.p2] : [L.p, L.c];
+            const lower: [Pt, Pt] = slopedUp ? [L.p, L.c] : [L.p1, L.p2];
+            const v = text.vAlign ?? 'top';
+            const mid: [Pt, Pt] = [[(L.p1[0] + L.p[0]) / 2, (L.p1[1] + L.p[1]) / 2], [(L.p2[0] + L.c[0]) / 2, (L.p2[1] + L.c[1]) / 2]];
+            const [s1, s2] = v === 'bottom' ? lower : v === 'top' ? upper : mid;
+            const [x1, y1] = s1[0] <= s2[0] ? s1 : s2;
+            const [x2, y2] = s1[0] <= s2[0] ? s2 : s1;
+            const half = Math.hypot(x2 - x1, y2 - y1) / 2;
+            const h = lh * lines;
+            const slack = (lh - namedFontSize(text.size)) / 2;
+            const pad = namedFontSize(text.size) / 3;
+            const ha = text.hAlign ?? 'left';
+            return {
+                x: ha === 'left' ? -half + (v === 'center' ? pad : 0) : ha === 'right' ? half - (v === 'center' ? pad : 0) : 0,
+                top: v === 'bottom' ? pad - slack : v === 'center' ? -h / 2 : -pad - h + slack,
+                align: ha,
+                rotate: { angle: uprightLineAngle(x1, y1, x2, y2), cx: (x1 + x2) / 2, cy: (y1 + y2) / 2 },
+            };
         }
         default:
             return pts[0] ? { x: pts[0][0], top: pts[0][1], align: 'left' } : null;

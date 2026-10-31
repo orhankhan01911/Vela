@@ -217,10 +217,12 @@ function legacyArrowMarker(doc: SerializedDrawing): SerializedDrawing {
     return doc.type === 'arrowmarker' && doc.props === undefined ? { ...doc, props: {} } : doc;
 }
 
-/** Brush and highlighter strokes, rectangles, paths, texts and callouts became TradingView's (2026-10-30). One saved before with no props:
- *  give it an empty bag so it keeps its look (a fresh stroke has no props and starts as TradingView's). */
+/** Brush and highlighter strokes, rectangles, paths, texts and callouts became TradingView's (2026-10-30), the flat
+ *  top/bottom on 2026-10-31. One saved before with no props: give it an empty bag so it keeps its look (a fresh one
+ *  has no props and starts as TradingView's). */
+const LEGACY_NO_PROPS: ReadonlySet<string> = new Set(['freehand', 'highlighter', 'box', 'path', 'text', 'callout', 'flattopbottom']);
 function legacyStroke(doc: SerializedDrawing): SerializedDrawing {
-    return (doc.type === 'freehand' || doc.type === 'highlighter' || doc.type === 'box' || doc.type === 'path' || doc.type === 'text' || doc.type === 'callout') && doc.props === undefined ? { ...doc, props: {} } : doc;
+    return LEGACY_NO_PROPS.has(doc.type) && doc.props === undefined ? { ...doc, props: {} } : doc;
 }
 
 /** Ellipses became TradingView's tilted three-point ellipse. A record saved before has two corners and no `axis`
@@ -464,7 +466,8 @@ registerDrawingType({
     group: 'channels',
     label: 'Flat Top/Bottom',
     icon: FLATTOP_ICON,
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 2, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}1a` },
+    // TradingView's flat top/bottom: its tan orange 2 px, the same orange at 20 % behind.
+    defaultStyle: { lineColor: '#FF9800', lineWidth: 2, lineStyle: 'solid', fillColor: '#FF980033' }, // palette-exempt: TradingView's tan orange 500
     create: (init) => new FlatTopBottom(init),
 });
 

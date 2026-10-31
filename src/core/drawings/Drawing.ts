@@ -23,6 +23,7 @@ export const TV_TEXT_DEFAULTS: Readonly<Record<string, Partial<DrawingText>>> = 
     hline: { color: TV_LINE_COLOR, size: 12, hAlign: 'center', vAlign: 'center' },
     hray: { color: TV_LINE_COLOR, size: 12, hAlign: 'center', vAlign: 'bottom' },
     parallelchannel: { color: TV_LINE_COLOR, size: 14, hAlign: 'left', vAlign: 'top' },
+    flattopbottom: { color: '#FF9800', size: 14, hAlign: 'left', vAlign: 'top' }, // palette-exempt: TradingView's tan orange 500
     vline: { color: TV_LINE_COLOR, size: 14, hAlign: 'center', vAlign: 'center' },
     pricerange: { color: TV_LINE_COLOR, size: 12 },
     datepricerange: { color: TV_LINE_COLOR, size: 12 },
