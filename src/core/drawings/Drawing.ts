@@ -152,6 +152,7 @@ export type DrawingTypeKey =
     | 'magnifier'
     | 'xabcd'
     | 'abcd'
+    | 'threedrives'
     | 'elliottimpulse'
     | 'elliottcorrection'
     | 'headshoulders'

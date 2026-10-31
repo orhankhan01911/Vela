@@ -19,6 +19,7 @@ import { ArrowMarker } from './types/ArrowMarker';
 import { DateRange } from './types/DateRange';
 import { PriceRange } from './types/PriceRange';
 import { TrianglePattern } from './types/TrianglePattern';
+import { ThreeDrives } from './types/ThreeDrives';
 import { ElliottTriangle, ElliottDoubleCombo, ElliottTripleCombo } from './types/ElliottCombo';
 import { HorizontalLine } from './types/HorizontalLine';
 import { Ray } from './types/Ray';
@@ -1242,6 +1243,16 @@ registerDrawingType({
     create: (init) => new ArrowMarker(init),
 });
 const lettered = { group: 'patterns' as const, coversSeries: true, defaultStyle: SOLID };
+// Three drives: three rising pushes with two pullbacks (our own glyph).
+const THREE_DRIVES_ICON = svg24('<path d="M3 19 6 13 8 15 12 8 14 11 18 4 21 12"/>');
+registerDrawingType({
+    type: 'threedrives',
+    label: 'Three Drives Pattern',
+    icon: THREE_DRIVES_ICON,
+    ...lettered,
+    defaultStyle: { lineColor: '#673ab7', lineWidth: 2, lineStyle: 'solid' }, // palette-exempt: TradingView's deep-blue-500
+    create: (init) => new ThreeDrives(init),
+});
 registerDrawingType({
     type: 'trianglepattern',
     label: 'Triangle Pattern',

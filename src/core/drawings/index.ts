@@ -38,6 +38,7 @@ export { DateRange } from './types/DateRange';
 export { PriceRange } from './types/PriceRange';
 export { RANGE_PARTS, RANGE_LABEL, rangeInfoLines, formatRangeVolume, type RangeInfo, type RangePart, type RangeFacts } from './types/rangeInfo';
 export { TrianglePattern } from './types/TrianglePattern';
+export { ThreeDrives } from './types/ThreeDrives';
 export { ElliottTriangle, ElliottDoubleCombo, ElliottTripleCombo } from './types/ElliottCombo';
 export { ELLIOTT_DEGREES, DEFAULT_DEGREE } from './types/elliottDegree';
 export { statsOf, anyStats, lineStatsRows, formatSpan, ALL_STATS, NO_STATS, LINE_STATS_FIELDS, STATS_PARTS, type LineStats } from './types/lineStats';
