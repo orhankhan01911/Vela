@@ -401,11 +401,13 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 if (this.zoomMode) this.exitZoom();
             });
         }
+        // Like TradingView, picking another tool drops an unfinished drawing (a 3-tap ghost feed
+        // would otherwise take the next tool's taps as its points).
+        if (type == null || type !== this.activeTool) this.interaction.onToolCleared();
         this.activeTool = type;
         this.activeToolStyle = lastStyle; // seeds the placement ghost so it matches the last-used color
         this.toolbar.setActiveTool(type);
-        if (type == null) this.interaction.onToolCleared();
-        else this.clearSelection(); // arming a tool dismisses an open settings popup + selection
+        if (type != null) this.clearSelection(); // arming a tool dismisses an open settings popup + selection
         this.render();
     }
 
