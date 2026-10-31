@@ -333,6 +333,7 @@ export class SymbolPicker {
         this.list = doc.createElement('div');
         this.list.className = 'vela-sp-list';
         this.list.setAttribute('role', 'listbox');
+        this.list.setAttribute('aria-label', vt('Symbols'));
         // Infinite scroll: nearing the bottom grows the page and APPENDS the new rows —
         // `filterSymbols` is a pure re-run with a larger limit whose result is a stable
         // superset (same ranking, same order), so appended rows never reshuffle the ones

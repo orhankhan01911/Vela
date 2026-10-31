@@ -124,6 +124,7 @@ export class IndicatorPicker {
         this.list = doc.createElement('div');
         this.list.className = 'vela-ip-list';
         this.list.setAttribute('role', 'listbox');
+        this.list.setAttribute('aria-label', vt('Indicators'));
         this.dialog = new Dialog({
             title: 'Indicators',
             host: opts.host,
