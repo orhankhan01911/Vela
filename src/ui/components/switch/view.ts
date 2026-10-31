@@ -6,6 +6,8 @@ import { SWITCH_CSS, SWITCH_STYLE_ID } from './styles';
 
 export interface SwitchOptions extends SwitchControllerOptions {
     id?: string;
+    /** Accessible name, for a switch whose visible words are not linked to it (no `id`). */
+    label?: string;
 }
 
 export class Switch {
@@ -22,6 +24,7 @@ export class Switch {
         b.dataset.size = this.ctrl.size;
         b.dataset.tone = this.ctrl.tone;
         b.setAttribute('role', 'switch');
+        if (opts.label) b.setAttribute('aria-label', opts.label);
         if (this.ctrl.disabled) b.disabled = true;
         b.appendChild(iconEl('check', b.ownerDocument));
         this.el = b;

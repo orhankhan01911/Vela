@@ -433,6 +433,8 @@ export class ColorField {
     /** Repaint the swatch (and the line sample): after an outside change of the color, width or style. */
     paint(): void {
         const v = this.getVal();
+        // Screen readers and agent-desktop read this; a row label (aria-labelledby) wins when there is one.
+        this.el.setAttribute('aria-label', `${vt('Color')} ${v}`);
         this.swatch.style.background = `linear-gradient(${v}, ${v}), ${FIELD_CHECKER}`;
         if (this.sample && this.line) {
             const { width, style } = this.line();

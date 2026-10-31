@@ -164,6 +164,7 @@ export function fieldRow(opts: FieldRowOptions): HTMLElement {
         wrap.className = 'vela-field-span vela-field-bool';
         const sw = new Switch({
             id: opts.toggle?.id ?? opts.id,
+            label: vt(opts.label),
             checked: opts.toggle?.checked ?? false,
             size: 'md',
             tone: 'bright',
@@ -205,6 +206,7 @@ export function fieldRow(opts: FieldRowOptions): HTMLElement {
         left.className = 'vela-field-toggle-label';
         const sw = new Switch({
             id: opts.toggle.id ?? opts.id,
+            label: vt(opts.label),
             checked: opts.toggle.checked,
             size: 'md',
             tone: 'bright',

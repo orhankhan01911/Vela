@@ -102,6 +102,7 @@ export class Dialog {
         this.titleEl = title;
         const close = doc.createElement('button');
         close.className = 'vela-dialog-close';
+        close.setAttribute('aria-label', vt('Close'));
         close.appendChild(iconEl('close', doc));
         header.append(title, close);
 
