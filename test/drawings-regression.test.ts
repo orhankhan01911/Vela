@@ -82,8 +82,8 @@ describe('drawings/RegressionChannel', () => {
         expect(d.reg.showR2).toBe(true);
     });
 
-    it('round-trips its per-line styling + R² toggle through serialize', () => {
-        const d = createDrawing('regressionchannel', { paneId: 'price', anchors: [{ time: 0, price: 0 }, { time: 4 * HR, price: 0 }] })! as RegressionChannel;
+    it('round-trips its per-line styling + R² toggle through serialize (one saved before the TradingView look)', () => {
+        const d = createDrawing('regressionchannel', { paneId: 'price', anchors: [{ time: 0, price: 0 }, { time: 4 * HR, price: 0 }], props: { showR2: true } })! as RegressionChannel;
         d.applySettings({ 'reg.midColor': '#123456', 'reg.upperStyle': 'dashed', 'reg.lowerFill': '#00000080', 'reg.showR2': false });
         const ser = d.serialize();
         expect(ser.props).toMatchObject({ midColor: '#123456', upperStyle: 'dashed', lowerFill: '#00000080', showR2: false });

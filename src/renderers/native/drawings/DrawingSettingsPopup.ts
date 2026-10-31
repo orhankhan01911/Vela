@@ -3,6 +3,7 @@ import type { VelaTheme } from '../../../core/options';
 import type { Drawing, RegressionStyle, VwapStyle, SerializedDrawing } from '../../../core/drawings';
 import {
     DEFAULT_DRAWING_COLOR,
+    RegressionChannel,
     TEXT_SIZE_OPTIONS,
     LINE_STYLE_OPTIONS,
     GLYPH_OPTIONS,
@@ -455,7 +456,10 @@ export class DrawingSettingsPopup {
         const tvFib = !multi && (drawing instanceof FibLevels || drawing instanceof FibChannel || drawing instanceof FibVerticalLevels || drawing instanceof FibSpeedFan || drawing instanceof RadialFib) && drawing.tv === true ? drawing : null;
         // TradingView's Fib channel bar has the line colour only (its collected colours; no width); the time zone's
         // colour, width and style set every level.
-        const tvBar = multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : TV_QUICK_BAR[drawing.type];
+        // TradingView's regression trend bar: its width only (every line), no colour.
+        const tvReg = !multi && drawing instanceof RegressionChannel && drawing.tv ? drawing : null;
+        const tvBar = multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : TV_QUICK_BAR[drawing.type];
+        if (tvReg) bar.querySelectorAll<HTMLElement>('[data-tip="Line width"]').forEach((k) => k.remove());
         if (tvFib instanceof FibVerticalLevels || tvFib instanceof RadialFib) bar.querySelectorAll<HTMLElement>('[data-tip="Line style"]').forEach((k) => k.remove());
         if (tvFib) {
             // TradingView's Fib bar: one colour for the trend line and every level, one width for both (its collected
@@ -486,6 +490,12 @@ export class DrawingSettingsPopup {
                               tvFib instanceof FibVerticalLevels
                                   ? this.dropdown('Line style', ['solid', 'dashed', 'dotted'], tvFib.levels[0]?.lineStyle ?? 'solid', (v) => lineIcon(2, v as 'solid'), (v) => actions.patch(Object.fromEntries(tvFib.levels.map((_, i) => [`levels.${i}.lineStyle`, v]))))
                                   : null,
+                      }
+                    : {}),
+                ...(tvReg
+                    ? {
+                          width: () =>
+                              this.dropdown('Line width', [1, 2, 3, 4], tvReg.trend.base.width, (w) => lineIcon(w, 'solid'), (v) => actions.patch({ 'trend.base.width': v, 'trend.up.width': v, 'trend.down.width': v }), { label: (v) => `${v}px`, labelInTrigger: true }),
                       }
                     : {}),
                 // TradingView's Gann box / square colour: every line it has (its collected colours).
@@ -1320,6 +1330,8 @@ const TV_BAR_TIP: Record<TvBarItem, string> = { line: 'Line color', fill: 'Fill'
 const LINE_BAR: readonly TvBarItem[] = ['line', 'text', 'width', 'style'];
 const AREA_BAR: readonly TvBarItem[] = ['line', 'fill', 'text', 'width'];
 /** TradingView's floating toolbar per tool (read from TradingView Desktop's toolbar data-names, 2026-10-30). */
+/** TradingView's regression trend bar (data-names: templates, line-tool-width, settings, ...). */
+const TV_REGRESSION_BAR: readonly TvBarItem[] = ['width'];
 /** TradingView's Fib retracement bar (its data-names: templates, line-tool-color, line-tool-width, settings, ...). */
 const TV_FIB_BAR: readonly TvBarItem[] = ['line', 'width'];
 const TV_FIB_CHANNEL_BAR: readonly TvBarItem[] = ['line'];

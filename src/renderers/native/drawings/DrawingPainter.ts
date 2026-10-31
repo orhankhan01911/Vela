@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -2097,6 +2097,10 @@ export class DrawingPainter {
     /** Paint a linear-regression channel: the two shaded bands (mid→upper, mid→lower), the three
      *  lines (upper/mid/lower, each with its own color + dash), and the R² readout at the start. */
     private paintRegressionChannel(ctx: CanvasRenderingContext2D, d: RegressionChannel, proj: Projector, theme: VelaTheme): void {
+        if (d.tv) {
+            this.paintTvRegression(ctx, d, proj, theme);
+            return;
+        }
         const L = d.layout(proj);
         if (!L) return;
         const s = d.reg;
@@ -2142,6 +2146,45 @@ export class DrawingPainter {
             ctx.textBaseline = 'middle';
             ctx.fillText(txt, bx + pad, by);
             ctx.textBaseline = 'alphabetic';
+        }
+    }
+
+    /** TradingView's regression trend (module 127345): between each pair of neighbouring lines (down, base, up) a fill
+     *  in the upper line's colour as set (its opacity), then the lines opaque, then Pearson's R centred under the down
+     *  line's start, 12 px. */
+    private paintTvRegression(ctx: CanvasRenderingContext2D, d: RegressionChannel, proj: Projector, theme: VelaTheme): void {
+        const T = d.tvLayout(proj);
+        if (!T) return;
+        const span = Math.max(1, T.x1 - T.x0);
+        const yAt = (y0: number, y1: number, x: number): number => y0 + ((y1 - y0) * (x - T.x0)) / span;
+        for (let i = 1; i < T.lines.length; i += 1) {
+            const lo = T.lines[i - 1]!;
+            const hi = T.lines[i]!;
+            ctx.save();
+            ctx.fillStyle = hi.line.color;
+            ctx.beginPath();
+            ctx.moveTo(T.x0, hi.y0);
+            ctx.lineTo(T.xEnd, yAt(hi.y0, hi.y1, T.xEnd));
+            ctx.lineTo(T.xEnd, yAt(lo.y0, lo.y1, T.xEnd));
+            ctx.lineTo(T.x0, lo.y0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+        for (const l of T.lines) {
+            this.stroke(ctx, { lineColor: opaqueColor(l.line.color), lineWidth: l.line.width, lineStyle: l.line.style }, () => {
+                ctx.moveTo(T.x0, l.y0);
+                ctx.lineTo(T.xEnd, yAt(l.y0, l.y1, T.xEnd));
+            });
+        }
+        if (T.pearsons) {
+            ctx.save();
+            ctx.font = `12px ${theme.fontFamily}`;
+            ctx.fillStyle = T.pearsons.color;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(T.pearsons.text, T.pearsons.x, T.pearsons.y);
+            ctx.restore();
         }
     }
 

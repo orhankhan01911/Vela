@@ -382,8 +382,8 @@ describe('settings dialog', () => {
         expect((s.live() as unknown as { showTradeLine: boolean }).showTradeLine).toBe(true);
     });
 
-    it('the regression channel quick bar keeps one color; its other settings are in the dialog', async () => {
-        const reg = createDrawing('regressionchannel', { paneId: 'price', anchors: [{ time: 0, price: 100 }, { time: 10, price: 110 }] })!;
+    it('a regression channel saved before keeps one color on its bar; its other settings are in the dialog', async () => {
+        const reg = createDrawing('regressionchannel', { paneId: 'price', anchors: [{ time: 0, price: 100 }, { time: 10, price: 110 }], props: { showR2: true } })!;
         const s = setup(reg);
         expect(s.tips()).toContain('Midline color');
         expect(s.tips()).not.toContain('Upper fill');

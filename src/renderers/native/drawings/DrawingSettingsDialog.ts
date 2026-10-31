@@ -67,6 +67,9 @@ import {
     type IntervalUnit,
     type BarKind,
     type IntervalVisibility,
+    RegressionChannel,
+    REGRESSION_SOURCES,
+    type RegressionTrendLine,
 } from '../../../core/drawings';
 import { BEARISH, BULLISH } from '../../../core/palette';
 import { ALONG_LINE_TEXT_TYPES, type SettingsField } from '../../../core/drawings/schema';
@@ -125,7 +128,9 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', trianglepattern: 'Triangle pattern', threedrives: 'Three drives pattern', elliottimpulse: 'Elliott impulse wave (12345)', elliottcorrection: 'Elliott correction wave (ABC)', elliotttriangle: 'Elliott triangle wave (ABCDE)', elliottdoublecombo: 'Elliott double combo wave (WXY)', elliotttriplecombo: 'Elliott triple combo wave (WXYXZ)', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', trianglepattern: 'Triangle pattern', threedrives: 'Three drives pattern', elliottimpulse: 'Elliott impulse wave (12345)', elliottcorrection: 'Elliott correction wave (ABC)', elliotttriangle: 'Elliott triangle wave (ABCDE)', elliottdoublecombo: 'Elliott double combo wave (WXY)', elliotttriplecombo: 'Elliott triple combo wave (WXYXZ)', regressionchannel: 'Regression trend', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+/** TradingView's source names (its price sources). */
+const REGRESSION_SOURCE_LABEL: Record<(typeof REGRESSION_SOURCES)[number], string> = { open: 'Open', high: 'High', low: 'Low', close: 'Close', hl2: '(H + L)/2', hlc3: '(H + L + C)/3', ohlc4: '(O + H + L + C)/4' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -177,7 +182,7 @@ export class DrawingSettingsDialog {
     static tabsFor(drawing: Drawing): DrawingDialogTab[] {
         const tabs: DrawingDialogTab[] = [];
         const custom = drawing instanceof PositionTool || drawing instanceof FixedRangeVolumeProfile || drawing instanceof FixedRangeTpoProfile;
-        if (custom) tabs.push('inputs');
+        if (custom || (drawing instanceof RegressionChannel && drawing.tv)) tabs.push('inputs');
         // TradingView's text: the Text tab and Visibility only.
         const tvText = (drawing instanceof TextLabel || drawing instanceof Callout) && drawing.tv === true;
         if (!tvText && (drawing.editableLevels() || styleFields(drawing).length > 0)) tabs.push('style');
@@ -217,6 +222,7 @@ export class DrawingSettingsDialog {
                 if (live instanceof PositionTool) this.buildPosition(grid, live, actions);
                 else if (live instanceof FixedRangeVolumeProfile) this.buildFrvp(grid, live, actions);
                 else if (live instanceof FixedRangeTpoProfile) this.buildFrtpo(grid, live, actions);
+                else if (live instanceof RegressionChannel) this.buildRegressionInputs(grid, live, actions);
             } else if (t === 'style') this.buildStyle(grid, live, actions);
             else if (t === 'text') this.buildText(grid, live, actions);
             else if (t === 'coordinates') this.buildCoordinates(grid, live, actions);
@@ -315,6 +321,10 @@ export class DrawingSettingsDialog {
      *  line-end buttons), Background, Extend, the tool's switches, then the INFO section (stats) and the tool's own
      *  sections (Fib, levels). */
     private buildStyle(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
+        if (drawing instanceof RegressionChannel && drawing.tv) {
+            this.buildRegressionTvStyle(grid, drawing, actions);
+            return;
+        }
         if (drawing instanceof FibSpeedFan && drawing.tv) {
             this.buildSpeedFanStyle(grid, drawing, actions);
             return;
@@ -1813,6 +1823,49 @@ export class DrawingSettingsDialog {
         paint();
         oneColor.el.dataset.role = 'one-color';
         return { el: oneColor.el, paint };
+    }
+
+    /** TradingView's regression trend Inputs tab (its study inputs): Upper Deviation, Lower Deviation, Use Upper
+     *  Deviation, Use Lower Deviation, Source. */
+    private buildRegressionInputs(grid: HTMLElement, d: RegressionChannel, actions: SettingsActions): void {
+        const t = d.trend;
+        const dev = (label: string, path: 'upperDev' | 'lowerDev', role: string): void => {
+            const row = fieldRow({
+                label,
+                control: buildFieldControl({ kind: 'number', value: t[path], min: -500, max: 500, step: 1, integer: true, fill: false, commit: 'blur', onChange: (n) => actions.patch({ [`trend.${path}`]: n }) }).el,
+            });
+            row.dataset.role = role;
+            grid.appendChild(row);
+        };
+        dev('Upper Deviation', 'upperDev', 'upper-dev');
+        dev('Lower Deviation', 'lowerDev', 'lower-dev');
+        for (const [label, path, role] of [['Use Upper Deviation', 'useUpper', 'use-upper'], ['Use Lower Deviation', 'useLower', 'use-lower']] as const) {
+            const row = fieldRow({ label, bool: true, toggle: { id: uid(), checked: t[path], onChange: (v) => actions.patch({ [`trend.${path}`]: v }) } });
+            row.dataset.role = role;
+            grid.appendChild(row);
+        }
+        const options = REGRESSION_SOURCES.map((v) => ({ value: v, label: REGRESSION_SOURCE_LABEL[v] }));
+        const source = fieldRow({ label: 'Source', control: [this.selectControl('trend.source', options, t.source, actions)], fit: true });
+        source.dataset.role = 'source';
+        grid.appendChild(source);
+    }
+
+    /** TradingView's regression trend Style tab: Base, Up and Down (a switch and the line's colour, width and style),
+     *  Extend lines, Pearson's R. */
+    private buildRegressionTvStyle(grid: HTMLElement, d: RegressionChannel, actions: SettingsActions): void {
+        const t = d.trend;
+        for (const [label, key] of [['Base', 'base'], ['Up', 'up'], ['Down', 'down']] as const) {
+            const l: RegressionTrendLine = t[key];
+            const btn = this.pathLineButton({ color: l.color, width: l.width, style: l.style }, { color: `trend.${key}.color`, width: `trend.${key}.width`, style: `trend.${key}.style` }, actions);
+            const row = fieldRow({ label, toggle: { id: uid(), checked: l.show, onChange: (v) => actions.patch({ [`trend.${key}.show`]: v }) }, control: [btn], fit: true });
+            row.dataset.role = key;
+            grid.appendChild(row);
+        }
+        for (const [label, path, role] of [['Extend lines', 'extend', 'extend'], ["Pearson's R", 'pearsons', 'pearsons']] as const) {
+            const row = fieldRow({ label, bool: true, toggle: { id: uid(), checked: t[path], onChange: (v) => actions.patch({ [`trend.${path}`]: v }) } });
+            row.dataset.role = role;
+            grid.appendChild(row);
+        }
     }
 
     /** TradingView's Elliott wave Style tab (module 356806): Color, Line (a switch for the wave and its width) and
