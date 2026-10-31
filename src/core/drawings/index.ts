@@ -41,6 +41,7 @@ export { TrianglePattern } from './types/TrianglePattern';
 export { ThreeDrives } from './types/ThreeDrives';
 export { ElliottTriangle, ElliottDoubleCombo, ElliottTripleCombo } from './types/ElliottCombo';
 export { ELLIOTT_DEGREES, DEFAULT_DEGREE } from './types/elliottDegree';
+export * from './types/elliottTv';
 export { statsOf, anyStats, lineStatsRows, formatSpan, ALL_STATS, NO_STATS, LINE_STATS_FIELDS, STATS_PARTS, type LineStats } from './types/lineStats';
 export { TrendAngle } from './types/TrendAngle';
 export { Box } from './types/Box';

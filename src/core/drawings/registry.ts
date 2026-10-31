@@ -1029,7 +1029,7 @@ registerDrawingType({
     label: 'Elliott Impulse Wave (1-5)',
     icon: ELLIOTT_IMPULSE_ICON,
     coversSeries: true, // labelled pattern over the candles like TradingView's: a candle never hides a wave or point name
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    defaultStyle: { lineColor: '#3d85c6', lineWidth: 2, lineStyle: 'solid' }, // palette-exempt: TradingView's Elliott wave colour
     create: (init) => new ElliottImpulse(init),
 });
 

@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, extendEndpoints, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -3299,7 +3299,53 @@ export class DrawingPainter {
         ctx.textBaseline = 'alphabetic';
     }
 
+    /** TradingView's Elliott wave (module 356806): the wave line, then each point's label in its degree's group look,
+     *  alternating below and above starting from the second leg's direction, 10 px off the point (circled degrees
+     *  ringed 1 px); the origin's label only while the wave shows its handles. */
+    private paintTvElliott(ctx: CanvasRenderingContext2D, d: PatternDrawing, proj: Projector, theme: VelaTheme): void {
+        const pts = d.handlePoints(proj);
+        const groups = d.tvElliottLabels();
+        if (pts.length < 2 || !groups) return;
+        const color = d.style.lineColor || theme.textColor;
+        if (d.showWave !== false) {
+            ctx.save();
+            ctx.lineJoin = 'round';
+            this.stroke(ctx, { ...d.style, lineStyle: 'solid' }, () => {
+                ctx.moveTo(pts[0]![0], pts[0]![1]);
+                for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i]![0], pts[i]![1]);
+            });
+            ctx.restore();
+        }
+        const from = handleIdsFor(this.targets).has(d.id) ? 0 : 1;
+        let below = pts.length > 2 ? Math.sign(pts[2]![1] - pts[1]![1]) === 1 : true;
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i < pts.length; i += 1, below = !below) {
+            if (i < from) continue;
+            const l = tvElliottLabel(groups, d.tvDegree ?? TV_ELLIOTT_DEFAULT_DEGREE, i);
+            const [x, py] = pts[i]!;
+            const y = py + (below ? 1 : -1) * (10 + l.radius);
+            if (l.circle) {
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(x, y, l.radius - 0.5, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            ctx.fillStyle = color;
+            ctx.font = `${l.bold ? 'bold ' : ''}${l.fontSize}px ${theme.fontFamily}`;
+            ctx.fillText(l.text, x, y + 0.05 * l.fontSize);
+        }
+        ctx.restore();
+    }
+
     private paintPattern(ctx: CanvasRenderingContext2D, d: PatternDrawing, proj: Projector, theme: VelaTheme): void {
+        if (d.tv && d.tvElliottLabels()) {
+            this.paintTvElliott(ctx, d, proj, theme);
+            return;
+        }
         if (d.tv) {
             this.paintTvPattern(ctx, d, proj, theme);
             return;

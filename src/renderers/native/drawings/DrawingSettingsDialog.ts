@@ -23,6 +23,8 @@ import {
     PitchforkBase,
     PatternDrawing,
     TV_PATTERN_TEXT,
+    TV_ELLIOTT_DEGREES,
+    TV_ELLIOTT_DEFAULT_DEGREE,
     Pitchfan,
     PITCHFORK_STYLES,
     PriceRange,
@@ -123,7 +125,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', trianglepattern: 'Triangle pattern', threedrives: 'Three drives pattern', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', trianglepattern: 'Triangle pattern', threedrives: 'Three drives pattern', elliottimpulse: 'Elliott impulse wave (12345)', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -315,6 +317,10 @@ export class DrawingSettingsDialog {
     private buildStyle(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
         if (drawing instanceof FibSpeedFan && drawing.tv) {
             this.buildSpeedFanStyle(grid, drawing, actions);
+            return;
+        }
+        if (drawing instanceof PatternDrawing && drawing.tv && drawing.tvElliottLabels()) {
+            this.buildElliottTvStyle(grid, drawing, actions);
             return;
         }
         if (drawing instanceof PatternDrawing && drawing.tv) {
@@ -1807,6 +1813,20 @@ export class DrawingSettingsDialog {
         paint();
         oneColor.el.dataset.role = 'one-color';
         return { el: oneColor.el, paint };
+    }
+
+    /** TradingView's Elliott wave Style tab (module 356806): Color, Line (a switch for the wave and its width) and
+     *  Degree (its 15 degrees). */
+    private buildElliottTvStyle(grid: HTMLElement, d: PatternDrawing, actions: SettingsActions): void {
+        const color = fieldRow({ label: 'Color', control: [this.colorControl(d, 'style.lineColor', actions, d.style.lineColor || DEFAULT_DRAWING_COLOR)], fit: true });
+        color.dataset.role = 'color';
+        const width = this.pathLineButton({ color: d.style.lineColor || DEFAULT_DRAWING_COLOR, width: d.style.lineWidth ?? 2, style: 'solid' }, { color: 'style.lineColor', width: 'style.lineWidth' }, actions);
+        const line = fieldRow({ label: 'Line', toggle: { id: uid(), checked: d.showWave !== false, onChange: (v) => actions.patch({ showWave: v }) }, control: [width], fit: true });
+        line.dataset.role = 'line';
+        const options = TV_ELLIOTT_DEGREES.map((label, i) => ({ value: String(i), label }));
+        const degree = fieldRow({ label: 'Degree', control: [this.selectControl('tvDegree', options, String(d.tvDegree ?? TV_ELLIOTT_DEFAULT_DEGREE), actions, (v) => Number(v))], fit: true });
+        degree.dataset.role = 'degree';
+        grid.append(color, line, degree);
     }
 
     /** TradingView's pattern Style tab (module 266806): Label (text colour, size, bold, italic), Border (colour and

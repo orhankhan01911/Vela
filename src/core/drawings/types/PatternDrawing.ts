@@ -3,6 +3,7 @@ import type { Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
 import { LINE_FIELDS, FILL_FIELDS } from '../schema';
 import { distToPolyline, handleAt } from '../hittest';
+import { TV_ELLIOTT_DEFAULT_DEGREE, tvDegreeOf, type ElliottLabelGroups } from './elliottTv';
 
 /** TradingView's pattern label text (white). */
 export const TV_PATTERN_TEXT = '#FFFFFF'; // palette-exempt: TradingView's white label text
@@ -27,6 +28,9 @@ export abstract class PatternDrawing extends Drawing {
     declare fontSize?: number;
     declare labelBold?: boolean;
     declare labelItalic?: boolean;
+    /** TradingView's Elliott waves: the degree (0 Supermillennium … 14 Minuscule) and whether the wave line shows. */
+    declare tvDegree?: number;
+    declare showWave?: boolean;
 
     constructor(init: ConstructorParameters<typeof Drawing>[0]) {
         super(init);
@@ -37,7 +41,16 @@ export abstract class PatternDrawing extends Drawing {
             this.fontSize = 12;
             this.labelBold = false;
             this.labelItalic = false;
+            if (this.tvElliottLabels()) {
+                this.tvDegree = TV_ELLIOTT_DEFAULT_DEGREE;
+                this.showWave = true;
+            }
         }
+    }
+
+    /** TradingView's Elliott label groups for a wave tool (null for the other patterns). */
+    tvElliottLabels(): ElliottLabelGroups | null {
+        return null;
     }
 
     /** Whether a new one takes TradingView's look (the tools audited so far). */
@@ -163,6 +176,7 @@ export abstract class PatternDrawing extends Drawing {
             fontSize: this.fontSize,
             labelBold: this.labelBold === true,
             labelItalic: this.labelItalic === true,
+            ...(this.tvElliottLabels() ? { tvDegree: tvDegreeOf(this.tvDegree), showWave: this.showWave !== false } : {}),
         };
     }
 
@@ -172,5 +186,7 @@ export abstract class PatternDrawing extends Drawing {
         for (const k of ['fillBackground', 'labelBold', 'labelItalic'] as const) if (typeof props[k] === 'boolean') this[k] = props[k] as boolean;
         if (typeof props.textColor === 'string') this.textColor = props.textColor;
         if (typeof props.fontSize === 'number' && Number.isFinite(props.fontSize)) this.fontSize = Math.min(48, Math.max(6, props.fontSize));
+        if (props.tvDegree !== undefined) this.tvDegree = tvDegreeOf(props.tvDegree);
+        if (typeof props.showWave === 'boolean') this.showWave = props.showWave;
     }
 }
