@@ -1261,7 +1261,14 @@ registerDrawingType({
     defaultStyle: { lineColor: '#673ab7', lineWidth: 2, lineStyle: 'solid', fillColor: '#673ab726' }, // palette-exempt: TradingView's deep-blue-500, background at 85 % transparency
     create: (init) => new TrianglePattern(init),
 });
-registerDrawingType({ type: 'elliotttriangle', label: 'Elliott Triangle Wave (ABCDE)', icon: ELLIOTT_TRIANGLE_ICON, ...lettered, create: (init) => new ElliottTriangle(init) });
+registerDrawingType({
+    type: 'elliotttriangle',
+    label: 'Elliott Triangle Wave (ABCDE)',
+    icon: ELLIOTT_TRIANGLE_ICON,
+    ...lettered,
+    defaultStyle: { lineColor: '#FF9800', lineWidth: 2, lineStyle: 'solid' }, // palette-exempt: TradingView's Elliott triangle orange
+    create: (init) => new ElliottTriangle(init),
+});
 registerDrawingType({ type: 'elliottdoublecombo', label: 'Elliott Double Combo Wave (WXY)', icon: ELLIOTT_COMBO_ICON, ...lettered, create: (init) => new ElliottDoubleCombo(init) });
 registerDrawingType({ type: 'elliotttriplecombo', label: 'Elliott Triple Combo Wave (WXYXZ)', icon: ELLIOTT_COMBO_ICON, ...lettered, create: (init) => new ElliottTripleCombo(init) });
 const PROJECTION_ICON = svg24('<path d="M4 20 18 6a10 10 0 0 1 2 10Z"/>');
