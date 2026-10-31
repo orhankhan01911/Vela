@@ -15,6 +15,9 @@ import {
     PriceNote,
     FlagMark,
     Signpost,
+    TableDrawing,
+    TV_TABLE,
+    tableActiveCell,
     BarsPattern,
     Projection,
     Forecast,
@@ -86,6 +89,8 @@ export interface SettingsActions {
     addAlert?(): void;
     /** TradingView's "Anchor drawing" toggle: a text or note becomes its screen-pinned twin, or back. Optional. */
     toggleAnchor?(): void;
+    /** TradingView's table: add a row / column after the active cell, or remove its row / column. Tables only. */
+    tableOp?(op: 'addRow' | 'addColumn' | 'removeRow' | 'removeColumn'): void;
     /** Put a saved template's look on the drawing and rebuild the toolbar (the Templates button). Optional. */
     applyTemplate?(look: TemplateLook): void;
 }
@@ -458,7 +463,7 @@ export class DrawingSettingsPopup {
         // TradingView's "Anchor drawing" sits between the lock and the trash on texts and notes; pressed = pinned.
         if (!multi && actions.toggleAnchor) {
             const flip = actions.toggleAnchor;
-            const pinned = drawing.type === 'anchoredtext' || drawing.type === 'anchorednote';
+            const pinned = drawing.type === 'anchoredtext' || drawing.type === 'anchorednote' || (drawing instanceof TableDrawing && drawing.anchored === true);
             const anchorBtn = this.toggle('Anchor drawing', ANCHOR_ICON, pinned, () => flip());
             anchorBtn.dataset.action = 'toggle-anchor';
             bar.appendChild(anchorBtn);
@@ -468,7 +473,7 @@ export class DrawingSettingsPopup {
         bar.appendChild(del);
         // TradingView's Elliott waves add a Degree submenu to the more menu.
         const wave = !multi && drawing instanceof PatternDrawing && drawing.tv && drawing.tvElliottLabels() ? drawing : null;
-        bar.appendChild(this.kebabButton(actions, multi ? null : openSettings, wave));
+        bar.appendChild(this.kebabButton(actions, multi ? null : openSettings, wave, !multi && drawing instanceof TableDrawing ? drawing : null));
 
         // TradingView's quick bar for the audited tools: which colour, width, style and size controls it shows, in its
         // order (line colour, background, text colour, width, style). Built controls are reused; a missing one is made.
@@ -499,7 +504,9 @@ export class DrawingSettingsPopup {
         // width; the forecast's line colour and width; nothing on the ghost feed's.
         const tvForeBar: readonly TvBarItem[] | null =
             multi ? null : drawing instanceof BarsPattern && drawing.tv ? ['fill'] : drawing instanceof Projection && drawing.tv ? ['fill', 'fill2', 'width'] : drawing instanceof Forecast && drawing.tv ? ['line', 'width'] : drawing instanceof GhostFeed && drawing.tv ? [] : null;
-        const tvBar = tvLabelBar ? tvLabelBar : tvForeBar ? tvForeBar : tvShapeBar ? tvShapeBar : oldShape || multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : tvFlat ? AREA_LINE_BAR : drawing instanceof TrendFigure || ((drawing instanceof TrendAngle || drawing instanceof CrossLine || drawing instanceof RotatedRect || drawing instanceof Circle || drawing instanceof Ellipse) && !drawing.tv) ? undefined : TV_QUICK_BAR[drawing.type];
+        // TradingView's table bar: border, background and text colours (the insert buttons go in front of them).
+        const tvTableBar: readonly TvBarItem[] | null = !multi && drawing instanceof TableDrawing ? ['line', 'fill', 'text'] : null;
+        const tvBar = tvTableBar ? tvTableBar : tvLabelBar ? tvLabelBar : tvForeBar ? tvForeBar : tvShapeBar ? tvShapeBar : oldShape || multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : tvFlat ? AREA_LINE_BAR : drawing instanceof TrendFigure || ((drawing instanceof TrendAngle || drawing instanceof CrossLine || drawing instanceof RotatedRect || drawing instanceof Circle || drawing instanceof Ellipse) && !drawing.tv) ? undefined : TV_QUICK_BAR[drawing.type];
         if (tvReg) bar.querySelectorAll<HTMLElement>('[data-tip="Line width"]').forEach((k) => k.remove());
         if (tvFib instanceof FibVerticalLevels || tvFib instanceof RadialFib) bar.querySelectorAll<HTMLElement>('[data-tip="Line style"]').forEach((k) => k.remove());
         if (tvFib) {
@@ -595,6 +602,11 @@ export class DrawingSettingsPopup {
                         : this.colorButton('Fill', BUCKET_ICON, drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'style.fillColor': v })),
                 text: () => this.colorButton('Text color', TYPE_ICON, drawing.text?.color || DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'text.color': v })),
             });
+            if (tvTableBar && drawing instanceof TableDrawing) Object.assign(make, {
+                line: () => this.colorButton('Line color', BRUSH_ICON, drawing.style.lineColor || TV_TABLE.borderColor, (v) => actions.patch({ 'style.lineColor': v })),
+                fill: () => this.colorButton('Fill', BUCKET_ICON, drawing.style.fillColor ?? TV_TABLE.background, (v) => actions.patch({ 'style.fillColor': v })),
+                text: () => this.colorButton('Text color', TYPE_ICON, drawing.textColor ?? TV_TABLE.text, (v) => actions.patch({ textColor: v })),
+            });
             if (tvForeBar) Object.assign(make, {
                 fill: () =>
                     drawing instanceof Projection
@@ -603,6 +615,17 @@ export class DrawingSettingsPopup {
                 fill2: () => (drawing instanceof Projection ? this.colorButton('Fill 2', BUCKET_ICON, drawing.color2 ?? TV_PROJECTION.color2, (v) => actions.patch({ color2: v })) : null),
             });
             applyTvBar(bar, tvBar, make);
+            // TradingView's Insert column and Insert row, right after the templates button.
+            if (tvTableBar && actions.tableOp) {
+                const op = actions.tableOp;
+                const col = this.iconBtn('Insert column', INSERT_COLUMN_ICON, () => op('addColumn'));
+                const row = this.iconBtn('Insert row', INSERT_ROW_ICON, () => op('addRow'));
+                // keep the cell being typed in active: pressing a button must not end the edit first
+                for (const k of [col, row]) k.addEventListener('pointerdown', (e) => e.preventDefault());
+                const tpl = [...bar.children].find((k) => (k as HTMLElement).dataset.action === 'templates');
+                bar.insertBefore(row, tpl ? tpl.nextSibling : bar.firstChild);
+                bar.insertBefore(col, row);
+            }
         }
 
         el.append(bar);
@@ -962,7 +985,7 @@ export class DrawingSettingsPopup {
     }
 
     /** The trailing kebab overflow — duplicate, z-order actions, reset settings. */
-    private kebabButton(actions: SettingsActions, openDialog: ((tab?: DrawingDialogTab) => void) | null, wave: PatternDrawing | null = null): HTMLButtonElement {
+    private kebabButton(actions: SettingsActions, openDialog: ((tab?: DrawingDialogTab) => void) | null, wave: PatternDrawing | null = null, table: TableDrawing | null = null): HTMLButtonElement {
         const b = this.base('More');
         b.innerHTML = sized(KEBAB_ICON);
         // Stop the trigger's own pointerdown from reaching `el` (which would pre-close the menu),
@@ -982,7 +1005,19 @@ export class DrawingSettingsPopup {
                     TV_ELLIOTT_DEGREES.map((label, i) => ({ icon: i === cur ? CHECK_ICON : '', label, onClick: () => actions.patch({ tvDegree: i }) })),
                 );
             };
+            // TradingView's table actions first: add a column / row after the active cell; with a cell active, remove
+            // its row / column (never the last one).
+            const op = table ? actions.tableOp : undefined;
+            const active = table ? tableActiveCell(table.id) : null;
             this.openActionMenu(b, [
+                ...(op
+                    ? [
+                          { icon: INSERT_COLUMN_ICON, label: 'Add column to right', onClick: () => op('addColumn') },
+                          { icon: INSERT_ROW_ICON, label: 'Add row below', onClick: () => op('addRow') },
+                          ...(active && table!.rows() > 1 ? [{ icon: '', label: 'Remove row', onClick: () => op('removeRow') }] : []),
+                          ...(active && table!.cols() > 1 ? [{ icon: '', label: 'Remove column', onClick: () => op('removeColumn') }] : []),
+                      ]
+                    : []),
                 ...(openDialog
                     ? [
                           { icon: GEAR_ICON, label: 'Settings\u2026', onClick: () => openDialog() },
@@ -1502,6 +1537,9 @@ const TEMPLATES_ICON = icon('drawing-templates');
 const ALERT_ADD_ICON = icon('alarm-add');
 const ANCHOR_ICON = icon('anchor');
 const BUCKET_ICON = icon('bucket');
+/** TradingView's table insert buttons: a grid with a new column / row marked. */
+const INSERT_COLUMN_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="3.5" width="9" height="11" rx="1"/><path d="M6 3.5v11M1.5 9h9M14.5 6.5v5M12 9h5"/></svg>';
+const INSERT_ROW_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3.5" y="1.5" width="11" height="9" rx="1"/><path d="M3.5 6h11M9 1.5v9M9 12v5M6.5 14.5h5"/></svg>';
 const TYPE_ICON = icon('type');
 const PRICE_DELTA_ICON = icon('price-delta');
 const DATE_DELTA_ICON = icon('date-delta');

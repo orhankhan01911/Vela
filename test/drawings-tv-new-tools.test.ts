@@ -151,12 +151,13 @@ describe("TradingView's tools Vela lacked", () => {
         }
     });
 
-    it('table: rows from the text lines, cells split by |, padded to the widest row, pinned on screen', () => {
-        const t = createDrawing('table', { paneId: 'price', anchors: [P(20, 80)], text: { value: 'Level | Price | Note\nHigh | 82,000\nLow | 81,000 | swept', size: 'normal' } as never })! as TableDrawing;
-        expect(t.cells()).toEqual([['Level', 'Price', 'Note'], ['High', '82,000', ''], ['Low', '81,000', 'swept']]);
+    it('table: one saved before (rows as lines, cells split by |) is read into cells and stays pinned on screen', () => {
+        const t = createDrawing('table', { paneId: 'price', anchors: [P(20, 80)], text: { value: 'Level | Price | Note\nHigh | 82,000\nLow | 81,000 | swept', size: 'normal' } as never, props: {} })! as TableDrawing;
+        expect(t.cells).toEqual([['Level', 'Price', 'Note'], ['High', '82,000', ''], ['Low', '81,000', 'swept']]);
+        expect(t.anchored).toBe(true);
         expect(t.hitTest(30, 30, proj(), 0)).toBe(true); // inside the grid from its corner (20, 20)
         expect(t.timeExtent()).toBeNull();
-        expect(createDrawing('table', { paneId: 'price', anchors: [P(0, 50)] })!.text?.value).toContain('|'); // starts with a sample grid
+        expect((createDrawing('table', { paneId: 'price', anchors: [P(0, 50)] })! as TableDrawing).cells).toEqual([['', '', ''], ['', '', ''], ['', '', '']]); // a new one: TradingView's empty 3 x 3
     });
 
     it('image: only https links or inline image data are kept; the box spans its two corners', () => {

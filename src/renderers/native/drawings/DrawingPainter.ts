@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TV_SIGNPOST, TrendFigure, TrendAngle, Circle, Ellipse, FlagMark, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, TV_FORECAST, Projection, TV_PROJECTION, TV_LINE_COLOR, TV_GREY, BarsPattern, GhostFeed, TV_GHOST, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TV_SIGNPOST, TrendFigure, TrendAngle, Circle, Ellipse, FlagMark, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, TV_FORECAST, Projection, TV_PROJECTION, TV_LINE_COLOR, TV_GREY, BarsPattern, GhostFeed, TV_GHOST, TableDrawing, TV_TABLE, setTableTextMeasure, tableActiveCell, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -1259,53 +1259,55 @@ export class DrawingPainter {
         ctx.restore();
     }
 
+    /** TradingView's table (module 932107): its background over the whole grid, 1 px borders round every cell, the
+     *  text top-aligned 8 px inside each cell (wrapped to the column, lines 1.3 × the size apart), the active cell
+     *  outlined 2 px in blue. The cell being typed in is left to the editor. */
     private paintTable(ctx: CanvasRenderingContext2D, d: TableDrawing, proj: Projector, theme: VelaTheme): void {
-        const pts = d.handlePoints(proj);
-        if (!pts.length) return;
-        const [x0, y0] = pts[0]!;
-        const fs = namedFontSize(d.text?.size ?? 'normal');
-        const font = (bold: boolean): string => `${bold || d.text?.bold ? '600 ' : ''}${d.text?.italic ? 'italic ' : ''}${fs}px ${theme.fontFamily}`;
-        const cells = d.cells();
-        const rowH = labelLineHeight(fs) + 8;
-        const widths = cells[0]!.map((_, c) =>
-            Math.max(...cells.map((r, ri) => {
-                ctx.font = font(ri === 0);
-                return ctx.measureText(r[c]!).width;
-            })) + 16,
-        );
-        const w = widths.reduce((a, b) => a + b, 0);
-        const h = cells.length * rowH;
-        const ink = d.text?.color ?? theme.textColor;
+        const px = d.fontSize ?? TV_TABLE.fontSize;
+        setTableTextMeasure((text, size) => {
+            ctx.save();
+            ctx.font = `${size}px ${theme.fontFamily}`;
+            const w = ctx.measureText(text).width;
+            ctx.restore();
+            return w;
+        });
+        const L = d.layout(proj);
+        if (!L) return;
+        const [l, r] = [L.colX[0]!, L.colX[L.colX.length - 1]!];
+        const [t, b] = [L.rowY[0]!, L.rowY[L.rowY.length - 1]!];
+        const bw = TV_TABLE.border;
+        const active = tableActiveCell(d.id);
         ctx.save();
         ctx.setLineDash([]);
-        ctx.fillStyle = d.backgroundColor ?? theme.background;
-        ctx.fillRect(x0, y0, w, h);
-        ctx.strokeStyle = d.borderColor ?? withAlpha(ink, 0.35);
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x0 + 0.5, y0 + 0.5, w, h);
-        ctx.beginPath();
-        for (let r = 1; r < cells.length; r += 1) {
-            ctx.moveTo(x0, Math.round(y0 + r * rowH) + 0.5);
-            ctx.lineTo(x0 + w, Math.round(y0 + r * rowH) + 0.5);
+        ctx.fillStyle = d.style.fillColor ?? TV_TABLE.background;
+        ctx.fillRect(l, t, r - l, b - t);
+        ctx.fillStyle = d.style.lineColor || TV_TABLE.borderColor;
+        for (let i = 0; i < L.rowY.length; i += 1) ctx.fillRect(l, L.rowY[i]!, r - l + bw, bw);
+        for (let i = 0; i < L.colX.length; i += 1) ctx.fillRect(L.colX[i]!, t, bw, b - t + bw);
+        if (active && active.cell[0] < d.rows() && active.cell[1] < d.cols()) {
+            const [ar, ac] = active.cell;
+            const [x0, x1, y0, y1] = [L.colX[ac]! + bw, L.colX[ac + 1]!, L.rowY[ar]! + bw, L.rowY[ar + 1]!];
+            const a = TV_TABLE.activeLine;
+            ctx.fillStyle = TV_TABLE.active;
+            ctx.fillRect(x0, y0, x1 - x0, a);
+            ctx.fillRect(x0, y1 - a, x1 - x0, a);
+            ctx.fillRect(x0, y0, a, y1 - y0);
+            ctx.fillRect(x1 - a, y0, a, y1 - y0);
         }
-        let x = x0;
-        for (let c = 0; c < widths.length - 1; c += 1) {
-            x += widths[c]!;
-            ctx.moveTo(Math.round(x) + 0.5, y0);
-            ctx.lineTo(Math.round(x) + 0.5, y0 + h);
-        }
-        ctx.stroke();
-        ctx.fillStyle = ink;
-        ctx.textBaseline = 'middle';
-        ctx.textAlign = 'left';
-        cells.forEach((row, ri) => {
-            ctx.font = font(ri === 0);
-            let cx = x0;
-            row.forEach((cell, ci) => {
-                ctx.fillText(cell, cx + 8, y0 + ri * rowH + rowH / 2);
-                cx += widths[ci]!;
-            });
-        });
+        ctx.font = `${px}px ${theme.fontFamily}`;
+        ctx.fillStyle = d.textColor || TV_TABLE.text;
+        ctx.textBaseline = 'top';
+        const align = d.horzAlign ?? 'left';
+        ctx.textAlign = align;
+        const pad = TV_TABLE.padding;
+        L.lines.forEach((row, ri) =>
+            row.forEach((lines, ci) => {
+                if (active?.editing && active.cell[0] === ri && active.cell[1] === ci) return;
+                const [x0, x1] = [L.colX[ci]! + bw + pad, L.colX[ci + 1]! - pad];
+                const x = align === 'right' ? x1 : align === 'center' ? (x0 + x1) / 2 : x0;
+                lines.forEach((line, k) => ctx.fillText(line, x, L.rowY[ri]! + bw + pad + k * px * TV_TABLE.lineHeight));
+            }),
+        );
         ctx.restore();
     }
 

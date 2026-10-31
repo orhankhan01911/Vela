@@ -12,7 +12,7 @@ import type {
     SnapMode,
     ToolbarDefinition,
 } from '../../../core/drawings';
-import { createDrawing, deserializeDrawing, getDrawingType, resetDrawingSettings, shownOnBarMs, resolveAnchors, writeAnchor, Callout, CALLOUT_RADIUS, CALLOUT_MARGIN, Note, Magnifier, PriceAlert, TextLabel, type BarAxis } from '../../../core/drawings';
+import { createDrawing, deserializeDrawing, getDrawingType, resetDrawingSettings, shownOnBarMs, resolveAnchors, writeAnchor, Callout, CALLOUT_RADIUS, CALLOUT_MARGIN, Note, Magnifier, PriceAlert, TextLabel, TableDrawing, TV_TABLE, setTableActiveCell, tableActiveCell, type BarAxis, type TableOp } from '../../../core/drawings';
 import type { Unsubscribe } from '../../../core/util/types';
 import { contrastColor, namedFontSize, labelLineHeight, safeCssColor, safeCssPx, TEXT_FRAME_INSET, TEXT_FRAME_RISE } from '../../shared/drawing-geometry';
 import { withAlpha } from '../core/chartConfig';
@@ -189,6 +189,8 @@ export class UserDrawingController implements IDrawingsRendererPort {
     // opened with (so Escape can put it back), and the text the core currently holds (so an edit is
     // reported exactly when it actually changes).
     private textEditor: { el: HTMLTextAreaElement; id: string; initial: string; stored: string; css: string } | null = null;
+    /** TradingView's table: the cell being typed in (one at a time, over the cell). */
+    private tableEditor: { el: HTMLTextAreaElement; id: string; cell: [number, number]; initial: string; css: string } | null = null;
 
     private readonly painter = new DrawingPainter();
     private readonly interaction: DrawingInteraction;
@@ -337,6 +339,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
         // The edited drawing can vanish from under the editor (deleted, erased, undone) — take the
         // editor with it instead of leaving a live textarea over nothing.
         if (this.textEditor && !this.editedDrawing(this.textEditor.id)) this.closeTextEditor();
+        if (this.tableEditor && !this.tableById(this.tableEditor.id)) this.finishTableEditor(false);
         this.invalidateSlices();
         this.render();
         this.deps.requestScaleUpdate();
@@ -486,6 +489,11 @@ export class UserDrawingController implements IDrawingsRendererPort {
     }
 
     setSelection(ids: readonly string[]): void {
+        // A table that is no longer selected keeps no active cell (TradingView).
+        for (const d of this.drawings) if (d instanceof TableDrawing && !ids.includes(d.id) && tableActiveCell(d.id)) {
+            if (this.tableEditor?.id === d.id) this.finishTableEditor(true);
+            setTableActiveCell(d.id, null);
+        }
         this.selectedIds = new Set(ids);
         // A multi-selection gets ONE bar for all of its drawings; when it shrinks back to a single
         // drawing that drawing's own bar takes over, and an emptied selection takes the bar away.
@@ -892,6 +900,131 @@ export class UserDrawingController implements IDrawingsRendererPort {
         this.render();
     }
 
+    private tableById(id: string): TableDrawing | null {
+        const d = this.drawings.find((x) => x.id === id);
+        return d instanceof TableDrawing ? d : null;
+    }
+
+    /** The editor over a table cell: inside its borders, the cell's padding, font, colours and alignment. */
+    private tableCellCss(d: TableDrawing, [r, c]: [number, number]): string | null {
+        const L = d.layout(this.deps.projector());
+        if (!L || r >= d.rows() || c >= d.cols()) return null;
+        const theme = this.deps.theme();
+        const bw = TV_TABLE.border + TV_TABLE.activeLine;
+        const px = d.fontSize ?? TV_TABLE.fontSize;
+        const back = d.style.fillColor ?? TV_TABLE.background;
+        const left = L.colX[c]! + bw;
+        const top = L.rowY[r]! + bw;
+        const pad = Math.max(0, TV_TABLE.padding - TV_TABLE.activeLine);
+        return (
+            'position:absolute;z-index:24;box-sizing:border-box;resize:none;overflow:hidden;margin:0;outline:none;pointer-events:auto;border:none;' +
+            `left:${left}px;top:${top}px;width:${L.colX[c + 1]! - TV_TABLE.activeLine - left}px;height:${L.rowY[r + 1]! - TV_TABLE.activeLine - top}px;padding:${pad}px;` +
+            `background:${blendOver(back, theme.background, splitColor(back).alpha)};color:${safeCssColor(d.textColor, TV_TABLE.text)};` +
+            `font:${px}px ${theme.fontFamily};line-height:${px * TV_TABLE.lineHeight}px;text-align:${d.horzAlign ?? 'left'};`
+        );
+    }
+
+    /** Type into a table cell on the chart (TradingView): the text lands as you type, Tab / Shift+Tab go to the next /
+     *  previous cell, Escape puts back what was there, a press elsewhere keeps it. */
+    private editTableCell(id: string, cell: [number, number]): void {
+        const d = this.tableById(id);
+        if (!d) return;
+        this.closeTextEditor();
+        const [r, c] = cell;
+        const initial = d.cells[r]?.[c] ?? '';
+        setTableActiveCell(id, cell, true);
+        const css = this.tableCellCss(d, cell);
+        if (!css) return;
+        const ta = document.createElement('textarea');
+        ta.value = initial;
+        ta.spellcheck = false;
+        ta.style.cssText = css;
+        ta.dataset.tableCell = `${r},${c}`;
+        let frame = 0;
+        ta.addEventListener('input', () => {
+            this.tableById(id)?.applySettings({ [`cells.${r}.${c}`]: ta.value });
+            if (frame) return;
+            const paint = (): void => {
+                frame = 0;
+                if (this.tableEditor?.el === ta) this.render();
+            };
+            frame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(paint) : (setTimeout(paint, 16) as unknown as number);
+        });
+        ta.addEventListener('pointerdown', (e) => e.stopPropagation());
+        ta.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const t = this.tableById(id);
+                if (!t) return;
+                const n = t.rows() * t.cols();
+                const k = (r * t.cols() + c + (e.shiftKey ? n - 1 : 1)) % n;
+                this.finishTableEditor(true);
+                this.editTableCell(id, [Math.floor(k / t.cols()), k % t.cols()]);
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                this.finishTableEditor(false);
+            }
+        });
+        ta.addEventListener('blur', (e) => {
+            if (this.tableEditor?.el !== ta) return;
+            // Reaching for the toolbar keeps the cell active (Insert row / column work from it).
+            if (this.popup.contains((e as FocusEvent).relatedTarget as Node | null)) this.storeTableCell();
+            else this.finishTableEditor(true);
+        });
+        this.overlayHost.appendChild(ta);
+        this.tableEditor = { el: ta, id, cell, initial, css };
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+        this.render();
+    }
+
+    /** Hand the cell's text to the core without ending the edit. */
+    private storeTableCell(): void {
+        const ed = this.tableEditor;
+        const d = ed && this.tableById(ed.id);
+        if (!ed || !d) return;
+        const [r, c] = ed.cell;
+        d.applySettings({ [`cells.${r}.${c}`]: ed.el.value });
+        if (ed.el.value !== ed.initial) {
+            ed.initial = ed.el.value;
+            this.emit({ kind: 'edit', doc: d.serialize() });
+        }
+    }
+
+    /** Close the cell editor, keeping (`commit`) or putting back the text; the cell stays active. */
+    private finishTableEditor(commit: boolean): void {
+        const ed = this.tableEditor;
+        if (!ed) return;
+        this.tableEditor = null; // first: removing the focused textarea fires blur
+        const [r, c] = ed.cell;
+        const value = commit ? ed.el.value : ed.initial;
+        ed.el.remove();
+        const d = this.tableById(ed.id);
+        if (tableActiveCell(ed.id)) setTableActiveCell(ed.id, ed.cell, false);
+        if (d) {
+            const before = d.cells[r]?.[c];
+            d.applySettings({ [`cells.${r}.${c}`]: value });
+            if (value !== ed.initial || before !== value) this.emit({ kind: 'edit', doc: d.serialize() });
+        }
+        this.render();
+    }
+
+    /** TradingView's table rows and columns: added after the active cell (at the end when none), removed at it. */
+    private tableOp(id: string, op: TableOp): void {
+        const d = this.tableById(id);
+        if (!d) return;
+        const editing = this.tableEditor?.id === id;
+        if (editing) this.finishTableEditor(true);
+        const t = this.tableById(id) ?? d;
+        const active = tableActiveCell(id)?.cell ?? null;
+        const next = t.tableOp(op, active);
+        setTableActiveCell(id, next);
+        this.emit({ kind: 'edit', doc: t.serialize() });
+        this.render();
+        if (editing && next) this.editTableCell(id, next);
+    }
+
     /**
      * Open an inline textarea over the drawing's own text so it is typed directly on the chart:
      * a callout fills its bubble, a plain text label sits exactly where the glyphs paint (the
@@ -1091,6 +1224,15 @@ export class UserDrawingController implements IDrawingsRendererPort {
 
     /** Keep an open editor glued to its drawing (typing, panning, zooming all move the anchor). */
     private layoutTextEditor(): void {
+        const te = this.tableEditor;
+        const td = te && this.tableById(te.id);
+        if (te && td) {
+            const css = this.tableCellCss(td, te.cell);
+            if (css && css !== te.css) {
+                te.el.style.cssText = css;
+                te.css = css;
+            }
+        }
         const ed = this.textEditor;
         if (!ed) return;
         const d = this.editedDrawing(ed.id);
@@ -1104,6 +1246,7 @@ export class UserDrawingController implements IDrawingsRendererPort {
     }
 
     private closeTextEditor(): void {
+        if (this.tableEditor) this.finishTableEditor(true);
         const ed = this.textEditor;
         if (!ed) return;
         this.textEditor = null; // null first: removing a focused textarea fires blur → re-entrant close
@@ -1158,6 +1301,14 @@ export class UserDrawingController implements IDrawingsRendererPort {
         const hit = topDrawingAt(this.shownDrawings(), x, y, this.deps.projector(), HIT_TOLERANCE);
         if (isInlineEditable(hit)) {
             this.editTextInline(hit.id); // double-click a callout / text label → edit its text in place
+            return true;
+        }
+        if (hit instanceof TableDrawing) {
+            const cell = hit.cellAt(x, y, this.deps.projector());
+            if (cell) {
+                this.openSettingsById(hit.id, 0, 0); // its bar stays up while typing (Insert row / column)
+                this.editTableCell(hit.id, cell); // TradingView: type into the cell
+            }
             return true;
         }
         if (hit && hit.inputsDialog()) {
@@ -1548,9 +1699,18 @@ export class UserDrawingController implements IDrawingsRendererPort {
     }
 
     /** A click on a drawing opens its settings toolbar (text labels edit text here too). */
-    private openSettingsById(id: string, _x: number, _y: number): void {
+    private openSettingsById(id: string, x: number, y: number): void {
         const drawing = this.drawings.find((d) => d.id === id);
         if (!drawing) return;
+        // TradingView's table: a click on a cell of the selected table types into that cell.
+        if (drawing instanceof TableDrawing && this.selectedIds.has(id) && !this.popupMulti && (x !== 0 || y !== 0)) {
+            const cell = drawing.cellAt(x, y, this.deps.projector());
+            if (cell) {
+                this.openSettingsById(id, 0, 0); // the press closed the bar: back with it, then type in the cell
+                this.editTableCell(id, cell);
+                return;
+            }
+        }
         const live = (): Drawing | undefined => this.drawings.find((d) => d.id === id);
         this.popupMulti = false;
         this.emit({ kind: 'select', ids: [id] }); // editing this drawing → it stays highlighted while the popup is open
@@ -1593,6 +1753,22 @@ export class UserDrawingController implements IDrawingsRendererPort {
                 this.openSettingsById(id, 0, 0);
             },
             ...(this.alertTypes.has(live()?.type ?? '') ? { addAlert: () => this.emit({ kind: 'alert', id }) } : {}),
+            // TradingView's table: rows and columns from the toolbar and the more menu, and its own pin to the screen.
+            ...(drawing instanceof TableDrawing
+                ? {
+                      tableOp: (op: TableOp) => this.tableOp(id, op),
+                      toggleAnchor: () => {
+                          const d = this.tableById(id);
+                          if (!d) return;
+                          if (this.tableEditor?.id === id) this.finishTableEditor(true);
+                          const t = this.tableById(id) ?? d;
+                          t.applySettings({ anchored: !t.anchored });
+                          t.handlePoints(this.deps.projector()); // a fresh pin takes the table's place now
+                          this.emit({ kind: 'edit', doc: t.serialize() });
+                          this.openSettingsById(id, 0, 0);
+                      },
+                  }
+                : {}),
             ...(ANCHOR_TWIN[drawing.type]
                 ? {
                       toggleAnchor: () => {

@@ -88,6 +88,8 @@ import {
     TV_GHOST,
     TV_BARS_PATTERN_MODES,
     TV_BARS_PATTERN_MODE_LABEL,
+    TableDrawing,
+    TV_TABLE,
     type ForecastColorKey,
     type RegressionTrendLine,
 } from '../../../core/drawings';
@@ -207,7 +209,7 @@ export class DrawingSettingsDialog {
         if (custom || (drawing instanceof RegressionChannel && drawing.tv) || (drawing instanceof GhostFeed && drawing.tv)) tabs.push('inputs');
         // TradingView's text: the Text tab and Visibility only.
         const tvText = (drawing instanceof TextLabel || drawing instanceof Callout) && drawing.tv === true;
-        if (!tvText && (drawing.editableLevels() || styleFields(drawing).length > 0 || (drawing instanceof GhostFeed && drawing.tv))) tabs.push('style');
+        if (!tvText && (drawing.editableLevels() || styleFields(drawing).length > 0 || (drawing instanceof GhostFeed && drawing.tv) || drawing instanceof TableDrawing)) tabs.push('style');
         // TradingView's price note, price label and flag mark style their label on the Style tab.
         const labelOnStyle = (drawing instanceof PriceLabel || drawing instanceof FlagMark) && drawing.tv === true;
         if (!labelOnStyle && drawing.schema().fields.some((f) => f.path.startsWith('text.'))) tabs.push('text');
@@ -218,7 +220,8 @@ export class DrawingSettingsDialog {
         // TradingView has no Coordinates for its flat top/bottom, disjoint channel, rotated rectangle, arc and polyline.
         // Nor for its bars pattern and projection.
         const noCoords = (drawing instanceof TrendFigure || drawing instanceof RotatedRect || drawing instanceof BarsPattern || drawing instanceof Projection || drawing.type === 'arc' || drawing.type === 'polyline') && (drawing as { tv?: boolean }).tv === true;
-        const pinned = drawing.type === 'anchorednote' || drawing instanceof SvgIcon || noCoords;
+        // TradingView's table has none either.
+        const pinned = drawing.type === 'anchorednote' || drawing instanceof SvgIcon || noCoords || drawing instanceof TableDrawing;
         if (!(drawing instanceof PositionTool) && !brush && !pinned && !(tvText && drawing instanceof TextLabel) && drawing.anchors.length > 0) tabs.push('coordinates');
         tabs.push('visibility');
         return tabs;
@@ -372,6 +375,21 @@ export class DrawingSettingsDialog {
         }
         if (drawing instanceof GhostFeed && drawing.tv) {
             this.buildGhostTvStyle(grid, drawing, actions);
+            return;
+        }
+        if (drawing instanceof TableDrawing) {
+            // TradingView's table: Background, Border, Text (colour and size), Text alignment.
+            const sizes = TV_FIB_FONT_SIZES.map((n) => ({ value: String(n), label: String(n) }));
+            const back = fieldRow({ label: 'Background', control: [this.colorControl(drawing, 'style.fillColor', actions, drawing.style.fillColor ?? TV_TABLE.background)], fit: true });
+            back.dataset.role = 'background';
+            const border = fieldRow({ label: 'Border', control: [this.colorControl(drawing, 'style.lineColor', actions, drawing.style.lineColor || TV_TABLE.borderColor)], fit: true });
+            border.dataset.role = 'border';
+            const text = fieldRow({ label: 'Text', control: [this.colorControl(drawing, 'textColor', actions, drawing.textColor ?? TV_TABLE.text), this.selectControl('fontSize', sizes, String(drawing.fontSize ?? TV_TABLE.fontSize), actions, (v) => Number(v))], fit: true });
+            text.dataset.role = 'text';
+            const aligns = [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }];
+            const align = fieldRow({ label: 'Text alignment', control: [this.selectControl('horzAlign', aligns, drawing.horzAlign ?? 'left', actions)], fit: true });
+            align.dataset.role = 'align';
+            grid.append(back, border, text, align);
             return;
         }
         if (drawing instanceof BarsPattern && drawing.tv) {

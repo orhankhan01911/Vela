@@ -18,7 +18,7 @@ const TEXT_WRAP_HANDLE_INSET = 5;
  */
 export class TextLabel extends PinnedLabel {
     // Widened so TradingView's anchored text (pinned to the screen) can reuse the whole tool.
-    readonly type: 'text' | 'anchoredtext' | 'table' = 'text';
+    readonly type: 'text' | 'anchoredtext' = 'text';
     // `!` (no initializer): the base constructor runs readProps first. Absent ⇒ off (TradingView's defaults).
     background!: boolean;
     backgroundColor!: string | undefined;
