@@ -13,8 +13,8 @@ export const TV_FIB_CIRCLE_LEVELS: readonly FibLevel[] = (
     [
         [0.236, '#F23645'], // palette-exempt: TradingView's ripe-red-500
         [0.382, '#FF9800'], // palette-exempt: TradingView's tan-orange-500
-        [0.5, '#4CAF50'], // palette-exempt: TradingView's minty-green-500
-        [0.618, '#089981'], // palette-exempt: TradingView's iguana-green-500
+        [0.5, '#089981'], // palette-exempt: TradingView's minty-green-500
+        [0.618, '#4CAF50'], // palette-exempt: TradingView's iguana-green-500
         [0.786, '#00BCD4'], // palette-exempt: TradingView's sky-blue-500
         [1, TV_FC_GRAY],
         [1.618, '#2962FF'], // palette-exempt: TradingView's tv-blue-500

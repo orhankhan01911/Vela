@@ -71,7 +71,7 @@ describe('Fib speed resistance arcs (TradingView)', () => {
         expect(d.tv).toBe(true);
         expect(d.levels.map((l) => [l.ratio, l.color.toUpperCase(), l.enabled, l.lineWidth])).toEqual(
             [
-                [0.236, '#F23645'], [0.382, '#FF9800'], [0.5, '#4CAF50'], [0.618, '#089981'], [0.786, '#00BCD4'], [1, '#808080'],
+                [0.236, '#F23645'], [0.382, '#FF9800'], [0.5, '#089981'], [0.618, '#4CAF50'], [0.786, '#00BCD4'], [1, '#808080'],
                 [1.618, '#2962FF'], [2.618, '#E91E63'], [3.618, '#2962FF'], [4.236, '#E91E63'], [4.618, '#F23645'],
             ].map(([r, c]) => [r, c, true, 2]),
         );

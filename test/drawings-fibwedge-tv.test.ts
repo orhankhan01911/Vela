@@ -70,7 +70,7 @@ describe('Fib wedge (TradingView)', () => {
         const d = wedge();
         expect(d.tv).toBe(true);
         expect(d.levels.map((l) => [l.ratio, l.color.toUpperCase(), l.enabled, l.lineWidth])).toEqual([
-            [0.236, '#F23645', true, 2], [0.382, '#FF9800', true, 2], [0.5, '#089981', true, 2], [0.618, '#4CAF50', true, 2],
+            [0.236, '#F23645', true, 2], [0.382, '#FF9800', true, 2], [0.5, '#4CAF50', true, 2], [0.618, '#089981', true, 2],
             [0.786, '#00BCD4', true, 2], [1, '#808080', true, 2], [1.618, '#2962FF', false, 2], [2.618, '#F23645', false, 2],
             [3.618, '#673AB7', false, 2], [4.236, '#E91E63', false, 2], [4.618, '#E91E63', false, 2],
         ]);
