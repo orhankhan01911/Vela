@@ -8,6 +8,11 @@ import { SegmentDrawing } from './SegmentDrawing';
 export class Triangle extends SegmentDrawing {
     readonly type = 'triangle' as const;
 
+    /** TradingView's look on a new one (module 565760: minty green 2 px, the green at 20 % behind). */
+    override tvShapeKind(): 'area' | 'polyline' | 'curve' {
+        return 'area';
+    }
+
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         return {
             min: 3,
@@ -52,6 +57,7 @@ export class Triangle extends SegmentDrawing {
     }
 
     schema(): SettingsSchema {
+        if (this.tv) return this.tvShapeSchema();
         return { fields: [...LINE_FIELDS, ...FILL_FIELDS, ...TEXT_FIELDS] };
     }
 }

@@ -12,7 +12,7 @@ import { PathDrawing } from './PathDrawing';
 export class Path extends PathDrawing {
     readonly type = 'path' as const;
     /** TradingView's path (new paths). */
-    tv?: boolean;
+    override tv?: boolean;
 
     constructor(init: ConstructorParameters<typeof PathDrawing>[0]) {
         super(init);

@@ -14,6 +14,11 @@ const ARC_SAMPLES = 40;
 export class Arc extends SegmentDrawing {
     readonly type = 'arc' as const;
 
+    /** TradingView's look on a new one (module 238807: berry pink 2 px, the pink at 20 % behind). */
+    override tvShapeKind(): 'area' | 'polyline' | 'curve' {
+        return 'area';
+    }
+
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         return { min: 3, max: 3, slots: [{ role: 'p1', free: 'both' }, { role: 'p2', free: 'both' }, { role: 'apex', free: 'both' }] };
     }
@@ -71,6 +76,7 @@ export class Arc extends SegmentDrawing {
     }
 
     schema(): SettingsSchema {
+        if (this.tv) return this.tvShapeSchema();
         return { fields: [...LINE_FIELDS.map((f) => ({ ...f, label: f.label.replace('Line', 'Border') })), ...FILL_FIELDS, ...TEXT_FIELDS] };
     }
 }

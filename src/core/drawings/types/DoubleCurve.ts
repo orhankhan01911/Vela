@@ -14,6 +14,11 @@ const STEPS = 64;
 export class DoubleCurve extends SegmentDrawing {
     readonly type = 'doublecurve' as const;
 
+    /** TradingView's look on a new one (module 481599: deep blue 2 px, no background). */
+    override tvShapeKind(): 'area' | 'polyline' | 'curve' {
+        return 'curve';
+    }
+
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         return { min: 2, max: 2, slots: [{ role: 'p1', free: 'both' }, { role: 'p2', free: 'both' }] };
     }
@@ -49,6 +54,7 @@ export class DoubleCurve extends SegmentDrawing {
     }
 
     schema(): SettingsSchema {
+        if (this.tv) return this.tvShapeSchema();
         return { fields: [...LINE_FIELDS] };
     }
 }

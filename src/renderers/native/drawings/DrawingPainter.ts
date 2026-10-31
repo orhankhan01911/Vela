@@ -1,6 +1,6 @@
-import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
+import type { Drawing, Projector, DrawingStyle, TextLabel } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TrendFigure, TrendAngle, Circle, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TrendFigure, TrendAngle, Circle, Ellipse, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -499,9 +499,9 @@ export class DrawingPainter {
             case 'ellipse': {
                 const o = (d as Ellipse).oval(proj);
                 if (!o || o.rx < 0.5) return;
-                if (d.style.fillColor) {
+                if ((d as Ellipse).filled()) {
                     ctx.save();
-                    ctx.fillStyle = d.style.fillColor; // alpha lives in the fill color itself
+                    ctx.fillStyle = d.style.fillColor!; // alpha lives in the fill color itself
                     ctx.beginPath();
                     ctx.ellipse(o.cx, o.cy, o.rx, Math.max(0.5, o.ry), o.rot, 0, Math.PI * 2);
                     ctx.fill();
@@ -700,6 +700,28 @@ export class DrawingPainter {
     private paintLabel(ctx: CanvasRenderingContext2D, d: Drawing, proj: Projector, theme: VelaTheme): void {
         const text = d.text;
         if (!text || !text.value || d.id === this.targets.mutedLabel) return;
+        if (d instanceof Ellipse && d.tv) {
+            // TradingView's ellipse text: at the centre, turned along the axis (kept upright), wrapped to the axis' length
+            // over √2 and cut at the other axis' length over √2.
+            const o = d.oval(proj);
+            if (!o) return;
+            const fs = namedFontSize(text.size);
+            const wrapW = (o.rx * 2) / Math.SQRT2;
+            const maxH = (o.ry * 2) / Math.SQRT2;
+            const up = Math.atan(Math.tan(o.rot));
+            ctx.save();
+            ctx.translate(o.cx, o.cy);
+            ctx.rotate(Number.isFinite(up) ? up : 0);
+            ctx.font = labelFont(text, fs, theme);
+            ctx.textBaseline = 'top';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = text.color ?? theme.textColor;
+            const lh = labelLineHeight(fs);
+            const lines = wrapLines(ctx, text.value, Math.max(1, wrapW)).slice(0, Math.max(1, Math.floor(maxH / lh)));
+            lines.forEach((line, i) => ctx.fillText(line, 0, -(lines.length * lh) / 2 + i * lh));
+            ctx.restore();
+            return;
+        }
         if (d instanceof Circle && d.tv) {
             // TradingView's circle text: centred, wrapped to the square inside the circle (side r·√2) and cut at its height.
             const c = d.circle(proj);
@@ -3572,9 +3594,9 @@ export class DrawingPainter {
     private paintSegments(ctx: CanvasRenderingContext2D, d: SegmentDrawing, proj: Projector): void {
         const g = d.geometry(proj);
         if (!g) return;
-        if (g.fill && g.fill.length >= 3 && d.style.fillColor) {
+        if (g.fill && g.fill.length >= 3 && d.fillShown()) {
             ctx.save();
-            ctx.fillStyle = d.style.fillColor; // alpha lives in the fill color itself
+            ctx.fillStyle = d.style.fillColor!; // alpha lives in the fill color itself
             ctx.beginPath();
             ctx.moveTo(g.fill[0]![0], g.fill[0]![1]);
             for (let i = 1; i < g.fill.length; i += 1) ctx.lineTo(g.fill[i]![0], g.fill[i]![1]);

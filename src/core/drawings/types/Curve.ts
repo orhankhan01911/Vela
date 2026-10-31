@@ -14,6 +14,11 @@ const CURVE_SAMPLES = 40;
 export class Curve extends SegmentDrawing {
     readonly type = 'curve' as const;
 
+    /** TradingView's look on a new one (module 499867: TradingView blue 2 px, no background). */
+    override tvShapeKind(): 'area' | 'polyline' | 'curve' {
+        return 'curve';
+    }
+
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
         return { min: 3, max: 3, slots: [{ role: 'p1', free: 'both' }, { role: 'p2', free: 'both' }, { role: 'control', free: 'both' }] };
     }
@@ -51,6 +56,7 @@ export class Curve extends SegmentDrawing {
     }
 
     schema(): SettingsSchema {
+        if (this.tv) return this.tvShapeSchema();
         return { fields: [...LINE_FIELDS, ...FILL_FIELDS, ...TEXT_FIELDS] };
     }
 }
