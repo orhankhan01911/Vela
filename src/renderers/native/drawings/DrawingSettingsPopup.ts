@@ -7,6 +7,7 @@ import {
     TrendFigure,
     TrendAngle,
     CrossLine,
+    RotatedRect,
     TEXT_SIZE_OPTIONS,
     LINE_STYLE_OPTIONS,
     GLYPH_OPTIONS,
@@ -464,7 +465,7 @@ export class DrawingSettingsPopup {
         const tvReg = !multi && drawing instanceof RegressionChannel && drawing.tv ? drawing : null;
         // TradingView's flat top/bottom bar: line colour, background, text colour, width, style (a saved one keeps ours).
         const tvFlat = !multi && drawing instanceof TrendFigure && drawing.tv ? drawing : null;
-        const tvBar = multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : tvFlat ? AREA_LINE_BAR : drawing instanceof TrendFigure || ((drawing instanceof TrendAngle || drawing instanceof CrossLine) && !drawing.tv) ? undefined : TV_QUICK_BAR[drawing.type];
+        const tvBar = multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : tvFlat ? AREA_LINE_BAR : drawing instanceof TrendFigure || ((drawing instanceof TrendAngle || drawing instanceof CrossLine || drawing instanceof RotatedRect) && !drawing.tv) ? undefined : TV_QUICK_BAR[drawing.type];
         if (tvReg) bar.querySelectorAll<HTMLElement>('[data-tip="Line width"]').forEach((k) => k.remove());
         if (tvFib instanceof FibVerticalLevels || tvFib instanceof RadialFib) bar.querySelectorAll<HTMLElement>('[data-tip="Line style"]').forEach((k) => k.remove());
         if (tvFib) {
@@ -503,6 +504,10 @@ export class DrawingSettingsPopup {
                           width: () =>
                               this.dropdown('Line width', [1, 2, 3, 4], tvReg.trend.base.width, (w) => lineIcon(w, 'solid'), (v) => actions.patch({ 'trend.base.width': v, 'trend.up.width': v, 'trend.down.width': v }), { label: (v) => `${v}px`, labelInTrigger: true }),
                       }
+                    : {}),
+                // TradingView's rotated rectangle background (picking a colour turns it on).
+                ...(!multi && drawing instanceof RotatedRect && drawing.tv
+                    ? { fill: () => this.colorButton('Fill', BUCKET_ICON, drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'style.fillColor': v, fillBackground: true })) }
                     : {}),
                 ...(tvFlat
                     ? {
@@ -1363,6 +1368,7 @@ const TV_QUICK_BAR: Readonly<Record<string, readonly TvBarItem[]>> = {
     arrow: LINE_BAR,
     trendangle: ['line', 'width', 'style'],
     crossline: ['line', 'width', 'style'],
+    rotatedrect: ['line', 'fill', 'width'],
     vline: LINE_BAR,
     hray: LINE_BAR,
     infoline: LINE_BAR,

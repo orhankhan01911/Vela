@@ -46,11 +46,13 @@ describe('drawings/Circle', () => {
 
 describe('drawings/RotatedRect', () => {
     const proj = fakeProjector();
-    // baseline (10,50)→(40,50) horizontal; width point at price 80 (y 20) → rect spans y 20..50
+    // baseline (10,50)→(40,50) horizontal; width point at price 80 (y 20) → rect spans y 20..50. One saved before
+    // the TradingView look (drawings-rotatedrect-tv covers that).
     const make = () =>
         createDrawing('rotatedrect', {
             paneId: 'price',
             anchors: [{ time: 10, price: 50 }, { time: 40, price: 50 }, { time: 25, price: 80 }],
+            props: {},
         })!;
 
     it('has a 3/3 anchor schema', () => {
