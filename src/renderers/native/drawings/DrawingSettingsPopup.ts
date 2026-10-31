@@ -11,6 +11,9 @@ import {
     Circle,
     Ellipse,
     SegmentDrawing,
+    PriceLabel,
+    PriceNote,
+    FlagMark,
     TEXT_SIZE_OPTIONS,
     LINE_STYLE_OPTIONS,
     GLYPH_OPTIONS,
@@ -260,11 +263,13 @@ export class DrawingSettingsPopup {
         // TradingView's first button: the drawing templates (one drawing at a time).
         if (!multi && actions.applyTemplate) bar.appendChild(this.templatesButton(drawing, actions));
 
-        if (paths.has('glyph')) {
+        // TradingView's flag mark bar has its colour only.
+        const tvFlagMark = drawings.every((d) => d instanceof FlagMark && d.tv === true);
+        if (paths.has('glyph') && !tvFlagMark) {
             const cur = common((d) => (d as unknown as { glyph?: string }).glyph ?? GLYPH_OPTIONS[0]!);
             bar.appendChild(this.dropdown('Icon', GLYPH_OPTIONS, cur, (g) => glyphIcon(g), (v) => actions.patch({ glyph: v })));
         }
-        if (paths.has('size')) {
+        if (paths.has('size') && !tvFlagMark) {
             const sz = common((d) => (d as unknown as { size?: string }).size ?? 'normal');
             bar.appendChild(this.dropdown('Icon size', STAMP_SIZE_OPTIONS, sz, (s) => stampSizeIcon(s), (v) => actions.patch({ size: v }), { label: sizeLabel }));
         }
@@ -481,7 +486,10 @@ export class DrawingSettingsPopup {
                   ? ['line', 'width']
                   : ['line', 'width', 'style'];
         const oldShape = drawing instanceof SegmentDrawing && !!drawing.tvShapeKind() && !drawing.tv;
-        const tvBar = tvShapeBar ? tvShapeBar : oldShape || multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : tvFlat ? AREA_LINE_BAR : drawing instanceof TrendFigure || ((drawing instanceof TrendAngle || drawing instanceof CrossLine || drawing instanceof RotatedRect || drawing instanceof Circle || drawing instanceof Ellipse) && !drawing.tv) ? undefined : TV_QUICK_BAR[drawing.type];
+        // TradingView's price label, price note and flag mark bars.
+        const tvLabelBar: readonly TvBarItem[] | null =
+            multi ? null : drawing instanceof PriceLabel && drawing.tv ? ['text', 'fill', 'size'] : drawing instanceof PriceNote && drawing.tv ? ['line', 'fill', 'text'] : drawing instanceof FlagMark && drawing.tv ? ['fill'] : null;
+        const tvBar = tvLabelBar ? tvLabelBar : tvShapeBar ? tvShapeBar : oldShape || multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : tvFlat ? AREA_LINE_BAR : drawing instanceof TrendFigure || ((drawing instanceof TrendAngle || drawing instanceof CrossLine || drawing instanceof RotatedRect || drawing instanceof Circle || drawing instanceof Ellipse) && !drawing.tv) ? undefined : TV_QUICK_BAR[drawing.type];
         if (tvReg) bar.querySelectorAll<HTMLElement>('[data-tip="Line width"]').forEach((k) => k.remove());
         if (tvFib instanceof FibVerticalLevels || tvFib instanceof RadialFib) bar.querySelectorAll<HTMLElement>('[data-tip="Line style"]').forEach((k) => k.remove());
         if (tvFib) {
@@ -565,6 +573,16 @@ export class DrawingSettingsPopup {
                     return this.colorButton('Fill', BUCKET_ICON, common(bg), (v) => actions.patch({ backgroundColor: v, background: true }), undefined, distinctValues(drawings, bg));
                 },
             };
+            // TradingView's label bars have no bold / italic.
+            if (tvLabelBar) bar.querySelectorAll<HTMLElement>('[data-tip="Bold"], [data-tip="Italic"]').forEach((k) => k.remove());
+            // TradingView's label backgrounds and the flag's colour win over the generic controls.
+            if (tvLabelBar) Object.assign(make, {
+                fill: () =>
+                    drawing instanceof FlagMark
+                        ? this.colorButton('Fill', BUCKET_ICON, drawing.style.lineColor || DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'style.lineColor': v }))
+                        : this.colorButton('Fill', BUCKET_ICON, drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'style.fillColor': v })),
+                text: () => this.colorButton('Text color', TYPE_ICON, drawing.text?.color || DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'text.color': v })),
+            });
             applyTvBar(bar, tvBar, make);
         }
 

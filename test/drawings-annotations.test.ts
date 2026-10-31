@@ -52,8 +52,9 @@ describe('drawings/annotations (Wave 13)', () => {
     it('seeds NO text color — the creation path fixes a theme-contrast ink instead', () => {
         // A forced white seed would be invisible on a light plate; `undefined` lets the
         // renderer fix the ink against the active theme (and auto-contrast until then).
-        // (TradingView's callout seeds its white: drawings-callout-tv.)
-        for (const [t, n] of [['note', 1], ['pricenote', 2], ['comment', 2], ['pricelabel', 1], ['signpost', 2]] as const) {
+        // (TradingView's callout, price note and price label seed their white on their own blue: drawings-callout-tv,
+        // drawings-labels-tv.)
+        for (const [t, n] of [['note', 1], ['comment', 2], ['signpost', 2]] as const) {
             expect(mk(t, n).text?.color).toBeUndefined();
         }
         // …while an explicit color (a deserialized document) passes through untouched.

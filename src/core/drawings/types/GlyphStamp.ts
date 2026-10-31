@@ -96,11 +96,41 @@ export abstract class GlyphStamp extends Drawing {
     }
 }
 
-/** A flag marker stamp. */
+/** A flag marker stamp. A new one is TradingView's flag mark (module 95256): its blue, one Flag colour. */
 export class FlagMark extends GlyphStamp {
     readonly type = 'flagmark' as const;
+    /** TradingView's flag mark: a new one; one saved before keeps its look. */
+    declare tv?: boolean;
+
+    constructor(init: ConstructorParameters<typeof GlyphStamp>[0]) {
+        super(init);
+        if (!init.props) this.tv = true;
+    }
+
     protected defaultGlyph(): string {
         return '⚑';
+    }
+
+    /** TradingView's flag: a 20 px pole on the point, its pennant to the right; grabbed in its 19 × 20 box. */
+    override hitTest(px: number, py: number, proj: Projector, tol: number): boolean {
+        if (!this.tv) return super.hitTest(px, py, proj, tol);
+        const c = this.center(proj);
+        return !!c && px >= c[0] && px <= c[0] + 19 && py >= c[1] - 20 && py <= c[1];
+    }
+
+    override bounds(proj: Projector): { x: number; y: number; w: number; h: number } | null {
+        if (!this.tv) return super.bounds(proj);
+        const c = this.center(proj);
+        return c ? { x: c[0], y: c[1] - 20, w: 19, h: 20 } : null;
+    }
+
+    protected override writeProps(): Record<string, unknown> {
+        return { ...super.writeProps(), ...(this.tv ? { tv: true } : {}) };
+    }
+
+    protected override readProps(props: Record<string, unknown>): void {
+        super.readProps(props);
+        if (props.tv === true) this.tv = true;
     }
 }
 

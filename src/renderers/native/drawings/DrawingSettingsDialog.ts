@@ -75,6 +75,9 @@ import {
     Circle,
     Ellipse,
     SegmentDrawing,
+    PriceLabel,
+    PriceNote,
+    FlagMark,
     type RegressionTrendLine,
 } from '../../../core/drawings';
 import { BEARISH, BULLISH } from '../../../core/palette';
@@ -134,7 +137,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', trianglepattern: 'Triangle pattern', threedrives: 'Three drives pattern', elliottimpulse: 'Elliott impulse wave (12345)', elliottcorrection: 'Elliott correction wave (ABC)', elliotttriangle: 'Elliott triangle wave (ABCDE)', elliottdoublecombo: 'Elliott double combo wave (WXY)', elliotttriplecombo: 'Elliott triple combo wave (WXYXZ)', regressionchannel: 'Regression trend', flattopbottom: 'Flat top/bottom', disjointchannel: 'Disjoint channel', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', extendedline: 'Extended line', arrow: 'Arrow', trendangle: 'Trend angle', crossline: 'Cross line', rotatedrect: 'Rotated rectangle', circle: 'Circle', ellipse: 'Ellipse', triangle: 'Triangle', polyline: 'Polyline', arc: 'Arc', curve: 'Curve', doublecurve: 'Double curve', cycliclines: 'Cyclic lines', timecycles: 'Time cycles', sineline: 'Sine line', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', trianglepattern: 'Triangle pattern', threedrives: 'Three drives pattern', elliottimpulse: 'Elliott impulse wave (12345)', elliottcorrection: 'Elliott correction wave (ABC)', elliotttriangle: 'Elliott triangle wave (ABCDE)', elliottdoublecombo: 'Elliott double combo wave (WXY)', elliotttriplecombo: 'Elliott triple combo wave (WXYXZ)', regressionchannel: 'Regression trend', flattopbottom: 'Flat top/bottom', disjointchannel: 'Disjoint channel', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', extendedline: 'Extended line', arrow: 'Arrow', trendangle: 'Trend angle', crossline: 'Cross line', rotatedrect: 'Rotated rectangle', circle: 'Circle', ellipse: 'Ellipse', triangle: 'Triangle', polyline: 'Polyline', arc: 'Arc', curve: 'Curve', doublecurve: 'Double curve', cycliclines: 'Cyclic lines', timecycles: 'Time cycles', sineline: 'Sine line', pricenote: 'Price note', pricelabel: 'Price label', flagmark: 'Flag mark', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's source names (its price sources). */
 const REGRESSION_SOURCE_LABEL: Record<(typeof REGRESSION_SOURCES)[number], string> = { open: 'Open', high: 'High', low: 'Low', close: 'Close', hl2: '(H + L)/2', hlc3: '(H + L + C)/3', ohlc4: '(O + H + L + C)/4' };
 /** TradingView's Text orientation dropdown (vertical line). */
@@ -192,7 +195,9 @@ export class DrawingSettingsDialog {
         // TradingView's text: the Text tab and Visibility only.
         const tvText = (drawing instanceof TextLabel || drawing instanceof Callout) && drawing.tv === true;
         if (!tvText && (drawing.editableLevels() || styleFields(drawing).length > 0)) tabs.push('style');
-        if (drawing.schema().fields.some((f) => f.path.startsWith('text.'))) tabs.push('text');
+        // TradingView's price note, price label and flag mark style their label on the Style tab.
+        const labelOnStyle = (drawing instanceof PriceLabel || drawing instanceof PriceNote || drawing instanceof FlagMark) && drawing.tv === true;
+        if (!labelOnStyle && drawing.schema().fields.some((f) => f.path.startsWith('text.'))) tabs.push('text');
         // TradingView's brush, highlighter and path have no Coordinates tab.
         const brush = (drawing instanceof Freehand || drawing instanceof Highlighter || drawing instanceof Path) && drawing.tv;
         // TradingView hides Coordinates for a drawing pinned to the screen (anchored note) and for its text.
@@ -335,6 +340,49 @@ export class DrawingSettingsDialog {
         }
         if (drawing instanceof TrendFigure && drawing.tv) {
             this.buildFlatTvStyle(grid, drawing, actions);
+            return;
+        }
+        if (drawing instanceof PriceLabel && drawing.tv) {
+            // TradingView's price label: Text (colour and size), Background, Border.
+            const sizes = TV_FIB_FONT_SIZES.map((n) => ({ value: String(n), label: String(n) }));
+            const text = fieldRow({ label: 'Text', control: [this.colorControl(drawing, 'text.color', actions, drawing.text?.color ?? DEFAULT_DRAWING_COLOR), this.selectControl('text.size', sizes, String(textPx(drawing.text?.size)), actions, (v) => Number(v))], fit: true });
+            text.dataset.role = 'text';
+            const back = fieldRow({ label: 'Background', control: [this.colorControl(drawing, 'style.fillColor', actions, drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR)], fit: true });
+            back.dataset.role = 'background';
+            const border = fieldRow({ label: 'Border', control: [this.colorControl(drawing, 'style.lineColor', actions, drawing.style.lineColor || DEFAULT_DRAWING_COLOR)], fit: true });
+            border.dataset.role = 'border';
+            grid.append(text, back, border);
+            return;
+        }
+        if (drawing instanceof PriceNote && drawing.tv) {
+            // TradingView's price note: Label text (colour, size, bold, italic), Label background, Label border, Line color.
+            const sizes = TV_FIB_FONT_SIZES.map((n) => ({ value: String(n), label: String(n) }));
+            const t = drawing.text;
+            const text = fieldRow({
+                label: 'Label text',
+                control: [
+                    this.colorControl(drawing, 'text.color', actions, t?.color ?? DEFAULT_DRAWING_COLOR),
+                    this.selectControl('text.size', sizes, String(textPx(t?.size)), actions, (v) => Number(v)),
+                    styleToggle('B', 'Bold', 'font-weight:700;', t?.bold === true, (v) => actions.patch({ 'text.bold': v })),
+                    styleToggle('I', 'Italic', 'font-style:italic;font-family:serif;', t?.italic === true, (v) => actions.patch({ 'text.italic': v })),
+                ],
+                fit: true,
+            });
+            text.dataset.role = 'label-text';
+            const back = fieldRow({ label: 'Label background', control: [this.colorControl(drawing, 'style.fillColor', actions, drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR)], fit: true });
+            back.dataset.role = 'label-background';
+            const border = fieldRow({ label: 'Label border', control: [this.colorControl(drawing, 'labelBorder', actions, drawing.labelBorder ?? DEFAULT_DRAWING_COLOR)], fit: true });
+            border.dataset.role = 'label-border';
+            const line = fieldRow({ label: 'Line color', control: [this.colorControl(drawing, 'style.lineColor', actions, drawing.style.lineColor || DEFAULT_DRAWING_COLOR)], fit: true });
+            line.dataset.role = 'line-color';
+            grid.append(text, back, border, line);
+            return;
+        }
+        if (drawing instanceof FlagMark && drawing.tv) {
+            // TradingView's flag mark: one Flag colour.
+            const row = fieldRow({ label: 'Flag', control: [this.colorControl(drawing, 'style.lineColor', actions, drawing.style.lineColor || DEFAULT_DRAWING_COLOR)], fit: true });
+            row.dataset.role = 'flag';
+            grid.appendChild(row);
             return;
         }
         if (drawing instanceof SegmentDrawing && drawing.tv && drawing.tvShapeKind()) {

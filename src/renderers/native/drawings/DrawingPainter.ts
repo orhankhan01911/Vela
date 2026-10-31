@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TrendFigure, TrendAngle, Circle, Ellipse, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TrendFigure, TrendAngle, Circle, Ellipse, FlagMark, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -3070,7 +3070,8 @@ export class DrawingPainter {
         roundRect(ctx, x, y, w, h, 5);
         ctx.fill();
         ctx.restore();
-        this.applyStroke(ctx, d.style);
+        // TradingView's label border is its own colour.
+        this.applyStroke(ctx, d.tv && d.labelBorder ? { ...d.style, lineColor: d.labelBorder, lineWidth: 1, lineStyle: 'solid' } : d.style);
         roundRect(ctx, x, y, w, h, 5);
         ctx.stroke();
         ctx.setLineDash([]);
@@ -3764,6 +3765,21 @@ export class DrawingPainter {
     private paintGlyphStamp(ctx: CanvasRenderingContext2D, d: GlyphStamp, proj: Projector, theme: VelaTheme): void {
         const c = d.center(proj);
         if (!c) return;
+        if (d instanceof FlagMark && d.tv) {
+            // TradingView's flag mark (module 95256): a 1 × 20 px cold grey pole standing on the point, the pennant 2 px
+            // right of it in the flag colour.
+            ctx.save();
+            ctx.setLineDash([]);
+            ctx.translate(Math.round(c[0]), Math.round(c[1] - 20));
+            ctx.fillStyle = TV_FLAG_POLE;
+            roundRect(ctx, 0, 0, 1, 20, 1);
+            ctx.fill();
+            ctx.fillStyle = d.style.lineColor;
+            ctx.translate(2, 0);
+            ctx.fill(TV_FLAG_PENNANT());
+            ctx.restore();
+            return;
+        }
         ctx.save();
         ctx.setLineDash([]);
         ctx.font = `${d.sizePx()}px ${theme.fontFamily}`;
@@ -4387,6 +4403,14 @@ export function labelLayout(d: Drawing, proj: Projector): {
         default:
             return pts[0] ? { x: pts[0][0], top: pts[0][1], align: 'left' } : null;
     }
+}
+
+/** TradingView's flag mark pole (its cold gray 500) and pennant (module 95256). */
+const TV_FLAG_POLE = '#787b86'; // palette-exempt: TradingView's cold gray 500
+let flagPennant: Path2D | null = null;
+function TV_FLAG_PENNANT(): Path2D {
+    flagPennant ??= new Path2D('M0 .5C0 .22.22 0 .5 0h16c.4 0 .64.46.4.8l-2.8 3.9a.5.5 0 0 0 0 .6l2.8 3.9a.5.5 0 0 1-.4.8H.5a.5.5 0 0 1-.5-.5z');
+    return flagPennant;
 }
 
 /** The card's link text, TradingView's. */

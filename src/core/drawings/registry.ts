@@ -220,7 +220,7 @@ function legacyArrowMarker(doc: SerializedDrawing): SerializedDrawing {
 /** Brush and highlighter strokes, rectangles, paths, texts and callouts became TradingView's (2026-10-30), the flat
  *  top/bottom, disjoint channel, trend angle, cross line, rotated rectangle, circle and the plain shapes on 2026-10-31. One saved before with no props: give it an empty bag so it keeps its look (a fresh one
  *  has no props and starts as TradingView's). */
-const LEGACY_NO_PROPS: ReadonlySet<string> = new Set(['freehand', 'highlighter', 'box', 'path', 'text', 'callout', 'flattopbottom', 'disjointchannel', 'trendangle', 'crossline', 'rotatedrect', 'circle', 'triangle', 'polyline', 'arc', 'curve', 'doublecurve', 'cycliclines', 'timecycles', 'sineline']);
+const LEGACY_NO_PROPS: ReadonlySet<string> = new Set(['freehand', 'highlighter', 'box', 'path', 'text', 'callout', 'flattopbottom', 'disjointchannel', 'trendangle', 'crossline', 'rotatedrect', 'circle', 'triangle', 'polyline', 'arc', 'curve', 'doublecurve', 'cycliclines', 'timecycles', 'sineline', 'pricenote', 'pricelabel']);
 function legacyStroke(doc: SerializedDrawing): SerializedDrawing {
     return LEGACY_NO_PROPS.has(doc.type) && doc.props === undefined ? { ...doc, props: {} } : doc;
 }
@@ -400,7 +400,8 @@ registerDrawingType({
     label: 'Price Note',
     icon: PRICE_NOTE_ICON,
     coversSeries: true, // text over the candles like TradingView's: a candle never paints over the words
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
+    // TradingView's: its blue line and label (module 394599).
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: TV_LINE_COLOR },
     create: (init) => new PriceNote(init),
 });
 
@@ -420,7 +421,8 @@ registerDrawingType({
     label: 'Price Label',
     icon: PRICE_LABEL_ICON,
     coversSeries: true, // text over the candles like TradingView's: a candle never paints over the words
-    defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: `${DEFAULT_DRAWING_COLOR}d9` },
+    // TradingView's: its blue line and label (module 616930).
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 1, lineStyle: 'solid', fillColor: TV_LINE_COLOR },
     create: (init) => new PriceLabel(init),
 });
 
@@ -711,7 +713,8 @@ registerDrawingType({
     group: 'stamps',
     label: 'Flag',
     icon: FLAG_MARK_ICON,
-    defaultStyle: { lineColor: ACCENT, lineWidth: 1, lineStyle: 'solid' },
+    // TradingView's flag mark: its blue.
+    defaultStyle: { lineColor: TV_LINE_COLOR, lineWidth: 1, lineStyle: 'solid' },
     create: (init) => new FlagMark(init),
 });
 
