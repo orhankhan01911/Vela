@@ -6,6 +6,7 @@ import {
     FibRetracement,
     FibExtensionTrend,
     FibChannel,
+    FibTimeZones,
     TV_FIB_FONT_SIZES,
     GannBox,
     GannFan,
@@ -110,7 +111,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -300,6 +301,10 @@ export class DrawingSettingsDialog {
      *  line-end buttons), Background, Extend, the tool's switches, then the INFO section (stats) and the tool's own
      *  sections (Fib, levels). */
     private buildStyle(grid: HTMLElement, drawing: Drawing, actions: SettingsActions): void {
+        if (drawing instanceof FibTimeZones && drawing.tv) {
+            this.buildFibTimeZoneStyle(grid, drawing, actions);
+            return;
+        }
         if ((drawing instanceof FibLevels || drawing instanceof FibChannel) && drawing.tv) {
             this.buildFibTvStyle(grid, drawing, actions);
             return;
@@ -1576,6 +1581,77 @@ export class DrawingSettingsDialog {
         grid.appendChild(levelsLine);
         grid.appendChild(fieldRow({ label: 'Extend', control: [this.extendDropdown(fib, actions, lv ? { left: 'Extend lines left', right: 'Extend lines right' } : { left: 'Extend left', right: 'Extend right' })], fit: true }));
         this.buildFibTvRest(grid, fib, lv, actions);
+    }
+
+    /** TradingView's Fib time zone Style tab (module 308132, FibTimezoneDefinitionsViewModel): the 11 levels (a switch,
+     *  the value, its line button), Use one color, Background (a switch and its transparency) and Labels (a switch, its
+     *  horizontal and vertical place). */
+    private buildFibTimeZoneStyle(grid: HTMLElement, tz: FibTimeZones, actions: SettingsActions): void {
+        const setters: Array<(c: string) => void> = [];
+        const colors = tz.levels.map((l) => l.color);
+        tz.levels.forEach((lv, i) => {
+            let cur = lv.ratio;
+            const coeff = buildFieldControl({
+                kind: 'number',
+                value: cur,
+                min: 0,
+                step: 1,
+                fill: false,
+                commit: 'blur',
+                onChange: (n) => {
+                    if (!Number.isFinite(n) || n < 0) {
+                        coeff.setValue?.(cur);
+                        return;
+                    }
+                    cur = n;
+                    actions.patch({ [`levels.${i}.ratio`]: n });
+                },
+            });
+            coeff.el.style.width = '96px';
+            coeff.el.style.flex = 'none';
+            coeff.el.dataset.role = `level-${i}-coeff`;
+            const line = this.pathLineButton(
+                { color: lv.color, width: lv.lineWidth ?? 2, style: lv.lineStyle ?? 'solid' },
+                { color: `levels.${i}.color`, width: `levels.${i}.lineWidth`, style: `levels.${i}.lineStyle` },
+                actions,
+                (set) => setters.push((c) => { colors[i] = c; set(c); }),
+            );
+            line.dataset.role = `level-${i}-line`;
+            const row = fieldRow({ label: '', toggle: { id: uid(), checked: lv.enabled, onChange: (v) => actions.patch({ [`levels.${i}.enabled`]: v }) }, control: [coeff.el, line], fit: true });
+            row.dataset.role = `level-${i}`;
+            grid.appendChild(row);
+        });
+        const oneColor: ColorField = new ColorField({
+            theme: this.theme,
+            getVal: () => colors[0] ?? DEFAULT_DRAWING_COLOR,
+            onVal: (v) => {
+                actions.patch(Object.fromEntries(tz.levels.map((_, i) => [`levels.${i}.color`, v])));
+                for (const set of setters) set(v);
+                paintOne();
+            },
+            popover: { align: 'start' },
+        });
+        const paintOne = (): void => {
+            oneColor.paint();
+            const sw = oneColor.el.querySelector<HTMLElement>('.vela-color-field-swatch');
+            if (sw && new Set(colors.map((c) => c.toLowerCase())).size > 1) sw.style.background = `linear-gradient(135deg, ${BULLISH} 50%, ${BEARISH} 50%)`;
+        };
+        paintOne();
+        oneColor.el.dataset.role = 'one-color';
+        grid.appendChild(fieldRow({ label: 'Use one color', control: [oneColor.el], fit: true }));
+        const bg = fieldRow({
+            label: 'Background',
+            toggle: { id: uid(), checked: tz.background === true, onChange: (v) => actions.patch({ background: v }) },
+            control: [opacitySlider(Math.round((tz.fillOpacity ?? 0.2) * 100), (n) => actions.patch({ fillOpacity: n / 100 }))],
+            fit: true,
+        });
+        bg.dataset.role = 'background';
+        grid.appendChild(bg);
+        const labelH = this.selectControl('labelH', FIB_H, tz.labelH ?? 'right', actions);
+        const labelV = this.selectControl('labelV', FIB_V, tz.labelV ?? 'bottom', actions);
+        const labels = fieldRow({ label: 'Labels', toggle: { id: uid(), checked: tz.showLabels !== false, onChange: (v) => actions.patch({ showLabels: v }) }, control: [labelH, labelV], fit: true });
+        labels.dataset.role = 'labels';
+        grid.appendChild(labels);
     }
 
     private buildFibTrendRow(grid: HTMLElement, fib: FibLevels, actions: SettingsActions): void {

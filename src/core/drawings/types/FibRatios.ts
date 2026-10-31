@@ -10,6 +10,9 @@ export interface FibLevel {
     color: string;
     enabled: boolean;
     label?: string;
+    /** A level's own line (TradingView's Fib time zone: each level has its width and style). */
+    lineWidth?: number;
+    lineStyle?: 'solid' | 'dashed' | 'dotted';
 }
 
 /** Font size for the entry numbers / labels (cycled by the bar buttons). */
@@ -26,6 +29,8 @@ function sanitizeLevel(v: unknown): FibLevel | null {
         color: o.color,
         enabled: o.enabled !== false,
         ...(typeof o.label === 'string' && o.label ? { label: o.label } : {}),
+        ...(typeof o.lineWidth === 'number' && Number.isFinite(o.lineWidth) ? { lineWidth: Math.min(10, Math.max(1, o.lineWidth)) } : {}),
+        ...(o.lineStyle === 'solid' || o.lineStyle === 'dashed' || o.lineStyle === 'dotted' ? { lineStyle: o.lineStyle } : {}),
     };
 }
 
@@ -46,6 +51,9 @@ export interface FibEntryLine {
     /** The level's ratio and price (TradingView-look Fibs), so the painter can format the price at the scale's step. */
     ratio?: number;
     price?: number;
+    /** The level's own line width / style (else the drawing's). */
+    lineWidth?: number;
+    lineStyle?: 'solid' | 'dashed' | 'dotted';
     /** Where the custom label is anchored (default centered). */
     labelAlign?: 'left' | 'center' | 'right';
 }

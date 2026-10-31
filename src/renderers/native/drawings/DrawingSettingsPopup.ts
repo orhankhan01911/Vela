@@ -22,6 +22,7 @@ import {
     HIGHLIGHTER_WIDTHS,
     FibLevels,
     FibChannel,
+    FibTimeZones,
 } from '../../../core/drawings';
 import { icon, svg24, svg24Solid } from '../../../core/icons';
 import { applyChromeTokens } from '../../shared/theme-tokens';
@@ -438,9 +439,11 @@ export class DrawingSettingsPopup {
 
         // TradingView's quick bar for the audited tools: which colour, width, style and size controls it shows, in its
         // order (line colour, background, text colour, width, style). Built controls are reused; a missing one is made.
-        const tvFib = !multi && (drawing instanceof FibLevels || drawing instanceof FibChannel) && drawing.tv === true ? drawing : null;
-        // TradingView's Fib channel bar has the line colour only (its collected colours; no width).
-        const tvBar = multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : TV_FIB_BAR) : TV_QUICK_BAR[drawing.type];
+        const tvFib = !multi && (drawing instanceof FibLevels || drawing instanceof FibChannel || drawing instanceof FibTimeZones) && drawing.tv === true ? drawing : null;
+        // TradingView's Fib channel bar has the line colour only (its collected colours; no width); the time zone's
+        // colour, width and style set every level.
+        const tvBar = multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof FibTimeZones ? TV_FIB_TZ_BAR : TV_FIB_BAR) : TV_QUICK_BAR[drawing.type];
+        if (tvFib instanceof FibTimeZones) bar.querySelectorAll<HTMLElement>('[data-tip="Line style"]').forEach((k) => k.remove());
         if (tvFib) {
             // TradingView's Fib bar: one colour for the trend line and every level, one width for both (its collected
             // line colour / width properties). The generic width button only sets the levels, so it is replaced.
@@ -454,7 +457,14 @@ export class DrawingSettingsPopup {
                               const read = (d: Drawing): string => (d as FibLevels).levels.find((l) => l.enabled)?.color ?? DEFAULT_DRAWING_COLOR;
                               return this.colorButton('Line color', BRUSH_ICON, read(tvFib), (v) => actions.patch({ ...(tvFib instanceof FibLevels ? { trendColor: v } : {}), ...Object.fromEntries(tvFib.levels.map((_, i) => [`levels.${i}.color`, v])) }), undefined, distinctValues([tvFib], read));
                           },
-                          width: () => this.dropdown('Line width', [1, 2, 3, 4], tvFib.style.lineWidth ?? 2, (w) => lineIcon(w, 'solid'), (v) => actions.patch({ 'style.lineWidth': v, trendWidth: v }), { label: (v) => `${v}px`, labelInTrigger: true }),
+                          width: () =>
+                              tvFib instanceof FibTimeZones
+                                  ? this.dropdown('Line width', [1, 2, 3, 4], tvFib.levels[0]?.lineWidth ?? 2, (w) => lineIcon(w, 'solid'), (v) => actions.patch(Object.fromEntries(tvFib.levels.map((_, i) => [`levels.${i}.lineWidth`, v]))), { label: (v) => `${v}px`, labelInTrigger: true })
+                                  : this.dropdown('Line width', [1, 2, 3, 4], tvFib.style.lineWidth ?? 2, (w) => lineIcon(w, 'solid'), (v) => actions.patch({ 'style.lineWidth': v, trendWidth: v }), { label: (v) => `${v}px`, labelInTrigger: true }),
+                          style: () =>
+                              tvFib instanceof FibTimeZones
+                                  ? this.dropdown('Line style', ['solid', 'dashed', 'dotted'], tvFib.levels[0]?.lineStyle ?? 'solid', (v) => lineIcon(2, v as 'solid'), (v) => actions.patch(Object.fromEntries(tvFib.levels.map((_, i) => [`levels.${i}.lineStyle`, v]))))
+                                  : null,
                       }
                     : {}),
                 text: () => (paths.has('text.color') ? swatch('Text color', TYPE_ICON, (d) => d.text?.color || t.textColor, 'text.color') : null),
@@ -1267,6 +1277,7 @@ const AREA_BAR: readonly TvBarItem[] = ['line', 'fill', 'text', 'width'];
 /** TradingView's Fib retracement bar (its data-names: templates, line-tool-color, line-tool-width, settings, ...). */
 const TV_FIB_BAR: readonly TvBarItem[] = ['line', 'width'];
 const TV_FIB_CHANNEL_BAR: readonly TvBarItem[] = ['line'];
+const TV_FIB_TZ_BAR: readonly TvBarItem[] = ['line', 'width', 'style'];
 const TV_QUICK_BAR: Readonly<Record<string, readonly TvBarItem[]>> = {
     trendline: LINE_BAR,
     hline: LINE_BAR,

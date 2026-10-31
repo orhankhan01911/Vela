@@ -199,7 +199,7 @@ describe('drawings/Fib fan + time zones are now configurable (gear)', () => {
 
     it('time zones: editable levels; disabling one drops its line', () => {
         const d = createDrawing('fibtimezones', { paneId: 'price', anchors: [{ time: 0, price: 50 }, { time: 10, price: 50 }] })!;
-        expect(d.editableLevels()!.length).toBe(9);
+        expect(d.editableLevels()!.length).toBe(11); // TradingView's 11 time zones (2026-10-31)
         const i = d.editableLevels()!.findIndex((l) => l.ratio === 8);
         d.applySettings({ [`levels.${i}.enabled`]: false });
         expect((d as FibTimeZones).zoneLines(proj)!.some((l) => l.n === 8)).toBe(false);
@@ -214,7 +214,7 @@ describe('drawings/FibTimeZones', () => {
     it('places vertical lines at fib multiples of the base interval', () => {
         const d = make();
         const lines = (d as FibTimeZones).zoneLines(proj)!;
-        expect(lines.map((l) => l.n)).toEqual([0, 1, 2, 3, 5, 8, 13, 21, 34]);
+        expect(lines.map((l) => l.n)).toEqual([0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89]); // TradingView's 11 (2026-10-31)
         expect(lines.find((l) => l.n === 5)?.x).toBe(50); // time 50 → x 50
     });
 

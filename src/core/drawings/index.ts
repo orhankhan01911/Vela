@@ -101,7 +101,7 @@ export { FibRetracement, TV_FIB_RETRACEMENT_LEVELS, TV_FIB_TREND_COLOR } from '.
 export { FibExtension } from './types/FibExtension';
 export { FibExtensionTrend } from './types/FibExtensionTrend';
 export { FibFan, type FibFanLine } from './types/FibFan';
-export { FibTimeZones, type FibZoneLine } from './types/FibTimeZones';
+export { FibTimeZones, type FibZoneLine, TV_FIB_TIME_ZONE_LEVELS } from './types/FibTimeZones';
 export { FibChannel } from './types/FibChannel';
 export { FibSpeedFan } from './types/FibSpeedFan';
 export { TrendFibTime } from './types/TrendFibTime';

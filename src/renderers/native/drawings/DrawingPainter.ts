@@ -857,7 +857,7 @@ export class DrawingPainter {
                 onLine(l.numberText, numFont, l.numberX, l.numberY, l.numberAlign);
                 onLine(l.label, lblFont, l.labelX, l.labelY, l.labelAlign ?? 'center');
             }
-            const line = (): void => this.stroke(ctx, { ...d.style, lineColor: l.color }, () => {
+            const line = (): void => this.stroke(ctx, { ...d.style, lineColor: l.color, ...(l.lineWidth ? { lineWidth: l.lineWidth } : {}), ...(l.lineStyle ? { lineStyle: l.lineStyle } : {}) }, () => {
                 ctx.moveTo(l.x1, l.y1);
                 ctx.lineTo(l.x2, l.y2);
             });
