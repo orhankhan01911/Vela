@@ -120,7 +120,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -320,6 +320,10 @@ export class DrawingSettingsDialog {
         }
         if (drawing instanceof GannSquare && drawing.tv) {
             this.buildGannSquareTvStyle(grid, drawing, actions);
+            return;
+        }
+        if (drawing instanceof GannFan && drawing.tv) {
+            this.buildGannFanTvStyle(grid, drawing, actions);
             return;
         }
         if (drawing instanceof RadialFib && drawing.tv) {
@@ -1796,6 +1800,43 @@ export class DrawingSettingsDialog {
         paint();
         oneColor.el.dataset.role = 'one-color';
         return { el: oneColor.el, paint };
+    }
+
+    /** TradingView's Gann fan Style tab (module 154448): the nine levels (a switch, its c1/c2 name and its line button),
+     *  Use one color, Background, Labels. */
+    private buildGannFanTvStyle(grid: HTMLElement, gf: GannFan, actions: SettingsActions): void {
+        const colors = gf.levels.map((l) => l.color);
+        const setters: Array<(c: string) => void> = [];
+        gf.levels.forEach((lv, i) => {
+            const line = this.pathLineButton(
+                { color: lv.color, width: lv.lineWidth ?? 2, style: lv.lineStyle ?? 'solid' },
+                { color: `levels.${i}.color`, width: `levels.${i}.lineWidth`, style: `levels.${i}.lineStyle` },
+                actions,
+                (set) =>
+                    setters.push((c) => {
+                        colors[i] = c;
+                        set(c);
+                    }),
+            );
+            const row = fieldRow({ label: lv.label ?? String(lv.ratio), toggle: { id: uid(), checked: lv.enabled, onChange: (v) => actions.patch({ [`levels.${i}.enabled`]: v }) }, control: [line], fit: true });
+            row.dataset.role = `level-${i}`;
+            grid.appendChild(row);
+        });
+        const one = this.fibOneColor(colors, () => ['style.lineColor'], actions, () => {
+            for (const set of setters) set(colors[0]!);
+        });
+        grid.appendChild(fieldRow({ label: 'Use one color', control: [one.el], fit: true }));
+        const bg = fieldRow({
+            label: 'Background',
+            toggle: { id: uid(), checked: gf.background, onChange: (v) => actions.patch({ background: v }) },
+            control: [opacitySlider(Math.round(gf.fillOpacity * 100), (n) => actions.patch({ fillOpacity: n / 100 }))],
+            fit: true,
+        });
+        bg.dataset.role = 'background';
+        grid.appendChild(bg);
+        const labels = fieldRow({ label: 'Labels', bool: true, toggle: { id: uid(), checked: gf.showLabels !== false, onChange: (v) => actions.patch({ showLabels: v }) } });
+        labels.dataset.role = 'labels';
+        grid.appendChild(labels);
     }
 
     /** TradingView's Gann square Style tab (module 206315): LEVELS, FANS and ARCS (each row a switch, its name and a
