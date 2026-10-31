@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel, Ellipse } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TrendFigure, TrendAngle, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TrendFigure, TrendAngle, Circle, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -548,15 +548,13 @@ export class DrawingPainter {
                 else this.paintTrendAngle(ctx, d, proj, theme);
                 break;
             case 'circle': {
-                const pts = d.handlePoints(proj);
-                if (pts.length < 2) return;
-                const cx = pts[0]![0];
-                const cy = pts[0]![1];
-                const r = Math.hypot(pts[1]![0] - cx, pts[1]![1] - cy);
-                if (r < 1) return;
-                if (d.style.fillColor) {
+                // From its centre and edge, not its handles (TradingView hides the centre handle under text).
+                const g = (d as Circle).circle(proj);
+                if (!g || g.r < 1) return;
+                const { cx, cy, r } = g;
+                if ((d as Circle).filled()) {
                     ctx.save();
-                    ctx.fillStyle = d.style.fillColor; // alpha lives in the fill color itself
+                    ctx.fillStyle = d.style.fillColor!; // alpha lives in the fill color itself
                     ctx.beginPath();
                     ctx.arc(cx, cy, r, 0, Math.PI * 2);
                     ctx.fill();
@@ -702,6 +700,24 @@ export class DrawingPainter {
     private paintLabel(ctx: CanvasRenderingContext2D, d: Drawing, proj: Projector, theme: VelaTheme): void {
         const text = d.text;
         if (!text || !text.value || d.id === this.targets.mutedLabel) return;
+        if (d instanceof Circle && d.tv) {
+            // TradingView's circle text: centred, wrapped to the square inside the circle (side r·√2) and cut at its height.
+            const c = d.circle(proj);
+            if (!c) return;
+            const fs = namedFontSize(text.size);
+            const side = c.r * Math.SQRT2;
+            ctx.save();
+            ctx.font = labelFont(text, fs, theme);
+            ctx.textBaseline = 'top';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = text.color ?? theme.textColor;
+            const lh = labelLineHeight(fs);
+            const lines = wrapLines(ctx, text.value, Math.max(1, side)).slice(0, Math.max(1, Math.floor(side / lh)));
+            const top = c.cy - (lines.length * lh) / 2;
+            lines.forEach((line, i) => ctx.fillText(line, c.cx, top + i * lh));
+            ctx.restore();
+            return;
+        }
         if (d instanceof Box && d.tv) {
             const t = this.tvBoxText(ctx, d, proj, theme);
             if (!t) return;

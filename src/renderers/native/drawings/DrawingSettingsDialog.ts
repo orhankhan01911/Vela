@@ -72,6 +72,7 @@ import {
     TrendFigure,
     TrendAngle,
     RotatedRect,
+    Circle,
     type RegressionTrendLine,
 } from '../../../core/drawings';
 import { BEARISH, BULLISH } from '../../../core/palette';
@@ -131,7 +132,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', trianglepattern: 'Triangle pattern', threedrives: 'Three drives pattern', elliottimpulse: 'Elliott impulse wave (12345)', elliottcorrection: 'Elliott correction wave (ABC)', elliotttriangle: 'Elliott triangle wave (ABCDE)', elliottdoublecombo: 'Elliott double combo wave (WXY)', elliotttriplecombo: 'Elliott triple combo wave (WXYXZ)', regressionchannel: 'Regression trend', flattopbottom: 'Flat top/bottom', disjointchannel: 'Disjoint channel', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', extendedline: 'Extended line', arrow: 'Arrow', trendangle: 'Trend angle', crossline: 'Cross line', rotatedrect: 'Rotated rectangle', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', trianglepattern: 'Triangle pattern', threedrives: 'Three drives pattern', elliottimpulse: 'Elliott impulse wave (12345)', elliottcorrection: 'Elliott correction wave (ABC)', elliotttriangle: 'Elliott triangle wave (ABCDE)', elliottdoublecombo: 'Elliott double combo wave (WXY)', elliotttriplecombo: 'Elliott triple combo wave (WXYXZ)', regressionchannel: 'Regression trend', flattopbottom: 'Flat top/bottom', disjointchannel: 'Disjoint channel', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', extendedline: 'Extended line', arrow: 'Arrow', trendangle: 'Trend angle', crossline: 'Cross line', rotatedrect: 'Rotated rectangle', circle: 'Circle', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's source names (its price sources). */
 const REGRESSION_SOURCE_LABEL: Record<(typeof REGRESSION_SOURCES)[number], string> = { open: 'Open', high: 'High', low: 'Low', close: 'Close', hl2: '(H + L)/2', hlc3: '(H + L + C)/3', ohlc4: '(O + H + L + C)/4' };
 /** TradingView's Text orientation dropdown (vertical line). */
@@ -332,8 +333,8 @@ export class DrawingSettingsDialog {
             this.buildFlatTvStyle(grid, drawing, actions);
             return;
         }
-        if (drawing instanceof RotatedRect && drawing.tv) {
-            // TradingView's rotated rectangle: Border (colour and width) and Background (a switch and its colour).
+        if ((drawing instanceof RotatedRect || drawing instanceof Circle) && drawing.tv) {
+            // TradingView's rotated rectangle and circle: Border (colour and width) and Background (a switch and its colour).
             const border = fieldRow({ label: 'Border', control: [this.pathLineButton({ color: drawing.style.lineColor || DEFAULT_DRAWING_COLOR, width: drawing.style.lineWidth ?? 2, style: 'solid' }, { color: 'style.lineColor', width: 'style.lineWidth' }, actions)], fit: true });
             border.dataset.role = 'border';
             const fill = this.colorControl(drawing, 'style.fillColor', actions, drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR);
