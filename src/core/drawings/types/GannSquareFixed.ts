@@ -37,7 +37,7 @@ export class GannSquareFixed extends GannSquare {
     }
 
     /** No price/bar ratio to fix or keep. */
-    override onPlaced(): void {}
+    override onPlaced(_proj: Projector): void {}
 
     override constrainHandleDrag(): void {}
 
