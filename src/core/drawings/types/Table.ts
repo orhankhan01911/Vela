@@ -134,7 +134,7 @@ export class TableDrawing extends Drawing {
             // A table saved before: its text, a row per line and "|" between cells (kept pinned, as it was).
             const old = init.text?.value;
             if (old != null && init.props) {
-                const rows = old.split('\n').slice(0, MAX_ROWS).map((r) => r.split('|').slice(0, MAX_COLS).map((c) => c.trim()));
+                const rows = old.slice(0, MAX_ROWS * MAX_COLS * MAX_CELL).split('\n').slice(0, MAX_ROWS).map((r) => r.split('|').slice(0, MAX_COLS).map((c) => c.trim().slice(0, MAX_CELL)));
                 const cols = Math.max(1, ...rows.map((r) => r.length));
                 this.cells = rows.map((r) => [...r, ...Array.from({ length: cols - r.length }, () => '')]);
                 this.anchored = true;

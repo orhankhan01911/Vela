@@ -57,7 +57,7 @@ import {
 } from '../../../core/drawings';
 import { icon, svg24, svg24Solid } from '../../../core/icons';
 import { applyChromeTokens } from '../../shared/theme-tokens';
-import { contrastColor } from '../../shared/drawing-geometry';
+import { contrastColor, safeCssColor } from '../../shared/drawing-geometry';
 import { NumberInput } from '../../../ui/components/number-input';
 import { TextArea } from '../../../ui/components/text-area';
 import { buildColorPicker } from '../../../ui/components/color-picker';
@@ -1361,7 +1361,7 @@ export class DrawingSettingsPopup {
         ic.style.cssText = 'display:flex;';
         ic.innerHTML = sized(icon, iconSize);
         const bar = document.createElement('span');
-        bar.style.cssText = `display:block;height:3px;width:${Math.round(iconSize * 0.85)}px;border-radius:2px;background:${color === MIXED ? stripes(used) : color};`;
+        bar.style.cssText = `display:block;height:3px;width:${Math.round(iconSize * 0.85)}px;border-radius:2px;background:${color === MIXED ? stripes(used) : safeCssColor(color, 'transparent')};`; // a saved layout is untrusted: only a plain colour reaches the CSS
         b.append(ic, bar);
         let cur = color;
         // Stop the swatch's own pointerdown from reaching `el` (which would pre-close the popover),
@@ -1578,7 +1578,7 @@ const SUPERSONIC_ICON = icon('supersonic');
 /** A striped underline for a mixed color swatch: equal bands of every color in use (a neutral
  *  gray pair when nothing concrete is known), so the mix itself is visible without opening it. */
 function stripes(colors: readonly string[]): string {
-    const bands = colors.length > 1 ? colors : ['var(--vela-fg-faint)', 'var(--vela-fg-muted)'];
+    const bands = colors.length > 1 ? colors.map((c) => safeCssColor(c, 'transparent')) : ['var(--vela-fg-faint)', 'var(--vela-fg-muted)'];
     const step = 100 / bands.length;
     const stops = bands.map((c, i) => `${c} ${i * step}% ${(i + 1) * step}%`).join(',');
     return `linear-gradient(90deg,${stops})`;

@@ -221,3 +221,16 @@ describe('Table toolbar, more menu and dialog', () => {
         expect(s.host.querySelector('.vela-drawing-dialog')!.textContent).toContain('Table');
     });
 });
+
+describe('Table: untrusted saved layouts', () => {
+    it('a colour that is not a plain colour never reaches the toolbar\'s CSS', () => {
+        const s = setup(table({ textColor: 'red;background-image:url(https://evil.example/x)' }));
+        const html = s.host.querySelector('.vela-dpop')!.innerHTML;
+        expect(html).not.toContain('evil.example');
+    });
+
+    it('a table saved before is capped per cell like a new one', () => {
+        const t = createDrawing('table', { id: 't', paneId: 'price', anchors: [{ time: 100, price: 900 }], text: { value: 'x'.repeat(10_000) } as never, props: {} })! as TableDrawing;
+        expect(t.cells[0]![0]!.length).toBe(2000);
+    });
+});
