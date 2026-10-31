@@ -123,6 +123,7 @@ export class IndicatorPicker {
         searchRow.append(iconEl('search', doc), this.search);
         this.list = doc.createElement('div');
         this.list.className = 'vela-ip-list';
+        this.list.setAttribute('role', 'listbox');
         this.dialog = new Dialog({
             title: 'Indicators',
             host: opts.host,
@@ -183,6 +184,9 @@ export class IndicatorPicker {
         const rowEl = (r: IndicatorRow, opts: { library?: number; instance?: number }): HTMLElement => {
             const row = doc.createElement('div');
             row.className = 'vela-ip-row';
+            // A named list option (screen readers, agent-desktop); a row already on the chart says so.
+            row.setAttribute('role', 'option');
+            row.setAttribute('aria-label', opts.instance !== undefined ? `${vt(r.name)} (${vt('on chart')})` : vt(r.name));
             if (opts.library !== undefined) row.dataset.library = String(opts.library);
             if (opts.instance !== undefined) row.dataset.instance = String(opts.instance);
             if (r.native) row.dataset.native = '1';
@@ -209,6 +213,7 @@ export class IndicatorPicker {
                 trash.className = 'vela-ip-trash';
                 trash.appendChild(iconEl('trash', doc));
                 trash.title = vt("Remove from chart");
+                trash.setAttribute('aria-label', `${vt('Remove')} ${vt(r.name)}`);
                 row.appendChild(trash);
             }
             return row;

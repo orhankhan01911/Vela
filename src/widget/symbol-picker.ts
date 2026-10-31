@@ -332,6 +332,7 @@ export class SymbolPicker {
         head.append(searchRow, this.tabs);
         this.list = doc.createElement('div');
         this.list.className = 'vela-sp-list';
+        this.list.setAttribute('role', 'listbox');
         // Infinite scroll: nearing the bottom grows the page and APPENDS the new rows —
         // `filterSymbols` is a pure re-run with a larger limit whose result is a stable
         // superset (same ranking, same order), so appended rows never reshuffle the ones
@@ -477,6 +478,7 @@ export class SymbolPicker {
 
     private renderHighlight(): void {
         [...this.list.children].forEach((el, i) => {
+            el.setAttribute('aria-selected', i === this.highlighted ? 'true' : 'false');
             if (i === this.highlighted) {
                 (el as HTMLElement).dataset.highlighted = '1';
                 (el as HTMLElement).scrollIntoView({ block: 'nearest' });
@@ -583,6 +585,9 @@ export class SymbolPicker {
         // The LISTING prefix wins over the provider id: it is the canonical spelling.
         const venue = s.prefix ?? s.provider;
         if (venue) row.dataset.venue = venue;
+        // A list option named by what tells it apart (the same ticker trades on several venues).
+        row.setAttribute('role', 'option');
+        row.setAttribute('aria-label', [s.ticker, venue, vt(s.description ?? s.type ?? '')].filter(Boolean).join(' · '));
         const av = tickerIconEl(doc, baseOf(s), s.ticker, 'vela-sp-avatar', this.opts.iconFor?.(s));
         const main = doc.createElement('span');
         main.className = 'vela-sp-main';
