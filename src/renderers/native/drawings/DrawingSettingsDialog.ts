@@ -9,6 +9,7 @@ import {
     FibVerticalLevels,
     TrendFibTime,
     RadialFib,
+    FibArcs,
     FibSpeedFan,
     TV_SPEED_FAN_GRID,
     type FibLevel,
@@ -116,7 +117,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** TradingView's Text orientation dropdown (vertical line). */
 const ORIENTATION_OPTIONS: readonly SelectOption[] = [
     { value: 'horizontal', label: 'Horizontal' },
@@ -1619,8 +1620,8 @@ export class DrawingSettingsDialog {
         grid.appendChild(labels);
     }
 
-    /** TradingView's ring Fibs (Fib circles, module 289525): Trend line, the levels (colour and width), Use one color,
-     *  Background, Levels, Coeffs as percents. */
+    /** TradingView's ring Fibs (Fib circles 289525, speed resistance arcs 492327): Trend line, the levels (colour and
+     *  width), Use one color, Background, Levels, then Coeffs as percents or Full circles. */
     private buildRadialFibStyle(grid: HTMLElement, d: RadialFib, actions: SettingsActions): void {
         this.buildFibTrendRow(grid, d, actions);
         this.fibLevelLineRows(grid, d.levels, actions, { step: 0.001, styled: false });
@@ -1632,10 +1633,10 @@ export class DrawingSettingsDialog {
         });
         bg.dataset.role = 'background';
         grid.appendChild(bg);
-        for (const [label, key, on, role] of [
-            ['Levels', 'showLevels', d.showLevels !== false, 'levels'],
-            ['Coeffs as percents', 'levelsAsPercent', d.levelsAsPercent === true, 'percents'],
-        ] as const) {
+        // The arcs' last switch is Full circles; the circles' is Coeffs as percents.
+        const last: readonly [string, string, boolean, string] =
+            d instanceof FibArcs ? ['Full circles', 'fullCircles', d.fullCircles === true, 'full-circles'] : ['Coeffs as percents', 'levelsAsPercent', d.levelsAsPercent === true, 'percents'];
+        for (const [label, key, on, role] of [['Levels', 'showLevels', d.showLevels !== false, 'levels'] as const, last]) {
             const row = fieldRow({ label, bool: true, toggle: { checked: on, onChange: (v) => actions.patch({ [key]: v }) } });
             row.dataset.role = role;
             grid.appendChild(row);

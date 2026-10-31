@@ -5,9 +5,10 @@ import { fibLevels } from '../levelPalette';
 
 const CIRCLE_LEVELS = fibLevels([0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.618, 2.618]);
 
-const TV_FC_GRAY = '#808080'; // palette-exempt: TradingView's cold-gray-500 (level 1, trend line)
+export const TV_FC_GRAY = '#808080'; // palette-exempt: TradingView's cold-gray-500 (level 1, trend line)
 
-/** TradingView's 11 circles (module 289525), in its order and colours, each 2 px solid, all shown. */
+/** TradingView's 11 circles (module 289525; the speed resistance arcs' too, module 492327), in its order and colours,
+ *  each 2 px solid, all shown. */
 export const TV_FIB_CIRCLE_LEVELS: readonly FibLevel[] = (
     [
         [0.236, '#F23645'], // palette-exempt: TradingView's ripe-red-500
@@ -33,16 +34,7 @@ export class FibCircles extends RadialFib {
     readonly type = 'fibcircles' as const;
 
     protected override applyTvDefaults(): boolean {
-        this.levels = TV_FIB_CIRCLE_LEVELS.map((l) => ({ ...l }));
-        this.style = { ...this.style, lineWidth: 2, lineStyle: 'solid' };
-        this.background = true;
-        this.fillOpacity = 0.2;
-        this.showLevels = true;
-        this.levelsAsPercent = false;
-        this.trendline = true;
-        this.trendColor = TV_FC_GRAY;
-        this.trendWidth = 2;
-        this.trendStyle = 'dashed';
+        this.applyTvRingLook(TV_FIB_CIRCLE_LEVELS, TV_FC_GRAY);
         return true;
     }
 

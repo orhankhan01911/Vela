@@ -53,8 +53,9 @@ describe('drawings/FibArcs', () => {
     // pivot (50,50); far (80,50) → R0 = 30, semicircle facing the far anchor (the right side)
     const make = () => createDrawing('fibarcs', { paneId: 'price', anchors: [{ time: 50, price: 50 }, { time: 80, price: 50 }] })!;
 
-    it('is a semicircle bulging toward the far anchor (the other side is empty)', () => {
-        const d = make();
+    it('a saved one is a semicircle bulging toward the far anchor (the other side is empty)', () => {
+        // New arcs are TradingView's (test/drawings-fibarcs-tv.test.ts); one saved before (with props) keeps this look.
+        const d = createDrawing('fibarcs', { paneId: 'price', anchors: [{ time: 50, price: 50 }, { time: 80, price: 50 }], props: { levels: [{ ratio: 1, color: '#2962ff', enabled: true }] } })!;
         expect(d.hitTest(80, 50, proj, 2)).toBe(true); // ring 1 on the far (right) side
         expect(d.hitTest(20, 50, proj, 2)).toBe(false); // same radius, but the away side has no arc
     });

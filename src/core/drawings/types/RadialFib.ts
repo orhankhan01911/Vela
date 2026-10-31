@@ -1,5 +1,5 @@
 import type { Projector } from '../geometry';
-import type { FibEntryLine } from './FibRatios';
+import type { FibEntryLine, FibLevel } from './FibRatios';
 import { FibRatios } from './FibRatios';
 import { distToSegment } from '../hittest';
 
@@ -12,6 +12,8 @@ export interface RadialGeom {
     a1: number;
     /** Vertical radius ÷ horizontal radius (an ellipse); absent ⇒ 1, a circle. */
     sy?: number;
+    /** Which way the second point lies vertically (1 below, −1 above, 0 level), where a tool's labels follow it. */
+    dir?: number;
 }
 
 /** True if a cursor angle falls within the arc sweep [a0, a1] (a0 ≤ a1, going clockwise on canvas). */
@@ -50,6 +52,21 @@ export abstract class RadialFib extends FibRatios {
     /** Set TradingView's factory defaults on a new drawing; false when the tool has no TradingView look yet. */
     protected applyTvDefaults(): boolean {
         return false;
+    }
+
+    /** TradingView's shared ring look (circles, arcs; modules 289525 and 492327): these levels, bands on at 80 %
+     *  transparency, numbers shown, a dashed grey 2 px trend line. */
+    protected applyTvRingLook(levels: readonly FibLevel[], trendColor: string): void {
+        this.levels = levels.map((l) => ({ ...l }));
+        this.style = { ...this.style, lineWidth: 2, lineStyle: 'solid' };
+        this.background = true;
+        this.fillOpacity = 0.2;
+        this.showLevels = true;
+        this.levelsAsPercent = false;
+        this.trendline = true;
+        this.trendColor = trendColor;
+        this.trendWidth = 2;
+        this.trendStyle = 'dashed';
     }
 
     /** Center, base pixel radius, and the arc sweep — null until enough anchors are placed. */
