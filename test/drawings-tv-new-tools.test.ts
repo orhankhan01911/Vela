@@ -95,7 +95,7 @@ describe("TradingView's tools Vela lacked", () => {
     it('forecast: success once a bar reaches the target in time, failure when the time passes, else pending', () => {
         const bars: Array<{ time: number; open: number; high: number; low: number; close: number }> = [];
         const p: Projector = { ...proj(), barsInRange: (from, to) => bars.filter((b) => b.time >= from && b.time <= to) };
-        const f = createDrawing('forecast', { paneId: 'price', anchors: [P(10, 50), P(50, 60)] })! as Forecast;
+        const f = createDrawing('forecast', { paneId: 'price', anchors: [P(10, 50), P(50, 60)], props: {} })! as Forecast;
         expect(f.status(p)).toBe('pending');
         bars.push({ time: 20, open: 50, high: 55, low: 49, close: 54 }, { time: 60, open: 54, high: 56, low: 53, close: 55 });
         expect(f.status(p)).toBe('failure'); // past the target time, never at 60
@@ -107,7 +107,7 @@ describe("TradingView's tools Vela lacked", () => {
     it('bars pattern: copies the bars between its points, moves as one, mirrors and flips', () => {
         const src = [0, 10, 20].map((t, i) => ({ time: t, open: 50 + i, high: 55 + i, low: 45 + i, close: 52 + i }));
         const p: Projector = { ...proj(), barsInRange: (from, to) => src.filter((b) => b.time >= from && b.time <= to) };
-        const d = createDrawing('barspattern', { paneId: 'price', anchors: [P(0, 40), P(20, 40)] })! as BarsPattern;
+        const d = createDrawing('barspattern', { paneId: 'price', anchors: [P(0, 40), P(20, 40)], props: { mode: 'candles' } })! as BarsPattern;
         d.onPlaced(p);
         expect(d.anchors[0]).toEqual({ time: 0, price: 50 });
         expect(d.patternBars(p).map((b) => b.x)).toEqual([0, 10, 20]);
@@ -123,7 +123,7 @@ describe("TradingView's tools Vela lacked", () => {
 
     it('ghost feed: one made-up candle per bar along the path, each opening on the last close', () => {
         const p: Projector = { ...proj(), barsBetween: (a, b) => (b - a) / 10 };
-        const g = createDrawing('ghostfeed', { paneId: 'price', anchors: [P(0, 50), P(40, 70), P(60, 60)] })! as GhostFeed;
+        const g = createDrawing('ghostfeed', { paneId: 'price', anchors: [P(0, 50), P(40, 70), P(60, 60)], props: {} })! as GhostFeed;
         const c = g.ghostCandles(p);
         expect(c.length).toBe(6); // 4 bars up, 2 bars down
         expect(c.map((k) => k.x)).toEqual([10, 20, 30, 40, 50, 60]);

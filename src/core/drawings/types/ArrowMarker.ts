@@ -26,7 +26,7 @@ export function arrowMarkerStroke(len: number): number {
 export class ArrowMarker extends SegmentDrawing {
     readonly type = 'arrowmarker' as const;
     /** TradingView's arrow (new markers). */
-    override tv?: boolean;
+    declare tv?: boolean;
 
     constructor(init: ConstructorParameters<typeof SegmentDrawing>[0]) {
         super(init);

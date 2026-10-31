@@ -218,9 +218,9 @@ function legacyArrowMarker(doc: SerializedDrawing): SerializedDrawing {
 }
 
 /** Brush and highlighter strokes, rectangles, paths, texts and callouts became TradingView's (2026-10-30), the flat
- *  top/bottom, disjoint channel, trend angle, cross line, rotated rectangle, circle and the plain shapes on 2026-10-31. One saved before with no props: give it an empty bag so it keeps its look (a fresh one
+ *  top/bottom, disjoint channel, trend angle, cross line, rotated rectangle, circle, the plain shapes, the forecast, projection and ghost feed on 2026-10-31. One saved before with no props: give it an empty bag so it keeps its look (a fresh one
  *  has no props and starts as TradingView's). */
-const LEGACY_NO_PROPS: ReadonlySet<string> = new Set(['freehand', 'highlighter', 'box', 'path', 'text', 'callout', 'flattopbottom', 'disjointchannel', 'trendangle', 'crossline', 'rotatedrect', 'circle', 'triangle', 'polyline', 'arc', 'curve', 'doublecurve', 'cycliclines', 'timecycles', 'sineline', 'pricenote', 'pricelabel', 'signpost']);
+const LEGACY_NO_PROPS: ReadonlySet<string> = new Set(['freehand', 'highlighter', 'box', 'path', 'text', 'callout', 'flattopbottom', 'disjointchannel', 'trendangle', 'crossline', 'rotatedrect', 'circle', 'triangle', 'polyline', 'arc', 'curve', 'doublecurve', 'cycliclines', 'timecycles', 'sineline', 'pricenote', 'pricelabel', 'signpost', 'forecast', 'projection', 'ghostfeed']);
 function legacyStroke(doc: SerializedDrawing): SerializedDrawing {
     return LEGACY_NO_PROPS.has(doc.type) && doc.props === undefined ? { ...doc, props: {} } : doc;
 }

@@ -1,6 +1,6 @@
 import type { Drawing, Projector, DrawingStyle, TextLabel } from '../../../core/drawings';
 import { TrendLine, textPx } from '../../../core/drawings';
-import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TV_SIGNPOST, TrendFigure, TrendAngle, Circle, Ellipse, FlagMark, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, BarsPattern, GhostFeed, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
+import { SegmentDrawing, ParallelChannel, FibRatios, RadialFib, FibSpiral, GannSquare, GANN_SQUARE_ARCS, DedekindTessellation, MachFigure, MeasureBox, PositionTool, PatternDrawing, TV_PATTERN_TEXT, TrianglePattern, tvElliottLabel, TV_ELLIOTT_DEFAULT_DEGREE, CalloutBase, Callout, Comment, PriceNote, Signpost, SIGNPOST_R, Note, NOTE_PIN, PriceLabel, ArrowMark, GlyphStamp, RegressionChannel, opaqueColor, TV_SIGNPOST, TrendFigure, TrendAngle, Circle, Ellipse, FlagMark, AnchoredVwap, FixedRangeVolumeProfile, FixedRangeTpoProfile, tpoLetter, PriceAlert, ALERT_STUB_PX, Magnifier, magnifierTimeframeLabel, lineSegmentIntersection, extendRay, effectiveFillColor, VALID_FILL, INVALID_FILL, DEFAULT_DRAWING_COLOR, shownOnBarMs, statsOf, anyStats, lineStatsRows, Forecast, TV_FORECAST, Projection, TV_PROJECTION, TV_LINE_COLOR, TV_GREY, BarsPattern, GhostFeed, TV_GHOST, TableDrawing, ImageDrawing, XPostDrawing, safeRelayPath, PriceRange, DatePriceRange, DateRange, Freehand, ArrowMarker, arrowMarkerStroke, Box, Path, CALLOUT_RADIUS, CALLOUT_MARGIN, TV_NOTE_PIN, SvgIcon, EmojiDrawing, IconDrawing, FA_GLYPHS, SVG_ICON_FRAME, type BarKind } from '../../../core/drawings';
 import type { VelaTheme } from '../../../core/options';
 import { contrastColor, dashPattern, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE, uprightLineAngle } from '../../shared/drawing-geometry';
 import { emojiImage } from './emojiArt';
@@ -289,6 +289,10 @@ export class DrawingPainter {
     private paintOne(ctx: CanvasRenderingContext2D, d: Drawing, proj: Projector, theme: VelaTheme): void {
         // A host-registered type that paints its own body (Drawing.paintSelf): its look replaces the built-in one.
         if (d.paintSelf(ctx, proj, theme)) return;
+        if (d instanceof Projection && d.tv) {
+            this.paintTvProjection(ctx, d, proj);
+            return;
+        }
         if (d.type === 'highlighter' && d instanceof SegmentDrawing) {
             this.paintHighlighter(ctx, d, proj);
             this.paintLabel(ctx, d, proj, theme);
@@ -1307,6 +1311,10 @@ export class DrawingPainter {
 
     /** TradingView's ghost feed: made-up candles along the clicked path, in the chart's own candle colors, faded. */
     private paintGhostFeed(ctx: CanvasRenderingContext2D, d: GhostFeed, proj: Projector): void {
+        if (d.tv) {
+            this.paintTvGhostFeed(ctx, d, proj);
+            return;
+        }
         const candles = d.ghostCandles(proj);
         if (!candles.length) {
             this.paintSegments(ctx, d, proj); // still placing the first leg
@@ -1333,9 +1341,51 @@ export class DrawingPainter {
         ctx.restore();
     }
 
+    /** TradingView's ghost feed (module 28531): a 1 px grey line through the points, then its candles at the chart's
+     *  bar width (bodies, borders and wicks in its colours, all 50 % see-through). */
+    private paintTvGhostFeed(ctx: CanvasRenderingContext2D, d: GhostFeed, proj: Projector): void {
+        const pts = d.handlePoints(proj);
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = TV_GREY;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+        ctx.stroke();
+        const candles = d.ghostCandles(proj);
+        if (candles.length) {
+            const step = candles.length > 1 ? Math.abs(candles[1]!.x - candles[0]!.x) : 8;
+            // the chart's own body width for this bar spacing (TradingView's optimalBarWidth)
+            const w = Math.max(1, Math.floor(step * 0.8) - (Math.floor(step * 0.8) % 2 === 0 ? 1 : 0));
+            ctx.globalAlpha *= 1 - (d.transparency ?? 50) / 100;
+            for (const c of candles) {
+                const up = c.close <= c.open; // pixel y grows down
+                const x = Math.round(c.x);
+                const left = x - Math.floor(w / 2);
+                if (d.drawWick !== false) {
+                    ctx.fillStyle = d.wickColor || TV_GHOST.wick;
+                    ctx.fillRect(x, Math.round(Math.min(c.high, c.low)), 1, Math.max(1, Math.round(Math.abs(c.low - c.high))));
+                }
+                const top = Math.round(Math.min(c.open, c.close));
+                const h = Math.max(1, Math.round(Math.max(c.open, c.close)) - top);
+                ctx.fillStyle = (up ? d.upColor : d.downColor) || (up ? TV_GHOST.up : TV_GHOST.down);
+                ctx.fillRect(left, top, w, h);
+                if (d.drawBorder !== false && w > 2) {
+                    ctx.strokeStyle = (up ? d.borderUpColor : d.borderDownColor) || (up ? TV_GHOST.borderUp : TV_GHOST.borderDown);
+                    ctx.strokeRect(left + 0.5, top + 0.5, w - 1, Math.max(0, h - 1));
+                }
+            }
+        }
+        ctx.restore();
+    }
+
     /** TradingView's bars pattern: the copied bars in the tool's color (down bars filled, up bars hollow), as candles,
      *  HL bars or a close line; a dashed span marks the range while nothing is copied yet. */
     private paintBarsPattern(ctx: CanvasRenderingContext2D, d: BarsPattern, proj: Projector, theme: VelaTheme): void {
+        if (d.tv) {
+            this.paintTvBarsPattern(ctx, d, proj);
+            return;
+        }
         const ink = d.style.lineColor || theme.textColor;
         const bars = d.patternBars(proj);
         if (!bars.length) {
@@ -1388,6 +1438,10 @@ export class DrawingPainter {
     /** TradingView's forecast: the curve, a plate under the source (price, time), the change above the target and,
      *  once known, SUCCESS (green) or FAILURE (red) above that. */
     private paintForecast(ctx: CanvasRenderingContext2D, d: Forecast, proj: Projector, theme: VelaTheme): void {
+        if (d.tv) {
+            this.paintTvForecast(ctx, d, proj, theme);
+            return;
+        }
         const c = d.curve(proj);
         if (c.length < 2) return;
         const ink = d.style.lineColor || theme.textColor;
@@ -1420,6 +1474,295 @@ export class DrawingPainter {
         const h = plate([d.changeLabel()], tx, ty - 8 - 24, ink);
         const st = d.status(proj);
         if (st !== 'pending') plate([st === 'success' ? 'SUCCESS' : 'FAILURE'], tx, ty - 8 - h - 4 - 24, st === 'success' ? VALID_FILL : INVALID_FILL);
+    }
+
+    /** TradingView's projection (module 867140, its "Sector"): the two radii and the arc in the border colour, and a
+     *  background graded from the first colour at the centre to the second at the rim (80 % see-through). */
+    private paintTvProjection(ctx: CanvasRenderingContext2D, d: Projection, proj: Projector): void {
+        const pts = d.handlePoints(proj);
+        if (pts.length < 2) return;
+        const color = d.style.lineColor || TV_PROJECTION.border;
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = d.style.lineWidth || 2;
+        const s = d.sector(proj);
+        ctx.beginPath();
+        ctx.moveTo(pts[0]![0], pts[0]![1]);
+        ctx.lineTo(pts[1]![0], pts[1]![1]);
+        if (s) {
+            ctx.moveTo(s.cx, s.cy);
+            ctx.lineTo(s.p3[0], s.p3[1]);
+        }
+        ctx.stroke();
+        if (s && s.r > 0) {
+            const ccw = s.sweep < 0;
+            ctx.beginPath();
+            ctx.arc(s.cx, s.cy, s.r, s.a0, s.a0 + s.sweep, ccw);
+            ctx.stroke();
+            if (d.fillBackground !== false) {
+                ctx.lineTo(s.cx, s.cy);
+                ctx.closePath();
+                const alpha = 1 - (d.transparency ?? 80) / 100;
+                const g = ctx.createRadialGradient(s.cx, s.cy, 0, s.cx, s.cy, s.r);
+                g.addColorStop(0, withAlpha(opaqueColor(d.color1 || TV_PROJECTION.color1), alpha));
+                g.addColorStop(1, withAlpha(opaqueColor(d.color2 || TV_PROJECTION.color2), alpha));
+                ctx.fillStyle = g;
+                ctx.fill();
+            }
+        }
+        ctx.restore();
+    }
+
+    /** TradingView's bars pattern (module 282181): HL / OC bars as 3 px filled bars from one price to the other, the
+     *  line modes as a 2 px line, all in its colour 10 % see-through. While placing: grey lines down both points and
+     *  between them. */
+    private paintTvBarsPattern(ctx: CanvasRenderingContext2D, d: BarsPattern, proj: Projector): void {
+        const color = withAlpha(opaqueColor(d.style.lineColor || TV_LINE_COLOR), 0.9);
+        const bars = d.patternBars(proj);
+        ctx.save();
+        ctx.setLineDash([]);
+        if (!bars.length) {
+            const pts = d.handlePoints(proj);
+            const rect = proj.paneRect?.(d.paneId) ?? { top: 0, height: proj.height };
+            ctx.strokeStyle = TV_GREY;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (const [x] of pts) {
+                ctx.moveTo(Math.round(x) + 0.5, rect.top);
+                ctx.lineTo(Math.round(x) + 0.5, rect.top + rect.height);
+            }
+            if (pts.length === 2) {
+                ctx.moveTo(pts[0]![0], pts[0]![1]);
+                ctx.lineTo(pts[1]![0], pts[1]![1]);
+            }
+            ctx.stroke();
+            ctx.restore();
+            return;
+        }
+        const mode = d.mode;
+        if (mode === 'hl' || mode === 'oc') {
+            ctx.fillStyle = color;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            for (const b of bars) {
+                const [y0, y1] = mode === 'hl' ? [b.high, b.low] : [b.open, b.close];
+                const top = Math.round(Math.min(y0, y1));
+                const h = Math.max(1, Math.round(Math.max(y0, y1)) - top);
+                ctx.fillRect(b.x - 1, top, 2, h);
+                ctx.strokeRect(b.x - 1 + 0.5, top + 0.5, 2, h);
+            }
+        } else {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            bars.forEach((b, i) => (i ? ctx.lineTo(b.x, b.value ?? b.close) : ctx.moveTo(b.x, b.value ?? b.close)));
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    /** TradingView's forecast (module 861360): a quarter ellipse with an arrow at the target; a balloon under (over,
+     *  for a fall) the source with its price (12 px) and time (10 px); one over (under) the target with the change and
+     *  "in" span (14 px), then its price, a clock and its time (11 px); SUCCESS / FAILURE (14 px bold) beyond it; a dark
+     *  dot on each point. The plates are 10 % see-through. */
+    private paintTvForecast(ctx: CanvasRenderingContext2D, d: Forecast, proj: Projector, theme: VelaTheme): void {
+        const pts = d.handlePoints(proj);
+        const a = d.anchors[0];
+        const b = d.anchors[1];
+        if (pts.length < 2 || !a || !b) return;
+        const [p0, p1] = [pts[0]!, pts[1]!];
+        const lw = d.style.lineWidth || 2;
+        const color = d.style.lineColor || theme.textColor;
+        const alpha = 1 - (d.transparency ?? 10) / 100;
+        const fade = (c: string | undefined, fallback: string): string => withAlpha(c || fallback, alpha);
+        const font = (px: number, bold = false): string => `${bold ? '700 ' : ''}${px}px ${theme.fontFamily}`;
+        const up = b.price > a.price;
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.lineCap = 'butt';
+        const c = d.curve(proj);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lw;
+        ctx.beginPath();
+        c.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+        ctx.stroke();
+        // The arrow: a triangle at the target along the arc's last stretch (TradingView finds where the arc is h px away).
+        const dx = p1[0] - p0[0];
+        const dy = p1[1] - p0[1];
+        const rx = Math.abs(dx);
+        const ry = Math.abs(dy);
+        const h = Math.max(8, 4 * lw);
+        let ang: number;
+        if (rx < 1 || ry < 1) ang = Math.atan(dx / dy);
+        else {
+            let lo = 0;
+            let hi = Math.PI / 2;
+            let t = (lo + hi) / 2;
+            let ax = 0;
+            let ay = 0;
+            if (Math.hypot(dx, dy) > h) {
+                for (let n = 0; n < 10; n += 1) {
+                    ax = rx * Math.sin(t);
+                    ay = ry * (1 - Math.cos(t));
+                    const l = Math.hypot(ax - rx, ay - ry);
+                    if (Math.abs(l - h) < 1) break;
+                    if (l > h) lo = t;
+                    else hi = t;
+                    t = (lo + hi) / 2;
+                }
+            }
+            ang = Math.atan((rx - ax) / (ry - ay));
+            if (dx * dy < 0) ang = -ang;
+        }
+        const side = dy < 0 ? 1 : -1;
+        ctx.save();
+        ctx.translate(p1[0], p1[1]);
+        ctx.rotate(-ang);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-h / 2, side * h);
+        ctx.lineTo(h / 2, side * h);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.restore();
+        // A balloon: a rounded box with a tail to the point, below it (`below`) or above; its left edge `off` px left of
+        // the point (20, less near the pane's right edge). Returns the box's top-left.
+        const balloon = (x: number, y: number, w: number, bh: number, below: boolean): [number, number] => {
+            const off = Math.max(20, Math.min(w - 15, x + w - proj.width + 5));
+            const bx = x - off;
+            const by = below ? y + 11 : y - 11 - bh;
+            const ty = below ? by : by + bh;
+            const tail = below ? -5 : 5;
+            ctx.beginPath();
+            ctx.moveTo(bx + 3, by);
+            if (below) {
+                ctx.lineTo(bx + off - 5, by);
+                ctx.lineTo(bx + off, ty + tail);
+                ctx.lineTo(bx + off + 5, by);
+            }
+            ctx.arcTo(bx + w, by, bx + w, by + 3, 3);
+            ctx.arcTo(bx + w, by + bh, bx + w - 3, by + bh, 3);
+            if (!below) {
+                ctx.lineTo(bx + off + 5, ty);
+                ctx.lineTo(bx + off, ty + tail);
+                ctx.lineTo(bx + off - 5, ty);
+            }
+            ctx.arcTo(bx, by + bh, bx, by + bh - 3, 3);
+            ctx.arcTo(bx, by, bx + 3, by, 3);
+            ctx.closePath();
+            return [bx, by];
+        };
+        const fmt = (price: number): string => this.axisLabel?.(d.paneId, price)?.text ?? formatPriceTag(price);
+        const rects: Array<{ x: number; y: number; w: number; h: number }> = [];
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+        // Source: its price and the bar's time.
+        const s1 = fmt(a.price);
+        const s2 = formatTimeStamp(a.time, this.timeZone, this.barMs || 60_000);
+        ctx.font = font(12);
+        const sw1 = ctx.measureText(s1).width;
+        ctx.font = font(10);
+        const sw = Math.max(sw1, ctx.measureText(s2).width) + 10;
+        const [sx, sy] = balloon(p0[0], p0[1], sw, 32, up);
+        ctx.fillStyle = fade(d.sourceBackColor, color);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = fade(d.sourceStrokeColor, color);
+        ctx.stroke();
+        rects.push({ x: sx, y: sy, w: sw, h: 32 });
+        ctx.fillStyle = d.sourceTextColor || TV_FORECAST.text;
+        ctx.font = font(12);
+        ctx.fillText(s1, sx + 5, sy + 4);
+        ctx.font = font(10);
+        ctx.fillText(s2, sx + 5, sy + 18);
+        // Target: the change and the span, then its price, a clock and its time.
+        const { change, span } = d.tvChange(fmt);
+        const t3 = fmt(b.price);
+        const t4 = formatTimeStamp(b.time, this.timeZone, this.barMs || 60_000);
+        ctx.font = font(14);
+        const space14 = ctx.measureText(' ').width;
+        const w1 = ctx.measureText(change).width;
+        const w2 = ctx.measureText(span).width;
+        ctx.font = font(11);
+        const space11 = ctx.measureText(' ').width;
+        const w3 = ctx.measureText(t3).width;
+        const w4 = ctx.measureText(t4).width;
+        const clock = 9;
+        const tw = Math.max(w1 + w2 + space14, w3 + w4 + clock + 2 * space11) + 12;
+        const [bx, by] = balloon(p1[0], p1[1], tw, 38, !up);
+        ctx.fillStyle = fade(d.targetBackColor, color);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = fade(d.targetStrokeColor, color);
+        ctx.stroke();
+        rects.push({ x: bx, y: by, w: tw, h: 38 });
+        const ink = d.targetTextColor || TV_FORECAST.text;
+        ctx.fillStyle = ink;
+        ctx.font = font(14);
+        ctx.fillText(change, bx + 6, by + 5);
+        ctx.fillText(span, bx + 6 + w1 + space14, by + 5);
+        ctx.font = font(11);
+        const ry2 = by + 22;
+        ctx.fillText(t3, bx + 6, ry2);
+        // TradingView's 9 px white clock between the price and the time.
+        const cx = bx + 6 + w3 + space11 + clock / 2;
+        const cy = ry2 + 1 + clock / 2;
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(cx, cy, clock / 2 - 0.5, 0, Math.PI * 2);
+        ctx.moveTo(cx, cy - 2.5);
+        ctx.lineTo(cx, cy);
+        ctx.lineTo(cx + 2, cy);
+        ctx.stroke();
+        ctx.fillText(t4, bx + 6 + w3 + clock + 2 * space11, ry2);
+        // SUCCESS / FAILURE beyond the target's plate.
+        const st = d.status(proj);
+        if (st !== 'pending') {
+            const ok = st === 'success';
+            const word = ok ? 'SUCCESS' : 'FAILURE';
+            ctx.font = font(14, true);
+            const ww = ctx.measureText(word).width;
+            const left = Math.round((tw - ww) / 2);
+            const bh = 18;
+            const top = up ? by - bh - 2 : by + 38 + 2;
+            roundRect(ctx, bx - 1, top, tw + 2, bh, 5);
+            ctx.fillStyle = ok ? fade(d.successBackground, TV_FORECAST.success) : fade(d.failureBackground, TV_FORECAST.failure);
+            ctx.fill();
+            rects.push({ x: bx - 1, y: top, w: tw + 2, h: bh });
+            const txt = (ok ? d.successTextColor : d.failureTextColor) || TV_FORECAST.text;
+            ctx.fillStyle = txt;
+            ctx.fillText(word, bx + left, top + 2);
+            // its icon: a tick (11 x 10) or a cross (9 x 9) left of the word
+            ctx.strokeStyle = txt;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            const ix = bx + left - 4;
+            const iy = top + bh / 2;
+            if (ok) {
+                ctx.moveTo(ix - 11, iy);
+                ctx.lineTo(ix - 7, iy + 4);
+                ctx.lineTo(ix, iy - 4);
+            } else {
+                ctx.moveTo(ix - 9, iy - 4.5);
+                ctx.lineTo(ix, iy + 4.5);
+                ctx.moveTo(ix, iy - 4.5);
+                ctx.lineTo(ix - 9, iy + 4.5);
+            }
+            ctx.stroke();
+        }
+        d.plateRects = rects;
+        // TradingView's dark dots on both points.
+        ctx.fillStyle = TV_FORECAST.centers;
+        for (const [x, y] of [p0, p1]) {
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
     }
 
     /** TradingView's line stats (trend line, ray, extended line, info line): a box of price range, percent, bars,

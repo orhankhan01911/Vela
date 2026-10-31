@@ -15,6 +15,11 @@ import {
     PriceNote,
     FlagMark,
     Signpost,
+    BarsPattern,
+    Projection,
+    Forecast,
+    GhostFeed,
+    TV_PROJECTION,
     TEXT_SIZE_OPTIONS,
     LINE_STYLE_OPTIONS,
     GLYPH_OPTIONS,
@@ -490,7 +495,11 @@ export class DrawingSettingsPopup {
         // TradingView's price label, price note and flag mark bars.
         const tvLabelBar: readonly TvBarItem[] | null =
             multi ? null : drawing instanceof Signpost && drawing.tv ? ['fill', 'size'] : drawing instanceof PriceLabel && drawing.tv ? ['text', 'fill', 'size'] : drawing instanceof PriceNote && drawing.tv ? ['line', 'fill', 'text'] : drawing instanceof FlagMark && drawing.tv ? ['fill'] : null;
-        const tvBar = tvLabelBar ? tvLabelBar : tvShapeBar ? tvShapeBar : oldShape || multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : tvFlat ? AREA_LINE_BAR : drawing instanceof TrendFigure || ((drawing instanceof TrendAngle || drawing instanceof CrossLine || drawing instanceof RotatedRect || drawing instanceof Circle || drawing instanceof Ellipse) && !drawing.tv) ? undefined : TV_QUICK_BAR[drawing.type];
+        // TradingView's forecasting bars: the bars pattern's colour; the projection's two background colours and
+        // width; the forecast's line colour and width; nothing on the ghost feed's.
+        const tvForeBar: readonly TvBarItem[] | null =
+            multi ? null : drawing instanceof BarsPattern && drawing.tv ? ['fill'] : drawing instanceof Projection && drawing.tv ? ['fill', 'fill2', 'width'] : drawing instanceof Forecast && drawing.tv ? ['line', 'width'] : drawing instanceof GhostFeed && drawing.tv ? [] : null;
+        const tvBar = tvLabelBar ? tvLabelBar : tvForeBar ? tvForeBar : tvShapeBar ? tvShapeBar : oldShape || multi ? undefined : tvFib ? (tvFib instanceof FibChannel ? TV_FIB_CHANNEL_BAR : tvFib instanceof TrendFibTime || tvFib instanceof RadialFib ? TV_TREND_FIB_TIME_BAR : tvFib instanceof FibTimeZones || tvFib instanceof FibSpeedFan ? TV_FIB_TZ_BAR : TV_FIB_BAR) : tvReg ? TV_REGRESSION_BAR : tvFlat ? AREA_LINE_BAR : drawing instanceof TrendFigure || ((drawing instanceof TrendAngle || drawing instanceof CrossLine || drawing instanceof RotatedRect || drawing instanceof Circle || drawing instanceof Ellipse) && !drawing.tv) ? undefined : TV_QUICK_BAR[drawing.type];
         if (tvReg) bar.querySelectorAll<HTMLElement>('[data-tip="Line width"]').forEach((k) => k.remove());
         if (tvFib instanceof FibVerticalLevels || tvFib instanceof RadialFib) bar.querySelectorAll<HTMLElement>('[data-tip="Line style"]').forEach((k) => k.remove());
         if (tvFib) {
@@ -585,6 +594,13 @@ export class DrawingSettingsPopup {
                         ? this.colorButton('Fill', BUCKET_ICON, drawing.style.lineColor || DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'style.lineColor': v }))
                         : this.colorButton('Fill', BUCKET_ICON, drawing.style.fillColor ?? DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'style.fillColor': v })),
                 text: () => this.colorButton('Text color', TYPE_ICON, drawing.text?.color || DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'text.color': v })),
+            });
+            if (tvForeBar) Object.assign(make, {
+                fill: () =>
+                    drawing instanceof Projection
+                        ? this.colorButton('Fill', BUCKET_ICON, drawing.color1 ?? TV_PROJECTION.color1, (v) => actions.patch({ color1: v }))
+                        : this.colorButton('Fill', BUCKET_ICON, drawing.style.lineColor || DEFAULT_DRAWING_COLOR, (v) => actions.patch({ 'style.lineColor': v })),
+                fill2: () => (drawing instanceof Projection ? this.colorButton('Fill 2', BUCKET_ICON, drawing.color2 ?? TV_PROJECTION.color2, (v) => actions.patch({ color2: v })) : null),
             });
             applyTvBar(bar, tvBar, make);
         }
@@ -1388,8 +1404,8 @@ export class DrawingSettingsPopup {
 // (a line at a given width, a stamp at a given size) are generated here, since they encode a
 // live style value rather than a fixed concept.
 /** One control of TradingView's quick bar: line colour, background, text colour, line width, line style, text size. */
-type TvBarItem = 'line' | 'fill' | 'text' | 'width' | 'style' | 'size';
-const TV_BAR_TIP: Record<TvBarItem, string> = { line: 'Line color', fill: 'Fill', text: 'Text color', width: 'Line width', style: 'Line style', size: 'Text size' };
+type TvBarItem = 'line' | 'fill' | 'fill2' | 'text' | 'width' | 'style' | 'size';
+const TV_BAR_TIP: Record<TvBarItem, string> = { line: 'Line color', fill: 'Fill', fill2: 'Fill 2', text: 'Text color', width: 'Line width', style: 'Line style', size: 'Text size' };
 const LINE_BAR: readonly TvBarItem[] = ['line', 'text', 'width', 'style'];
 const AREA_BAR: readonly TvBarItem[] = ['line', 'fill', 'text', 'width'];
 /** TradingView's floating toolbar per tool (read from TradingView Desktop's toolbar data-names, 2026-10-30). */

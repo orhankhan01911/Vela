@@ -42,7 +42,7 @@ export class ParallelChannel extends SegmentDrawing {
     extendLeft!: boolean;
     extendRight!: boolean;
     /** TradingView's Background switch (the color is style.fillColor). Absent ⇒ on. */
-    override fillBackground!: boolean;
+    declare fillBackground: boolean;
 
     constructor(init: ConstructorParameters<typeof SegmentDrawing>[0]) {
         super(init);

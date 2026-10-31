@@ -79,6 +79,16 @@ import {
     PriceNote,
     FlagMark,
     Signpost,
+    Forecast,
+    Projection,
+    GhostFeed,
+    BarsPattern,
+    TV_FORECAST,
+    TV_PROJECTION,
+    TV_GHOST,
+    TV_BARS_PATTERN_MODES,
+    TV_BARS_PATTERN_MODE_LABEL,
+    type ForecastColorKey,
     type RegressionTrendLine,
 } from '../../../core/drawings';
 import { BEARISH, BULLISH } from '../../../core/palette';
@@ -138,7 +148,7 @@ const SIZE_OPTIONS: readonly SelectOption[] = TEXT_SIZE_OPTIONS.map((o) => ({ va
 /** TradingView's text-size dropdown: px. */
 const PX_SIZE_OPTIONS: readonly SelectOption[] = TEXT_PX_SIZES.map((n) => ({ value: String(n), label: String(n) }));
 /** TradingView's dialog titles where they differ from the tool's name in the toolbar. */
-const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', trianglepattern: 'Triangle pattern', threedrives: 'Three drives pattern', elliottimpulse: 'Elliott impulse wave (12345)', elliottcorrection: 'Elliott correction wave (ABC)', elliotttriangle: 'Elliott triangle wave (ABCDE)', elliottdoublecombo: 'Elliott double combo wave (WXY)', elliotttriplecombo: 'Elliott triple combo wave (WXYXZ)', regressionchannel: 'Regression trend', flattopbottom: 'Flat top/bottom', disjointchannel: 'Disjoint channel', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', extendedline: 'Extended line', arrow: 'Arrow', trendangle: 'Trend angle', crossline: 'Cross line', rotatedrect: 'Rotated rectangle', circle: 'Circle', ellipse: 'Ellipse', triangle: 'Triangle', polyline: 'Polyline', arc: 'Arc', curve: 'Curve', doublecurve: 'Double curve', cycliclines: 'Cyclic lines', timecycles: 'Time cycles', sineline: 'Sine line', pricenote: 'Price note', pricelabel: 'Price label', flagmark: 'Flag mark', signpost: 'Signpost', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
+const DIALOG_TITLE: Record<string, string> = { fibretracement: 'Fib retracement', fibextensiontrend: 'Trend-based fib extension', fibchannel: 'Fib channel', fibtimezones: 'Fib time zone', trendfibtime: 'Trend-based fib time', fibspeedfan: 'Fib speed resistance fan', fibcircles: 'Fib circles', fibspiral: 'Fib spiral', fibarcs: 'Fib speed resistance arcs', fibwedge: 'Fib wedge', gannbox: 'Gann box', gannsquare: 'Gann square', gannfan: 'Gann fan', gannsquarefixed: 'Gann square fixed', xabcd: 'XABCD pattern', cypher: 'Cypher pattern', headshoulders: 'Head and shoulders', abcd: 'ABCD pattern', trianglepattern: 'Triangle pattern', threedrives: 'Three drives pattern', elliottimpulse: 'Elliott impulse wave (12345)', elliottcorrection: 'Elliott correction wave (ABC)', elliotttriangle: 'Elliott triangle wave (ABCDE)', elliottdoublecombo: 'Elliott double combo wave (WXY)', elliotttriplecombo: 'Elliott triple combo wave (WXYXZ)', regressionchannel: 'Regression trend', flattopbottom: 'Flat top/bottom', disjointchannel: 'Disjoint channel', arrowmarker: 'Arrow marker', arrowmarkup: 'Arrow mark up', arrowmarkdown: 'Arrow mark down', freehand: 'Brush', highlighter: 'Highlighter', path: 'Path', anchoredtext: 'Anchored text', anchorednote: 'Anchored note', emoji: 'Emoji', icon: 'Icon', pricerange: 'Price range', datepricerange: 'Date and price range', daterange: 'Date range', trendline: 'Trendline', extendedline: 'Extended line', arrow: 'Arrow', trendangle: 'Trend angle', crossline: 'Cross line', rotatedrect: 'Rotated rectangle', circle: 'Circle', ellipse: 'Ellipse', triangle: 'Triangle', polyline: 'Polyline', arc: 'Arc', curve: 'Curve', doublecurve: 'Double curve', cycliclines: 'Cyclic lines', timecycles: 'Time cycles', sineline: 'Sine line', pricenote: 'Price note', pricelabel: 'Price label', flagmark: 'Flag mark', signpost: 'Signpost', forecast: 'Position forecast', projection: 'Sector', barspattern: 'Bars pattern', ghostfeed: 'Ghost feed', hline: 'Horizontal line', vline: 'Vertical line', hray: 'Horizontal ray', infoline: 'Info line', parallelchannel: 'Parallel channel' };
 /** Emojis offered for the signpost's pin (TradingView's default first). */
 const SIGNPOST_EMOJIS: readonly string[] = ['🙂', '🚀', '📈', '📉', '💰', '🔥', '⚠️', '✅', '❌', '⭐', '🎯', '🐂', '🐻', '💡', '📌', '🔔'];
 /** TradingView's source names (its price sources). */
@@ -194,10 +204,10 @@ export class DrawingSettingsDialog {
     static tabsFor(drawing: Drawing): DrawingDialogTab[] {
         const tabs: DrawingDialogTab[] = [];
         const custom = drawing instanceof PositionTool || drawing instanceof FixedRangeVolumeProfile || drawing instanceof FixedRangeTpoProfile;
-        if (custom || (drawing instanceof RegressionChannel && drawing.tv)) tabs.push('inputs');
+        if (custom || (drawing instanceof RegressionChannel && drawing.tv) || (drawing instanceof GhostFeed && drawing.tv)) tabs.push('inputs');
         // TradingView's text: the Text tab and Visibility only.
         const tvText = (drawing instanceof TextLabel || drawing instanceof Callout) && drawing.tv === true;
-        if (!tvText && (drawing.editableLevels() || styleFields(drawing).length > 0)) tabs.push('style');
+        if (!tvText && (drawing.editableLevels() || styleFields(drawing).length > 0 || (drawing instanceof GhostFeed && drawing.tv))) tabs.push('style');
         // TradingView's price note, price label and flag mark style their label on the Style tab.
         const labelOnStyle = (drawing instanceof PriceLabel || drawing instanceof FlagMark) && drawing.tv === true;
         if (!labelOnStyle && drawing.schema().fields.some((f) => f.path.startsWith('text.'))) tabs.push('text');
@@ -206,7 +216,8 @@ export class DrawingSettingsDialog {
         // TradingView hides Coordinates for a drawing pinned to the screen (anchored note) and for its text.
         // TradingView: no Coordinates for a pinned note, nor for an emoji / icon (one point you drag instead).
         // TradingView has no Coordinates for its flat top/bottom, disjoint channel, rotated rectangle, arc and polyline.
-        const noCoords = (drawing instanceof TrendFigure || drawing instanceof RotatedRect || drawing.type === 'arc' || drawing.type === 'polyline') && (drawing as { tv?: boolean }).tv === true;
+        // Nor for its bars pattern and projection.
+        const noCoords = (drawing instanceof TrendFigure || drawing instanceof RotatedRect || drawing instanceof BarsPattern || drawing instanceof Projection || drawing.type === 'arc' || drawing.type === 'polyline') && (drawing as { tv?: boolean }).tv === true;
         const pinned = drawing.type === 'anchorednote' || drawing instanceof SvgIcon || noCoords;
         if (!(drawing instanceof PositionTool) && !brush && !pinned && !(tvText && drawing instanceof TextLabel) && drawing.anchors.length > 0) tabs.push('coordinates');
         tabs.push('visibility');
@@ -239,6 +250,7 @@ export class DrawingSettingsDialog {
                 else if (live instanceof FixedRangeVolumeProfile) this.buildFrvp(grid, live, actions);
                 else if (live instanceof FixedRangeTpoProfile) this.buildFrtpo(grid, live, actions);
                 else if (live instanceof RegressionChannel) this.buildRegressionInputs(grid, live, actions);
+                else if (live instanceof GhostFeed) this.buildGhostInputs(grid, live, actions);
             } else if (t === 'style') this.buildStyle(grid, live, actions);
             else if (t === 'text') this.buildText(grid, live, actions);
             else if (t === 'coordinates') this.buildCoordinates(grid, live, actions);
@@ -343,6 +355,38 @@ export class DrawingSettingsDialog {
         }
         if (drawing instanceof TrendFigure && drawing.tv) {
             this.buildFlatTvStyle(grid, drawing, actions);
+            return;
+        }
+        if (drawing instanceof Forecast && drawing.tv) {
+            this.buildForecastTvStyle(grid, drawing, actions);
+            return;
+        }
+        if (drawing instanceof Projection && drawing.tv) {
+            // TradingView's sector: Background (its centre and rim colours), Border (colour and width).
+            const back = fieldRow({ label: 'Background', control: [this.colorControl(drawing, 'color1', actions, drawing.color1 ?? TV_PROJECTION.color1), this.colorControl(drawing, 'color2', actions, drawing.color2 ?? TV_PROJECTION.color2)], fit: true });
+            back.dataset.role = 'background';
+            const border = fieldRow({ label: 'Border', control: [this.pathLineButton({ color: drawing.style.lineColor || TV_PROJECTION.border, width: drawing.style.lineWidth ?? 2, style: 'solid' }, { color: 'style.lineColor', width: 'style.lineWidth' }, actions)], fit: true });
+            border.dataset.role = 'border';
+            grid.append(back, border);
+            return;
+        }
+        if (drawing instanceof GhostFeed && drawing.tv) {
+            this.buildGhostTvStyle(grid, drawing, actions);
+            return;
+        }
+        if (drawing instanceof BarsPattern && drawing.tv) {
+            // TradingView's bars pattern: Color, Mode (its 7), Mirrored, Flipped.
+            const color = fieldRow({ label: 'Color', control: [this.colorControl(drawing, 'style.lineColor', actions, drawing.style.lineColor || DEFAULT_DRAWING_COLOR)], fit: true });
+            color.dataset.role = 'color';
+            const modes = TV_BARS_PATTERN_MODES.map((v) => ({ value: v, label: TV_BARS_PATTERN_MODE_LABEL[v] }));
+            const mode = fieldRow({ label: 'Mode', control: [this.selectControl('mode', modes, drawing.mode, actions)], fit: true });
+            mode.dataset.role = 'mode';
+            grid.append(color, mode);
+            for (const [label, path] of [['Mirrored', 'mirrored'], ['Flipped', 'flipped']] as const) {
+                const row = fieldRow({ label, bool: true, toggle: { id: uid(), checked: drawing[path] === true, onChange: (v) => actions.patch({ [path]: v }) } });
+                row.dataset.role = path;
+                grid.appendChild(row);
+            }
             return;
         }
         if (drawing instanceof PriceLabel && drawing.tv) {
@@ -2013,6 +2057,65 @@ export class DrawingSettingsDialog {
         const source = fieldRow({ label: 'Source', control: [this.selectControl('trend.source', options, t.source, actions)], fit: true });
         source.dataset.role = 'source';
         grid.appendChild(source);
+    }
+
+    /** TradingView's forecast Style tab (module 861360): Line (colour and width), then the source's, target's, success
+     *  and failure plates' text, background and border colours. */
+    private buildForecastTvStyle(grid: HTMLElement, d: Forecast, actions: SettingsActions): void {
+        const line = fieldRow({ label: 'Line', control: [this.pathLineButton({ color: d.style.lineColor || DEFAULT_DRAWING_COLOR, width: d.style.lineWidth ?? 2, style: 'solid' }, { color: 'style.lineColor', width: 'style.lineWidth' }, actions)], fit: true });
+        line.dataset.role = 'line';
+        grid.appendChild(line);
+        const rows: Array<[string, ForecastColorKey, string]> = [
+            ['Source text', 'sourceTextColor', TV_FORECAST.text],
+            ['Source background', 'sourceBackColor', DEFAULT_DRAWING_COLOR],
+            ['Source border', 'sourceStrokeColor', DEFAULT_DRAWING_COLOR],
+            ['Target text', 'targetTextColor', TV_FORECAST.text],
+            ['Target background', 'targetBackColor', DEFAULT_DRAWING_COLOR],
+            ['Target border', 'targetStrokeColor', DEFAULT_DRAWING_COLOR],
+            ['Success text', 'successTextColor', TV_FORECAST.text],
+            ['Success background', 'successBackground', TV_FORECAST.success],
+            ['Failure text', 'failureTextColor', TV_FORECAST.text],
+            ['Failure background', 'failureBackground', TV_FORECAST.failure],
+        ];
+        for (const [label, key, fallback] of rows) {
+            const row = fieldRow({ label, control: [this.colorControl(d, key, actions, d[key] ?? fallback)], fit: true });
+            row.dataset.role = key;
+            grid.appendChild(row);
+        }
+    }
+
+    /** TradingView's ghost feed Inputs tab: "Avg HL in minticks" (1..50000) and "Variance" (1..100 %). */
+    private buildGhostInputs(grid: HTMLElement, d: GhostFeed, actions: SettingsActions): void {
+        for (const [label, path, max, role] of [['Avg HL in minticks', 'averageHL', 50000, 'avg-hl'], ['Variance', 'variance', 100, 'variance']] as const) {
+            const row = fieldRow({
+                label,
+                control: buildFieldControl({ kind: 'number', value: d[path] ?? (path === 'variance' ? 50 : 20), min: 1, max, step: 1, integer: true, fill: false, commit: 'blur', onChange: (n) => { if (Number.isFinite(n)) actions.patch({ [path]: Math.max(1, Math.min(max, Math.round(n))) }); } }).el,
+            });
+            row.dataset.role = role;
+            grid.appendChild(row);
+        }
+    }
+
+    /** TradingView's ghost feed Style tab: Candles (up and down), Borders and Wick (a switch and their colours),
+     *  Transparency. */
+    private buildGhostTvStyle(grid: HTMLElement, d: GhostFeed, actions: SettingsActions): void {
+        const candles = fieldRow({ label: 'Candles', control: [this.colorControl(d, 'upColor', actions, d.upColor ?? TV_GHOST.up), this.colorControl(d, 'downColor', actions, d.downColor ?? TV_GHOST.down)], fit: true });
+        candles.dataset.role = 'candles';
+        const borders = fieldRow({
+            label: 'Borders',
+            toggle: { id: uid(), checked: d.drawBorder !== false, onChange: (v) => actions.patch({ drawBorder: v }) },
+            control: [this.colorControl(d, 'borderUpColor', actions, d.borderUpColor ?? TV_GHOST.borderUp), this.colorControl(d, 'borderDownColor', actions, d.borderDownColor ?? TV_GHOST.borderDown)],
+            fit: true,
+        });
+        borders.dataset.role = 'borders';
+        const wick = fieldRow({ label: 'Wick', toggle: { id: uid(), checked: d.drawWick !== false, onChange: (v) => actions.patch({ drawWick: v }) }, control: [this.colorControl(d, 'wickColor', actions, d.wickColor ?? TV_GHOST.wick)], fit: true });
+        wick.dataset.role = 'wick';
+        const transparency = fieldRow({
+            label: 'Transparency',
+            control: buildFieldControl({ kind: 'number', value: d.transparency ?? 50, min: 0, max: 100, step: 1, integer: true, fill: false, commit: 'blur', onChange: (n) => { if (Number.isFinite(n)) actions.patch({ transparency: Math.max(0, Math.min(100, Math.round(n))) }); } }).el,
+        });
+        transparency.dataset.role = 'transparency';
+        grid.append(candles, borders, wick, transparency);
     }
 
     /** TradingView's regression trend Style tab: Base, Up and Down (a switch and the line's colour, width and style),

@@ -19,8 +19,10 @@ export interface ToolSettings {
 }
 
 const STORAGE_KEY = 'vela.drawings.toolSettings.v1';
-const NOT_REMEMBERED: Partial<Record<DrawingTypeKey, readonly string[]>> = { emoji: ['angle', 'emoji'], icon: ['angle', 'icon'] };
-const CONTENT_PROPS = new Set<DrawingTypeKey>(['image', 'xpost', 'table', 'pricealert', 'anchoredtext', 'anchorednote', 'ghostfeed']);
+// A bars pattern's copied bars and a ghost feed's made bars are what it shows, not settings (TradingView's templates
+// keep their look and inputs: mode, mirrored, colours, variance; the ghost feed's average is the chart's own).
+const NOT_REMEMBERED: Partial<Record<DrawingTypeKey, readonly string[]>> = { emoji: ['angle', 'emoji'], icon: ['angle', 'icon'], barspattern: ['bars', 'base'], ghostfeed: ['segments', 'tick', 'averageHL'] };
+const CONTENT_PROPS = new Set<DrawingTypeKey>(['image', 'xpost', 'table', 'pricealert', 'anchoredtext', 'anchorednote']);
 
 let memory: Map<string, ToolSettings> | null = null;
 

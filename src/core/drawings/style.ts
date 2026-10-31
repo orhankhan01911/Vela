@@ -41,6 +41,7 @@ export function defaultStyle(): DrawingStyle {
 
 /** TradingView's default line-tool blue (trend line line and text): palette-exempt, matches TradingView 1:1. */
 export const TV_LINE_COLOR = '#2962FF'; // palette-exempt: TradingView's line-tool blue
+export const TV_GREY = '#808080'; // palette-exempt: TradingView's cold-gray-500, a neutral grey
 
 /** Named text sizes in px (the older Small / Normal / Large choices). */
 const NAMED_TEXT_PX: Record<string, number> = { tiny: 10, small: 12, normal: 14, large: 18, huge: 24, auto: 14 };

@@ -76,9 +76,9 @@ export abstract class BrushStroke extends PathDrawing {
      *  Chaikin passes. */
     smooth!: number;
     /** TradingView's brush (new strokes): its smoothing, line ends, Background switch and end markers. */
-    override tv?: boolean;
+    declare tv?: boolean;
     /** TradingView's Background switch (`tv` strokes; older ones fill whenever they have a fill color). */
-    override fillBackground?: boolean;
+    declare fillBackground?: boolean;
 
     /** The stroke in pixels, smoothed as set. */
     protected strokePixels(proj: Projector): Array<[number, number]> | null {

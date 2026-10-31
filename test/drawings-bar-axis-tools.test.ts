@@ -37,7 +37,8 @@ describe('drawing tools on a chart whose x counts bars (tick, Renko ...)', () =>
     });
 
     it('ghost candles sit one bar apart', () => {
-        const d = createDrawing('ghostfeed', { paneId: 'price', anchors: [{ time: TIMES[2]!, price: 40 }, { time: TIMES[8]!, price: 60 }] }) as GhostFeed;
+        // one saved before (TradingView's look is checked in drawings-forecasting-tv)
+        const d = createDrawing('ghostfeed', { paneId: 'price', anchors: [{ time: TIMES[2]!, price: 40 }, { time: TIMES[8]!, price: 60 }], props: {} }) as GhostFeed;
         const xs = d.ghostCandles(barProjector(true)).map((c) => c.x);
         expect(xs.length).toBe(6);
         expect(gaps(xs)).toEqual([10, 10, 10, 10, 10]);
@@ -45,10 +46,14 @@ describe('drawing tools on a chart whose x counts bars (tick, Renko ...)', () =>
 
     it('a copied bars pattern keeps one bar between copies wherever it is placed', () => {
         const proj = barProjector(true);
-        const d = createDrawing('barspattern', { paneId: 'price', anchors: [{ time: TIMES[3]!, price: 50 }, { time: TIMES[8]!, price: 50 }] }) as BarsPattern;
+        const d = createDrawing('barspattern', { paneId: 'price', anchors: [{ time: TIMES[3]!, price: 50 }, { time: TIMES[8]!, price: 50 }], props: { mode: 'candles' } }) as BarsPattern;
         d.onPlaced(proj);
         d.anchors[0] = { time: TIMES[9]!, price: 50 }; // moved over denser bars
         expect(gaps(d.patternBars(proj).map((b) => b.x))).toEqual([10, 10, 10, 10, 10]);
+        // TradingView's look spaces the copy between its two points: placed, they are the copied bars' own
+        const tv = createDrawing('barspattern', { paneId: 'price', anchors: [{ time: TIMES[3]!, price: 50 }, { time: TIMES[8]!, price: 50 }] }) as BarsPattern;
+        tv.onPlaced(proj);
+        expect(gaps(tv.patternBars(proj).map((b) => b.x))).toEqual([10, 10, 10, 10, 10]);
     });
 
     it('on a time chart nothing changes', () => {
