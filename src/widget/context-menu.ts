@@ -150,6 +150,7 @@ export class ChartContextMenu {
                 ...(ctx && a.enabled && !a.enabled(ctx) ? { disabled: true } : {}),
                 ...(a.icon ? { icon: a.icon } : {}),
                 ...(a.hint ? { hint: a.hint } : {}),
+                ...(ctx && a.checkedFor ? { toggle: true, checked: a.checkedFor(ctx) } : {}),
                 ...(sub ? { submenu: sub.map((r) => ({ ...r, id: `sub:${a.id}${SUB}${r.id}` })), disabled: sub.length === 0 } : {}),
             };
             return { item, order: a.order, ...(a.group ? { group: a.group } : {}), ...(a.replaces ? { replaces: a.replaces } : {}) };

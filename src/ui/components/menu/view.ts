@@ -116,7 +116,14 @@ class Surface {
             id: opts.id,
             placement: opts.placement,
             flip: opts.flip,
-            onSelect: (id) => this.onSelect(id),
+            onSelect: (id) => {
+                this.onSelect(id);
+                // A switch row keeps the dropdown open (closeOnSelect false): flip its pill, as the sheet does.
+                const item = this.items.find((i) => i.id === id);
+                if (!item?.toggle) return;
+                const li = Array.from(this.list.querySelectorAll<HTMLElement>('.vela-menu-item')).find((el) => el.dataset.veiId === id);
+                li?.querySelector('.vela-menu-switch')?.classList.toggle('on');
+            },
             getAnchorRect: () => this.pinnedAnchor,
             onOpenChange: (open) => {
                 if (open && trigger) {

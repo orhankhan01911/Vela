@@ -196,3 +196,21 @@ describe('ChartContextMenu — text fields keep their own menu', () => {
         expect(menus.some((m) => m.opened === 1)).toBe(true);
     });
 });
+
+describe('ChartContextMenu — switch rows (`checkedFor`)', () => {
+    it('draws a contributed action as a switch showing its state, and a plain row without it', () => {
+        let on = false;
+        disposers.push(
+            registerWidgetAction({ id: 'test.smooth', target: 'context:body', label: 'Enable smooth chart', checkedFor: () => on, run: () => (on = !on) }),
+            registerWidgetAction({ id: 'test.plain', target: 'context:body', label: 'Plain row', run: () => undefined }),
+        );
+        const { host } = setup();
+        const row = (id: string) => menus[0]!.items.find((i) => i.id === `action:${id}`);
+        host.fire('contextmenu', { clientX: 300, clientY: 200 });
+        expect(row('test.smooth')).toMatchObject({ toggle: true, checked: false });
+        expect(row('test.plain')?.toggle).toBeUndefined();
+        menus[0]!.select('action:test.smooth');
+        host.fire('contextmenu', { clientX: 300, clientY: 200 });
+        expect(row('test.smooth')).toMatchObject({ toggle: true, checked: true });
+    });
+});

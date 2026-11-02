@@ -146,6 +146,9 @@ export interface WidgetActionDescriptor {
     /** Context menus only: the row's text worked out when the menu opens (TradingView's
      *  "Add alert on BTCUSDT at 81,782.00…"); `label` stays the fallback and the aria name. */
     labelFor?: (ctx: WidgetContext) => string;
+    /** Context-menu actions: draw the row as a SWITCH showing this state (the menu stays open on a click and the
+     *  switch flips). For on/off settings such as "Enable smooth chart". */
+    checkedFor?: (ctx: WidgetContext) => boolean;
     /** Context menus only: right-aligned shortcut hint (`'Alt+A'`). */
     hint?: string;
     /** Context menus only: the built-in group the row joins, so it sits inside that block
