@@ -4255,10 +4255,10 @@ export class NativeRenderer implements IChartRenderer {
      * that are not an indicator's (a chart type, chrome, a background) keep painting as before.
      */
     private idleLayerTypes(): Set<string> {
-        // Was OFF (user's iPhone, 2026-10-26/27: "A problem repeatedly occurred" on Tester, dmcharts and Local). Back ON
-        // 2026-11-02 for the user's real-iPhone test (EMVE-7: 142 blank layer canvases = 313 MB on an Aggr tab at 1x).
-        // A host turns it off with `globalThis.__velaIdleLayers = false` (the sandbox: `?idlelayers=0`).
-        if ((globalThis as { __velaIdleLayers?: boolean }).__velaIdleLayers === false) return new Set<string>();
+        // OFF: releasing idle layer canvases crashes iPhone Safari ("A problem repeatedly occurred"), seen 2026-10-26/27
+        // on Tester, dmcharts and Local, and again on Local 2026-11-02 (EMVE-7 retest). Opt in for experiments only with
+        // `globalThis.__velaIdleLayers = true` (the sandbox: `?idlelayers=1`).
+        if ((globalThis as { __velaIdleLayers?: boolean }).__velaIdleLayers !== true) return new Set<string>();
         const used = new Set<string>();
         for (const m of this.scene.indicators.values()) if (m.native && !m.native.channel) used.add(m.native.type);
         const idle = new Set<string>();
