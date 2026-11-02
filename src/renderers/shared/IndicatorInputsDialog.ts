@@ -731,8 +731,13 @@ export class IndicatorInputsDialog {
             theme: this.host.theme(),
             onTrigger: (trigger) => {
                 if (open) return close();
+                // A dropdown, never a drop-up, a few rows tall and scrolling (user, 2026-11-03: the CVD Exchanges list
+                // opened upwards and filled the screen). It flips up only when there is no usable room below.
+                const room = (trigger.ownerDocument.defaultView?.innerHeight ?? 0) - trigger.getBoundingClientRect().bottom;
                 const m = new Menu({
                     trigger,
+                    maxHeight: '300px',
+                    flip: room < 180,
                     items: menu.items(value),
                     onOpenChange: (isOpen) => {
                         if (!isOpen && open === m) close();

@@ -23,6 +23,9 @@ export interface MenuOptions extends MenuControllerOptions {
      *  compact lists like the timeframe dropdown pass something snug). Submenus keep the
      *  default. */
     minWidth?: string;
+    /** Cap the root list's height (a CSS length); it still never passes the room on its side, and scrolls. A long
+     *  checklist shows a few rows instead of most of the screen. Submenus keep the default. */
+    maxHeight?: string;
     /** Star-toggle reports from items carrying `favorite` (the menu stays open — starring
      *  is a side action on a row, never a selection). */
     onFavorite?: (id: string, on: boolean) => void;
@@ -53,6 +56,8 @@ interface SurfaceOptions {
     triggerId?: string;
     id?: string;
     minWidth?: string;
+    maxHeight?: string;
+    flip?: boolean;
     onFavorite?: (id: string, on: boolean) => void;
     checkmarks?: boolean;
     iconBadges?: boolean;
@@ -100,6 +105,7 @@ class Surface {
         this.list = doc.createElement('ul');
         this.list.className = 'vela-menu';
         if (opts.minWidth) this.list.style.minWidth = opts.minWidth;
+        if (opts.maxHeight) this.list.style.maxHeight = `min(${opts.maxHeight}, var(--available-height, ${opts.maxHeight}))`;
         this.positioner.appendChild(this.list);
         this.host.appendChild(this.positioner);
 
@@ -109,6 +115,7 @@ class Surface {
             items: [],
             id: opts.id,
             placement: opts.placement,
+            flip: opts.flip,
             onSelect: (id) => this.onSelect(id),
             getAnchorRect: () => this.pinnedAnchor,
             onOpenChange: (open) => {
@@ -384,6 +391,8 @@ export class Menu {
             triggerId: opts.triggerId,
             id: opts.id,
             minWidth: opts.minWidth,
+            maxHeight: opts.maxHeight,
+            flip: opts.flip,
             onFavorite: opts.onFavorite,
             checkmarks: opts.checkmarks,
             iconBadges: opts.iconBadges,

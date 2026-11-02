@@ -49,6 +49,9 @@ export interface MenuControllerOptions {
     getAnchorRect?: () => { x: number; y: number; width: number; height: number } | null;
     /** Share the trigger's DOM id with other machines composed on the same element. */
     triggerId?: string;
+    /** `false` keeps the list on its placement side (a dropdown stays a dropdown) instead of flipping to the
+     *  other side when the room runs short; pair it with a max height so the list scrolls. Default: flips. */
+    flip?: boolean;
     /** Pin the machine's own id instead of taking a fresh one. A parent registers its
      *  submenus under this key, so rebuilding a branch replaces its entry rather than
      *  piling a new one on top. */
@@ -72,6 +75,7 @@ export function menuController(opts: MenuControllerOptions): MenuController {
             ids: opts.triggerId ? { trigger: opts.triggerId } : undefined,
             positioning: {
                 placement: opts.placement ?? 'bottom-start',
+                ...(opts.flip === false ? { flip: false } : {}),
                 ...(opts.getAnchorRect ? { getAnchorRect: () => opts.getAnchorRect!() } : {}),
             },
             onSelect: (d: menu.SelectionDetails) => opts.onSelect?.(d.value),
