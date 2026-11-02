@@ -39,6 +39,7 @@ export class CalloutBubble {
         this.spec = { icon: opts.icon, background: opts.background, label: opts.label };
         if (opts.color !== undefined) this.spec.color = opts.color;
         if (opts.panel !== undefined) this.spec.panel = opts.panel;
+        if (opts.span !== undefined) this.spec.span = opts.span;
         this.size = opts.size ?? 16;
         this.host = opts.host;
         this.theme = opts.theme;
@@ -47,7 +48,6 @@ export class CalloutBubble {
         injectStyles(CALLOUT_STYLE_ID, CALLOUT_CSS, doc);
         this.el = doc.createElement('span');
         this.el.className = 'vela-callout';
-        this.el.style.width = `${this.size}px`;
         this.el.style.height = `${this.size}px`;
         // A click's job is the panel — never the row/chip underneath (selection,
         // settings dialogs); a dblclick on the bubble must stay the bubble's too.
@@ -95,7 +95,12 @@ export class CalloutBubble {
         const clickable = this.spec.panel !== undefined;
         this.el.style.background = this.spec.background;
         this.el.style.color = this.spec.color ?? '';
-        this.el.innerHTML = iconAt(this.spec.icon, this.size - 4);
+        // a span > 1 is a pill: one icon square per slot, the round ends kept
+        const span = Math.min(4, Math.max(1, Math.round(this.spec.span ?? 1)));
+        const ip = this.size - 4;
+        this.el.style.width = `${this.size + (span - 1) * ip}px`;
+        this.el.style.borderRadius = span > 1 ? `${this.size / 2}px` : '';
+        this.el.innerHTML = iconAt(this.spec.icon, ip, ip * span);
         this.el.setAttribute('aria-label', vt(this.spec.label));
         if (clickable) {
             this.el.setAttribute('role', 'button');

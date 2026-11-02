@@ -33,6 +33,9 @@ export interface CalloutBubbleSpec {
     label: string;
     /** Deployed panel — presence makes the bubble clickable. */
     panel?: CalloutPanel;
+    /** Icon slots side by side (default 1): a wider pill for an icon drawn `span` squares wide (several logos in
+     *  a row). The icon's viewBox should be 16*span x 16. Clamped to 1..4. */
+    span?: number;
 }
 
 /** Whether activating a panel button also closes the panel (defaults to yes). */

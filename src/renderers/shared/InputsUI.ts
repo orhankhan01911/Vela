@@ -430,6 +430,7 @@ export class InputsUI {
                 ...(view.color !== undefined ? { color: view.color } : {}),
                 label: view.tooltip,
                 ...(view.content !== undefined ? { panel: view.content } : {}),
+                ...(view.span !== undefined ? { span: view.span } : {}),
                 // The panel portals into the plot host and self-tokens: it must work on
                 // a bare chart, where no `.vela-ui` token ancestor exists.
                 host: this.container,

@@ -140,6 +140,9 @@ export interface LegendCalloutView {
     tooltip: string;
     /** Deployed panel — presence makes the bubble clickable. */
     content?: LegendCalloutPanel;
+    /** Icon slots side by side (default 1): a wider pill for an icon drawn `span` squares wide (several logos in
+     *  a row). The icon's viewBox should be 16*span x 16. Clamped to 1..4. */
+    span?: number;
 }
 
 /** OHLCV of the price bar under the crosshair (the "data window" source). */

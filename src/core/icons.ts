@@ -31,8 +31,8 @@ export function icon(id: string): string {
 
 /** {@link icon} pinned to an explicit pixel size, for slots that cannot inherit one (a
  *  glyph dropped into a row whose font-size belongs to the text beside it). */
-export function iconAt(id: string, px: number): string {
-    return icon(id).replace('<svg ', `<svg width="${px}" height="${px}" `);
+export function iconAt(id: string, px: number, wpx = px): string {
+    return icon(id).replace('<svg ', `<svg width="${wpx}" height="${px}" `);
 }
 
 // `extra` is emitted BEFORE the tier defaults: HTML keeps the first of a duplicated

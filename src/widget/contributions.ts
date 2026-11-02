@@ -459,6 +459,9 @@ export interface LegendCalloutSpec {
     tooltip: string;
     /** Deployed panel — presence makes the bubble clickable. */
     content?: LegendCalloutContent;
+    /** Icon slots side by side (default 1): a wider pill for an icon drawn `span` squares wide (several logos in
+     *  a row). The icon's viewBox should be 16*span x 16. Clamped to 1..4. */
+    span?: number;
 }
 
 /**
@@ -522,6 +525,7 @@ export function legendCalloutsProviderFor(chart: Vela, context: () => WidgetCont
                 icon: spec.icon,
                 background: spec.background,
                 ...(spec.color !== undefined ? { color: spec.color } : {}),
+                ...(spec.span !== undefined ? { span: spec.span } : {}),
                 tooltip: spec.tooltip,
                 ...(spec.content !== undefined
                     ? {
