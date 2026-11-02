@@ -131,7 +131,7 @@ function toPoints(bars: readonly OHLCV[], values: readonly number[], colors?: Re
     // A plot may be longer than the bars (Ichimoku's leading spans, shifted forward):
     // the extra slots get future times one bar step apart.
     const n = bars.length;
-    const len = Math.max(n, values.length);
+    const len = Math.max(n, Math.min(values.length, n + 5000)); // future slots capped (no unbounded allocation)
     const step = n > 1 ? bars[n - 1]!.time - bars[n - 2]!.time : 60_000;
     const pts = new Array<SeriesPoint>(len);
     for (let i = 0; i < len; i++) {

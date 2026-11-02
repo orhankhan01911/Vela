@@ -392,7 +392,9 @@ const ichimoku: ClassicIndicatorSpec = {
         const base = donchianMid(bars, Math.max(1, Math.trunc(num(inputs, 'base', 26))));
         const lead1 = conv.map((c, i) => (c + base[i]!) / 2);
         const lead2 = donchianMid(bars, Math.max(1, Math.trunc(num(inputs, 'spanB', 52))));
-        const shift = Math.max(1, Math.trunc(num(inputs, 'displacement', 26))) - 1;
+        // Clamped to the input's own range: a restored layout or shared state can carry any number, and the shift
+        // allocates that many future slots.
+        const shift = Math.min(5000, Math.max(1, Math.trunc(num(inputs, 'displacement', 26)) || 1)) - 1;
         // Leading spans run `shift` bars past the last candle (TradingView draws the cloud into the future).
         const ahead = (v: readonly number[]): number[] => [...new Array<number>(shift).fill(Number.NaN), ...v];
         const a = ahead(lead1);
