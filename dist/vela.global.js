@@ -7606,6 +7606,7 @@ var Vela = (function (exports) {
   var CHUNK_BARS = 1e4;
   var FIRST_PAINT_BARS = 20;
   var GAP_FACTOR = 1.5;
+  var LATE_BAR_WINDOW = 2;
   var HEAL_COOLDOWN_MS = 5e3;
   var EngineOrchestrator = class _EngineOrchestrator {
     constructor(container, renderer, feed, engines, config, dataControl) {
@@ -8369,10 +8370,39 @@ var Vela = (function (exports) {
           viewBar = this.barTransform.next(bar, this.bars[this.bars.length - 1]);
           this.bars.push(viewBar);
         }
-      } else return;
+      } else {
+        this.amendClosedBar(bar, notify);
+        return;
+      }
       this.renderer.updateBar(viewBar);
       this.events.emit("bar", bar);
       if (notify) this.notifySessionsBars(this.historyState === "backfill" ? "backfill" : void 0);
+    }
+    /**
+     * A late update of a bar that already CLOSED: a feed that opens the next bar on the
+     * clock edge (rather than on its first trade) can still deliver an update stamped
+     * before that edge a moment later. Without this it was dropped, so the closed candle
+     * missed its last ticks until the next history load, and differed from history.
+     * Only the last {@link LATE_BAR_WINDOW} closed bars are amended; anything older, or a
+     * time that matches no bar, is still ignored. The series is re-set with the view kept
+     * (a rare, whole-array path), and sessions re-run over the corrected history
+     * ('complete'): a streamed session only re-executes the forming bar. No `'bar'` event:
+     * that event means the newest bar changed.
+     */
+    amendClosedBar(bar, notify) {
+      const n = this.rawBars.length;
+      let i = -1;
+      for (let k = n - 2; k >= Math.max(0, n - 1 - LATE_BAR_WINDOW); k -= 1) {
+        if (this.rawBars[k].time === bar.time) {
+          i = k;
+          break;
+        }
+      }
+      if (i < 0) return;
+      this.rawBars[i] = bar;
+      this.bars = this.barTransform ? this.barTransform.full(this.rawBars) : this.rawBars;
+      this.renderer.setBars(this.bars, { preserveView: true });
+      if (notify) this.notifySessionsBars(this.historyState === "backfill" ? "backfill" : "complete");
     }
     /**
      * Signal every live session that the bars changed: streamed sessions markDirty (re-execute
