@@ -87,11 +87,20 @@ export class ChromeRenderer {
         this.ctx = canvas.getContext('2d');
         // Widths measured before a web font arrived (font-display: swap) belong to the fallback face: drop them,
         // so label chips and the price column are sized from the real font.
-        canvas.ownerDocument?.fonts?.addEventListener?.('loadingdone', () => {
-            this.widthCache.clear();
-            this.widthCachePrev.clear();
-        });
+        // Removed in destroy(): document.fonts outlives every chart, and a listener left on it kept each destroyed
+        // chart's renderer and scene (its timeline marks, drawings) in memory (+9 MB per workspace switch, 2026-11-02).
+        this.fontsOff?.();
+        const fonts = canvas.ownerDocument?.fonts;
+        if (fonts?.addEventListener) {
+            const onLoaded = (): void => {
+                this.widthCache.clear();
+                this.widthCachePrev.clear();
+            };
+            fonts.addEventListener('loadingdone', onLoaded);
+            this.fontsOff = () => fonts.removeEventListener('loadingdone', onLoaded);
+        }
     }
+    private fontsOff: (() => void) | null = null;
 
     private measureCached(ctx: CanvasRenderingContext2D, text: string): number {
         const key = ctx.font + '\0' + text;
@@ -380,6 +389,8 @@ export class ChromeRenderer {
     }
 
     destroy(): void {
+        this.fontsOff?.();
+        this.fontsOff = null;
         this.canvas = null;
         this.ctx = null;
     }
