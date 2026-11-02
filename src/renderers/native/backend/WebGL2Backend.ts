@@ -337,6 +337,10 @@ export class WebGL2Backend implements IRenderBackend {
         const i0 = Math.max(0, Math.floor(vr.from));
         const i1 = Math.min(n - 1, Math.ceil(vr.to));
         if (i1 < i0) return;
+        // Indicator plots may run past the last bar (Ichimoku's leading spans are
+        // shifted forward): series/fills draw to the visible edge; their loops skip
+        // indices with no point.
+        const i1x = Math.max(i1, Math.ceil(vr.to));
 
         // Blend/scissor are enabled once; the program/VAO/uniform bindings live in each pane's
         // `flush`, since an interleave-layer quad swaps them mid-pane anyway.
@@ -420,8 +424,8 @@ export class WebGL2Backend implements IRenderBackend {
                     // Fills paint at the model's z slot, under its own series — a band between
                     // two plots sits behind the plot lines, and the whole model moves as one
                     // unit when its object-tree row is reordered.
-                    for (const f of m.fills) if (f.overlay !== true) this.emitFill(b, m, f, mp, coords, i0, i1, off);
-                    for (const s of m.series) if (s.overlay !== true) this.emitSeries(b, s, mp, coords, i0, i1, theme, off);
+                    for (const f of m.fills) if (f.overlay !== true) this.emitFill(b, m, f, mp, coords, i0, i1x, off);
+                    for (const s of m.series) if (s.overlay !== true) this.emitSeries(b, s, mp, coords, i0, i1x, theme, off);
                 }
                 if (drawCandles && !candleDrawn) {
                     drawSlicesUpTo(scene.candleZ);
@@ -435,11 +439,11 @@ export class WebGL2Backend implements IRenderBackend {
                 if (isPrice) {
                     for (const m of scene.indicators.values()) {
                         const off = scene.offsetOf(m.id);
-                        for (const f of m.fills) if (f.overlay === true) this.emitFill(b, m, f, pane, coords, i0, i1, off);
+                        for (const f of m.fills) if (f.overlay === true) this.emitFill(b, m, f, pane, coords, i0, i1x, off);
                     }
                     for (const m of scene.indicators.values()) {
                         const off = scene.offsetOf(m.id);
-                        for (const s of m.series) if (s.overlay === true) this.emitSeries(b, s, pane, coords, i0, i1, theme, off);
+                        for (const s of m.series) if (s.overlay === true) this.emitSeries(b, s, pane, coords, i0, i1x, theme, off);
                     }
                 }
                 // Stack-top slices: the topmost indicator's drawings, force_overlay drawings,
@@ -659,8 +663,23 @@ export class WebGL2Backend implements IRenderBackend {
                 const bc = parseColor(grad.bottomColor);
                 const span = yBot - yTop;
                 const at = (y: number): RGBA => lerpColor(tc, bc, clamp01((y - yTop) / span));
-                // quad corners: TL(xPrev,tPrev) TR(xCur,tCur) BR(xCur,bCur) BL(xPrev,bPrev)
-                b.quad4(xPrev, tPrev, at(tPrev), xCur, tCur, at(tCur), xCur, bCur, at(bCur), xPrev, bPrev, at(bPrev));
+                // Canvas2d's gradient is flat (clamped) outside [yTop, yBot] and linear inside, so
+                // corner colours alone are wrong for a quad that crosses a stop (an RSI fill from the
+                // line down to 50 faded all the way to 50 instead of stopping at 70). Cut the quad at
+                // the two stop lines and colour each piece by its own corners: exact in every piece.
+                const quad: Pt[] = [{ x: xPrev, y: tPrev }, { x: xCur, y: tCur }, { x: xCur, y: bCur }, { x: xPrev, y: bPrev }];
+                const lo = Math.min(yTop, yBot);
+                const hi = Math.max(yTop, yBot);
+                for (const [y0, y1] of [[-Infinity, lo], [lo, hi], [hi, Infinity]] as const) {
+                    const poly = clipBandY(quad, y0, y1);
+                    for (let k = 1; k + 1 < poly.length; k += 2) {
+                        const p0 = poly[0]!;
+                        const p1 = poly[k]!;
+                        const p2 = poly[k + 1]!;
+                        const p3 = poly[Math.min(k + 2, poly.length - 1)]!;
+                        b.quad4(p0.x, p0.y, at(p0.y), p1.x, p1.y, at(p1.y), p2.x, p2.y, at(p2.y), p3.x, p3.y, at(p3.y));
+                    }
+                }
             } else {
                 const color = fill.colors ? fill.colors[i - 1 - off] : fill.color;
                 if (!color) continue;
@@ -1163,8 +1182,39 @@ function clamp01(t: number): number {
     return t < 0 ? 0 : t > 1 ? 1 : t;
 }
 
+/**
+ * Mix two straight-alpha colours the way a CSS / canvas gradient does: in PREMULTIPLIED space.
+ * A fully transparent stop reads back from the colour probe as transparent BLACK (its rgb is lost),
+ * so a straight lerp from `rgba(76,175,80,1)` to `rgba(76,175,80,0)` ran through dark grey: the
+ * black smudges in TradingView-style RSI gradient fills on the light theme (2026-11-02).
+ */
 function lerpColor(a: RGBA, b: RGBA, t: number): RGBA {
-    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t];
+    const al = a[3] + (b[3] - a[3]) * t;
+    if (al <= 0) return [0, 0, 0, 0];
+    const ch = (i: 0 | 1 | 2): number => (a[i] * a[3] + (b[i] * b[3] - a[i] * a[3]) * t) / al;
+    return [ch(0), ch(1), ch(2), al];
+}
+
+type Pt = { x: number; y: number };
+
+/** A convex polygon clipped to the horizontal band y0 <= y <= y1 (Sutherland-Hodgman on two edges). */
+function clipBandY(poly: Pt[], y0: number, y1: number): Pt[] {
+    const edge = (pts: Pt[], keep: (p: Pt) => boolean, yc: number): Pt[] => {
+        const out: Pt[] = [];
+        for (let i = 0; i < pts.length; i += 1) {
+            const p = pts[i]!;
+            const q = pts[(i + 1) % pts.length]!;
+            const pin = keep(p);
+            const qin = keep(q);
+            if (pin) out.push(p);
+            if (pin !== qin && q.y !== p.y) out.push({ x: p.x + ((q.x - p.x) * (yc - p.y)) / (q.y - p.y), y: yc });
+        }
+        return out;
+    };
+    let out = poly;
+    if (Number.isFinite(y0)) out = edge(out, (p) => p.y >= y0, y0);
+    if (Number.isFinite(y1)) out = edge(out, (p) => p.y <= y1, y1);
+    return out.length >= 3 ? out : [];
 }
 
 function fadeAlpha(c: RGBA, t: number): RGBA {

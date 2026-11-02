@@ -84,3 +84,26 @@ export function categoricalColor(key: string): string {
  *  text and grey details in dark, the white card in light. `line` is the line to the post's bar. */
 export const XPOST_DARK = { back: '#000000', border: '#1A1A1A', name: '#DBDBDB', text: '#DBDBDB', muted: '#808080', line: '#808080', url: '#1848CC' } as const;
 export const XPOST_LIGHT = { back: '#FFFFFF', border: '#EBEBEB', name: '#000000', text: '#0F0F0F', muted: '#808080', line: '#808080', url: '#2962FF' } as const;
+
+/** TradingView's own default colours for its built-in indicators (classics/tv.ts), read from its metainfo 2026-11-02.
+ *  `pineBlue` is Pine's `color.blue`; a plot with no colour uses `blue`. */
+export const TV_COLORS = {
+    blue: '#2962FF',
+    orange: '#FF6D00',
+    grey: '#787B86',
+    green: '#4CAF50',
+    red: '#F23645',
+    yellow: '#FDD835',
+    purple: '#7E57C2',
+    green600: '#43A047',
+    teal: '#26A69A',
+    tealLight: '#B2DFDB',
+    redLight: '#FFCDD2',
+    redAccent: '#FF5252',
+    tvTeal: '#089981',
+    red900: '#B71C1C',
+    green200: '#A5D6A7',
+    red200: '#EF9A9A',
+    olive: '#808000',
+    pineBlue: '#2196F3',
+} as const;

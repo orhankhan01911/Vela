@@ -11,10 +11,10 @@ import { sourceValues } from './math';
 
 const DAY_MS = 86400000;
 
-type Anchor = 'Session' | 'Week' | 'Month' | 'Quarter' | 'Year';
+export type Anchor = 'Session' | 'Week' | 'Month' | 'Quarter' | 'Year';
 
 /** UTC period key for an anchor (epoch day 0 was a Thursday; weeks start Monday). */
-function periodKey(anchor: Anchor, time: number): number {
+export function periodKey(anchor: Anchor, time: number): number {
     if (anchor === 'Week') return Math.floor((Math.floor(time / DAY_MS) + 3) / 7);
     if (anchor === 'Month' || anchor === 'Quarter' || anchor === 'Year') {
         const d = new Date(time);
@@ -26,7 +26,7 @@ function periodKey(anchor: Anchor, time: number): number {
 }
 
 /** Median spacing between bars, in ms — the classics' only handle on the chart's timeframe. */
-function barInterval(bars: readonly OHLCV[]): number {
+export function barInterval(bars: readonly OHLCV[]): number {
     if (bars.length < 2) return 0;
     const gaps: number[] = [];
     for (let i = 1; i < bars.length; i++) gaps.push(bars[i]!.time - bars[i - 1]!.time);

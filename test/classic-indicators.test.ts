@@ -169,7 +169,7 @@ describe('classic catalog registration', () => {
             'standard-deviation': 'StdDev',
             stochastic: 'Stoch',
             'stochastic-rsi': 'Stoch RSI',
-            supertrend: 'SuperTrend',
+            supertrend: 'Supertrend', // TradingView's spelling
             trix: 'TRIX',
             'true-strength-index': 'TSI',
             'ttm-squeeze': 'TTM Squeeze',
@@ -180,6 +180,11 @@ describe('classic catalog registration', () => {
             'volume-oscillator': 'Vol Osc',
             'vortex-indicator': 'VI',
             vwap: 'VWAP',
+            wma: 'WMA',
+            'hull-moving-average': 'HMA',
+            dema: 'DEMA',
+            tema: 'TEMA',
+            'ichimoku-cloud': 'Ichimoku',
             'williams-alligator': 'Alligator',
             'williams-fractal': 'Fractals',
             'williams-percent-r': '%R',
@@ -212,12 +217,14 @@ describe('classic catalog registration', () => {
     it("TradingView's Smoothing on SMA, EMA and OBV: off by default, an average of the line, SMA + Bollinger Bands adds the bands", () => {
         const bars = Array.from({ length: 80 }, (_, i) => bar(100 + Math.sin(i / 3) * 5 + i * 0.2, i, 10 + (i % 7)));
         const byType = new Map(classicSpecs.map((s) => [s.type, s] as const));
+        // TradingView titles SMA's own line "MA" and its smoothing "SMA-based MA".
+        const lineTitle = (of: string): string => (of === 'SMA' ? 'MA' : of);
         for (const [type, of] of [['sma', 'SMA'], ['ema', 'EMA'], ['on-balance-volume', 'OBV']] as const) {
             const spec = byType.get(type)!;
             const defaults = classicDescriptor(spec).defaultInputs();
-            expect(spec.compute(bars, defaults).plots.map((p) => p.title), type).toEqual([of === 'OBV' ? 'OBV' : of]);
+            expect(spec.compute(bars, defaults).plots.map((p) => p.title), type).toEqual([lineTitle(of)]);
             const bb = spec.compute(bars, { ...defaults, smoothingType: 'SMA + Bollinger Bands', smoothingLength: 14, bbMult: 2 }).plots;
-            expect(bb.map((p) => p.title), type).toEqual([of === 'OBV' ? 'OBV' : of, `${of}-based MA`, 'Upper Bollinger Band', 'Lower Bollinger Band']);
+            expect(bb.map((p) => p.title), type).toEqual([lineTitle(of), `${of}-based MA`, 'Upper Bollinger Band', 'Lower Bollinger Band']);
             const line = bb[0]!.values;
             const ma = sma(line, 14);
             const i = 70;
@@ -227,7 +234,7 @@ describe('classic catalog registration', () => {
             expect(bb[2]!.values[i]).toBeCloseTo(ma[i]! + 2 * sd, 9);
             expect(bb[3]!.values[i]).toBeCloseTo(ma[i]! - 2 * sd, 9);
             const e = spec.compute(bars, { ...defaults, smoothingType: 'EMA', smoothingLength: 14 }).plots;
-            expect(e.map((p) => p.title)).toEqual([of === 'OBV' ? 'OBV' : of, `${of}-based MA`]);
+            expect(e.map((p) => p.title)).toEqual([lineTitle(of), `${of}-based MA`]);
         }
         // an OBV saved before (its own Smoothing MA switch) keeps its MA
         const obv = byType.get('on-balance-volume')!;
@@ -257,15 +264,16 @@ describe('classic catalog registration', () => {
         const emaSpec = byType.get('ema')!;
         expect(smaSpec.title).toBe('Simple Moving Average');
         expect(emaSpec.title).toBe('Exponential Moving Average');
-        expect(smaSpec.inputs.map((i) => i.key)).toEqual(['length', 'source', 'offset', 'color', 'smoothingType', 'smoothingLength', 'bbMult', 'smoothingColor', 'bbColor']);
-        expect(emaSpec.inputs.map((i) => i.key)).toEqual(['length', 'source', 'offset', 'color', 'smoothingType', 'smoothingLength', 'bbMult', 'smoothingColor', 'bbColor']);
+        // TradingView's inputs (colours live on the Style tab now; length defaults to 9).
+        expect(smaSpec.inputs.map((i) => i.key)).toEqual(['length', 'source', 'offset', 'smoothingType', 'smoothingLength', 'bbMult']);
+        expect(emaSpec.inputs.map((i) => i.key)).toEqual(['length', 'source', 'offset', 'smoothingType', 'smoothingLength', 'bbMult']);
         const closes = bars.map((b) => b.close);
         const smaOut = smaSpec.compute(bars, classicDescriptor(smaSpec).defaultInputs()).plots[0]!;
         const emaOut = emaSpec.compute(bars, classicDescriptor(emaSpec).defaultInputs()).plots[0]!;
-        expect(smaOut.title).toBe('SMA');
+        expect(smaOut.title).toBe('MA');
         expect(emaOut.title).toBe('EMA');
-        expect(smaOut.values).toEqual(sma(closes, 20));
-        expect(emaOut.values).toEqual(ema(closes, 20));
+        expect(smaOut.values).toEqual(sma(closes, 9));
+        expect(emaOut.values).toEqual(ema(closes, 9));
         // The offset shifts the line without changing its values.
         const shifted = smaSpec.compute(bars, { ...classicDescriptor(smaSpec).defaultInputs(), offset: 2 }).plots[0]!;
         expect(shifted.values[30]).toBe(smaOut.values[28]);
@@ -276,8 +284,10 @@ describe('classic catalog registration', () => {
         for (const spec of classicSpecs) {
             const desc = classicDescriptor(spec);
             const out = spec.compute(bars, desc.defaultInputs());
+            // Ichimoku's leading spans (and its cloud edges) run displacement - 1 bars past the last bar, as on TradingView.
+            const ahead = spec.type === 'ichimoku-cloud' && /^(spanA|spanB|kumoUpper|kumoLower)$/;
             for (const plot of out.plots) {
-                expect(plot.values.length, `${spec.type}:${plot.key}`).toBe(bars.length);
+                expect(plot.values.length, `${spec.type}:${plot.key}`).toBe(ahead && ahead.test(plot.key) ? bars.length + 25 : bars.length);
             }
         }
     });
@@ -376,7 +386,8 @@ describe('classic descriptor adapter', () => {
         const up = Array.from({ length: 60 }, (_, i) => bar(100 + i * 2, i));
         const down = Array.from({ length: 60 }, (_, i) => bar(220 - i * 2, i + 60));
         const out = runOnce(spec, [...up, ...down]);
-        expect(out.series!.map((s) => s.title)).toEqual(['Uptrend', 'Downtrend']);
+        // TradingView's titles; Body Middle is its hidden fill anchor (drawn nowhere).
+        expect(out.series!.map((s) => s.title).slice(0, 2)).toEqual(['Up Trend', 'Down Trend']);
         const uptrend = pointsOf(out.series![0]);
         const downtrend = pointsOf(out.series![1]);
         // Exactly one leg carries a value on any bar the stop exists on.
@@ -413,8 +424,9 @@ describe('classic descriptor adapter', () => {
     it('blanks VWAP on daily and higher timeframes unless the guard is turned off', () => {
         const spec = classicSpecs.find((s) => s.type === 'vwap')!;
         const daily: OHLCV[] = Array.from({ length: 5 }, (_, i) => ({ time: i * 86400000, open: 10, high: 10, low: 10, close: 10, volume: 1 }));
-        expect(pointsOf(runOnce(spec, daily).series![0]).every((p) => p.value == null)).toBe(true);
-        expect(pointsOf(runOnce(spec, daily, { hideDwm: false }).series![0]).every((p) => p.value != null)).toBe(true);
+        // TradingView's default is OFF (VWAP shows on daily bars) — the guard hides it only when turned on.
+        expect(pointsOf(runOnce(spec, daily).series![0]).every((p) => p.value != null)).toBe(true);
+        expect(pointsOf(runOnce(spec, daily, { hideDwm: true }).series![0]).every((p) => p.value == null)).toBe(true);
     });
 
     it('draws VWAP bands per enabled pair, in standard deviations or percent, fill optional', () => {
@@ -425,50 +437,56 @@ describe('classic descriptor adapter', () => {
             { time: 60000, open: 106, high: 106, low: 106, close: 106, volume: 2 },
         ];
         const out = runOnce(spec, bars, { band1: true, band1Mult: 1, band2: false, band3: true, band3Mult: 2.5 });
-        expect(out.series!.map((s) => s.title)).toEqual(['VWAP', 'Upper Band #1', 'Lower Band #1', 'Upper Band #2', 'Lower Band #2']);
+        // TradingView lists all three pairs (Style tab rows) whatever is on; a pair switched off is not displayed.
+        expect(out.series!.map((s) => s.title)).toEqual(['VWAP', 'Upper Band #1', 'Lower Band #1', 'Upper Band #2', 'Lower Band #2', 'Upper Band #3', 'Lower Band #3']);
+        expect((out.series![3] as { display?: { pane?: boolean } }).display?.pane).toBe(false);
+        expect((out.series![5] as { display?: { pane?: boolean } }).display?.pane).not.toBe(false);
         const sd = Math.sqrt(8);
         expect(pointsOf(out.series![1])[1]!.value).toBeCloseTo(104 + sd, 10);
-        expect(pointsOf(out.series![4])[1]!.value).toBeCloseTo(104 - 2.5 * sd, 10);
+        expect(pointsOf(out.series![6])[1]!.value).toBeCloseTo(104 - 2.5 * sd, 10);
 
         // Percentage mode offsets by a share of the VWAP value instead of its deviation.
         const percent = runOnce(spec, bars, { bandsMode: 'Percentage', band1Mult: 2 });
         expect(pointsOf(percent.series![1])[1]!.value).toBeCloseTo(104 * 1.02, 10);
 
-        // Upper bands lean bearish, lower bands bullish, both at 40% transparency.
+        // TradingView's colours: band 1 green, band 3 teal, fills at 95% transparency (each fill is a Style-tab row).
         const inkOf = (s: SeriesSpec): string | undefined => (isLineLikeSeries(s) ? s.style.color : undefined);
-        expect(inkOf(out.series![1]!)).toBe('#f2364599');
-        expect(inkOf(out.series![2]!)).toBe('#08998199');
+        expect(inkOf(out.series![1]!)).toBe('#4CAF50');
+        expect(inkOf(out.series![3]!)).toBe('#808000');
+        expect(inkOf(out.series![5]!)).toBe('#089981');
 
-        // Only band 1 is on by default; each visible pair gets one fill, and the toggle kills them all.
-        expect(runOnce(spec, bars).series).toHaveLength(3);
-        expect(out.fills).toHaveLength(2);
-        expect(runOnce(spec, bars, { fill: false }).fills).toHaveLength(0);
-        expect(out.fills![0]!.color).toBe('#787b860d');
+        // Every pair and fill is there (only band 1 is on by default; an off pair draws nothing).
+        expect(runOnce(spec, bars).series).toHaveLength(7);
+        expect(out.fills).toHaveLength(3);
+        expect(out.fills![0]!.color).toBe('rgba(76,175,80,0.05)');
     });
 
     it('reads VWAP source through the shared source vocabulary', () => {
         const spec = classicSpecs.find((s) => s.type === 'vwap')!;
         const source = spec.inputs.find((i) => i.key === 'source')!;
-        expect(source.options).toEqual(['Close', 'Open', 'High', 'Low', 'HL2', 'HLC3', 'OHLC4', 'HLCC4']);
+        // TradingView's order and labels.
+        expect(source.options).toEqual(['Open', 'High', 'Low', 'Close', 'HL2', 'HLC3', 'OHLC4', 'HLCC4']);
+        expect(source.optionLabels?.HLC3).toBe('(H + L + C)/3');
+        expect(source.defval).toBe('HLC3');
         const bars: OHLCV[] = [{ time: 0, open: 1, high: 9, low: 3, close: 5, volume: 1 }];
         expect(pointsOf(runOnce(spec, bars, { source: 'High' }).series![0])[0]!.value).toBe(9);
         expect(pointsOf(runOnce(spec, bars, { source: 'HL2' }).series![0])[0]!.value).toBe(6);
     });
 
-    it('declares VWAP band toggles in Settings and its inks in a trailing Style group', () => {
+    it("declares VWAP's inputs as TradingView does: VWAP Settings, then Bands Settings with each band's switch inline", () => {
         const spec = classicSpecs.find((s) => s.type === 'vwap')!;
         const anchor = spec.inputs.find((i) => i.key === 'anchor')!;
-        expect(anchor.options).toEqual(['Session', 'Week', 'Month', 'Quarter', 'Year']);
+        expect(anchor.options).toEqual(['Session', 'Week', 'Month', 'Quarter', 'Year', 'Decade', 'Century', 'Earnings', 'Dividends', 'Splits']);
         for (const n of [1, 2, 3]) {
             const on = spec.inputs.find((i) => i.key === `band${n}`)!;
             const mult = spec.inputs.find((i) => i.key === `band${n}Mult`)!;
             expect(on.type).toBe('bool');
-            expect(on.group).toBe('Settings');
+            expect(on.group).toBe('Bands Settings');
             expect(mult.type).toBe('float');
-            expect(mult.group).toBe('Settings');
+            expect(mult.title).toBe(`Bands Multiplier #${n}`);
+            expect(on.inline).toBe(mult.inline);
         }
-        const styled = spec.inputs.filter((i) => i.group === 'Style').map((i) => i.key);
-        expect(styled).toEqual(['bullColor', 'bearColor', 'bandsColor', 'fill']);
-        expect(spec.inputs.slice(-styled.length).map((i) => i.key)).toEqual(styled);
+        // Colours are not inputs any more: they are on the Style tab.
+        expect(spec.inputs.some((i) => i.type === 'color')).toBe(false);
     });
 });

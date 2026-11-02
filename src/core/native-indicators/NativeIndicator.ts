@@ -23,6 +23,8 @@ export interface NativeIndicatorOutput {
      * pane derives a scale from its content as usual.
      */
     paneAxis?: PaneAxis;
+    /** Input values the legend shows after the title (TradingView's "Inputs in status line"), e.g. `14 close`. */
+    statusInputs?: string;
     series?: SeriesSpec[];
     fills?: Fill[];
     backgrounds?: Background[];
@@ -117,6 +119,8 @@ export interface NativeIndicator {
  */
 export interface NativeIndicatorDescriptor {
     readonly type: string;
+    /** Gets the TradingView Style tab (a row per plot, level and fill, plus output / input value switches). */
+    readonly styleTab?: boolean;
     /** Full display name (picker, settings header, handle title). */
     readonly title: string;
     /**

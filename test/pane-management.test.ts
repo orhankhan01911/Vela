@@ -307,7 +307,39 @@ describe('pane management — order / collapse / maximize', () => {
         const reordered = chart.panes.list();
         expect(reordered.find((p) => p.id === bPane.id)!.order).toBe(1); // B now above A
         expect(renderer.orderCalls.length).toBeGreaterThan(0);
-        expect(renderer.orderCalls[renderer.orderCalls.length - 1]![0]).toBe('price'); // price stays pinned on top
+        expect(renderer.orderCalls[renderer.orderCalls.length - 1]![0]).toBe('price'); // price still on top
+
+        // TradingView: Move pane up right under the main chart puts the pane above it.
+        chart.panes.move(bPane.id, 'up');
+        await flush();
+        expect(chart.panes.list().map((p) => p.kind)).toEqual(['study', 'price', 'study']);
+        expect(renderer.orderCalls[renderer.orderCalls.length - 1]![0]).toBe(bPane.id);
+        chart.panes.move(bPane.id, 'up'); // already on top: no-op
+        await flush();
+        expect(chart.panes.list()[0]!.id).toBe(bPane.id);
+    });
+
+    it('a pane moved above the main chart is saved and restored there', async () => {
+        const src = '//@version=5\nindicator("X")\nplot(close)';
+        const one = await makeChart();
+        const [a, b] = [one.chart.addIndicator(src), one.chart.addIndicator(src)];
+        await flush();
+        const paneOf = (chart: Vela, id: string): string => chart.panes.list().find((p) => p.indicators.some((i) => i.id === id))!.id;
+        one.chart.panes.move(paneOf(one.chart, a.id), 'up');
+        await flush();
+        const refs = new Map([[a.id, 'n0'], [b.id, 'n1']]);
+        const layout = paneLayoutOf(one.chart.panes.list(), (id) => refs.get(id));
+        expect(layout).toEqual({ slots: [[], [{ ref: 'n0' }], [{ ref: 'n1' }]], priceAt: 1 });
+
+        const two = await makeChart();
+        const [a2, b2] = [two.chart.addIndicator(src), two.chart.addIndicator(src)];
+        await flush();
+        const ids = new Map([['n0', a2.id], ['n1', b2.id]]);
+        applyPaneLayout(layout, (r) => ids.get(r), two.chart.panes);
+        await flush();
+        const list = two.chart.panes.list();
+        expect(list.map((p) => p.kind)).toEqual(['study', 'price', 'study']);
+        expect(list[0]!.indicators[0]!.id).toBe(a2.id);
     });
 
     it('collapse + maximize flow through to the renderer and the pane list', async () => {

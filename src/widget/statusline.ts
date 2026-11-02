@@ -22,7 +22,8 @@ const STYLE_ID = 'vela-widget-statusline';
 const CSS = `
 .vela-statusline {
     position: absolute;
-    top: var(--vela-space-2);
+    /* On the main chart's pane (the renderer publishes its top): a study pane moved above it keeps its own top. */
+    top: calc(var(--vela-statusline-top, 0px) + var(--vela-space-2));
     /* Track the indicator legend's left edge: the renderer publishes its toolbar gutter
      * on the mount container, and the legend sits 10px into the plot to its right —
      * so the two columns stay aligned whether the toolbar is docked (44px), collapsed

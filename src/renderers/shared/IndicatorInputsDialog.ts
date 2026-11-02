@@ -12,6 +12,9 @@ import { DatePicker, normalizeDateInput } from '../../ui/components/date-picker'
 import { fieldRow, fieldSection, buildFieldControl, fieldGridColumns, FIELD_GAP_PX } from '../../ui/components/field';
 import { overlayScrollbarCss, FIELD_FOCUS_CSS, FIELD_FOCUS_RING } from '../../ui/styles';
 import { vt } from '../../i18n';
+import { ColorField } from '../../ui/components/color-picker';
+import { caption, segmented } from './line-controls';
+import { PLOT_KINDS } from '../../core/engine/plotStyle';
 
 /** Emitted when the user edits an input in the in-chart settings dialog. */
 export interface InputsUIChange {
@@ -43,6 +46,7 @@ export interface IndicatorDialogRow {
  * declares, not settings a trader changes, so the dialog no longer lists them (they stay settable by API).
  */
 export const STYLE_TAB = 'Style';
+const VISIBILITY_TAB = 'Visibility';
 
 /** An input decl as the dialog renders it — `bag` marks where its value lives:
  *  `prop` routes to `row.propValues`, `style` to `row.styleValues`; commits carry that `kind`. */
@@ -153,14 +157,19 @@ export class IndicatorInputsDialog {
         if (style.length > 0) {
             // The Style tab follows the input tabs; a script input that DECLARES
             // tab='Style' shares it rather than spawning a duplicate strip label.
-            const styleDecls: DialogDecl[] = style.map((p) => {
+            // Style rows, then TradingView's Visibility tab (rows that name it keep their tab).
+            const styleDecls: DialogDecl[] = [];
+            const visDecls: DialogDecl[] = [];
+            for (const p of style) {
                 const d: DialogDecl = { ...p, bag: 'style' };
+                const vis = d.tab === VISIBILITY_TAB;
                 delete d.tab;
-                return d;
-            });
+                (vis ? visDecls : styleDecls).push(d);
+            }
             const existing = tabDefs.find((t) => t.name === STYLE_TAB);
             if (existing) existing.inputs.push(...styleDecls);
-            else tabDefs.push({ name: STYLE_TAB, inputs: styleDecls });
+            else if (styleDecls.length > 0) tabDefs.push({ name: STYLE_TAB, inputs: styleDecls });
+            if (visDecls.length > 0) tabDefs.push({ name: VISIBILITY_TAB, inputs: visDecls });
         }
         const tabs = document.createElement('div');
         tabs.style.cssText = `display:flex;gap:12px;padding:0 20px;border-bottom:1px solid ${border};flex:0 0 auto;`;
@@ -388,6 +397,10 @@ export class IndicatorInputsDialog {
             return el;
         };
 
+        if (decls.length > 1 && (decls[0] as DialogDecl).bag === 'style' && decls[0]!.key.endsWith('.visible')) {
+            return append(this.buildStyleRow(row, decls as DialogDecl[], idOf));
+        }
+
         if (decls.length > 1) {
             return append(fieldRow({
                 label: '',
@@ -446,6 +459,107 @@ export class IndicatorInputsDialog {
         }));
     }
 
+    /**
+     * One Style-tab row in TradingView's layout: a checkbox with the output's name, then its line button (colour with
+     * Thickness and Line style in the same popover), or its colour(s) for a fill, then the plot type or a level's value.
+     */
+    private buildStyleRow(row: IndicatorDialogRow, decls: DialogDecl[], idOf: (d: InputSchema) => string): HTMLElement {
+        const lead = decls[0]!;
+        const base = lead.key.slice(0, -'.visible'.length);
+        const decl = (part: string): DialogDecl | undefined => decls.find((d) => d.key === `${base}.${part}`);
+        const read = (d: DialogDecl): InputValue => bagOf(row, d)[d.key] ?? d.defval;
+        const color = decl('color');
+        const color2 = decl('color2');
+        const width = decl('width');
+        const lineStyle = decl('lineStyle');
+        const kind = decl('kind');
+        const value = decl('value');
+        const controls: HTMLElement[] = [];
+        if (color && (width || lineStyle)) {
+            const field: ColorField = new ColorField({
+                theme: this.host.theme(),
+                getVal: () => String(read(color)),
+                onVal: (v) => this.commit(row, color, v),
+                commit: 'release',
+                line: () => ({ width: Number(width ? read(width) : 1), style: String(lineStyle ? read(lineStyle) : 'solid') }),
+                popover: { align: 'start' },
+                extra: () => {
+                    const box = document.createElement('div');
+                    box.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+                    if (width) {
+                        box.append(
+                            caption('Thickness'),
+                            segmented([1, 2, 3, 4].map((n) => ({ value: String(n), sample: { width: n, style: 'solid' } })), String(read(width)), (v) => {
+                                this.commit(row, width, Number(v));
+                                field.paint();
+                            }),
+                        );
+                    }
+                    if (lineStyle) {
+                        box.append(
+                            caption('Line style'),
+                            segmented(['solid', 'dashed', 'dotted'].map((v) => ({ value: v, sample: { width: 2, style: v } })), String(read(lineStyle)), (v) => {
+                                this.commit(row, lineStyle, v);
+                                field.paint();
+                            }),
+                        );
+                    }
+                    return box;
+                },
+            });
+            field.el.id = idOf(color);
+            field.el.dataset.role = 'line-button';
+            field.el.title = vt('Line');
+            controls.push(field.el);
+        } else {
+            if (color) controls.push(this.buildControl(row, color, idOf(color)));
+            if (color2) controls.push(this.buildControl(row, color2, idOf(color2)));
+        }
+        if (kind) {
+            const pairs = PLOT_KINDS.map(([label, k]) => ({ value: k, label }));
+            controls.push(this.selectPairs(idOf(kind), pairs, String(read(kind)), (v) => this.commit(row, kind, v)));
+        }
+        if (value) {
+            controls.push(buildFieldControl({
+                kind: 'number',
+                id: idOf(value),
+                value: Number(read(value)),
+                step: 1,
+                commit: 'blur',
+                onChange: (v) => this.commit(row, value, v),
+            }).el);
+        }
+        const id = idOf(lead);
+        const main = fieldRow({
+            label: nameOf(lead),
+            id,
+            toggle: { id, checked: Boolean(read(lead)), onChange: (v) => this.commit(row, lead, v) },
+            control: controls,
+            fit: true,
+        });
+        // A phone's grid gives the control cell its whole width and the name the rest: a Style row's controls fill
+        // the line and the name shrank to nothing (every row read "checkbox, swatch, Line", 2026-11-02 emulator).
+        // There the name takes its own line and the controls sit under it.
+        if (this.host.mobile()) {
+            const [label, cell] = [main.children[0] as HTMLElement | undefined, main.children[1] as HTMLElement | undefined];
+            if (label) label.style.gridColumn = '1 / -1';
+            if (cell) Object.assign(cell.style, { gridColumn: '1 / -1', justifySelf: 'start', paddingLeft: '28px', marginTop: '-6px' });
+        }
+        // A per-bar coloured output's palette: TradingView lists "Color 0", "Color 1"... under it, one swatch each.
+        const palette = decls.filter((d) => d.key.startsWith(`${base}.color.`));
+        if (palette.length === 0) return main;
+        const wrap = document.createElement('div');
+        wrap.style.display = 'contents';
+        wrap.append(main);
+        for (const d of palette) {
+            const n = d.key.slice(`${base}.color.`.length);
+            const sub = fieldRow({ label: `${vt('Color')} ${n}`, id: idOf(d), control: [this.buildControl(row, d, idOf(d))], fit: true });
+            sub.style.paddingLeft = '28px';
+            wrap.append(sub);
+        }
+        return wrap;
+    }
+
     /** Build the typed control for one input, committing edits live via `onChange`. */
     private buildControl(row: IndicatorDialogRow, inp: DialogDecl, id: string): HTMLElement {
         const current = bagOf(row, inp)[inp.key] ?? inp.defval;
@@ -457,7 +571,16 @@ export class IndicatorInputsDialog {
         // A host's own picker for this input (an exchange checklist instead of typing EXCHANGE,EXCHANGE).
         const menu = inp.bag ? null : inputMenuFor(row.id, inp, this.host.container);
         if (menu) return this.buildInputMenu(id, menu, current, emit);
-        if (inp.options && inp.options.length > 0) return this.select(id, inp.options.map(String), String(current), emit);
+        if (inp.options && inp.options.length > 0) {
+            const labels = inp.optionLabels;
+            if (labels) {
+                // Wide enough for TradingView's longer labels ("(O + H + L + C)/4") to read whole.
+                const el = this.selectPairs(id, inp.options.map((o) => ({ value: String(o), label: labels[String(o)] ?? String(o) })), String(current), emit);
+                el.style.minWidth = '150px';
+                return el;
+            }
+            return this.select(id, inp.options.map(String), String(current), emit);
+        }
         if (inp.type === 'source') return this.select(id, SOURCES, String(current), emit);
         if (inp.type === 'color') {
             return buildFieldControl({

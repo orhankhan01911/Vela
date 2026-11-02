@@ -43,6 +43,10 @@ export interface ClassicPlot {
     base?: number;
     /** Per-bar color override, aligned to bars by index. */
     colors?: ReadonlyArray<string | null>;
+    /** The colours {@link colors} picks from (TradingView's palette): one Style-tab swatch each. */
+    palette?: readonly string[];
+    /** Hidden by default but listed (unticked) on the Style tab: see SeriesBase.styleOff. */
+    styleOff?: boolean;
     /** Render on the price pane even when the indicator owns a study pane. */
     overlay?: boolean;
     /**
@@ -56,11 +60,15 @@ export interface ClassicPlot {
 /** A soft band filled between two plots (referenced by plot key). */
 export interface ClassicBand {
     key: string;
+    /** Name on the Style tab (TradingView's fill title). */
+    title?: string;
     from: string;
     to: string;
     color: string;
     /** Per-bar solid color, aligned to bars by index; overrides {@link color} where set. */
     colors?: ReadonlyArray<string | null>;
+    /** The colours {@link colors} picks from (TradingView's palette): one Style-tab swatch each. */
+    palette?: readonly string[];
     /** Per-bar vertical gradient (a two-tone wash across the band), aligned by index. */
     gradient?: ReadonlyArray<FillGradientStop | null>;
 }
@@ -72,6 +80,7 @@ export interface ClassicLevel {
     color?: string;
     lineStyle?: LineStyle;
     title?: string;
+    width?: number;
 }
 
 /** What one compute pass yields. */
@@ -92,6 +101,12 @@ export interface ClassicIndicatorSpec {
     /** true = draws over the price candles; false = its own pane below. */
     overlay: boolean;
     inputs: InputSchema[];
+    /**
+     * TradingView layout: the settings dialog gets the Style tab (colours, widths and levels live there, not on
+     * Inputs) and the legend shows the inputs after the title. `statusKeys` picks the inputs the legend shows
+     * (TradingView hides `display = display.none` ones); default: every number, source and option input.
+     */
+    tv?: { statusKeys?: readonly string[] };
     /** `period`: time candles to aggregate period OHLC from when the drawn bars are not time candles
      *  ({@link NativeIndicatorContext.periodBars}); only period-anchored specs read it. */
     compute(bars: readonly OHLCV[], inputs: Record<string, InputValue>, period?: PeriodBars | null): ClassicOutput;
@@ -113,10 +128,16 @@ export function bool(inputs: Record<string, InputValue>, key: string, fallback: 
 }
 
 function toPoints(bars: readonly OHLCV[], values: readonly number[], colors?: ReadonlyArray<string | null>): SeriesPoint[] {
-    const pts = new Array<SeriesPoint>(bars.length);
-    for (let i = 0; i < bars.length; i++) {
+    // A plot may be longer than the bars (Ichimoku's leading spans, shifted forward):
+    // the extra slots get future times one bar step apart.
+    const n = bars.length;
+    const len = Math.max(n, values.length);
+    const step = n > 1 ? bars[n - 1]!.time - bars[n - 2]!.time : 60_000;
+    const pts = new Array<SeriesPoint>(len);
+    for (let i = 0; i < len; i++) {
         const v = values[i];
-        const p: SeriesPoint = { time: bars[i]!.time, value: v != null && Number.isFinite(v) ? v : null };
+        const time = i < n ? bars[i]!.time : bars[n - 1]!.time + (i - n + 1) * step;
+        const p: SeriesPoint = { time, value: v != null && Number.isFinite(v) ? v : null };
         const c = colors?.[i];
         if (c != null) p.color = c;
         pts[i] = p;
@@ -185,6 +206,8 @@ class ClassicIndicator implements NativeIndicator {
                     ...(plot.base != null ? { base: plot.base } : {}),
                 },
                 ...(plot.overlay ? { overlay: true } : {}),
+                ...(plot.palette ? { palette: [...plot.palette] } : {}),
+                ...(plot.styleOff ? { styleOff: true } : {}),
                 ...(plot.display ? { display: plot.display } : {}),
             });
         });
@@ -208,7 +231,9 @@ class ClassicIndicator implements NativeIndicator {
                     fromSeriesId: from,
                     toSeriesId: to,
                     color: band.color,
+                    ...(band.title ? { title: band.title } : {}),
                     ...(band.colors ? { colors: [...band.colors] } : {}),
+                    ...(band.palette ? { palette: [...band.palette] } : {}),
                     ...(band.gradient ? { gradient: [...band.gradient] } : {}),
                 },
             ];
@@ -219,7 +244,7 @@ class ClassicIndicator implements NativeIndicator {
             price: level.price,
             ...(level.color != null ? { color: level.color } : {}),
             lineStyle: level.lineStyle ?? 'dashed',
-            width: 1,
+            width: level.width ?? 1,
             ...(level.title != null ? { title: level.title } : {}),
         }));
         const polylines: DrawingPolyline[] = (out.polylines ?? []).map((poly, ordinal) => {
@@ -246,9 +271,25 @@ class ClassicIndicator implements NativeIndicator {
             fontFamily: 'default',
             ...(m.text ? { text: m.text, textColor: m.color } : {}),
         }));
-        this.ctx.emit({ series, fills, priceLines, polylines, ...(labels.length ? { labels } : {}) });
+        const statusInputs = this.spec.tv ? statusText(this.spec, this.inputs) : '';
+        this.ctx.emit({ series, fills, priceLines, polylines, ...(labels.length ? { labels } : {}), ...(statusInputs ? { statusInputs } : {}) });
         this.ctx.setStatus('idle');
     }
+}
+
+/** The legend's input text, TradingView's way: `14 close` (sources in lower case, numbers as typed). */
+export function statusText(spec: ClassicIndicatorSpec, inputs: Record<string, InputValue>): string {
+    const keys = spec.tv?.statusKeys;
+    const parts: string[] = [];
+    for (const inp of spec.inputs) {
+        if (keys ? !keys.includes(inp.key) : inp.type === 'bool' || inp.type === 'color' || inp.tab === 'Style') continue;
+        const v = inputs[inp.key] ?? inp.defval;
+        if (v === undefined || v === null || v === '') continue;
+        // Sources read lower case, as TradingView's legend does ("RSI 14 close", "VWAP Session hlc3").
+        const isSource = inp.type === 'source' || (inp.options?.includes('HLC3') ?? false);
+        parts.push(isSource ? String(v).toLowerCase() : String(v));
+    }
+    return parts.join(' ');
 }
 
 /** Wrap a catalog entry into a registrable native-indicator descriptor. */
@@ -261,6 +302,7 @@ export function classicDescriptor(spec: ClassicIndicatorSpec): NativeIndicatorDe
         overlay: spec.overlay,
         // Studies stack (a 20 and a 200 moving average side by side) — unlike the layer-backed natives.
         multiInstance: true,
+        ...(spec.tv ? { styleTab: true } : {}),
         inputsSchema: () => spec.inputs,
         defaultInputs: () => Object.fromEntries(spec.inputs.map((i) => [i.key, i.defval])),
         create: () => new ClassicIndicator(spec),

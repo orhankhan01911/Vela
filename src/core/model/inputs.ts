@@ -62,6 +62,8 @@ export interface InputSchema {
     step?: number;
     /** Choices for a dropdown (`input.string(..., options=[...])`). */
     options?: readonly string[];
+    /** Display text for some {@link options} (value -> label), e.g. TradingView's "(H + L + C)/3" for HLC3. */
+    optionLabels?: Readonly<Record<string, string>>;
     /** Grouping label for the dialog layout. */
     group?: string;
     /** Inline grouping label (controls placed on one row). */

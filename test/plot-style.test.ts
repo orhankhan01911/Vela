@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyPlotStyle, plotStyleSchema } from '../src/core/engine/plotStyle';
+import { applyPlotStyle, plotStyleSchema, visibleOnInterval } from '../src/core/engine/plotStyle';
 import type { IndicatorModel } from '../src/core/model/indicator';
 
 function model(): IndicatorModel {
@@ -26,15 +26,42 @@ describe('plot style (settings dialog Style tab)', () => {
     it('lists visible plots, levels, fills and background with the script defaults', () => {
         const keys = plotStyleSchema(model()).map((d) => `${d.key}=${String(d.defval)}`);
         expect(keys).toEqual([
-            'plot:SMA.visible=true', 'plot:SMA.color=#111111', 'plot:SMA.width=1',
+            'plot:SMA.visible=true', 'plot:SMA.color=#111111', 'plot:SMA.width=1', 'plot:SMA.lineStyle=solid', 'plot:SMA.kind=line',
             // per-bar colours: no single colour to offer
-            'plot:Signal.visible=true', 'plot:Signal.width=2',
+            'plot:Signal.visible=true', 'plot:Signal.width=2', 'plot:Signal.lineStyle=solid', 'plot:Signal.kind=line',
             // the hidden anchor plot is skipped; a second "SMA" gets a suffix
-            'plot:SMA#2.visible=true', 'plot:SMA#2.color=#444444', 'plot:SMA#2.width=1',
-            'hline:Zero.visible=true', 'hline:Zero.color=#999999', 'hline:Zero.width=1',
+            'plot:SMA#2.visible=true', 'plot:SMA#2.color=#444444', 'plot:SMA#2.width=1', 'plot:SMA#2.lineStyle=solid', 'plot:SMA#2.kind=histogram',
+            'hline:Zero.visible=true', 'hline:Zero.color=#999999', 'hline:Zero.width=1', 'hline:Zero.lineStyle=solid', 'hline:Zero.value=0',
             'fill:1.visible=true', 'fill:1.color=rgba(0,0,255,0.2)',
             'bg.visible=true',
+            // TradingView's Output values / Input values sections
+            'out.precision=Default', 'out.priceLabels=true', 'out.statusValues=true', 'in.statusInputs=true',
+            // TradingView's Visibility tab
+            'vis.ticks=true',
+            'vis.seconds=true', 'vis.seconds.from=1', 'vis.seconds.to=59',
+            'vis.minutes=true', 'vis.minutes.from=1', 'vis.minutes.to=59',
+            'vis.hours=true', 'vis.hours.from=1', 'vis.hours.to=24',
+            'vis.days=true', 'vis.days.from=1', 'vis.days.to=366',
+            'vis.weeks=true', 'vis.weeks.from=1', 'vis.weeks.to=52',
+            'vis.months=true', 'vis.months.from=1', 'vis.months.to=12',
+            'vis.ranges=true',
         ]);
+    });
+
+    it('Visibility tab: hides every output on a timeframe it switches off, and only there', () => {
+        const m = model();
+        plotStyleSchema(m);
+        const H1 = 3_600_000;
+        applyPlotStyle(m, { 'vis.hours': false }, H1);
+        expect(m.series.every((s) => s.visible === false || s.display?.pane === false)).toBe(true);
+        expect(m.priceLines).toHaveLength(0);
+        expect(m.fills).toHaveLength(0);
+        applyPlotStyle(m, { 'vis.hours': false }, 5 * 60_000); // a 5 minute chart: still shown
+        expect(m.priceLines).toHaveLength(1);
+        applyPlotStyle(m, { 'vis.minutes.to': 4 }, 5 * 60_000); // minutes 1-4 only
+        expect(m.priceLines).toHaveLength(0);
+        expect(visibleOnInterval({ 'vis.days.from': 2 }, 86_400_000)).toBe(false);
+        expect(visibleOnInterval({}, 86_400_000)).toBe(true);
     });
 
     it('applies overrides and puts the script look back when they are cleared', () => {
@@ -68,5 +95,23 @@ describe('plot style (settings dialog Style tab)', () => {
         const m = model();
         applyPlotStyle(m, { 'plot:Nope.color': '#fff', 'plot:SMA.width': 'abc' });
         expect((m.series[0] as { style: { width: number } }).style.width).toBe(1);
+    });
+});
+
+describe('plots off by default (Pine display.none) are listed unticked, like TradingView', () => {
+    it('lists a styleOff plot with its box off, keeps it hidden by default, and draws it once ticked', () => {
+        const m = model();
+        const off = m.series[2]!;
+        (off as { styleOff?: boolean }).styleOff = true;
+        off.display = { pane: false, priceScale: false, legend: false, dataWindow: true };
+        const schema = plotStyleSchema(m);
+        const vis = schema.find((d) => d.key === 'plot:Anchor.visible');
+        expect(vis?.defval).toBe(false);
+        applyPlotStyle(m, {});
+        expect(m.series[2]!.display?.pane).toBe(false);
+        expect(m.series[2]!.display?.dataWindow).toBe(true); // its own display kept (alerts / data window)
+        applyPlotStyle(m, { 'plot:Anchor.visible': true });
+        expect(m.series[2]!.display?.pane).not.toBe(false);
+        expect(m.series[2]!.visible).not.toBe(false);
     });
 });

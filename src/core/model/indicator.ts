@@ -127,4 +127,8 @@ export interface IndicatorModel {
     styleInputs?: InputSchema[];
     /** The user's style overrides, keyed like {@link styleInputs}. */
     styleValues?: Record<string, InputValue>;
+    /** Input values shown after the title in the legend (see {@link shorttitle}); the Style tab can hide them. */
+    statusInputs?: string;
+    /** Decimals the legend and data window show (the Style tab's Precision); absent = the pane's own format. */
+    precision?: number;
 }

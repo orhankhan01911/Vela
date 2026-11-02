@@ -13,6 +13,9 @@ export interface PaneControlView {
     /** Position among panes (0 = topmost) + total, to gate move-up/down. */
     index: number;
     count: number;
+    /** The pane right above / below is the main chart (a merge that way is "into main chart"). */
+    aboveIsPrice?: boolean;
+    belowIsPrice?: boolean;
 }
 
 export interface PaneControlsDeps {
@@ -42,9 +45,13 @@ const STYLE_ID = 'vela-pane-controls';
 /** The cluster's glyph size. Icons inherit it from the slot, so it is set once in CSS. */
 const ICON_PX = 12;
 
-/** The cluster's scrim pill. It floats over CHART CONTENT (candles of any color), not over a
- *  panel, so it stays a neutral darkening rather than a themed surface. */
-const CLUSTER_PILL = 'rgba(0,0,0,0.65)';
+/** The cluster's pill: the theme's raised surface with a border and a soft shadow, like TradingView's pane
+ *  buttons, so it reads over candles, fills and the plot on both themes. It was a fixed 65 % black scrim with
+ *  muted icons: dark ink on a dark pill in the light theme, and dim grey on near-black in the dark one (user
+ *  report 2026-11-02, "not visible in light or dark"). */
+const CLUSTER_PILL = 'var(--vela-surface-elev)';
+const CLUSTER_BORDER = '1px solid var(--vela-border-strong)';
+const CLUSTER_SHADOW = '0 1px 4px rgba(0,0,0,0.25)';
 
 /** Hover/active states as CSS, so they can never lag behind a pointer or drift from the
  *  tokens (the buttons only carry their per-instance color/opacity inline). */
@@ -53,7 +60,7 @@ function ensureStyles(): void {
     const st = document.createElement('style');
     st.id = STYLE_ID;
     st.textContent = `
-.vela-pc-btn{display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;border-radius:var(--vela-radius-sm);background:transparent;line-height:0;font-size:${ICON_PX}px;color:var(--vela-fg-muted);}
+.vela-pc-btn{display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;border-radius:var(--vela-radius-sm);background:transparent;line-height:0;font-size:${ICON_PX}px;color:var(--vela-fg);}
 .vela-pc-btn svg{display:block;}
 .vela-pc-btn:not(:disabled):hover{opacity:1 !important;background:var(--vela-active);color:var(--vela-fg-bright);}
 .vela-pc-on,.vela-pc-on:not(:disabled):hover{background:var(--vela-selected-bg);color:var(--vela-selected-fg);}
@@ -71,6 +78,8 @@ function ensureStyles(): void {
 export class PaneControls {
     private readonly root: HTMLDivElement;
     private readonly clusters = new Map<string, HTMLDivElement>();
+    /** What each cluster's buttons were built from: rebuilt only when it changes. */
+    private readonly built = new Map<string, string>();
     private hoverPaneId: string | null = null;
     /** Mobile: hover clusters are meaningless without a cursor — suppressed; a
      *  collapsed pane's standalone expand chip stays (the only way back up). */
@@ -121,18 +130,27 @@ export class PaneControls {
                     position: 'absolute',
                     display: 'flex',
                     gap: '2px',
-                    padding: '2px',
+                    padding: '1px', // + the 1px border: still 24px tall
                     borderRadius: 'var(--vela-radius-md)',
                     background: CLUSTER_PILL,
+                    border: CLUSTER_BORDER,
+                    boxShadow: CLUSTER_SHADOW,
                     pointerEvents: 'auto',
                 });
                 this.root.appendChild(cluster);
                 this.clusters.set(p.id, cluster);
             }
-            this.buildButtons(cluster, p);
+            // Rebuild only when the buttons would differ. refresh() runs on every indicator remount (a live chart
+            // remounts often), and replacing the button between pointerdown and pointerup ate the click: Collapse
+            // pane needed two clicks (user report 2026-11-02).
+            const sig = [p.kind, p.index, p.count, p.collapsed, p.maximized, p.aboveIsPrice, p.belowIsPrice, this.deps.onMerge ? 1 : 0].join('|');
+            if (this.built.get(p.id) !== sig) {
+                this.buildButtons(cluster, p);
+                this.built.set(p.id, sig);
+            }
         }
         for (const [id, cluster] of this.clusters) {
-            if (!seen.has(id)) { cluster.remove(); this.clusters.delete(id); }
+            if (!seen.has(id)) { cluster.remove(); this.clusters.delete(id); this.built.delete(id); }
         }
         this.reposition();
     }
@@ -140,12 +158,13 @@ export class PaneControls {
     private buildButtons(cluster: HTMLDivElement, p: PaneControlView): void {
         cluster.textContent = '';
         if (p.kind === 'study') {
-            cluster.appendChild(this.button(ICONS.up, 'Move pane up', p.index <= 1, () => this.deps.onMove(p.id, 'up'), { role: 'up' }));
+            // TradingView: under the main chart, Move pane up puts the pane above it (index 0 = already on top).
+            cluster.appendChild(this.button(ICONS.up, 'Move pane up', p.index <= 0, () => this.deps.onMove(p.id, 'up'), { role: 'up' }));
             cluster.appendChild(this.button(ICONS.down, 'Move pane down', p.index >= p.count - 1, () => this.deps.onMove(p.id, 'down'), { role: 'down' }));
             const merge = this.deps.onMerge;
             if (merge) {
-                cluster.appendChild(this.button(ICONS.mergeUp, p.index === 1 ? 'Merge into main chart' : 'Merge pane up', p.index < 1, () => merge(p.id, 'up'), { role: 'merge-up' }));
-                if (p.index < p.count - 1) cluster.appendChild(this.button(ICONS.mergeDown, 'Merge pane down', false, () => merge(p.id, 'down'), { role: 'merge-down' }));
+                if (p.index > 0) cluster.appendChild(this.button(ICONS.mergeUp, p.aboveIsPrice ? 'Merge into main chart' : 'Merge pane up', false, () => merge(p.id, 'up'), { role: 'merge-up' }));
+                if (p.index < p.count - 1) cluster.appendChild(this.button(ICONS.mergeDown, p.belowIsPrice ? 'Merge into main chart' : 'Merge pane down', false, () => merge(p.id, 'down'), { role: 'merge-down' }));
             }
             cluster.appendChild(
                 this.button(p.collapsed ? ICONS.expand : ICONS.collapse, p.collapsed ? 'Expand pane' : 'Collapse pane', false, () => this.deps.onToggleCollapse(p.id), {
@@ -185,7 +204,7 @@ export class PaneControls {
         b.dataset.role = opts.role;
         const selected = opts.selected === true;
         // Selected (e.g. the expand toggle of a collapsed pane) is an inverse chip, fully
-        // opaque — it must read on its own, without the cluster's dark pill behind it.
+        // opaque — it must read on its own, without the cluster's pill behind it.
         // Ink lives in the stylesheet (muted at rest, bright on hover, inverse when selected);
         // only the disabled fade stays inline.
         b.className = selected ? 'vela-pc-btn vela-pc-on' : 'vela-pc-btn';
@@ -222,11 +241,13 @@ export class PaneControls {
                 : `${p.top + 4}px`;
             cluster.style.display = visible ? 'flex' : 'none';
             if (!visible) continue;
-            // Without hover only the state chip shows, standalone: drop the dark pill so the white
+            // Without hover only the state chip shows, standalone: drop the pill so the inverse
             // chip reads on its own. Its siblings stay laid out (visibility:hidden, not display:none)
             // so the chip keeps the exact slot it occupies once the full cluster reveals on hover.
             const soloChip = stateChipRole != null && !hovered;
             cluster.style.background = soloChip ? 'transparent' : CLUSTER_PILL;
+            cluster.style.border = soloChip ? '1px solid transparent' : CLUSTER_BORDER;
+            cluster.style.boxShadow = soloChip ? 'none' : CLUSTER_SHADOW;
             for (const child of cluster.children) {
                 const btn = child as HTMLElement;
                 btn.style.display = 'inline-flex';
@@ -256,5 +277,6 @@ export class PaneControls {
         this.plot.removeEventListener('pointerleave', this.onPlotLeave);
         this.root.remove();
         this.clusters.clear();
+        this.built.clear();
     }
 }

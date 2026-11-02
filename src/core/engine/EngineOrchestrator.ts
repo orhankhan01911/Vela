@@ -40,7 +40,7 @@ import { parseSymbol } from '../../data/ProviderRegistry';
 import { barTransformFor, parseExtendedTicker, type BarTransform } from '../price-styles/BarTransform';
 import { chartType, replacesSeries, type HistoryLayerState, type SeriesDataEngine } from '../../chart-types/registry';
 import { resolveTheme } from '../theme';
-import { applyPlotStyle, plotStyleSchema } from './plotStyle';
+import { applyPlotStyle, plotStyleSchema, styleShowsInputs } from './plotStyle';
 import type { ReplayBounds, ReplayController, ReplayEndReason, ReplayStartOptions, ReplayState, ReplayTick, ReplayTickSource } from '../ReplayControl';
 
 export interface ResolvedConfig {
@@ -2301,7 +2301,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             record.propValues = {};
             this.applyProps(id, settings.props);
         }
-        if (!record.native) {
+        if (!record.native || record.native.descriptor.styleTab) {
             record.styleValues = {};
             this.applyStyle(id, settings.style);
         }
@@ -2317,11 +2317,12 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      * IndicatorController: override plot / level / fill styles of a SCRIPT indicator. No
      * re-run: the overrides are re-applied over the current model and the indicator is
      * remounted in place (legend row and an open settings dialog survive). Natives style
-     * themselves through their own inputs.
+     * themselves through their own inputs, except those with a TradingView Style tab
+     * (`descriptor.styleTab`, the built-in classics), which take the same overrides.
      */
     applyStyle(id: string, values: Record<string, InputValue>): void {
         const record = this.registry.get(id);
-        if (!record || record.native) return;
+        if (!record || (record.native && !record.native.descriptor.styleTab)) return;
         record.styleValues = { ...record.styleValues, ...values };
         const model = record.model;
         if (model && record.renderHandle && !record.loading) {
@@ -2342,7 +2343,12 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         // already, so keep it instead of re-reading the overridden look as the default.
         if (!(record.model === model && model.styleInputs)) model.styleInputs = plotStyleSchema(model);
         model.styleValues = { ...record.styleValues };
-        applyPlotStyle(model, record.styleValues ?? {});
+        applyPlotStyle(model, record.styleValues ?? {}, this.bars.length > 1 ? this.bars[this.bars.length - 1]!.time - this.bars[this.bars.length - 2]!.time : 0);
+        // TradingView's legend: the title, then the inputs ("RSI 14 close") unless "Inputs in status line" is off.
+        if (model.statusInputs) {
+            const base = record.native?.descriptor.shortTitle ?? model.shorttitle ?? model.title;
+            model.shorttitle = styleShowsInputs(record.styleValues) ? `${base} ${model.statusInputs}` : base;
+        }
         return before !== model.styleInputs.map((i) => i.key).join('|');
     }
 
@@ -2921,6 +2927,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             native: { type, ...(channel !== type ? { channel } : {}) },
             ...(d.legend === false ? { legend: false } : {}),
             ...(out.paneAxis != null ? { paneAxis: out.paneAxis } : {}),
+            ...(out.statusInputs ? { statusInputs: out.statusInputs } : {}),
             series: out.series ?? [],
             fills: out.fills ?? [],
             backgrounds: out.backgrounds ?? [],
@@ -3031,7 +3038,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     /** Drop a now-empty pane from the order + collapse/maximize mirror. */
     private forgetPane(paneId: string): void {
         const i = this.paneOrder.indexOf(paneId);
-        if (i > 0) this.paneOrder.splice(i, 1); // never remove 'price' (index 0)
+        if (i >= 0 && paneId !== 'price') this.paneOrder.splice(i, 1); // never remove 'price' (it can sit anywhere)
         this.collapsedPanes.delete(paneId);
         if (this.maximizedPaneId === paneId) this.maximizedPaneId = null;
     }
@@ -3074,13 +3081,13 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     }
 
     movePane(paneId: string, dir: 'up' | 'down'): void {
-        if (paneId === 'price') return; // price stays pinned on top
+        if (paneId === 'price') return; // the main chart is moved by moving the panes around it
         const existing = this.existingPaneIds();
         const i = existing.indexOf(paneId);
         if (i < 0) return;
         const j = dir === 'up' ? i - 1 : i + 1;
-        // Never move above the price pane (index 0) or past the last pane.
-        if (j <= 0 || j >= existing.length) return;
+        // TradingView: a study pane moves past the main chart too (Move pane up under the chart puts it on top).
+        if (j < 0 || j >= existing.length) return;
         [existing[i], existing[j]] = [existing[j]!, existing[i]!];
         this.reorderPanes(existing);
         this.events.emit('pane:moved', { paneId, dir });
@@ -3118,11 +3125,13 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         this.relocateIndicator(id, paneId, ownScale, insert);
     }
 
-    /** PaneController: study panes in this order (price first; the rest keep their order after the listed ones). */
+    /** PaneController: panes in this order. `'price'` in the list places the main chart there; left out, it goes
+     *  first. Panes not listed keep their order after the listed ones. */
     orderPanes(ids: string[]): void {
         const existing = this.existingPaneIds();
-        const listed = ids.filter((p, i) => p !== 'price' && existing.includes(p) && ids.indexOf(p) === i);
-        const next = ['price', ...listed, ...existing.filter((p) => p !== 'price' && !listed.includes(p))];
+        const listed = ids.filter((p, i) => existing.includes(p) && ids.indexOf(p) === i);
+        const rest = existing.filter((p) => p !== 'price' && !listed.includes(p));
+        const next = listed.includes('price') ? [...listed, ...rest] : ['price', ...listed, ...rest];
         if (next.join('|') === existing.join('|')) return;
         this.reorderPanes(next);
     }
@@ -3245,7 +3254,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 const existing = this.existingPaneIds();
                 const i = existing.indexOf(a.paneId);
                 const j = a.dir === 'up' ? i - 1 : i + 1;
-                if (i > 0 && j > 0 && j < existing.length) {
+                if (i >= 0 && j >= 0 && j < existing.length) {
                     [existing[i], existing[j]] = [existing[j]!, existing[i]!];
                     this.paneOrder.length = 0;
                     this.paneOrder.push(...existing);
@@ -3311,7 +3320,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (record.loading && this.bars.length === 0 && !EngineOrchestrator.modelHasOutput(model)) return false;
 
         const handle = this.handles.get(id);
-        if (!record.native && this.styleModel(record, model) && record.renderHandle) record.pendingStructural = true;
+        if ((!record.native || record.native.descriptor.styleTab) && this.styleModel(record, model) && record.renderHandle) record.pendingStructural = true;
         // A native's pane axis (e.g. row labels that arrive with its data) is not in the value patch: remount on change.
         if (record.native && record.renderHandle && JSON.stringify(model.paneAxis ?? null) !== JSON.stringify(record.model?.paneAxis ?? null)) record.pendingStructural = true;
         // Nor are its levels or the set and look of its series: a native whose lines move or switch on and off (the
@@ -3369,6 +3378,9 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     /** What of a native's model a value patch cannot carry: its levels, and each series' id, kind and look. */
     private static nativeShape(model: IndicatorModel): string {
         return JSON.stringify([
+            model.shorttitle,
+            model.precision,
+            model.fills.map((f) => [f.color, f.gradient?.find((g) => g)]),
             model.priceLines,
             model.series.map((s) => [s.id, s.kind, s.visible, s.display, s.axisTag, isLineLikeSeries(s) ? s.style : null]),
         ]);
@@ -3401,11 +3413,15 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
 
     /** Each named value series' last plotted value — the model is the one source every
      *  engine fills, so this works without an execution context. */
-    private static plotsAtLastBar(model: IndicatorModel): Record<string, number | null> {
+    private static plotsAtLastBar(model: IndicatorModel, lastTime?: number): Record<string, number | null> {
         const out: Record<string, number | null> = {};
         for (const spec of model.series) {
             if (!isLineLikeSeries(spec)) continue;
-            out[spec.title] = spec.points[spec.points.length - 1]?.value ?? null;
+            // A forward-shifted plot (Ichimoku leading spans) runs past the last bar:
+            // read the value AT the last bar, never a future slot.
+            let k = spec.points.length - 1;
+            if (lastTime != null) while (k > 0 && spec.points[k]!.time > lastTime) k -= 1;
+            out[spec.title] = spec.points[k]?.value ?? null;
         }
         return out;
     }
@@ -3487,7 +3503,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             // whatever produced this run.
             forming: this.config.live && this.bars.length > 0,
             complete: this.historyState !== 'backfill',
-            plots: EngineOrchestrator.plotsAtLastBar(model),
+            plots: EngineOrchestrator.plotsAtLastBar(model, lastBar?.time),
             vars: snapshot?.variables ?? {},
             ...(snapshot?.strategy ? { strategy: snapshot.strategy } : {}),
             warnings: snapshot?.warnings ?? [],

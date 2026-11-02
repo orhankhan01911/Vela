@@ -68,7 +68,7 @@ export class PanesControl {
         return this;
     }
 
-    /** Put the study panes in this order, top to bottom (the main chart stays on top; panes not listed follow). */
+    /** Put the panes in this order, top to bottom. `'price'` places the main chart; left out, it stays on top. Panes not listed follow. */
     order(ids: string[]): this {
         if (this.guard()) this.controller.orderPanes(ids);
         return this;

@@ -562,6 +562,25 @@ describe('EngineOrchestrator', () => {
         }
     });
 
+    it('a built-in with a TradingView Style tab keeps its Style overrides (setStyle, restoreSettings) and is re-styled by them', async () => {
+        const renderer = new FakeRenderer();
+        const chart = new Vela({} as unknown as HTMLElement, { live: false }, { renderer, engines: [], dataFeed: new MockDataFeed() });
+        const h = chart.addNativeIndicator('rsi');
+        await chart.ready();
+        await flush();
+        const hasOb = () => renderer.mountedModels.filter((x) => x.id === h.id).pop()!.fills.some((f) => f.id.startsWith('rsi:fill:ob'));
+        expect(hasOb()).toBe(true);
+        h.setStyle({ 'fill:Overbought Gradient Fill.visible': false, 'plot:RSI.color': '#ff0000' });
+        await flush();
+        // Dropped before 2026-11-02: every Style-tab edit on a built-in was ignored (and lost on a theme switch).
+        expect(h.styleValues()).toEqual({ 'fill:Overbought Gradient Fill.visible': false, 'plot:RSI.color': '#ff0000' });
+        expect(hasOb()).toBe(false);
+        h.restoreSettings({ inputs: h.inputValues(), props: {}, style: { 'fill:Oversold Gradient Fill.visible': false } });
+        await flush();
+        expect(h.styleValues()).toEqual({ 'fill:Oversold Gradient Fill.visible': false });
+        expect(hasOb()).toBe(true);
+    });
+
     it('addNativeIndicator: a multiInstance type creates a fresh instance per add, each mounted and removable on its own', async () => {
         const instances: TestNativeIndicator[] = [];
         const multiDescriptor: NativeIndicatorDescriptor = {
@@ -1986,6 +2005,12 @@ describe('EngineOrchestrator — built-in volume native indicators', () => {
             valuesColor: '#787b86',
             showPoc: false,
             valueAreaFrac: 0.7,
+            // the stepped "Line" look (84dec3c / eaa0f6e): off by default, bars stay the look
+            look: 'bars',
+            lineFill: false,
+            lineUpColor: '#2f8cff',
+            lineDownColor: '#8a8f98',
+            lineWidth: 1,
         });
         expect(chart.inspect().indicators.some((s) => s.nativeType === 'vpvr')).toBe(true);
     });

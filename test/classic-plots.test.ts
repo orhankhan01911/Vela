@@ -28,7 +28,7 @@ describe('classicPlots: a classic indicator computed off-chart with its own sett
     it('MACD: MACD and signal lines are both there', () => {
         const m = classicPlots('macd', bars, { fastLength: 12, slowLength: 26, signalLength: 9, source: 'Close' })!;
         const titles = m.plots.map((p) => p.title);
-        expect(titles).toEqual(expect.arrayContaining(['MACD', 'Signal']));
+        expect(titles).toEqual(expect.arrayContaining(['MACD', 'Signal line']));
     });
 
     it('an unknown type is null', () => {

@@ -49,7 +49,7 @@ import type { Unsubscribe } from '../../core/util/types';
 import { SecondClock, type WallClock } from '../../core/util/wall-clock';
 import { isLineLikeSeries, seriesShownOn, type SeriesSurface } from '../../core/model/series';
 import { InputsUI, type LegendPlotValue } from '../shared/InputsUI';
-import { PaneControls } from './chrome/PaneControls';
+import { PaneControls, type PaneControlView } from './chrome/PaneControls';
 import { AxisScaleButtons, type AxisScaleView } from './chrome/AxisScaleButtons';
 import { NATIVE_CAPABILITIES, supportsWebGL2 } from './capabilities';
 import { WebGL2Backend } from './backend/WebGL2Backend';
@@ -2135,6 +2135,7 @@ export class NativeRenderer implements IChartRenderer {
         this.mountContainer?.style.removeProperty('--vela-scale-gutter');
         this.mountContainer?.style.removeProperty('--vela-bottom-gutter');
         this.mountContainer?.style.removeProperty('--vela-price-pane-top');
+        this.mountContainer?.style.removeProperty('--vela-statusline-top');
         this.mountContainer?.style.removeProperty('--vela-price-pane-bottom');
         this.mountContainer = null;
         this.wrapper?.remove();
@@ -3335,11 +3336,13 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     /** Thin projection of the panes for the hover-control cluster (top-to-bottom order). */
-    private paneControlViews(): Array<{ id: string; kind: 'price' | 'study'; collapsed: boolean; maximized: boolean; top: number; height: number; index: number; count: number }> {
+    private paneControlViews(): PaneControlView[] {
         const ordered = this.scene.orderedPanes();
         return ordered.map((p, i) => ({
             id: p.id,
             kind: p.kind,
+            aboveIsPrice: ordered[i - 1]?.kind === 'price',
+            belowIsPrice: ordered[i + 1]?.kind === 'price',
             collapsed: p.collapsed,
             maximized: this.maximizedPaneId === p.id,
             top: p.bounds.top,
@@ -3355,7 +3358,7 @@ export class NativeRenderer implements IChartRenderer {
         const i = ordered.findIndex((p) => p.id === paneId);
         if (i < 0) return;
         const j = dir === 'up' ? i - 1 : i + 1;
-        if (j < 1 || j >= ordered.length) return; // price pane stays pinned at index 0
+        if (j < 0 || j >= ordered.length) return; // TradingView: a study pane can move above the main chart
         const ids = ordered.map((p) => p.id);
         const tmp = ids[i]!;
         ids[i] = ids[j]!;
@@ -3371,7 +3374,7 @@ export class NativeRenderer implements IChartRenderer {
         const ordered = this.scene.orderedPanes();
         const i = ordered.findIndex((p) => p.id === paneId);
         const target = ordered[dir === 'up' ? i - 1 : i + 1];
-        if (i < 1 || !target) return;
+        if (i < 0 || ordered[i]!.kind === 'price' || !target) return;
         const to: MoveTarget = target.kind === 'price' ? 'price' : { pane: target.id };
         for (const m of [...this.scene.orderedIndicatorsForPane(paneId)]) for (const cb of this.moveIndicatorCbs) cb(m.id, to);
     }
@@ -3611,9 +3614,11 @@ export class NativeRenderer implements IChartRenderer {
             if (value == null || !Number.isFinite(value)) continue;
             // a merged indicator reads on its own (left) scale: 327.5M for a CVD merged into RSI, not 327470000.00
             const own = model.ownScale === true && pane ? this.scene.scaleFor(model, pane) : null;
-            const shown = own && pane
-                ? valueFormat(model, own) === 'volume' ? formatCompactValue(value) : formatPriceLabel(own, pane.bounds.height, value, this.scene.priceMintick)
-                : this.dataWindowFmt(value, pane);
+            const shown = model.precision != null
+                ? value.toFixed(model.precision)
+                : own && pane
+                  ? valueFormat(model, own) === 'volume' ? formatCompactValue(value) : formatPriceLabel(own, pane.bounds.height, value, this.scene.priceMintick)
+                  : this.dataWindowFmt(value, pane);
             rows.push({ label: s.title || model.title, value: surface === 'legend' && s.legendLabel ? `${s.legendLabel} ${shown}` : shown, color });
         }
         return rows;
@@ -4691,6 +4696,9 @@ export class NativeRenderer implements IChartRenderer {
         const bottom = Math.max(0, plotH - (top + height));
         this.mountContainer.style.setProperty('--vela-price-pane-top', `${top}px`);
         this.mountContainer.style.setProperty('--vela-price-pane-bottom', `${bottom}px`);
+        // The status line (symbol + OHLC) rides on the main chart's pane, as on TradingView: below a study pane
+        // moved above it. A maximized study pane hides the main chart; the line then stays at the top.
+        this.mountContainer.style.setProperty('--vela-statusline-top', `${price && price.bounds.height >= 4 ? top : 0}px`);
     }
 
     /** The built-in mark, or the host's own when one is set. */

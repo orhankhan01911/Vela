@@ -38,6 +38,10 @@ export interface Fill {
     gradient?: Array<FillGradientStop | null>;
     /** `force_overlay` → render on the price pane regardless of the indicator's pane. */
     overlay?: boolean;
+    /** Name on the settings dialog's Style tab (TradingView's fill `title`). */
+    title?: string;
+    /** The colours {@link colors} picks from, in order (TradingView's "Color 0", "Color 1"); the Style tab edits each. */
+    palette?: string[];
 }
 
 /** A vertical background tint over a time span (Pine `bgcolor()` / session bands). */

@@ -584,6 +584,11 @@ export class ChartCell {
             if (this.settling(id)) return;
             this.history.push({ undo: () => this.indicatorById(id)?.setVisible(!visible), redo: () => this.indicatorById(id)?.setVisible(visible) });
         });
+        // A pane moved up/down (its hover arrows): the order is part of the saved layout.
+        this.inner.on('pane:moved', () => {
+            this.deps.onStateDirty();
+            this.layoutMoved = true;
+        });
         // A move or merge (legend drag, "Move to", object tree, a pane's merge button) is one undo step; the
         // moves of one gesture (a whole pane merged up) land in the same step and undo together, newest first.
         this.inner.on('indicator:moved', ({ id, paneId, ownScale, from }) => {

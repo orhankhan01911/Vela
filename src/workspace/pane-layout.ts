@@ -7,15 +7,22 @@ import type { PaneLayoutState } from '../state/document';
 
 /** The layout of the chart's panes right now. Indicators `refOf` cannot name (not in the ledger) are left out. */
 export function paneLayoutOf(panes: readonly PaneInfo[], refOf: (id: string) => string | undefined): PaneLayoutState {
-    const slots: PaneLayoutState['slots'] = [];
+    // Slot 0 is always the main chart's; the study slots follow top to bottom, and `priceAt` says where the main
+    // chart sits among them when a study pane was moved above it.
+    const price: PaneLayoutState['slots'][number] = [];
+    const studies: PaneLayoutState['slots'] = [];
+    let priceAt = 0;
     for (const p of panes) {
         const members = p.indicators.flatMap((i) => {
             const ref = refOf(i.id);
             return ref ? [i.ownScale ? { ref, ownScale: true } : { ref }] : [];
         });
-        if (p.kind === 'price' || members.length > 0) slots.push(members);
+        if (p.kind === 'price') {
+            price.push(...members);
+            priceAt = studies.length;
+        } else if (members.length > 0) studies.push(members);
     }
-    return { slots };
+    return priceAt > 0 ? { slots: [price, ...studies], priceAt } : { slots: [price, ...studies] };
 }
 
 /**
@@ -47,5 +54,6 @@ export function applyPaneLayout(layout: PaneLayoutState, resolve: (ref: string) 
         for (const m of members) if (m !== master) panes.place(m.id, { paneId, ownScale: m.own });
         used.push(paneId);
     });
-    panes.order(used);
+    const at = Math.min(layout.priceAt ?? 0, used.length);
+    panes.order(at > 0 ? [...used.slice(0, at), 'price', ...used.slice(at)] : used);
 }

@@ -11,6 +11,7 @@ import { trendSpecs } from './trend';
 import { volatilitySpecs } from './volatility';
 import { volumeSpecs } from './volume';
 import { overlaySpecs } from './overlays';
+import { tvSpecs } from './tv';
 
 /**
  * The classic indicator catalog — the standard technical-analysis studies every
@@ -18,14 +19,10 @@ import { overlaySpecs } from './overlays';
  * each a pure compute over the chart's own bars riding the native-indicator
  * pipeline (picker, legend, panes, settings, persistence).
  */
+const TV_TYPES = new Set(tvSpecs.map((s) => s.type));
 export const classicSpecs: ClassicIndicatorSpec[] = [
-    ...averageSpecs,
-    ...bandSpecs,
-    ...oscillatorSpecs,
-    ...trendSpecs,
-    ...volatilitySpecs,
-    ...volumeSpecs,
-    ...overlaySpecs,
+    ...tvSpecs,
+    ...[...averageSpecs, ...bandSpecs, ...oscillatorSpecs, ...trendSpecs, ...volatilitySpecs, ...volumeSpecs, ...overlaySpecs].filter((s) => !TV_TYPES.has(s.type)),
 ];
 
 /** Register the classic indicator catalog (idempotent). Called by the composition root. */
@@ -60,8 +57,9 @@ export function classicPlots(
     const spec = classicSpecs.find((s) => s.type === type);
     if (!spec) return null;
     const out = spec.compute(bars, inputs);
-    // A plot shown nowhere only anchors a band (the 0/100 rails): not something to watch.
-    const seen = (d: SeriesDisplay | undefined): boolean => !d || d.pane !== false || d.legend !== false;
+    // A plot shown nowhere only anchors a band (the 0/100 rails): not something to watch. One kept in the data window
+    // (Ichimoku's hidden Kumo cloud edges, as on TradingView) is a real output an alert can watch.
+    const seen = (d: SeriesDisplay | undefined): boolean => !d || d.pane !== false || d.legend !== false || d.dataWindow === true;
     return {
         plots: out.plots.filter((p) => seen(p.display)).map((p) => ({ key: p.key, title: p.title, values: p.values })),
         levels: (out.levels ?? []).map((l) => ({ key: l.key, title: l.title ?? '', price: l.price })),

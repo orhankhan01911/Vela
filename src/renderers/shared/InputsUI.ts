@@ -648,9 +648,11 @@ export class InputsUI {
 
     private positionLegend(lg: HTMLElement, paneId: string): void {
         const bounds = this.paneBoundsOf ? this.paneBoundsOf(paneId) : { top: 0, height: Infinity };
-        // Publish whether this legend's pane sits at the very top of the plot (see
-        // LEGEND_AT_TOP_ATTR) — the price pane normally, or a maximized study pane filling it.
-        lg.toggleAttribute(LEGEND_AT_TOP_ATTR, bounds.top === 0);
+        // Publish whether this legend shares its pane with the status line (see LEGEND_AT_TOP_ATTR): the main
+        // chart's pane wherever it sits (a study pane can move above it), or, while a maximized study pane hides
+        // the main chart, the pane at the top of the plot.
+        const price = this.paneBoundsOf?.('price');
+        lg.toggleAttribute(LEGEND_AT_TOP_ATTR, price && price.height >= 4 ? paneId === 'price' : bounds.top === 0);
         // A pane hidden by a maximize elsewhere collapses to ~0 height — hide its legend entirely
         // (a collapsed strip keeps a small height, so its title still shows). Titles switched
         // off (the settings toggle) hide every pane's container the same way. Restore to 'flex'

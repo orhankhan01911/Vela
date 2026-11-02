@@ -108,6 +108,9 @@ export interface CellState {
  */
 export interface PaneLayoutState {
     slots: Array<Array<{ ref: string; ownScale?: boolean }>>;
+    /** Where the main chart sits among the panes, top to bottom, when not on top (a study pane moved above it).
+     *  Slot 0 stays the main chart's indicators either way. */
+    priceAt?: number;
 }
 
 /** One persisted manifest-instance entry (see `CellState.indicators`). */
@@ -250,7 +253,8 @@ function sanitizePaneLayout(raw: unknown): PaneLayoutState | null {
             return [(m as { ownScale?: unknown }).ownScale === true ? { ref, ownScale: true } : { ref }];
         }),
     );
-    return { slots: out };
+    const at = (raw as { priceAt?: unknown }).priceAt;
+    return typeof at === 'number' && Number.isInteger(at) && at > 0 && at < out.length ? { slots: out, priceAt: at } : { slots: out };
 }
 
 function sanitizeCell(raw: unknown): CellState | null {

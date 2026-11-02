@@ -100,6 +100,12 @@ interface SeriesBase {
     /** Also tag this plot's latest value on its pane's price scale, in its colour, named by `legendLabel`
      *  ("7d -3.1"), so lines of one colour family can be told apart where they end. Line-like series only. */
     axisTag?: boolean;
+    /** The colours a per-bar coloured plot picks from, in order (TradingView's "Color 0", "Color 1"...): the
+     *  settings dialog's Style tab edits each one. */
+    palette?: string[];
+    /** Listed on the Style tab although not displayed (Pine `display.none`, e.g. a VWAP band switched off or
+     *  Ichimoku's Kumo edge lines): its box starts unticked, and ticking it draws the plot, as on TradingView. */
+    styleOff?: boolean;
 }
 
 export interface LineLikeSeries extends SeriesBase {
