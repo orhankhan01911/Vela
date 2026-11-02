@@ -96,7 +96,7 @@ export class CalloutBubble {
         this.el.style.background = this.spec.background;
         this.el.style.color = this.spec.color ?? '';
         // a span > 1 is a pill: one icon square per slot, the round ends kept
-        const span = Math.min(4, Math.max(1, Math.round(this.spec.span ?? 1)));
+        const span = Math.min(6, Math.max(1, Math.round(this.spec.span ?? 1)));
         const ip = this.size - 4;
         this.el.style.width = `${this.size + (span - 1) * ip}px`;
         this.el.style.borderRadius = span > 1 ? `${this.size / 2}px` : '';
