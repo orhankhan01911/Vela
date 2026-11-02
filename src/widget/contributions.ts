@@ -478,8 +478,9 @@ export interface LegendCalloutDescriptor {
     id: string;
     /** Sort key within the contributed group (ascending; default 0). */
     order?: number;
-    /** Resolve the row's bubble — `null`/`undefined` shows none. */
-    callout(indicator: LegendIndicatorInfo): LegendCalloutSpec | null | undefined;
+    /** Resolve the row's bubble — `null`/`undefined` shows none. `on` is the row's own chart and indicator handle
+     *  (ids repeat across a workspace's charts, so a callout that reads inputs must use this, not a lookup by id). */
+    callout(indicator: LegendIndicatorInfo, on?: { chart: Vela; handle: IndicatorHandle }): LegendCalloutSpec | null | undefined;
 }
 
 const calloutRegistry = new Map<string, LegendCalloutDescriptor>();
@@ -514,7 +515,7 @@ export function legendCalloutsProviderFor(chart: Vela, context: () => WidgetCont
         const info: LegendIndicatorInfo = { id: handle.id, title: handle.title, ...(handle.source !== undefined ? { source: handle.source } : {}) };
         const views: LegendCalloutView[] = [];
         for (const d of legendCallouts()) {
-            const spec = d.callout(info);
+            const spec = d.callout(info, { chart, handle });
             if (!spec) continue;
             views.push({
                 id: d.id,
