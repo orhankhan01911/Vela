@@ -2289,7 +2289,9 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (!record.hidden && !record.native) this.setLoading(record, true);
         record.pendingCause = 'inputs';
         if (record.session) record.session.update(record.inputValues);
-        else if (record.native && !record.hidden) record.native.instance.setInputs(record.inputValues);
+        // A native not started yet (added moments ago, hidden, or re-created for a new market) has
+        // no context: its start() reads the merged record.inputValues instead.
+        else if (record.native?.started && !record.hidden) record.native.instance.setInputs(record.inputValues);
         this.events.emit('indicator:inputs', { id });
     }
 

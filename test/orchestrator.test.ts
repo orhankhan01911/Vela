@@ -699,6 +699,39 @@ describe('EngineOrchestrator', () => {
         }
     });
 
+    it('inputs changed before a native started reach start(), not setInputs() on a context-less instance', async () => {
+        // A host that sets inputs right after adding (theme colours, a tenor picked elsewhere)
+        // used to hit setInputs() before start(): an instance that redraws there read its
+        // missing ctx and threw ("this.ctx.symbol" of undefined, the VRP page crash).
+        class StrictNative implements NativeIndicator {
+            seen: { start: Record<string, unknown> | null; setInputs: number } = { start: null, setInputs: 0 };
+            private ctx: NativeIndicatorContext | null = null;
+            start(ctx: NativeIndicatorContext, inputs: Record<string, unknown>): void { this.ctx = ctx; this.seen.start = { ...inputs }; ctx.emit({}); }
+            onBars(): void {}
+            onViewport(): void {}
+            setInputs(): void { this.seen.setInputs += 1; void this.ctx!.symbol; }
+            suspend(): void {}
+            resume(): void {}
+            stop(): void {}
+        }
+        const made: StrictNative[] = [];
+        registerNativeIndicator({ ...testNativeDescriptor, type: 'strict-inputs', title: 'Strict inputs', multiInstance: true, create: () => { const n = new StrictNative(); made.push(n); return n; } });
+        try {
+            const renderer = new FakeRenderer();
+            const chart = new Vela({} as unknown as HTMLElement, { live: false, volume: false }, { renderer, engines: [], dataFeed: new MockDataFeed() });
+            const h = chart.addNativeIndicator('strict-inputs', { inputs: { len: 14 } });
+            expect(() => h.setInputs({ len: 7 })).not.toThrow(); // before ready: no start yet
+            expect(made[0]!.seen.setInputs).toBe(0);
+            await chart.ready();
+            await flush();
+            expect(made[0]!.seen.start).toMatchObject({ len: 7 }); // start() got the merged inputs
+            h.setInputs({ len: 21 });
+            expect(made[0]!.seen.setInputs).toBe(1); // a started instance still gets setInputs
+        } finally {
+            unregisterNativeIndicator('strict-inputs');
+        }
+    });
+
     it('show puts a layer native back on its own pane before it resumes (its resume pushes layer data without emitting)', async () => {
         // Bar Stats' shape: emits its model once, then only pushes layer data. Before the fix the model came back
         // only on the next emit, so for the whole time after a show the layer had no owner and painted on the
