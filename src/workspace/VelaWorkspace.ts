@@ -20,7 +20,7 @@ import { isEditableTarget, KeymapManager } from '../ui/keymap';
 import { Menu } from '../ui/components/menu';
 import type { Vela } from '../Vela';
 import { Topbar, priceStyleLabel, priceStyleIcon } from '../widget/topbar';
-import { Bottombar, RANGE_PRESETS } from '../widget/bottombar';
+import { Bottombar, RANGE_PRESETS, snapRangePreset, type RangePreset } from '../widget/bottombar';
 import { SecondClock } from '../core/util/wall-clock';
 import { ObjectTree } from '../widget/object-tree';
 import { DataWindow } from '../widget/data-window';
@@ -744,7 +744,7 @@ export class VelaWorkspace {
                       timezone: this.timezone,
                       clock: this.clock,
                       onRange: (preset) => {
-                          this.active.applyRange(preset);
+                          this.active.applyRange(this.rangeForChart(preset));
                           this.bottombar?.setActiveRange(preset.id);
                       },
                       onTimezone: (zone) => this.setTimezone(zone),
@@ -2315,12 +2315,17 @@ export class VelaWorkspace {
             getContext: () => this.context(),
             onTimeframe: (tf) => this.setActiveTimeframe(tf),
             onRange: (preset) => {
-                this.active.applyRange(preset);
+                this.active.applyRange(this.rangeForChart(preset));
                 this.bottombar?.setActiveRange(preset.id); // the desktop bar stays truthful across a mode flip
             },
             onOpenChange: (open) => this.trackDialog(open),
         });
         this.tfDrawer.open();
+    }
+
+    /** The chip, on a timeframe this chart offers (see {@link snapRangePreset}). */
+    private rangeForChart(preset: RangePreset): RangePreset {
+        return snapRangePreset(preset, this.opts.timeframes ?? DEFAULT_TIMEFRAMES);
     }
 
     private openDrawingsDrawer(): void {

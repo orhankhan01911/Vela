@@ -1,3 +1,4 @@
+import { timeframeToMs } from '../data/timeframe';
 // Bottom bar — date-range presets (left), live clock + timezone picker (right).
 // Range presets switch the timeframe AND frame the matching visible window; the widget
 // owns the rebuild, so the bar only reports the chosen preset upward.
@@ -32,6 +33,21 @@ export interface RangePreset {
  * window needs. Resolutions follow the reference: the shorter the range, the finer the
  * bars (1 day of 1-minute bars … 5 years of weekly bars).
  */
+/**
+ * A range chip on a chart that does not offer the chip's timeframe (a host passed its own
+ * `timeframes`, e.g. a feed with nothing under 15m): the offered timeframe closest to it
+ * (by ratio), with the bar budget scaled so the same window is fetched. Without this a
+ * "7D" chip switched such a chart to 5m and it went blank. Offered ⇒ unchanged.
+ */
+export function snapRangePreset(preset: RangePreset, offered: readonly string[]): RangePreset {
+    if (offered.length === 0 || offered.includes(preset.tf)) return preset;
+    const want = timeframeToMs(preset.tf);
+    const gap = (tf: string): number => Math.abs(Math.log(timeframeToMs(tf) / want));
+    let best = offered[0]!;
+    for (const tf of offered) if (gap(tf) < gap(best)) best = tf;
+    return { ...preset, tf: best, bars: Math.ceil((preset.bars * want) / timeframeToMs(best)) + 2 };
+}
+
 export const RANGE_PRESETS: readonly RangePreset[] = [
     { id: '1D', tf: '1', preset: '1D', bars: 1500 }, //   1 day  @ 1m  = 1440 bars
     { id: '7D', tf: '5', preset: '1W', bars: 2100 }, //   7 days @ 5m  = 2016
