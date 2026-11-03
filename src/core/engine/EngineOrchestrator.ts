@@ -764,8 +764,9 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
     private restartNativeIndicators(): void {
         for (const record of this.registry.all()) {
             if (!record.native) continue;
-            record.native.instance.stop();
+            if (record.native.started) record.native.instance.stop();
             record.native.instance = record.native.descriptor.create();
+            record.native.started = false;
             record.pendingStructural = true; // the next emitted model remounts over the old visuals
             if (record.hidden) {
                 record.native.stale = true;
@@ -1309,7 +1310,9 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         if (!record.hidden && !record.native) this.setLoading(record, true);
         record.pendingCause = 'inputs';
         if (record.session) record.session.update(record.inputValues);
-        else if (record.native && !record.hidden) record.native.instance.setInputs(record.inputValues);
+        // A native not started yet (added moments ago, hidden, or re-created for a new market) has
+        // no context: its start() reads the merged record.inputValues instead.
+        else if (record.native?.started && !record.hidden) record.native.instance.setInputs(record.inputValues);
         this.events.emit('indicator:inputs', { id });
     }
 
@@ -1358,7 +1361,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         // opt-out a removed volume resurrected on the next symbol/timeframe switch.
         if (record?.native?.type === 'volume') this.volumeOptedOut = true;
         record?.session?.stop();
-        record?.native?.instance.stop();
+        if (record?.native?.started) record.native.instance.stop();
         this.handles.delete(id);
         if (record?.renderHandle) this.renderer.removeIndicator(record.renderHandle);
         const paneId = record?.model?.paneId;
@@ -1386,13 +1389,15 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         if (!visible) {
             record.session?.stop();
             record.session = undefined;
-            record.native?.instance.suspend();
+            if (record.native?.started) record.native.instance.suspend(); // never-started: nothing to suspend
             if (record.renderHandle) this.renderer.setIndicatorVisible?.(record.renderHandle, false);
         } else {
             if (record.renderHandle) this.renderer.setIndicatorVisible?.(record.renderHandle, true);
             record.pendingStructural = true; // visuals dropped on hide → next model re-mounts
             if (record.native) {
-                if (record.native.stale) {
+                if (record.native.stale || !record.native.started) {
+                    // Also a native hidden before it ever started: start it now (resume() would
+                    // run a context-less instance and the indicator would stay blank).
                     // The instance was re-created for a NEW market while hidden — resume()
                     // would revive the old market's compute; start the fresh instance instead.
                     record.native.stale = false;
@@ -1483,7 +1488,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         // native instances free their own caches/timers in stop()
         for (const record of this.registry.all()) {
             record.session?.stop();
-            record.native?.instance.stop();
+            if (record.native?.started) record.native.instance.stop();
         }
         for (const engine of this.typeEngines.values()) engine.stop(); // chart-type data engines (SDK)
         this.typeEngines.clear();
@@ -1604,6 +1609,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
             await this.readyPromise;
             const record = this.registry.get(id);
             if (!record?.native || record.hidden) return; // removed/hidden during the await
+            if (record.native.started) return; // a second queued start (hidden + shown before ready)
             const ctx: NativeIndicatorContext = {
                 symbol: this.config.market.symbol ?? 'TEST',
                 timeframe: this.config.market.timeframe ?? '60',
@@ -1618,6 +1624,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
                 },
             };
             record.native.instance.start(ctx, record.inputValues);
+            record.native.started = true;
         } catch (err) {
             this.fail(id, handle, err);
         }

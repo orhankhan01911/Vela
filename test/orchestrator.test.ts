@@ -475,6 +475,62 @@ describe('EngineOrchestrator', () => {
         expect(engine.runCount[vr.id] ?? 0).toBeGreaterThan(runsBefore);
     });
 
+    it('a native is only told about inputs, hide and show once it has started', async () => {
+        // A host that sets inputs right after adding (theme colours, a tenor picked elsewhere)
+        // used to hit setInputs() before start(): an instance that redraws there read its
+        // missing ctx and threw ("this.ctx.symbol" of undefined, the options VRP page crash).
+        class StrictNative implements NativeIndicator {
+            calls = { start: 0, setInputs: 0, suspend: 0, resume: 0, stop: 0 };
+            startInputs: Record<string, unknown> | null = null;
+            private ctx: NativeIndicatorContext | null = null;
+            start(ctx: NativeIndicatorContext, inputs: Record<string, unknown>): void { this.calls.start += 1; this.ctx = ctx; this.startInputs = { ...inputs }; ctx.emit({}); }
+            onBars(): void { void this.ctx!.symbol; }
+            onViewport(): void {}
+            setInputs(): void { this.calls.setInputs += 1; void this.ctx!.symbol; }
+            suspend(): void { this.calls.suspend += 1; void this.ctx!.symbol; }
+            resume(): void { this.calls.resume += 1; void this.ctx!.symbol; }
+            stop(): void { this.calls.stop += 1; void this.ctx!.symbol; }
+        }
+        const made: StrictNative[] = [];
+        const desc = (type: string): NativeIndicatorDescriptor => ({ ...testNativeDescriptor, type, title: type, create: () => { const n = new StrictNative(); made.push(n); return n; } });
+        registerNativeIndicator(desc('strict-a'));
+        registerNativeIndicator(desc('strict-b'));
+        registerNativeIndicator(desc('strict-c'));
+        try {
+            const renderer = new FakeRenderer();
+            const chart = new Vela({} as unknown as HTMLElement, { live: false, volume: false }, { renderer, engines: [], dataFeed: new MockDataFeed() });
+            // (a) inputs before start go to start()
+            const a = chart.addNativeIndicator('strict-a', { inputs: { len: 14 } });
+            expect(() => a.setInputs({ len: 7 })).not.toThrow();
+            // (b) hidden and shown again before start: started once, never resumed context-less
+            const b = chart.addNativeIndicator('strict-b');
+            expect(() => { b.setVisible(false); b.setVisible(true); }).not.toThrow();
+            // (c) hidden before start, shown after: start() then, not resume()
+            const c = chart.addNativeIndicator('strict-c');
+            c.setVisible(false);
+            await chart.ready();
+            await flush();
+            const [na, nb, nc] = made;
+            expect(na!.calls.setInputs).toBe(0);
+            expect(na!.startInputs).toMatchObject({ len: 7 });
+            expect(nb!.calls).toMatchObject({ start: 1, resume: 0, suspend: 0 });
+            expect(nc!.calls).toMatchObject({ start: 0, suspend: 0 });
+            expect(() => c.setVisible(true)).not.toThrow();
+            await flush();
+            expect(nc!.calls).toMatchObject({ start: 1, resume: 0 });
+            a.setInputs({ len: 21 });
+            expect(na!.calls.setInputs).toBe(1); // a started instance still gets setInputs
+            // removing / destroying stops only what ran
+            const d = chart.addNativeIndicator('strict-c');
+            void d;
+            expect(() => chart.destroy()).not.toThrow();
+        } finally {
+            unregisterNativeIndicator('strict-a');
+            unregisterNativeIndicator('strict-b');
+            unregisterNativeIndicator('strict-c');
+        }
+    });
+
     it('addNativeIndicator: mounts via the shared pipeline, is single-instance per type, and inspect tags it', async () => {
         registerNativeIndicator(testNativeDescriptor);
         try {

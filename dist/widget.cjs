@@ -19135,8 +19135,9 @@ var EngineOrchestrator = class _EngineOrchestrator {
   restartNativeIndicators() {
     for (const record of this.registry.all()) {
       if (!record.native) continue;
-      record.native.instance.stop();
+      if (record.native.started) record.native.instance.stop();
       record.native.instance = record.native.descriptor.create();
+      record.native.started = false;
       record.pendingStructural = true;
       if (record.hidden) {
         record.native.stale = true;
@@ -19590,7 +19591,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
     if (!record.hidden && !record.native) this.setLoading(record, true);
     record.pendingCause = "inputs";
     if (record.session) record.session.update(record.inputValues);
-    else if (record.native && !record.hidden) record.native.instance.setInputs(record.inputValues);
+    else if (record.native?.started && !record.hidden) record.native.instance.setInputs(record.inputValues);
     this.events.emit("indicator:inputs", { id });
   }
   /** IndicatorController: the CURRENT stored input values (defaults merged with edits). */
@@ -19629,7 +19630,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
     const record = this.registry.remove(id);
     if (record?.native?.type === "volume") this.volumeOptedOut = true;
     record?.session?.stop();
-    record?.native?.instance.stop();
+    if (record?.native?.started) record.native.instance.stop();
     this.handles.delete(id);
     if (record?.renderHandle) this.renderer.removeIndicator(record.renderHandle);
     const paneId = record?.model?.paneId;
@@ -19655,13 +19656,13 @@ var EngineOrchestrator = class _EngineOrchestrator {
     if (!visible) {
       record.session?.stop();
       record.session = void 0;
-      record.native?.instance.suspend();
+      if (record.native?.started) record.native.instance.suspend();
       if (record.renderHandle) this.renderer.setIndicatorVisible?.(record.renderHandle, false);
     } else {
       if (record.renderHandle) this.renderer.setIndicatorVisible?.(record.renderHandle, true);
       record.pendingStructural = true;
       if (record.native) {
-        if (record.native.stale) {
+        if (record.native.stale || !record.native.started) {
           record.native.stale = false;
           const handle = this.handles.get(id);
           if (handle) void this.startNativeIndicator(id, handle);
@@ -19735,7 +19736,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
     this.paneActionUnsub?.();
     for (const record of this.registry.all()) {
       record.session?.stop();
-      record.native?.instance.stop();
+      if (record.native?.started) record.native.instance.stop();
     }
     for (const engine of this.typeEngines.values()) engine.stop();
     this.typeEngines.clear();
@@ -19828,6 +19829,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
       await this.readyPromise;
       const record = this.registry.get(id);
       if (!record?.native || record.hidden) return;
+      if (record.native.started) return;
       const ctx = {
         symbol: this.config.market.symbol ?? "TEST",
         timeframe: this.config.market.timeframe ?? "60",
@@ -19842,6 +19844,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
         }
       };
       record.native.instance.start(ctx, record.inputValues);
+      record.native.started = true;
     } catch (err) {
       this.fail(id, handle, err);
     }
