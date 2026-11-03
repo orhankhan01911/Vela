@@ -392,6 +392,13 @@ export interface IChartRenderer {
      * a renderer without it simply never shows contributed callouts.
      */
     setLegendCallouts?(provider: ((indicatorId: string) => LegendCalloutView[]) | null): void;
+    /**
+     * Host hook for the price-axis countdown chip, called on every paint with the
+     * end of the last bar and the current time (ms); return rows of text to show instead of
+     * the bar-close countdown (e.g. `['OPENS IN', '15:22:10']` while a market is shut), or
+     * null to keep the normal countdown. Pass null to remove the hook.
+     */
+    setCountdownLines?(fn: ((lastBarEndMs: number, nowMs: number) => string[] | null) | null): void;
 
     /**
      * Replace the indicator legend's fold toggle with a HOST action (or restore it with

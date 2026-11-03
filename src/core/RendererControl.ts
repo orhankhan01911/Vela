@@ -58,6 +58,17 @@ export class RendererControl {
     }
 
     /**
+     * Host hook for the price-axis countdown chip. Called on every paint with the end of
+     * the last bar and now (ms): return rows of text to show instead of the bar-close
+     * countdown (e.g. `['OPENS IN', '15:22:10']` while a market is shut), or null for the
+     * normal countdown. Pass null to remove it. No-op on a renderer without the hook.
+     */
+    setCountdownLines(fn: ((lastBarEndMs: number, nowMs: number) => string[] | null) | null): this {
+        this.renderer.setCountdownLines?.(fn);
+        return this;
+    }
+
+    /**
      * Wire the legend rows' HOST-CONTRIBUTED callout bubbles (the shells route the
      * plugin registry through this; see `registerLegendCallout`). Silent on a renderer
      * without the seam — contributed callouts simply never show there, same graceful
