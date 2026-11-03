@@ -909,6 +909,34 @@ describe('EngineOrchestrator', () => {
         expect(seen[seen.length - 1]).toBe(lastT + 3 * HOUR);
     });
 
+    it('amends a CLOSED bar from a late live update (a feed that opens bars on the clock edge)', async () => {
+        const HOUR = 3_600_000;
+        const feed = new GapFeed(10);
+        const renderer = new FakeRenderer();
+        const chart = new Vela({} as unknown as HTMLElement, { live: true }, { renderer, engines: [], dataFeed: feed });
+        const seen: number[] = [];
+        chart.on('bar', (b) => seen.push(b.time));
+        await chart.ready();
+        await flush();
+        const lastT = 1_700_000_000_000 + 9 * HOUR;
+        feed.push!(mkBar(lastT + HOUR, 50)); // the edge: the next bar opens
+        await flush();
+        const setBefore = renderer.setBarsCalls.length;
+        // A tick stamped before the edge arrives after it: the closed bar takes it.
+        feed.push!({ ...mkBar(lastT, 77), high: 120 });
+        await flush();
+        expect(renderer.bars[renderer.bars.length - 2]).toMatchObject({ time: lastT, close: 77, high: 120 });
+        expect(renderer.bars[renderer.bars.length - 1]).toMatchObject({ time: lastT + HOUR, close: 50 });
+        expect(renderer.setBarsCalls.slice(setBefore)).toEqual([{ n: 11, preserveView: true }]);
+        expect(seen).toEqual([lastT + HOUR]); // no 'bar' event for the closed bar
+        // Beyond the window (or a time with no bar) it is still ignored.
+        feed.push!(mkBar(lastT - 5 * HOUR, 1));
+        feed.push!(mkBar(lastT + 30 * 60_000, 1));
+        await flush();
+        expect(renderer.setBarsCalls.length).toBe(setBefore + 1);
+        expect(renderer.bars.find((b) => b.close === 1)).toBeUndefined();
+    });
+
     it('accepts a legitimate market gap after an empty heal (cooldown — no refetch loop)', async () => {
         const HOUR = 3_600_000;
         const feed = new GapFeed(10);

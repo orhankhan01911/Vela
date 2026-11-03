@@ -561,7 +561,11 @@ export class ChromeRenderer {
 
         // ── axis chips: last-price label and/or countdown ──
         // A series-replacing style (Renko, tick bars) has no fixed bar close: no countdown.
-        const cdText = scene.showCountdown && !replacesSeries(scene.priceStyle) ? countdownText(last.time, coords.barInterval, Date.now()) : null;
+        // A host hook (market closed) can replace the countdown rows, even when the
+        // bar-close countdown itself is off (daily bars).
+        const hostLines = scene.countdownLines && coords.barInterval > 0 ? scene.countdownLines(last.time + coords.barInterval, Date.now()) : null;
+        const cdText = hostLines?.[0] ?? (scene.showCountdown && !replacesSeries(scene.priceStyle) ? countdownText(last.time, coords.barInterval, Date.now()) : null);
+        const extraRows = hostLines ? hostLines.slice(1) : [];
         const showCountdown = cdText !== null;
         const showLabel = scene.showPriceLabel;
         if (!showLabel && !showCountdown) return;
@@ -577,16 +581,17 @@ export class ChromeRenderer {
         if (showLabel && cdText !== null) {
             // Merged block: label row on top (centered on the price line), countdown row
             // under it. Same width, text flushed left.
-            const w = Math.max(this.measureCached(ctx, priceText), this.measureCached(ctx, cdText)) + PAD;
+            const rows = [cdText, ...extraRows];
+            const w = Math.max(this.measureCached(ctx, priceText), ...rows.map((r) => this.measureCached(ctx, r))) + PAD;
             const top = y - 8;
             const tx = x + PAD / 2;
             ctx.fillStyle = color;
-            ctx.fillRect(x, top, w, 32);
+            ctx.fillRect(x, top, w, 16 * (rows.length + 1));
             ctx.fillStyle = textColor;
             ctx.textAlign = 'left';
             ctx.fillText(priceText, tx, y);
-            // 16 CSS px under it is not whole device px at 67-133 %: snap the countdown row too
-            ctx.fillText(cdText, tx, Math.round((y + 16) * coords.dpr) / coords.dpr);
+            // 16 CSS px under it is not whole device px at 67-133 %: snap the countdown rows too
+            rows.forEach((r, i) => ctx.fillText(r, tx, Math.round((y + 16 * (i + 1)) * coords.dpr) / coords.dpr));
             ctx.textAlign = 'start';
             return;
         }

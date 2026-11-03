@@ -2069,17 +2069,26 @@ export class NativeRenderer implements IChartRenderer {
      *  scales or repaint the geometry/volume/VPVR/SDK layers once a second (that cost
      *  multiplies by the cell count in a multi-chart workspace). */
     private syncCountdownTimer(): void {
-        if (this.scene.showCountdown) {
+        if (this.scene.showCountdown || this.scene.countdownLines) {
             if (this.countdownUnsub == null) {
                 const clock = this.hostClock ?? (this.ownClock ??= new SecondClock());
                 this.countdownUnsub = clock.onTick(() => {
-                    if (this.scene.showCountdown && this.scene.bars.length > 0) this.scheduler?.invalidate(InvalidateLevel.Chrome);
+                    if ((this.scene.showCountdown || this.scene.countdownLines) && this.scene.bars.length > 0) this.scheduler?.invalidate(InvalidateLevel.Chrome);
                 });
             }
         } else if (this.countdownUnsub != null) {
             this.countdownUnsub();
             this.countdownUnsub = null;
         }
+    }
+
+    /** Host hook for the price-axis countdown chip: return rows of text to show instead of
+     *  the bar-close countdown (e.g. while the market is shut), or null for the normal one.
+     *  Pass null to remove the hook. See `SceneGraph.countdownLines`. */
+    setCountdownLines(fn: ((lastBarEndMs: number, nowMs: number) => string[] | null) | null): void {
+        this.scene.countdownLines = fn;
+        this.syncCountdownTimer();
+        this.scheduler?.invalidate(InvalidateLevel.Chrome);
     }
 
     destroy(): void {

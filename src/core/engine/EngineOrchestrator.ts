@@ -135,6 +135,9 @@ const MIN_TICK_UPDATE_MS = 16;
  * (selected by language), routes panes, and drives the injected `IChartRenderer`.
  * Imports neither a concrete renderer nor a concrete scripting engine.
  */
+
+/** How many CLOSED bars a late live update may still amend (see amendClosedBar). */
+const LATE_BAR_WINDOW = 2;
 export class EngineOrchestrator implements IndicatorController, PaneController, ReplayController {
     readonly events = new TypedEventBus<VelaEventMap>();
     private readonly registry = new IndicatorRegistry();
@@ -2011,6 +2014,30 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     }
 
     /**
+     * A late update of a bar that already CLOSED: a feed that opens the next bar on the
+     * clock edge (rather than on its first trade) can still deliver an update stamped
+     * before that edge a moment later. Without this it was dropped, so the closed candle
+     * missed its last ticks until the next history load, and differed from history.
+     * Only the last {@link LATE_BAR_WINDOW} closed bars are amended; anything older, or a
+     * time that matches no bar, is still ignored. (Ported from the dashboard's pin, 6878a0c.)
+     */
+    private amendClosedBar(bar: OHLCV, notify: boolean): void {
+        const n = this.rawBars.length;
+        let i = -1;
+        for (let k = n - 2; k >= Math.max(0, n - 1 - LATE_BAR_WINDOW); k -= 1) {
+            if (this.rawBars[k]!.time === bar.time) {
+                i = k;
+                break;
+            }
+        }
+        if (i < 0) return;
+        const raw = this.rawBars.slice();
+        raw[i] = bar;
+        this.setBarSeries(raw, { preserveView: true });
+        if (notify) this.notifySessionsBars(this.historyState === 'backfill' ? 'backfill' : 'complete');
+    }
+
+    /**
      * Reconcile one live bar into the canonical array + renderer (no gap detection). The raw
      * bar lands in {@link rawBars}; the VIEW bar is derived incrementally (a transform needs
      * only the previous view bar — O(1) per tick) and index-stays aligned with the raw series.
@@ -2049,7 +2076,10 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 viewBar = this.barTransform.next(bar, this.bars[this.bars.length - 1]);
                 this.bars.push(viewBar);
             }
-        } else return;
+        } else {
+            this.amendClosedBar(bar, notify);
+            return;
+        }
 
         this.renderer.updateBar(viewBar);
         this.events.emit('bar', bar);
