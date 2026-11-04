@@ -1,3 +1,41 @@
+/**
+ * The rank of every built-in context-menu row, by zone and row id (`settings` is each
+ * zone's settings row). Contributed `context:*` actions sort TOGETHER with these rows by
+ * their `order` (default 0), ascending; on a tie the built-in row comes first, then the
+ * actions in registration order. The built-in actions rank below 0 and the settings row at
+ * 1000, so an action without `order` lands after the built-in actions and before the
+ * settings row, and `order: -100` leads the menu.
+ */
+declare const CONTEXT_MENU_BUILTIN_ORDER: {
+    readonly body: {
+        readonly 'reset-view': -30;
+        readonly 'copy-price': -29;
+        readonly paste: -28;
+        readonly 'lock-cursor': -25;
+        readonly 'table-view': -24;
+        readonly 'object-tree': -23;
+        readonly 'remove-drawings': -20;
+        readonly 'remove-indicators': -10;
+        readonly settings: 1000;
+    };
+    readonly 'price-axis': {
+        readonly auto: -80;
+        readonly 'price-only': -75;
+        readonly invert: -70;
+        readonly 'scale:regular': -60;
+        readonly 'scale:percent': -50;
+        readonly 'scale:indexed': -40;
+        readonly 'scale:log': -30;
+        readonly labels: -20;
+        readonly levels: -10;
+        readonly settings: 1000;
+    };
+    readonly 'time-axis': {
+        readonly timezone: -10;
+        readonly settings: 1000;
+    };
+};
+
 /** Width (px) a panel takes when it declares none. */
 declare const DEFAULT_PANEL_WIDTH = 280;
 /** Bounds a RESIZABLE panel takes when it declares none. */
@@ -15,6 +53,9 @@ interface SidePanelOptions {
      *  its width. Docked when false/omitted. A floating panel gets a header pin the user
      *  can dock it with (see {@link SidePanel.onPlacementChange}). */
     overlay?: boolean;
+    /** A header button that MAXIMIZES the panel over every chart of the shell, and restores
+     *  it. For panels that are sometimes the main work surface (an editor). */
+    maximizable?: boolean;
 }
 /**
  * Clamp a width to its bounds and round to whole pixels — PURE. The drag, a programmatic
@@ -47,11 +88,31 @@ declare class SidePanel {
     private readonly floatable;
     private overlayOn;
     private readonly pin;
+    private readonly maxButton;
+    private maximizedOn;
+    /** Set while the close is announced, so a listener's own close does not re-enter. */
+    private closing;
+    /** Open as far as the dock and the host are concerned — a closed panel can still be on
+     *  screen while its exit animation runs. */
+    private isOpen;
+    /** The exit animation of a close; a reopen cancels it. */
+    private exit;
     /** `modifier` is the panel's own class, carrying its content styles (e.g. `vela-ot`). */
     constructor(host: HTMLElement, title: string, modifier: string, opts?: SidePanelOptions);
     get open(): boolean;
-    /** Open/close the panel — a bare call flips it. */
-    toggle(open?: boolean): void;
+    /**
+     * Open/close the panel — a bare call flips it. The panel reports closed at once, but a
+     * close keeps it on screen, marked `data-closing`, while a host exit animation runs.
+     * `instant` skips that, and also cuts short the exit of a panel already closing: a panel
+     * handing the dock to another leaves at once.
+     */
+    toggle(open?: boolean, instant?: boolean): void;
+    /** Whether the panel covers every chart right now. */
+    get maximized(): boolean;
+    /** Maximize the panel over the shell's charts, or restore it. A no-op on a panel not
+     *  declared `maximizable`. */
+    setMaximized(maximized: boolean): void;
+    private refreshMaxButton;
     /** The scrolling body, for a panel filled from OUTSIDE the class — a contributed panel's
      *  `mount` receives exactly this element. Subclasses use the protected `body`. */
     get content(): HTMLElement;
@@ -77,4 +138,4 @@ declare class SidePanel {
     private mountResizer;
 }
 
-export { DEFAULT_PANEL_MAX_WIDTH as D, type SidePanelOptions as S, DEFAULT_PANEL_MIN_WIDTH as a, DEFAULT_PANEL_WIDTH as b, clampPanelWidth as c, SidePanel as d };
+export { CONTEXT_MENU_BUILTIN_ORDER as C, DEFAULT_PANEL_MAX_WIDTH as D, type SidePanelOptions as S, DEFAULT_PANEL_MIN_WIDTH as a, DEFAULT_PANEL_WIDTH as b, clampPanelWidth as c, SidePanel as d };

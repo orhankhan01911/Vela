@@ -1,6 +1,6 @@
-import { D as DataProvider } from './DataProvider-BPCAysxU.js';
-import { S as ScriptingEngine, V as Vela } from './contributions-NvOMUXXm.js';
-import { V as VisibleRangePreset } from './options-BSbXQdMy.js';
+import { D as DataProvider } from './DataProvider-Brs7Yc4U.js';
+import { a8 as ScriptingEngine, aw as Vela } from './contributions-DtaeOFCZ.js';
+import { W as WallClock, bf as VisibleRangePreset } from './options-E_TmxEA7.js';
 
 /** The linkable dimensions. `crosshair` mirrors the pointer time onto same-group
  *  cells as GHOST crosshairs (renderers without the optional `setExternalCrosshair`
@@ -54,10 +54,15 @@ interface CellState {
     timeframe?: string;
     priceStyle?: string;
     bars?: number;
+    /** History as a span: days back from now, or a start date (UTC ms). See `workspace/history-depth.ts`. */
+    historyDays?: number;
+    historySince?: number;
     /** Trading session shown (`'extended'` persisted; absent = regular, the default). */
     session?: string;
     /** Symbol watermark visibility — a per-chart display pref. */
     watermark?: boolean;
+    /** The "Replay" line under the watermark while replaying — a per-chart display pref. */
+    replayWatermark?: boolean;
     /** Indicator titles (the in-chart legend rows) visibility — a per-chart display pref. */
     indicatorTitles?: boolean;
     /** Plot values beside the legend titles visibility — a per-chart display pref. */
@@ -66,12 +71,13 @@ interface CellState {
     rendererConfig?: unknown;
     /** The user-drawings document (`drawings.toJSON()`). */
     drawings?: unknown;
-    /** The indicator ledger: manifest entries + present native types. A manifest entry
-     *  is the bare NAME when every value sits on its declaration default, else the
-     *  name plus the input/prop DELTAS (defaults are never frozen into documents). */
+    /** The indicator ledger: manifest entries + native entries. Either side persists
+     *  the bare NAME/TYPE when every value sits on its declaration default and the
+     *  indicator is visible, else the name/type plus the input(/prop) DELTAS and a
+     *  `hidden` flag (defaults are never frozen into documents). */
     indicators?: {
         manifest: PersistedManifestEntry[];
-        natives: string[];
+        natives: PersistedNativeEntry[];
     };
     /** Third-party per-chart state, by namespaced key (`'vendor.feature'`) — written and
      *  read by registered state-persistence handlers (`registerStatePersistence`, scope
@@ -79,12 +85,36 @@ interface CellState {
      *  whose handler is absent this session still round-trips — and each handler
      *  validates its own payload at restore. JSON-serializable values only. */
     ext?: Record<string, unknown>;
+    /** Where the indicators sit once the user moved or merged any (absent: each in its default pane). */
+    panes?: PaneLayoutState;
+}
+/**
+ * The pane layout: pane slots top to bottom (slot 0 = the main chart), each listing its indicators by their position
+ * in `indicators` (`n2` = natives[2], `m0` = manifest[0]) and whether one reads on its own scale (a merge).
+ */
+interface PaneLayoutState {
+    slots: Array<Array<{
+        ref: string;
+        ownScale?: boolean;
+    }>>;
+    /** Where the main chart sits among the panes, top to bottom, when not on top (a study pane moved above it).
+     *  Slot 0 stays the main chart's indicators either way. */
+    priceAt?: number;
 }
 /** One persisted manifest-instance entry (see `CellState.indicators`). */
 type PersistedManifestEntry = string | {
     name: string;
     inputs?: Record<string, unknown>;
     props?: Record<string, unknown>;
+    hidden?: boolean;
+};
+/** One persisted native-indicator entry (see `CellState.indicators`). The bare TYPE is
+ *  the historical shape and still the common case; the object form carries the input
+ *  DELTAS and/or the hidden flag so native settings and visibility survive a reload. */
+type PersistedNativeEntry = string | {
+    type: string;
+    inputs?: Record<string, unknown>;
+    hidden?: boolean;
 };
 /** One entry of the document's `charts` array: a chart's state plus its cell IDENTITY. */
 interface ChartState extends CellState {
@@ -110,6 +140,8 @@ interface WorkspaceState {
     favorites?: string[];
     /** Favorite timeframes (the topbar's quick-switch chips) — a SHARED preference. */
     timeframeFavorites?: string[];
+    /** Favorite chart types (the topbar's quick-switch icon buttons) — a SHARED preference. */
+    styleFavorites?: string[];
     /** The docked side panels: which one is open, and the widths the user dragged. */
     panels?: PanelsState;
     /** Per-chart state, one entry per SLOT (a single `c1` entry for the widget).
@@ -235,7 +267,8 @@ interface VelaShellOptions {
     indicators?: string | IndicatorManifest | IndicatorLoader;
     /** Topbar timeframe presets (chart timeframe values). */
     timeframes?: string[];
-    /** Display timezone (IANA; default 'Etc/UTC') — one zone for the whole shell. */
+    /** Display timezone — one choice for the whole shell: an IANA zone (default
+     *  'Etc/UTC'), or `'exchange'` to render every chart in its own market's zone. */
     timezone?: string;
     /** Chrome toggles (all default true). */
     statusline?: boolean;
@@ -302,6 +335,12 @@ declare class WidgetHistory {
     /** Run `fn` without recording — for programmatic state application (setState,
      *  ledger restore), whose indicator/drawing events are not user edits. */
     silently(fn: () => void): void;
+    /** False while an undo / redo replays (its own events must not record). */
+    get recording(): boolean;
+    /** Whether `action` is the newest undo step (an edit still being merged into it). */
+    isLatest(action: HistoryAction): boolean;
+    /** Drop the newest undo step when it is `action` (an edit that ended where it started). */
+    dropLatest(action: HistoryAction): void;
     get canUndo(): boolean;
     get canRedo(): boolean;
     onChange(cb: () => void): () => void;
@@ -329,14 +368,16 @@ interface RangePreset {
      */
     bars: number;
 }
-/**
- * Range chips — each pairs a timeframe, a visible window, and the fetch depth that
- * window needs. Resolutions follow the reference: the shorter the range, the finer the
- * bars (1 day of 1-minute bars … 5 years of weekly bars).
- */
 declare const RANGE_PRESETS: readonly RangePreset[];
 interface BottombarOptions {
+    /** The stored display-timezone choice — an IANA zone or the exchange rule. */
     timezone: string;
+    /** The active chart's market zone, resolving the exchange rule (see {@link Bottombar.setTimezone}). */
+    exchangeTimezone?: string;
+    /** The second pulse the clock ticks on. Share one with the charts' countdown chips
+     *  (`renderer.setWallClock`) so every time display reads the same second; omitted,
+     *  the bar runs its own second-aligned clock. */
+    clock?: WallClock;
     onRange: (preset: RangePreset) => void;
     onTimezone: (zone: string) => void;
     /** RTH/ETH toggled by the user. Fires only while the toggle is ENABLED (see {@link Bottombar.setSession}). */
@@ -354,9 +395,18 @@ declare class Bottombar {
     private readonly sessionButtons;
     private sessionEl;
     private timezone;
-    private timer;
+    private exchangeTimezone;
+    private readonly unsubClock;
     constructor(host: HTMLElement, opts: BottombarOptions);
-    setTimezone(zone: string): void;
+    /**
+     * Reflect the stored choice AND the active chart's market zone. The clock and the
+     * offset label read the RESOLVED zone, so a workspace on the exchange rule re-labels
+     * when the active cell (or its symbol) changes market — the host re-projects on
+     * both. Idempotent: unchanged inputs leave the menu alone.
+     */
+    setTimezone(zone: string, exchangeTimezone?: string): void;
+    /** The zone the bar's clock and label render in. */
+    private get displayZone();
     /** Highlight (or clear with null) the active range chip — cleared on manual tf changes. */
     setActiveRange(id: string | null): void;
     /**
@@ -378,4 +428,4 @@ declare class Bottombar {
  *  the status line's own right-click menu drive these. */
 type StatuslinePart = 'logo' | 'name' | 'market' | 'ohlc' | 'change';
 
-export { Bottombar as B, type CellState as C, type IndicatorLoader as I, type PanelsState as P, type ResolvedIndicator as R, type SyncSetting as S, type TrackSizes as T, type VelaStorage as V, WidgetHistory as W, type StatuslinePart as a, type RangePreset as b, type VelaShellOptions as c, type SyncOptions as d, type SyncKind as e, type WorkspaceState as f, type ChartState as g, decodeState as h, encodeState as i, type TopbarComposition as j, type BottombarOptions as k, type IndicatorManifest as l, type IndicatorManifestEntry as m, RANGE_PRESETS as n, type ResolvedTopbarComposition as o, TOPBAR_BUILTIN_IDS as p, TOPBAR_DEFAULT_LEFT as q, TOPBAR_DEFAULT_RIGHT as r, sanitizeState as s, type WidgetStorage as t, localStorageAdapter as u, pinnedTopbarActionIds as v, resolveIndicators as w, resolveTopbarComposition as x, topbarHas as y };
+export { Bottombar as B, type CellState as C, type IndicatorLoader as I, type PanelsState as P, type RangePreset as R, type StatuslinePart as S, type TopbarComposition as T, type VelaShellOptions as V, WidgetHistory as W, type WorkspaceState as a, type BottombarOptions as b, type ChartState as c, type IndicatorManifest as d, type IndicatorManifestEntry as e, RANGE_PRESETS as f, type ResolvedIndicator as g, type ResolvedTopbarComposition as h, TOPBAR_BUILTIN_IDS as i, TOPBAR_DEFAULT_LEFT as j, TOPBAR_DEFAULT_RIGHT as k, type VelaStorage as l, type WidgetStorage as m, decodeState as n, encodeState as o, localStorageAdapter as p, pinnedTopbarActionIds as q, resolveIndicators as r, resolveTopbarComposition as s, sanitizeState as t, topbarHas as u, type SyncSetting as v, type TrackSizes as w, type SyncOptions as x, type SyncKind as y };

@@ -1,9 +1,9 @@
-import { O as OHLCV, V as VisibleRangePreset, a as VisibleRange, b as VelaOptions, I as InputValue, c as VelaTheme, N as NativeBackend, d as MarketSession } from './options-BSbXQdMy.js';
-import { S as SyncSetting, V as VelaStorage, C as CellState, W as WidgetHistory, R as ResolvedIndicator, a as StatuslinePart, b as RangePreset, T as TrackSizes, c as VelaShellOptions, d as SyncOptions, e as SyncKind, f as WorkspaceState } from './statusline-model-CqGoLw8w.js';
-export { g as ChartState, P as PanelsState, h as decodeState, i as encodeState, s as sanitizeState } from './statusline-model-CqGoLw8w.js';
-import { K as KeymapManager } from './keymap-CGOz5F5f.js';
-import { I as IndicatorHandle, S as ScriptingEngine, W as WidgetContext, V as Vela, E as ExternalIndicatorEntry, a as ScriptRun } from './contributions-NvOMUXXm.js';
-import { M as MarketDataFeed } from './DataProvider-BPCAysxU.js';
+import { O as OHLCV, bf as VisibleRangePreset, u as VisibleRange, be as VelaOptions, k as InputValue, V as VelaTheme, bp as NativeBackend, bo as MarketSession, aY as ScreenshotOptions } from './options-E_TmxEA7.js';
+import { v as SyncSetting, l as VelaStorage, C as CellState, W as WidgetHistory, g as ResolvedIndicator, S as StatuslinePart, R as RangePreset, w as TrackSizes, V as VelaShellOptions, x as SyncOptions, y as SyncKind, a as WorkspaceState } from './statusline-model-BiBzwS17.js';
+export { c as ChartState, P as PanelsState, n as decodeState, o as encodeState, t as sanitizeState } from './statusline-model-BiBzwS17.js';
+import { a as KeymapManager } from './keymap-CGIxBV99.js';
+import { x as IndicatorHandle, a8 as ScriptingEngine, aD as WidgetContext, aw as Vela, u as ExternalIndicatorEntry, a2 as ReplayState, _ as ReplayBounds, ay as VelaEventMap, a5 as ScriptRun } from './contributions-DtaeOFCZ.js';
+import { M as MarketDataFeed } from './DataProvider-Brs7Yc4U.js';
 
 /** The cells that follow `originId` under `setting` — PURE (never includes the origin). */
 declare function syncTargets(originId: string, setting: SyncSetting | undefined, cellIds: readonly string[]): string[];
@@ -25,16 +25,16 @@ type WorkspaceStorage = VelaStorage;
  *  localStorage default when persisted state must not outlive the page session. */
 declare function memoryStorageAdapter(): VelaStorage;
 
-/** The seed/mutable market state of one cell (all optional — an empty cell parks).
- *  The SAME vocabulary as the widget's chart options: the workspace's top-level chart
- *  options provide every cell's default ({@link seedDefaults}), `cells` overrides per
- *  cell. `data`/`visibleRange` are boot-only (they seed the first load, never persist). */
 interface CellSeed {
     /** Bare ticker (provider resolved by declaration order) or `EXCHANGE:`-prefixed. */
     symbol?: string;
     timeframe?: string;
     priceStyle?: string;
     bars?: number;
+    /** History as a span instead of a bar count (see `history-depth.ts`): days back from now, or a start date
+     *  (UTC midnight, ms). One of the two at most; neither = `bars`. */
+    historyDays?: number;
+    historySince?: number;
     /** Trading session to show (markets that have one; `regular` is the default). */
     session?: string;
     /** Offline bars for this cell — replaces the provider (boot-only). */
@@ -53,14 +53,17 @@ type CellBoot = PooledCellState & Pick<CellSeed, 'data' | 'visibleRange'>;
  *  `nativeBackend` (the WebGL budget policy, explicit value resolved upstream), the
  *  market/view seeds (those flow through {@link CellSeed}), and `drawings`' toolbar
  *  sub-key (see {@link cellDrawings}). */
-type CellChartDefaults = Pick<VelaOptions, 'renderer' | 'defaultLanguage' | 'currentPriceLine' | 'logScale' | 'animations' | 'glow' | 'upColor' | 'downColor' | 'drawings' | 'settings'>;
-/** A cell's Status line tab prefs as one bundle — the segment toggles (null when the
- *  shell runs without status lines) plus the indicator legend's titles/values. What
- *  the workspace's STYLE link mirrors across same-group cells. */
+type CellChartDefaults = Pick<VelaOptions, 'renderer' | 'defaultLanguage' | 'currentPriceLine' | 'logScale' | 'animations' | 'glow' | 'upColor' | 'downColor' | 'drawings' | 'settings' | 'priceAxis'>;
+/** A cell's own look prefs as one bundle — the Status line tab's segment toggles (null
+ *  when the shell runs without status lines) and indicator legend titles/values, plus
+ *  the Symbol tab's watermark toggles. What the workspace's STYLE link mirrors across
+ *  same-group cells, next to the renderer config. */
 interface CellStatusPrefs {
     parts: Record<StatuslinePart, boolean> | null;
     indicatorTitles: boolean;
     indicatorValues: boolean;
+    watermark: boolean;
+    replayWatermark: boolean;
 }
 /** One entry of the shared indicator picker's native catalog, per cell. */
 interface CellNativeInfo {
@@ -88,12 +91,15 @@ interface CellDeps {
     /** Where the renderer mounts its MODAL dialogs (chart/indicator settings) — the
      *  workspace root, so dialogs center over the whole grid instead of one cell. */
     dialogHost: HTMLElement;
-    /** The workspace-global display timezone (applied to every cell's renderer). */
+    /** The workspace-global display-timezone CHOICE — an IANA zone, or the exchange
+     *  rule, which each cell resolves to its own market's zone ({@link ChartCell.applyTimezone}). */
     timezone(): string;
     /** Switch the workspace-global display timezone (a cell's time-axis menu). */
     setTimezone(zone: string): void;
     /** The live widget-context builder (per-cell context menus project contributed actions). */
     context(): WidgetContext;
+    /** Shortcut hints for the chart-body menu rows, by row id (the workspace keymap's chords). */
+    menuHints?(): Readonly<Record<string, string>>;
     /** The shared manifest can no longer change instance sets: it resolved, or the
      *  workspace has no `indicators` option so nothing will ever resolve. Gates the
      *  ledger's pending fallback in `dehydrate` — once settled, a live empty set means
@@ -120,7 +126,7 @@ interface CellDeps {
     onPriceStyleChanged(id: string): void;
     /** The cell's indicator ledger changed (count/picker refresh upstream). */
     onIndicatorsChanged(id: string): void;
-    /** A Status line tab pref changed on this cell (the style link mirrors upstream). */
+    /** A Status line tab or watermark pref changed on this cell (the style link mirrors upstream). */
     onStatusPrefsChanged(id: string): void;
     /** Persistable per-cell state changed outside the market/indicator channels
      *  (bars budget, watermark/titles toggles) — the workspace debounces a save. */
@@ -133,10 +139,15 @@ interface CellDeps {
 interface CellInstance {
     entry: ResolvedIndicator;
     handle: IndicatorHandle | null;
+    /** The id the indicator runs under on the chart — recorded on the first add (host-
+     *  supplied or minted) so an undo/redo resurrection re-adds it under the SAME id:
+     *  whatever a host keyed on it (a document, an editor tab) keeps pointing at it. */
+    id?: string;
     external?: boolean;
     values?: {
         inputs?: Record<string, InputValue>;
         props?: Record<string, InputValue>;
+        style?: Record<string, InputValue>;
     };
 }
 declare class ChartCell {
@@ -146,6 +157,24 @@ declare class ChartCell {
     readonly host: HTMLElement;
     /** This cell's unified app+drawings undo timeline (the shared Ctrl+Z routes here). */
     readonly history: WidgetHistory;
+    /** Moves of the current gesture, gathered into one undo step (see `indicator:moved`). */
+    private pendingMoves;
+    /** An indicator was moved or merged (by the user or a restore): from then on the pane layout is saved. */
+    private layoutMoved;
+    /** A saved pane layout waiting for its indicators to mount (natives by ledger position; manifest via instances). */
+    private pendingLayout;
+    /** Each indicator's settings as last seen, so an edit's undo step knows what it changed from. */
+    private readonly settingsSeen;
+    /** When each indicator joined the chart. An indicator settles itself for a moment after it is added (saved
+     *  inputs restored, its own pane placed): those changes are not the user's edits, so they must not become undo
+     *  steps. They did, and each Ctrl+Z after an undone removal spent itself on one of them (2026-10-23). */
+    private readonly addedAt;
+    /** Indicators the saved chart restored: they do not settle (`addedAt` is for a user's add). */
+    private readonly restoredIds;
+    private settling;
+    /** The settings edit still being merged into one undo step (the dialog commits every keystroke and swatch drag
+     *  live; TradingView undoes a dialog's changes as one step, not one per keystroke). */
+    private settingsEdit;
     /** Live manifest-indicator instances on this cell (the SAME entry may repeat).
      *  `external` marks instances added through the public seam (`ctx.addIndicator`)
      *  rather than the shell manifest — they share the undo/redo and picker plumbing
@@ -161,9 +190,14 @@ declare class ChartCell {
     activeRangeId: string | null;
     /** Latched verdict of {@link sessionAvailable} (async metadata, sticky per symbol). */
     private sessionAvailableFlag;
+    /** The symbol of the most recent metadata probe — an older one landing late is dropped. */
+    private metadataProbeSymbol;
     /** Latched: the symbol's extended tape wraps midnight (an overnight roll market) —
      *  one extended-hours shading phase instead of the pre/post split. */
     private sessionOvernightFlag;
+    /** Latched: the symbol's own trading zone (`SymbolInfo.timezone`) — what the exchange
+     *  rule resolves to on this cell. Undefined until metadata lands or when none is declared. */
+    private exchangeZone;
     private inner;
     /** The live app theme — seeded from deps, updated on `theme:changed` (the base the
      *  plot-overlay tokens re-derive from). */
@@ -178,6 +212,8 @@ declare class ChartCell {
     private readonly cellControls;
     private readonly contextMenu;
     private readonly offMarket;
+    /** Interval sections changed (a bar size edited): the legend label follows. */
+    private readonly offIntervals;
     /** The cell's durable market state — the seed vocabulary plus the venue mirror the
      *  persisted document carries (`provider` = the symbol's parsed prefix). */
     private state;
@@ -196,6 +232,9 @@ declare class ChartCell {
     private presentNatives;
     private rangeBars;
     private pendingRange;
+    /** History depth a {@link jumpTo} borrowed beyond the cell's own (0 = none). The next symbol or timeframe switch
+     *  loads the cell's own depth again, so a jump's deep history is never carried to another market. */
+    private jumpBars;
     /** Last symbol we toasted "no provider serves this" for — once per symbol (the
      *  core re-reports on every provider-index settle). */
     private unresolvedToasted;
@@ -205,6 +244,7 @@ declare class ChartCell {
      *  verbatim, so a document never loses a plugin's state in the plugin's absence. */
     private extState;
     private watermarkOn;
+    private replayWatermarkOn;
     /** Indicator titles (this cell's in-chart legend rows) shown. */
     private indicatorTitlesOn;
     /** Plot values beside this cell's legend titles shown. */
@@ -229,7 +269,23 @@ declare class ChartCell {
     get session(): MarketSession;
     /** Switch this cell's shown session in place (a reload — RTH and ETH are different bars). */
     setSession(session: MarketSession): void;
-    private refreshSessionAvailable;
+    /**
+     * The symbol's own trading zone, once its metadata has landed — what the exchange
+     * rule resolves to on this cell (the workspace labels the shared bottom bar with the
+     * ACTIVE cell's). Undefined = unknown or undeclared (the rule then renders UTC).
+     */
+    get exchangeTimezone(): string | undefined;
+    /** The IANA zone this cell's axis renders in: the workspace choice, resolved. */
+    get displayTimezone(): string;
+    /**
+     * Push the resolved zone to the renderer — on the workspace choice changing, and on
+     * this cell's market zone changing under the exchange rule. Skips the write when the
+     * renderer already holds it (its config default is the bare `'UTC'` alias).
+     */
+    applyTimezone(): void;
+    /** Re-read the symbol's metadata: session posture (RTH/ETH toggle, shading) and its
+     *  trading zone (the exchange rule). Async — the workspace re-projects when a verdict lands. */
+    private refreshSymbolMetadata;
     /** (Re)derive the pre/post-market shading bands for this cell's market. The bands
      *  expand locally from the symbol's session vocabulary, so they paint as soon as
      *  metadata is known and follow any pan depth without provider round trips. */
@@ -250,17 +306,19 @@ declare class ChartCell {
     private pushSettingsSections;
     /** Show/hide this cell's symbol watermark (persisted per cell). */
     setWatermarkVisible(visible: boolean): void;
+    /** Show/hide the "Replay" line under this cell's watermark while it replays (persisted per cell). */
+    setReplayWatermarkVisible(visible: boolean): void;
     /** Show/hide this cell's indicator titles — the in-chart legend rows (persisted per cell). */
     setIndicatorTitlesVisible(visible: boolean): void;
     /** Show/hide the plot values beside this cell's legend titles (persisted per cell). */
     setIndicatorValuesVisible(visible: boolean): void;
     /** Show/hide one status-line segment (the settings dialog's Status line tab). */
     private setStatuslinePart;
-    /** This cell's Status line tab prefs as one bundle (see {@link CellStatusPrefs}). */
+    /** This cell's Status line tab and watermark prefs as one bundle (see {@link CellStatusPrefs}). */
     statusPrefs(): CellStatusPrefs;
-    /** Converge this cell's Status line tab prefs to `prefs` — the follower half of
-     *  the workspace's style link. Idempotent: matching values change nothing, so a
-     *  propagated echo dies on its own. */
+    /** Converge this cell's Status line tab and watermark prefs to `prefs` — the
+     *  follower half of the workspace's style link. Idempotent: matching values change
+     *  nothing, so a propagated echo dies on its own. */
     applyStatusPrefs(prefs: CellStatusPrefs): void;
     /** The LIVE chart of this cell — never cache it across a layout change (the cell's
      *  identity is what endures; the chart dies with the cell). */
@@ -277,6 +335,10 @@ declare class ChartCell {
     setTimeframe(timeframe: string): void;
     /** Applied live (renderer feature) — no reload. */
     setPriceStyle(style: string): void;
+    /** The interval label when an interval section's bars (ticks, ranges…) are on, else undefined. */
+    private intervalLabel;
+    /** Re-write the legend meta and the watermark with the current interval label. */
+    private refreshIntervalLabel;
     /** OHLC/change ink in the status line follows the ACTIVE price style's configured
      *  colors and direction rule (candle bodies by close-vs-open, baseline by position
      *  against the live baseline price, …) instead of the fixed theme tokens. */
@@ -285,15 +347,30 @@ declare class ChartCell {
      *  the workspace flips this with the layout (see Statusline.setFitMode). */
     setStatuslineFit(on: boolean): void;
     /** The workspace shell keeps the app theme; the cell host's tokens re-derive from
-     *  the LIVE plot surface (see {@link applyPlotOverlayTokens}). */
+     *  the LIVE plot surface for overlay ink (statusline, watermark). Menus portal to
+     *  `.vela-ui` and keep the app-theme surface (see {@link applyPlotOverlayTokens}). */
     private syncPlotOverlayTokens;
     /**
      * Frame a bottombar range chip: switch to its timeframe, fetch the depth its window
      * needs, and keep it framed (re-asserted once the deeper history is painted).
      */
     applyRange(preset: RangePreset): void;
-    /** Reset this cell's view: re-enable auto scale and frame the full history —
-     *  the same action the chart context menu offers. */
+    /** The cell's own history depth: its "Bars to fetch" (default 500), deeper while a range chip needs it. */
+    private ownBars;
+    /** Bars the cell's History setting asks for on `timeframe` (a count, or a span in bars of that timeframe). */
+    private depth;
+    /**
+     * Go to a moment in the past (TradingView's "Go to date"): switch to `timeframe` when given, load at least `bars`
+     * of history, then frame `range` once that history is in. The extra depth is borrowed: the next symbol or
+     * timeframe switch loads the cell's own depth again. Resolves after the framing, or early when another market
+     * switch superseded the jump (nothing is framed then).
+     */
+    jumpTo(range: VisibleRange, opts: {
+        bars: number;
+        timeframe?: string;
+    }): Promise<void>;
+    /** Reset this cell's view like TradingView's "Reset chart view": auto scale back on and the newest bars at the
+     *  default zoom (it used to frame the whole history, which is the 'ALL' range preset). Context menu and Alt+R. */
     resetView(): void;
     /** Rebuild the view-controls cluster (the maximize gate or state changed). */
     refreshControls(): void;
@@ -302,7 +379,14 @@ declare class ChartCell {
     /** Make this cell the active one and put keyboard focus on its chart surface. */
     focus(): void;
     /** Raster of this cell's chart (same pixels as the PNG download), or null. */
-    screenshotCanvas(): HTMLCanvasElement | null;
+    screenshotCanvas(opts?: ScreenshotOptions): HTMLCanvasElement | null;
+    /** CSS box (viewport coordinates) the last {@link screenshotCanvas} covers. */
+    screenshotBox(): {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+    } | null;
     /** Download this cell's chart as a PNG (named after its market). */
     downloadScreenshot(): void;
     /**
@@ -358,14 +442,34 @@ declare class ChartCell {
     addManifestInstance(entry: ResolvedIndicator, opts?: {
         record?: boolean;
         external?: boolean;
+        id?: string;
         inputs?: Record<string, InputValue>;
         props?: Record<string, InputValue>;
+        style?: Record<string, InputValue>;
+        hidden?: boolean;
     }): void;
     private removeInstance;
     private dropInstance;
     /** Add a native indicator. A multi-instance type gets a fresh instance every time; a
      *  single-instance type already on the chart hands back its existing one — nothing
      *  changed, so nothing enters the undo timeline. */
+    /**
+     * Converge one native handle to a restored ledger entry: every schema key gets the
+     * entry's value or its declaration default (the DOCUMENT is the truth — a live
+     * tweak must not survive a restore that says otherwise), and visibility follows
+     * the `hidden` flag. Skips the input write when nothing differs — `setInputs`
+     * re-runs the indicator, and a no-op restore must not flicker every native.
+     */
+    private applyNativeLedgerEntry;
+    private convergeNative;
+    private indicatorById;
+    /**
+     * A settings edit (inputs, props or style) as an undo step. Edits of the same indicator less than
+     * {@link SETTINGS_MERGE_MS} apart are one step, and a step whose edits end where they started (the dialog's
+     * Cancel) is dropped. Undo puts the settings back exactly (`restoreSettings`), so an override added by the edit
+     * goes too.
+     */
+    private recordSettingsEdit;
     addNative(type: string): void;
     private removeNative;
     /** The chart's native instances, insertion order — the picker's on-chart rows and
@@ -408,8 +512,126 @@ declare class ChartCell {
      *  come from the LIVE config (`chart.market`) — the requested identity — so a switch
      *  still loading when the snapshot is taken (persist-on-close) is not lost. */
     dehydrate(): PooledCellState;
+    /** The pane layout to save: the live one once anything was moved, else a restored one still waiting to apply. */
+    private savedPaneLayout;
+    /** Hold a saved pane layout until its indicators are on the chart (they mount after their first compute), then
+     *  apply it once, outside the undo history. Gives up waiting after 20 s and places whatever arrived. */
+    private awaitPaneLayout;
+    private paneLayoutDone;
+    private tryPaneLayout;
     destroy(): void;
 }
+
+/** The workspace replay's events — the chart `replay:*` events, reported for the ACTIVE cell. */
+interface WorkspaceReplayEventMap extends Record<string, unknown> {
+    'replay:start': VelaEventMap['replay:start'];
+    'replay:step': VelaEventMap['replay:step'];
+    'replay:tick': VelaEventMap['replay:tick'];
+    'replay:play': VelaEventMap['replay:play'];
+    'replay:pause': undefined;
+    'replay:end': VelaEventMap['replay:end'];
+}
+/** Options for {@link WorkspaceReplay.start}. */
+interface WorkspaceReplayStartOptions {
+    /** Epoch ms, read on `cell`'s chart as `chart.replay.start({ from })` reads it: that chart
+     *  keeps every bar opened at or before it. The close of its last kept bar becomes the
+     *  shared replay time, and every other chart keeps the bars closed by then. */
+    from: number;
+    /** The cell `from` is read on (default: the active cell). */
+    cell?: string;
+    /** Bars of history to show before the start bar on every chart (`chart.replay.start`'s `context`). */
+    context?: number;
+}
+/** What the controller reads from its workspace. */
+interface WorkspaceReplayHost {
+    cells(): ReadonlyArray<{
+        readonly id: string;
+        readonly chart: Vela;
+    }>;
+    activeId(): string | null;
+    onCells(handler: (e: {
+        kind: 'created' | 'destroyed' | 'active';
+        id: string;
+    }) => void): () => void;
+}
+/**
+ * The workspace's bar-replay control surface (`workspace.replay`, `ctx.replay` for
+ * contributions): the same verbs as `chart.replay`, applied to every cell on a shared
+ * clock. A step moves the clock to the next bar close on ANY chart, and each chart reveals
+ * the bars closed by then — so the finest timeframe sets the pace and a coarser chart
+ * shows its bar when it completes. Cells added while replaying join at the shared time; a
+ * cell switching symbol rejoins once its new bars load; a timeframe switch keeps the
+ * cell's place. The replay ends on every chart together: `stop()`, or any chart reaching
+ * its last bar. In a multi-chart layout bars are revealed whole (tick replay needs a
+ * single-chart layout).
+ */
+declare class WorkspaceReplay {
+    private readonly host;
+    private readonly bus;
+    /** The running session: the shared replay time (every chart shows the bars closed by it). */
+    private session;
+    private playing;
+    private intervalMs;
+    /** `context` of the last start (bars shown before the start bar); undefined = each chart's own. */
+    private context;
+    private timer;
+    /** Cells whose replay a symbol switch ended — restarted at the shared time once their bars land. */
+    private readonly rejoining;
+    private readonly cellSubs;
+    private readonly offHost;
+    /** Inside a group step: chart events are the controller's own doing. */
+    private stepping;
+    /** Inside `finish`: the charts' `replay:end` events are the controller's own doing. */
+    private stopping;
+    /** Driving a chart's own timer: its play/pause events are not the user's. */
+    private muted;
+    /** A chart finished during a group step — the session ends right after it. */
+    private finishedDuringStep;
+    constructor(host: WorkspaceReplayHost);
+    /**
+     * Enter replay on every cell (or seek, when already replaying) — paused. Resolves once
+     * every chart shows its rewound history (a chart whose history does not reach that far
+     * loads older bars first). A chart with nothing to replay after the shared time stays
+     * as it is.
+     */
+    start(opts: WorkspaceReplayStartOptions): Promise<void>;
+    /** Reveal the next bar(s): the clock moves to the next bar close on any chart. Returns false when nothing is left. */
+    step(): boolean;
+    /** Reveal the next update — in a single-chart layout, the chart's `stepUpdate()` (tick replay); otherwise {@link step}. */
+    stepUpdate(): boolean;
+    /** Advance one update every `intervalMs` (default: the last pace, initially 1000). Calling it again while playing changes the pace. */
+    play(intervalMs?: number): this;
+    pause(): this;
+    /** Leave replay on every chart: full history back, live updates resumed. */
+    stop(): this;
+    /** `active`/`playing`/`intervalMs` for the whole workspace; the cursor fields read the ACTIVE cell's chart. */
+    get state(): ReplayState;
+    /** The active cell's replayable history (`chart.replay.bounds`). */
+    get bounds(): ReplayBounds | null;
+    on<K extends keyof WorkspaceReplayEventMap>(event: K, handler: (payload: WorkspaceReplayEventMap[K]) => void): () => void;
+    destroy(): void;
+    /** The one chart of a single-chart layout — it replays on its own, tick replay included. */
+    private solo;
+    private activeChart;
+    /** Rewind one chart to the shared time: every bar that closed by `clock`, none after. */
+    private startCell;
+    /** Move the clock to the next bar close on any chart; each chart reveals what closed by then. */
+    private stepGroup;
+    /** Put the timers in the state `playing` asks for: a single chart runs its own (it paces
+     *  ticks), several run on the controller's clock. */
+    private syncPlayback;
+    private schedule;
+    private clearTimer;
+    /** End the session on every chart (idempotent). */
+    private finish;
+    private watch;
+    private onCellCreated;
+    private onCellDestroyed;
+}
+/** When a bar opened at `open` closes on `timeframe` — calendar months for month-based ones. */
+declare function barClose(open: number, timeframe: string | undefined): number;
+/** The latest open whose bar has closed by `time` on `timeframe` (the inverse of {@link barClose}). */
+declare function lastOpenClosedBy(time: number, timeframe: string | undefined): number;
 
 /** The extended context a workspace hands to contributed actions/attachments. */
 interface WorkspaceWidgetContext extends WidgetContext {
@@ -424,6 +646,9 @@ interface WorkspaceWidgetContext extends WidgetContext {
     /** LIVE getter — follows every active-cell switch. */
     activeCellId: string;
     setActiveCell(id: string): void;
+    /** Bar replay across every cell on one clock (`workspace.replay`) — drive this rather
+     *  than one cell's `chart.replay`, so every chart replays together. */
+    replay: WorkspaceReplay;
 }
 
 /** One registered workspace layout. */
@@ -462,9 +687,10 @@ declare function layoutDefinition(id: string): LayoutDefinition | undefined;
 declare function layouts(): LayoutDefinition[];
 /** Register the built-in presets (idempotent — called by the workspace entry point). */
 declare function registerBuiltinLayouts(): void;
-/** Picker canvas bound — dynamic layouts stay within a 4×4 grid (16 cells, the
- *  workspace's dormant-state pool capacity). */
+/** Picker canvas bound — the uniform rows×cols canvas stays within a 4×4 grid. */
 declare const GRID_PICKER_MAX = 4;
+/** Most charts one layout may hold — the workspace's dormant-state pool capacity. */
+declare const LAYOUT_MAX_CELLS = 16;
 /**
  * The layout for a UNIFORM rows×cols grid (Grid picker mode), clamped to the
  * picker canvas. Geometry matching a registered classic preset returns that preset
@@ -477,6 +703,26 @@ declare function layoutForGrid(rows: number, cols: number): LayoutDefinition;
  * picks. Unknown ids stay undefined.
  */
 declare function ensureLayout(id: string): LayoutDefinition | undefined;
+/** The shape of a catalog entry: stacks of `counts[i]` cells, laid out as columns or rows. */
+interface StackSpec {
+    kind: 'cols' | 'rows';
+    counts: number[];
+}
+/**
+ * The layout for a stack spec — PURE. Slots are numbered in reading order (top row first,
+ * left to right), so the first cell is always the top-left one.
+ */
+declare function stackLayout(id: string, label: string, spec: StackSpec): LayoutDefinition;
+/**
+ * Every catalog layout, in menu order. Uniform grids resolve to the classic presets
+ * (`'1'`, `'2h'`, `'2v'`, `'4'`, `'8'`) so existing saved layouts keep their ids.
+ */
+declare function layoutCatalog(): LayoutDefinition[];
+/** The catalog grouped by chart count (1, 2, 3 …), in menu order — what the picker renders. */
+declare function layoutCatalogGroups(): Array<{
+    count: number;
+    layouts: LayoutDefinition[];
+}>;
 /** A layout's shape on the picker canvas. */
 type LayoutShape = {
     rows: number;
@@ -545,6 +791,9 @@ interface VelaWorkspaceOptions extends Omit<VelaOptions, 'height'>, VelaShellOpt
     maxWebglCells?: number;
     /** How many alerts the topbar bell keeps (the oldest drop beyond it). Default 50. */
     alertCap?: number;
+    /** Show a toast for every script `alert()` call. Default true; a host that turns script calls into alerts the
+     *  user sets (TradingView's model) turns it off. The bell list and the chart 'alert' event are unchanged. */
+    alertToasts?: boolean;
 }
 /** A cell's {@link ScriptRun}, tagged with the cell it ran in. */
 type WorkspaceScriptRun = ScriptRun & {
@@ -562,6 +811,19 @@ interface WorkspaceEventMap extends Record<string, unknown> {
      * change included.
      */
     'script:run': WorkspaceScriptRun;
+    /**
+     * One cell's price style is switching `from` → `to` — the per-chart
+     * `priceStyle:change` relayed up with the cell's identity, so one subscription
+     * covers the whole grid, cells added by a later layout change included. Only the
+     * cell whose style changes emits. Same timing as the chart event: synchronous,
+     * before that cell repaints, so `ws.cell(id).priceStyle` and the cell's canvas
+     * still show `from` while the listener runs.
+     */
+    'cell:priceStyle': {
+        id: string;
+        from: string;
+        to: string;
+    };
     /** The grid switched layouts (cells created/destroyed/restored around it). */
     'layout:changed': {
         layout: string;
@@ -584,10 +846,16 @@ declare class VelaWorkspace {
     readonly root: HTMLElement;
     /** The shortcut system — one manager for the whole workspace, routed to the active cell. */
     readonly keymap: KeymapManager;
+    /** Bar replay across every cell on one clock (see {@link WorkspaceReplay}). */
+    readonly replay: WorkspaceReplay;
     private readonly gridEl;
+    private readonly stripsEl;
     private readonly events;
     private readonly feed;
     private readonly cellsById;
+    /** The one second pulse behind every time display: the bottom-bar clock and each
+     *  cell's countdown chip subscribe to it, so they can never read different seconds. */
+    private readonly clock;
     private readonly pool;
     private readonly trackSizes;
     private readonly splitters;
@@ -638,11 +906,23 @@ declare class VelaWorkspace {
     private favs;
     /** Favorite timeframes — the shared topbar's quick-switch chips, one set for the grid. */
     private tfFavs;
+    private styleFavs;
     /** Live sync configuration (mutable copy of the option). */
     private readonly syncOpts;
     private readonly persistKey;
     private readonly storage;
     private stateTimer;
+    /** Re-entrance guard for {@link flushPendingState}: a `state:changed` subscriber that
+     *  calls back into the workspace (`destroy()` on save is the obvious one) must not
+     *  re-enter the flush and recurse. */
+    private emitting;
+    /** False until the constructor finishes. Boot is not an edit: seeding the sync
+     *  settings marks state dirty, so without this a workspace mounted and torn down
+     *  inside the debounce window would flush and tell the host the user had changed
+     *  something — a save of the default document over whatever was stored. */
+    private booted;
+    /** A page unload gets the same flush as a teardown — the pending edit reaches the
+     *  host, the timer is cleared, and a `destroy()` that follows adds no second write. */
     private readonly onUnload;
     /** Re-entrance guard around one propagation tick: followers' synchronous echoes
      *  (their setVisibleRange re-emits viewport:changed) must not re-propagate. */
@@ -669,12 +949,14 @@ declare class VelaWorkspace {
     private alerts;
     /** Bell retention — `alertCap` option, default {@link ALERT_CAP}. */
     private readonly alertCap;
+    private readonly alertToasts;
     private alertsMenu;
     /** Writes `data-layout` on the root and pushes mode flips into every cell's renderer. */
     private layoutCtl;
     private readonly mobileBar;
     private readonly drawingPill;
     private tfDrawer;
+    private readonly offIntervalSections;
     private drawingsDrawer;
     private moreDrawer;
     private timezoneDrawer;
@@ -715,17 +997,22 @@ declare class VelaWorkspace {
      * maximized cell alone. Same pixels the screenshot button downloads. A single
      * visible cell returns that cell's own chart export (the one-chart case).
      */
-    screenshot(): string | null;
+    screenshot(opts?: ScreenshotOptions): string | null;
+    /** {@link screenshot} as a canvas (for a host that previews, copies or shares it without a PNG round trip).
+     *  `scale` above the screen's pixel ratio draws every chart again at it: a sharper picture than the screen. */
+    screenshotCanvas(opts?: ScreenshotOptions): HTMLCanvasElement | null;
     /** Download {@link screenshot} as a PNG. A multi-cell layout is named
      *  `vela-layout.png`; one visible cell keeps `${symbol}-${timeframe}.png`. */
     downloadScreenshot(): void;
     /** Live cells the screenshot should include — maximized siblings are `hidden`. */
     private shotCells;
-    /** Place every cell's raster onto one canvas the size of the grid. */
+    /** Place every cell's raster onto one canvas the size of the grid, each where its chart is on screen. */
     private compositeLayoutShot;
     setActiveCell(id: string | null): void;
     on<K extends keyof WorkspaceEventMap>(event: K, handler: (payload: WorkspaceEventMap[K]) => void): () => void;
     /** The context handed to contributed actions/attachments (rebuilt per invocation). */
+    /** The chart-body menu's shortcut hints: the reset binding as rebound, and the drawings layer's paste chord. */
+    private menuHints;
     context(): WorkspaceWidgetContext;
     /** Re-project contributed topbar actions + side panels, and mount late-registered attachments. */
     refreshActions(): void;
@@ -764,8 +1051,15 @@ declare class VelaWorkspace {
      *  Handlers whose restore touches chart content should be `scope: 'cell'` instead
      *  (those run inside the cell's history-mute). */
     private restoreGlobalExt;
-    /** Set the workspace-global display timezone — applied to EVERY cell. */
+    /**
+     * Set the workspace-global display timezone — applied to EVERY cell. An IANA zone,
+     * or `'exchange'` (the exchange rule): each cell then renders in its OWN market's
+     * zone (Chicago for a CME future, New York for a US equity, UTC for crypto), and the
+     * bottom bar follows the active cell's.
+     */
     setTimezone(zone: string): void;
+    /** Bottom bar ⇐ the stored choice + the ACTIVE cell's market zone (labels the exchange row). */
+    private projectTimezone;
     /**
      * Swap the workspace theme at runtime — `'dark'`, `'light'`, or a full custom theme,
      * applied to the shared chrome (topbar, panels, drawing toolbar) and EVERY cell.
@@ -822,6 +1116,27 @@ declare class VelaWorkspace {
     /** Debounced dirty mark: one `state:changed` (+ one storage write in persist mode)
      *  per burst of edits, flushed hard on unload/destroy. */
     private markStateDirty;
+    /**
+     * Push a pending debounced change out NOW, for a teardown or a page unload — the
+     * two moments the 500ms timer would otherwise never reach.
+     *
+     * Dropping it was a silent data loss: the timer carries BOTH halves of the dirty
+     * signal — the `state:changed` event and the storage write — so a host that saves
+     * from that event (a server-backed host, where `persistNow` is a no-op for want of
+     * a `persistKey`) simply never heard about the user's last edit.
+     *
+     * Idempotent and re-entrancy safe, which the ordering here buys:
+     *  - a no-op unless a timer is actually pending, so a teardown with nothing
+     *    outstanding stays silent and never invents an edit;
+     *  - the timer is cleared FIRST, so nothing survives this call and a second call
+     *    does nothing — `destroy()` after an unload flush adds no second write;
+     *  - the state is snapshotted BEFORE the handlers run, and that snapshot is what
+     *    gets persisted, so storage and the host are told the same thing even if a
+     *    handler mutates state while it runs;
+     *  - `emitting` is held across the emit, so a handler calling back in (a host that
+     *    tears down on save is the obvious one) cannot re-enter this and recurse.
+     */
+    private flushPendingState;
     /** Write the current state through the storage adapter now (fire-and-forget). */
     private persistNow;
     private resolveLayout;
@@ -879,12 +1194,23 @@ declare class VelaWorkspace {
      */
     private alignNewCellStyles;
     /**
-     * Mirror an origin cell's presentation — the Canvas + Scales-and-lines slice of
-     * its renderer config plus its Status line tab prefs — onto its same-group
-     * followers (the style link). Loop-safe two ways: the busy guard eats the
-     * followers' SYNCHRONOUS echoes (their `applyConfig` re-fires `onConfigChanged`
-     * in the same tick), and the equality short-circuits leave already-converged
-     * followers untouched, so nothing re-emits once the group agrees.
+     * Bring cells minted by a layout change into their drawings group: with the link
+     * on, a NEW cell (fresh slot, or one returning from the pool that missed edits
+     * while dormant) receives the drawings of a pre-existing group peer — the active
+     * cell when it is one. A drawing the arriving cell already holds a linked copy of
+     * is refreshed in place; any other is copied and linked like a freshly synced
+     * drawing, so later edits and removals follow both ways. The arrival is the cell's
+     * starting state, not an edit: it stays out of the cell's undo timeline, and the
+     * busy guard keeps the copies' own events from fanning back out.
+     */
+    private alignNewCellDrawings;
+    /**
+     * Mirror an origin cell's presentation — the style-link slice of its renderer
+     * config ({@link styleConfigPatch}) plus its Status line and watermark prefs —
+     * onto its same-group followers (the style link). Loop-safe two ways: the busy
+     * guard eats the followers' SYNCHRONOUS echoes (their `applyConfig` re-fires
+     * `onConfigChanged` in the same tick), and the equality short-circuits leave
+     * already-converged followers untouched, so nothing re-emits once the group agrees.
      */
     private propagateStylePrefs;
     /**
@@ -947,6 +1273,8 @@ declare class VelaWorkspace {
     /** Star/unstar a timeframe — a WORKSPACE preference (one chip row, whatever the
      *  active cell); the topbar follows and the set persists with the document. */
     private setTimeframeFavorite;
+    /** Star/unstar a chart type — a WORKSPACE preference like the timeframe favorites. */
+    private setStyleFavorite;
     /** The mode flipped (container resized across the breakpoint, or a coarse-pointer
      *  change). Close the open surfaces — a desktop card must not linger over the
      *  mobile chrome (and vice versa) — and re-present every cell's own chrome. */
@@ -957,8 +1285,16 @@ declare class VelaWorkspace {
      *  per-indicator controls live there (the legend rows have no room in a grid cell). */
     private syncCellPresentation;
     private openTimeframeDrawer;
+    /** The chip, on a timeframe this chart offers (see {@link snapRangePreset}). */
+    private rangeForChart;
     private openDrawingsDrawer;
     private openMoreDrawer;
+    /** The catalog the layout menu lists: arrangements by chart count, the current one lit. */
+    private layoutCatalogView;
+    /** Registered layouts the catalog does not list (a host's bespoke presets). */
+    private layoutsOutsideCatalog;
+    /** The contributed topbar actions the mobile menu lists, from one cluster. */
+    private drawerActions;
     private openTimezoneDrawer;
     private openPriceScaleDrawer;
     /** The aggregated alerts bell — entries carry their cell; selecting one activates it. */
@@ -969,7 +1305,7 @@ declare class VelaWorkspace {
     private runOverride;
     /** The default shortcut set — every binding acts on the ACTIVE cell. */
     private registerDefaultKeys;
-    /** Bare-typing router: letters → symbol search (seeded), digits → timeframe entry. */
+    /** Bare-typing router: letters and `0` → symbol search (seeded), digits 1–9 → timeframe entry. */
     private routeTyping;
     private trackDialog;
     /** Pool a dehydrated slot state (bounded — oldest entries drop past the cap). */
@@ -998,4 +1334,4 @@ declare function resizeTracks(weights: readonly number[], index: number, deltaPx
  */
 declare function trackOffsets(weights: readonly number[], sizePx: number, gapPx: number): number[];
 
-export { type CellBoot, type CellChartDefaults, type CellNativeInfo, type CellSeed, CellState, ChartCell, GRID_PICKER_MAX, type LayoutDefinition, type LayoutShape, type PooledCellState, SyncKind, SyncOptions, SyncSetting, TrackSizes, VelaWorkspace, type VelaWorkspaceOptions, type WorkspaceEventMap, type WorkspaceScriptRun, WorkspaceState, type WorkspaceStorage, type WorkspaceWidgetContext, activeAfterLayout, ensureLayout, evenTracks, gridStyles, layoutDefinition, layoutForGrid, layoutShape, layouts, memoryStorageAdapter, rangesWithin, registerBuiltinLayouts, registerLayout, resizeTracks, syncTargets, trackOffsets, unregisterLayout };
+export { type CellBoot, type CellChartDefaults, type CellNativeInfo, type CellSeed, CellState, ChartCell, GRID_PICKER_MAX, LAYOUT_MAX_CELLS, type LayoutDefinition, type LayoutShape, type PooledCellState, SyncKind, SyncOptions, SyncSetting, TrackSizes, VelaWorkspace, type VelaWorkspaceOptions, type WorkspaceEventMap, WorkspaceReplay, type WorkspaceReplayEventMap, type WorkspaceReplayHost, type WorkspaceReplayStartOptions, type WorkspaceScriptRun, WorkspaceState, type WorkspaceStorage, type WorkspaceWidgetContext, activeAfterLayout, barClose, ensureLayout, evenTracks, gridStyles, lastOpenClosedBy, layoutCatalog, layoutCatalogGroups, layoutDefinition, layoutForGrid, layoutShape, layouts, memoryStorageAdapter, rangesWithin, registerBuiltinLayouts, registerLayout, resizeTracks, stackLayout, syncTargets, trackOffsets, unregisterLayout };

@@ -1,6 +1,6 @@
-import { c as VelaTheme } from './options-BSbXQdMy.js';
+import { V as VelaTheme } from './options-E_TmxEA7.js';
 import { MachineSchema, Service, Machine } from '@zag-js/core';
-export { a as KeyBindingDescriptor, K as KeymapManager, b as KeymapOptions, R as ResolvedBinding } from './keymap-CGOz5F5f.js';
+export { K as KeyBindingDescriptor, a as KeymapManager, b as KeymapOptions, R as ResolvedBinding } from './keymap-CGIxBV99.js';
 import * as tooltip from '@zag-js/tooltip';
 import * as menu from '@zag-js/menu';
 import * as dialog from '@zag-js/dialog';
@@ -10,6 +10,196 @@ export { normalizeProps, spreadProps } from '@zag-js/vanilla';
 /** Apply an alpha to any parseable color → an `rgba(...)` string. Unparseable input is
  *  returned unchanged so callers can pass through `transparent`, `currentColor`, etc. */
 declare function withAlpha(color: string, alpha: number): string;
+
+type DatePickerPanel = 'date' | 'month' | 'year';
+interface DatePickerControllerOptions {
+    /** The selected date (`YYYY-MM-DD`); the calendar opens on its month. */
+    value?: string;
+    /** "Today" for the today ring and the initial month when nothing is selected. */
+    today?: Date;
+}
+/** One cell of the current panel. `blank` cells pad the first week of a month. */
+interface DatePickerCell {
+    label: string;
+    /** The day (`YYYY-MM-DD`) on the date panel; the month index or the year otherwise. */
+    value: string | number;
+    checked: boolean;
+    today: boolean;
+    /** A padding year outside the decade on the year panel. */
+    outside?: boolean;
+    blank?: boolean;
+}
+interface DatePickerController {
+    readonly panel: DatePickerPanel;
+    readonly year: number;
+    readonly month: number;
+    readonly value: string | null;
+    /** Header text: the month switch (hidden off the date panel) and the year switch. */
+    header(): {
+        month: string;
+        monthVisible: boolean;
+        year: string;
+        yearDisabled: boolean;
+    };
+    /** What the arrows step on the current panel. */
+    navLabels(): {
+        prev: string;
+        next: string;
+    };
+    cells(): DatePickerCell[];
+    /** One month, one year or ten, depending on the panel. */
+    step(dir: 1 | -1): void;
+    showMonths(): void;
+    showYears(): void;
+    /** Activate a cell: a day returns its date (the pick); a month or year only navigates. */
+    choose(cell: DatePickerCell): string | null;
+    /** Rewrite the selection without emitting (and open on its month). */
+    setValue(value: string | null): void;
+}
+/** `YYYY-MM-DD` for a local date. */
+declare function isoDate(d: Date): string;
+/** Accept `YYYY-MM-DD` or `YYYY-M-D` and return a padded ISO date, or null if unusable. */
+declare function normalizeDateInput(raw: string): string | null;
+declare function datePickerController(opts?: DatePickerControllerOptions): DatePickerController;
+
+interface DatePickerOptions extends DatePickerControllerOptions {
+    /** A day was picked (`YYYY-MM-DD`). */
+    onPick?: (value: string) => void;
+}
+declare class DatePicker {
+    private readonly opts;
+    readonly el: HTMLDivElement;
+    private readonly ctrl;
+    private readonly prev;
+    private readonly next;
+    private readonly monthBtn;
+    private readonly yearBtn;
+    private readonly week;
+    private readonly grid;
+    constructor(opts?: DatePickerOptions);
+    get value(): string | null;
+    /** Rewrite the selection without emitting (the calendar opens on its month). */
+    setValue(value: string | null): void;
+    private paint;
+    private cellEl;
+}
+
+/** One menu entry. `id` is the selection value reported to `onSelect`. */
+interface MenuItemDescriptor {
+    id: string;
+    label: string;
+    disabled?: boolean;
+    /** Draw a separator line above this item. */
+    separatorBefore?: boolean;
+    /** Right-aligned hint (e.g. a shortcut display from KeymapManager). */
+    hint?: string;
+    /** Selected state (undefined = plain item). A plain checked item renders as a
+     *  highlighted row (brighter surface + bright ink) — or, in a menu built with
+     *  `checkmarks`, as a leading ✓ with the row surface left free for hover. */
+    checked?: boolean;
+    /** Render as a SWITCH row (a right-aligned toggle pill reflecting `checked`)
+     *  instead of the selected-row highlight, and keep the menu OPEN on selection —
+     *  the shape for boolean settings living inside a dropdown. */
+    toggle?: boolean;
+    /** Icon id (see the `vela/ui` icon registry) rendered before the label. A level where
+     *  any row has one gives its iconless rows an empty slot, so the labels align. */
+    icon?: string;
+    /** Favorite-star affordance at the row's right edge: `false` renders an outline
+     *  star revealed on row hover, `true` a filled star that stays visible. Clicking
+     *  it reports through the menu's `onFavorite` WITHOUT selecting (or closing) the
+     *  row — undefined rows carry no star at all. */
+    favorite?: boolean;
+    /** Nested entries — the row becomes a submenu trigger opening its own list to the side.
+     *  A branch is not selectable itself: `onSelect` only ever reports leaf ids. */
+    submenu?: readonly MenuItemDescriptor[];
+}
+interface MenuControllerOptions {
+    items: readonly MenuItemDescriptor[];
+    onSelect?: (id: string) => void;
+    placement?: menu.Props['positioning'] extends infer P | undefined ? P extends {
+        placement?: infer PL;
+    } ? PL : never : never;
+    onOpenChange?: (open: boolean) => void;
+    /** Pin the floating list to this rect (viewport coords). Used to keep an open
+     *  menu still when its trigger moves — starring a timeframe adds a chip and
+     *  would otherwise drag the list with the caret. `null` falls through to the
+     *  live trigger. */
+    getAnchorRect?: () => {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    } | null;
+    /** Share the trigger's DOM id with other machines composed on the same element. */
+    triggerId?: string;
+    /** `false` keeps the list on its placement side (a dropdown stays a dropdown) instead of flipping to the
+     *  other side when the room runs short; pair it with a max height so the list scrolls. Default: flips. */
+    flip?: boolean;
+    /** Pin the machine's own id instead of taking a fresh one. A parent registers its
+     *  submenus under this key, so rebuilding a branch replaces its entry rather than
+     *  piling a new one on top. */
+    id?: string;
+}
+type MenuService = menu.Service;
+type MenuApi = menu.Api;
+interface MenuController {
+    machine: typeof menu.machine;
+    props: Partial<menu.Props>;
+    connect(service: MenuService): MenuApi;
+}
+declare function menuController(opts: MenuControllerOptions): MenuController;
+
+interface MenuOptions extends MenuControllerOptions {
+    /** Element that opens the menu on click (gets the machine's trigger props). */
+    trigger?: HTMLElement;
+    host?: HTMLElement;
+    /** Override the root list's min-width (the stylesheet default suits full-word labels;
+     *  compact lists like the timeframe dropdown pass something snug). Submenus keep the
+     *  default. */
+    minWidth?: string;
+    /** Cap the root list's height (a CSS length); it still never passes the room on its side, and scrolls. A long
+     *  checklist shows a few rows instead of most of the screen. Submenus keep the default. */
+    maxHeight?: string;
+    /** Star-toggle reports from items carrying `favorite` (the menu stays open — starring
+     *  is a side action on a row, never a selection). */
+    onFavorite?: (id: string, on: boolean) => void;
+    /** Mark checked items with a leading ✓ instead of the selected-row background wash —
+     *  the shape for pointer-anchored action menus (right-click context menus), where a
+     *  washed row reads as hover state. A level holding checkable rows reserves the mark
+     *  column on all its rows so labels align; an all-action level keeps its natural left
+     *  edge. Submenus inherit the mode. Dropdown menus (a trigger button opening a
+     *  picker) keep the default wash. */
+    checkmarks?: boolean;
+    /** Sit each row's icon in a squared badge (a 24px rounded tile with a faint fill and a soft
+     *  border) instead of a bare glyph: its glyph brightens on a hovered row, and the tile
+     *  inverts on the selected one. A
+     *  level where some rows carry an icon reserves the badge column on all its rows so
+     *  labels align; a level with no icon keeps its natural left edge. With `checkmarks`,
+     *  the mark column leads and the badge follows. Submenus inherit the mode. */
+    iconBadges?: boolean;
+}
+declare class Menu {
+    private readonly root;
+    private readonly opts;
+    private items;
+    private sheet;
+    /** Re-render the open sheet's top page (setItems while it is open: a checklist pick flips other rows). */
+    private sheetRefresh;
+    constructor(opts: MenuOptions);
+    get api(): menu.Api;
+    open(): void;
+    /** On a phone a menu with no visible button to hang from opened as a small dropdown pinned in a corner, floating
+     *  over the chart (the language picker, Add widget and Templates from the More sheet; user report 2026-10-28,
+     *  "kind of slop", the third time). There it opens as a bottom sheet like the phone's other menus. */
+    private sheetMode;
+    private openSheet;
+    /** Open anchored to a viewport point (context menus). */
+    openAt(clientX: number, clientY: number): void;
+    close(): void;
+    /** Swap the item descriptors (e.g. checked states) and re-project. */
+    setItems(items: readonly MenuItemDescriptor[]): void;
+    destroy(): void;
+}
 
 /** A ready-to-insert element rendering the icon (empty span when unknown). */
 declare function iconEl(id: string, doc?: Document): HTMLElement;
@@ -25,12 +215,13 @@ declare function injectStyles(id: string, css: string, root?: Document | ShadowR
 /** Write the theme-derived custom properties onto a host element (the widget root and
  *  every floating layer — menus/tooltips portal outside the root, so layers re-apply). */
 declare function applyThemeTokens(el: HTMLElement, t: VelaTheme): void;
-/** Re-token a chart-overlay host (statusline, watermark, toast, context menu — chrome
- *  floating OVER the plot) from the LIVE plot surface: a config edit can recolor the
- *  plot background independently of the app theme (a white plot typed into settings on
- *  the dark theme), and the overlay ink must stay readable either way. `config` is the
- *  renderer's `getConfig()` snapshot; a missing/shapeless one falls back to the base
- *  app theme. */
+/** Re-token a chart-overlay host (statusline, watermark, toast — chrome floating OVER
+ *  the plot) from the LIVE plot surface: a config edit can recolor the plot background
+ *  independently of the app theme (a white plot typed into settings on the dark theme),
+ *  and the overlay ink must stay readable either way. `config` is the renderer's
+ *  `getConfig()` snapshot; a missing/shapeless one falls back to the base app theme.
+ *  Floating menus and dropdowns do NOT use this — they mount on {@link floatingLayerHost}
+ *  so their surface follows the app theme alone. */
 declare function applyPlotOverlayTokens(host: HTMLElement, base: VelaTheme, config: unknown): void;
 /** Mark an element as a kit host: static token sheet + the `.vela-ui` class. */
 declare function ensureUIHost(el: HTMLElement, theme?: VelaTheme): void;
@@ -46,6 +237,20 @@ interface MachineHandle<T extends MachineSchema> {
 declare function runMachine<T extends MachineSchema>(machine: Machine<T>, props: Partial<T['props']> | (() => Partial<T['props']>), render: (service: Service<T>) => void): MachineHandle<T>;
 /** Unique ids for machine instances (Zag keys its DOM lookups on them). */
 declare function nextUid(prefix: string): string;
+
+/** Dispatched on a surface's element once it is shown. */
+declare const SURFACE_OPEN_EVENT = "vela:surface-open";
+/** Dispatched on a surface's element as it starts to close, before it hides or leaves the DOM. */
+declare const SURFACE_CLOSE_EVENT = "vela:surface-close";
+/** What opened or closed: a menu (submenus included), a popover (select lists, color
+ *  pickers, mark cards, the layout picker), a dialog, a drawer, or a side panel. */
+type SurfaceKind = 'menu' | 'popover' | 'dialog' | 'drawer' | 'panel';
+/** The `detail` of a {@link SURFACE_OPEN_EVENT} / {@link SURFACE_CLOSE_EVENT} event. */
+interface SurfaceEventDetail {
+    kind: SurfaceKind;
+    /** The element that opened it, when there is one (a menu's button, a popover's trigger). */
+    trigger: HTMLElement | null;
+}
 
 interface TooltipControllerOptions {
     placement?: tooltip.Placement;
@@ -78,99 +283,6 @@ declare class Tooltip {
     private readonly trigger;
     constructor(trigger: HTMLElement, opts: TooltipOptions);
     setContent(content: string | Node | (() => Node)): void;
-    destroy(): void;
-}
-
-/** One menu entry. `id` is the selection value reported to `onSelect`. */
-interface MenuItemDescriptor {
-    id: string;
-    label: string;
-    disabled?: boolean;
-    /** Draw a separator line above this item. */
-    separatorBefore?: boolean;
-    /** Right-aligned hint (e.g. a shortcut display from KeymapManager). */
-    hint?: string;
-    /** Selected state (undefined = plain item). A plain checked item renders as a
-     *  highlighted row (brighter surface + bright ink) — or, in a menu built with
-     *  `checkmarks`, as a leading ✓ with the row surface left free for hover. */
-    checked?: boolean;
-    /** Render as a SWITCH row (a right-aligned toggle pill reflecting `checked`)
-     *  instead of the selected-row highlight, and keep the menu OPEN on selection —
-     *  the shape for boolean settings living inside a dropdown. */
-    toggle?: boolean;
-    /** Icon id (see the `vela/ui` icon registry) rendered before the label. */
-    icon?: string;
-    /** Favorite-star affordance at the row's right edge: `false` renders an outline
-     *  star revealed on row hover, `true` a filled star that stays visible. Clicking
-     *  it reports through the menu's `onFavorite` WITHOUT selecting (or closing) the
-     *  row — undefined rows carry no star at all. */
-    favorite?: boolean;
-    /** Nested entries — the row becomes a submenu trigger opening its own list to the side.
-     *  A branch is not selectable itself: `onSelect` only ever reports leaf ids. */
-    submenu?: readonly MenuItemDescriptor[];
-}
-interface MenuControllerOptions {
-    items: readonly MenuItemDescriptor[];
-    onSelect?: (id: string) => void;
-    placement?: menu.Props['positioning'] extends infer P | undefined ? P extends {
-        placement?: infer PL;
-    } ? PL : never : never;
-    onOpenChange?: (open: boolean) => void;
-    /** Pin the floating list to this rect (viewport coords). Used to keep an open
-     *  menu still when its trigger moves — starring a timeframe adds a chip and
-     *  would otherwise drag the list with the caret. `null` falls through to the
-     *  live trigger. */
-    getAnchorRect?: () => {
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-    } | null;
-    /** Share the trigger's DOM id with other machines composed on the same element. */
-    triggerId?: string;
-    /** Pin the machine's own id instead of taking a fresh one. A parent registers its
-     *  submenus under this key, so rebuilding a branch replaces its entry rather than
-     *  piling a new one on top. */
-    id?: string;
-}
-type MenuService = menu.Service;
-type MenuApi = menu.Api;
-interface MenuController {
-    machine: typeof menu.machine;
-    props: Partial<menu.Props>;
-    connect(service: MenuService): MenuApi;
-}
-declare function menuController(opts: MenuControllerOptions): MenuController;
-
-interface MenuOptions extends MenuControllerOptions {
-    /** Element that opens the menu on click (gets the machine's trigger props). */
-    trigger?: HTMLElement;
-    host?: HTMLElement;
-    /** Override the root list's min-width (the stylesheet default suits full-word labels;
-     *  compact lists like the timeframe dropdown pass something snug). Submenus keep the
-     *  default. */
-    minWidth?: string;
-    /** Star-toggle reports from items carrying `favorite` (the menu stays open — starring
-     *  is a side action on a row, never a selection). */
-    onFavorite?: (id: string, on: boolean) => void;
-    /** Mark checked items with a leading ✓ instead of the selected-row background wash —
-     *  the shape for pointer-anchored action menus (right-click context menus), where a
-     *  washed row reads as hover state. A level holding checkable rows reserves the mark
-     *  column on all its rows so labels align; an all-action level keeps its natural left
-     *  edge. Submenus inherit the mode. Dropdown menus (a trigger button opening a
-     *  picker) keep the default wash. */
-    checkmarks?: boolean;
-}
-declare class Menu {
-    private readonly root;
-    constructor(opts: MenuOptions);
-    get api(): menu.Api;
-    open(): void;
-    /** Open anchored to a viewport point (context menus). */
-    openAt(clientX: number, clientY: number): void;
-    close(): void;
-    /** Swap the item descriptors (e.g. checked states) and re-project. */
-    setItems(items: readonly MenuItemDescriptor[]): void;
     destroy(): void;
 }
 
@@ -228,6 +340,23 @@ declare class Dialog {
     private readonly handle;
     private readonly ctrl;
     constructor(opts?: DialogOptions);
+    private opener;
+    private wasOpen;
+    /** The panel and scrim's exit animation after a close; a reopen cancels it. */
+    private exit;
+    private destroyed;
+    private setShown;
+    /** Keep the just-closed dialog up through its exit animation, then hide it — or
+     *  remove it, when it was destroyed meanwhile. `spreadProps` re-applies the close
+     *  props' `hidden` only when its value changes, so lifting it keeps the panel and
+     *  scrim up until the exit ends. The positioner spans the viewport: inert, it lets
+     *  clicks through to the page while the panel animates out. */
+    private holdExit;
+    private detach;
+    /** Closing hands focus back to whatever opened it (Escape, the ✕, hide(), or a
+     *  teardown that outruns the machine's close notification). */
+    private restoreOpener;
+    private announce;
     get open(): boolean;
     show(): void;
     hide(): void;
@@ -289,13 +418,30 @@ declare class Drawer {
      */
     private wireGestures;
     setTitle(title: string): void;
+    private opener;
+    private wasOpen;
+    /** The sheet and scrim's exit animation after a close; a reopen cancels it. */
+    private exit;
+    private destroyed;
+    private setShown;
+    /** Keep the just-closed sheet up through its exit animation, then hide it — or
+     *  remove it, when it was destroyed meanwhile. `spreadProps` re-applies the close
+     *  props' `hidden` only when its value changes, so lifting it keeps the sheet and
+     *  scrim up until the exit ends. The positioner spans the host: inert, it lets
+     *  clicks through to the page while the sheet animates out. */
+    private holdExit;
+    private detach;
+    /** Closing hands focus back to whatever opened it (Escape, the ✕, hide(), or a
+     *  teardown that outruns the machine's close notification). */
+    private restoreOpener;
+    private announce;
     get open(): boolean;
     show(): void;
     hide(): void;
     destroy(): void;
 }
 
-type PopoverAlign = 'start' | 'end';
+type PopoverAlign = 'start' | 'end' | 'center';
 type PopoverPosition = 'fixed' | 'absolute';
 /** Axis-aligned rectangle in viewport coordinates. */
 interface Rect {
@@ -333,7 +479,8 @@ declare function intersectRects(a: Rect, b: Rect): Rect;
 /**
  * Place a popover under `trigger`, flipping above when it would leave `clamp`.
  * Prefers the side with more room when neither fully fits. `align: 'end'` right-aligns
- * to the trigger (swatches and width fields sit at the row's right edge).
+ * to the trigger (swatches and width fields sit at the row's right edge); `'center'`
+ * centers it on the trigger (a popup over a small glyph).
  */
 declare function placePopover(a: PlaceArgs): PlaceResult;
 interface PopoverControllerOptions {
@@ -367,6 +514,8 @@ interface PopoverOptions extends PopoverControllerOptions {
     zIndex?: string | number;
     /** Clamp rectangle. `'viewport'` (default) or an element (dialog / chart host). */
     boundary?: PopoverBoundary;
+    /** Fade the shell in on show and out on hide over this many ms (default 0 — instant). */
+    fadeMs?: number;
 }
 /** Close whichever kit popover is showing (dialog teardown, a second trigger). */
 declare function closeOpenPopovers(): void;
@@ -386,10 +535,17 @@ declare class Popover {
     private readonly ctrl;
     private readonly boundary;
     private readonly theme?;
+    /** Hosted under a `.vela-ui` we resolved ourselves — its tokens win over `theme`. */
+    private readonly inheritsTokens;
     private onOutside;
     private onKey;
     private onReflow;
     private shown;
+    private readonly fadeMs;
+    /** The pending removal of a fading-out shell; a show() that reuses the shell cancels it. */
+    private leaveTimer;
+    /** The shell's exit animation before it leaves the DOM; a show() that reuses the shell cancels it. */
+    private exit;
     constructor(opts: PopoverOptions);
     get open(): boolean;
     get position(): PopoverPosition;
@@ -427,6 +583,8 @@ declare function switchController(opts?: SwitchControllerOptions): SwitchControl
 
 interface SwitchOptions extends SwitchControllerOptions {
     id?: string;
+    /** Accessible name, for a switch whose visible words are not linked to it (no `id`). */
+    label?: string;
 }
 declare class Switch {
     readonly el: HTMLButtonElement;
@@ -484,6 +642,8 @@ interface SelectOptions extends SelectControllerOptions {
     theme?: VelaTheme;
     /** Placement for the open list (dialog-rect clamp, etc.). */
     list?: SelectListPopoverOpts;
+    /** Open the host's own menu on click instead of the option list (the trigger keeps the select's look). */
+    onTrigger?: (trigger: HTMLButtonElement) => void;
 }
 /** Fill `menu` with option buttons. Call {@link decorateSelectScroll} after the menu is on screen. */
 declare function fillSelectList(menu: HTMLElement, options: readonly SelectOption[], current: string, onPick: (value: string, label: string) => void): void;
@@ -502,6 +662,8 @@ declare class Select {
     constructor(opts: SelectOptions);
     get value(): string;
     setValue(v: string): void;
+    /** Show `text` on the trigger without changing the value (a host menu's own label). */
+    setText(text: string): void;
     toggle(): void;
     destroy(): void;
 }
@@ -616,6 +778,16 @@ declare function combineColor(hex6: string, alpha: number): string;
 declare function blendOver(fg: string, bg: string, alpha: number): string;
 /** HSL (h 0-360, s/l 0-100) → `#rrggbb`. */
 declare function hslHex(h: number, s: number, l: number): string;
+/** HSV (h 0-360, s/v 0-1) → `#rrggbb`: the custom panel's square (saturation × brightness) and hue bar. */
+declare function hsvHex(h: number, s: number, v: number): string;
+/** `#rrggbb` → HSV (h 0-360, s/v 0-1). A grey keeps hue 0. */
+declare function hexHsv(hex: string): {
+    h: number;
+    s: number;
+    v: number;
+};
+/** A typed hex colour (3 or 6 hex digits, with or without `#`, any case) as `#rrggbb`, or null when it is not one. */
+declare function parseHexInput(text: string): string | null;
 /** A swatch palette: a grayscale row, then hue columns × shade rows. */
 declare function buildPalette(): string[][];
 /** The alpha checkerboard laid under translucent colors. Its grays are fixed on purpose:
@@ -636,11 +808,22 @@ interface ColorPickerController {
 declare function colorPickerController(opts?: ColorPickerControllerOptions): ColorPickerController;
 
 /**
+ * When the opacity slider hands its value to `onChange` during a drag: `'live'` on every
+ * pointer move (the consumer repaints cheaply, so the chart previews the drag), `'release'`
+ * once on pointerup/pointercancel (the consumer recomputes — a script re-runs over its whole
+ * history, so a per-move commit would queue seconds of work behind the pointer). The knob,
+ * gradient and percentage follow the pointer either way; swatch picks always emit at once.
+ */
+type ColorCommit = 'live' | 'release';
+interface ColorPickerOptions {
+    commit?: ColorCommit;
+}
+/**
  * A self-contained color picker: a swatch grid (grays + hue × shade), a
  * recents row with a custom "+" picker, and an opacity slider over a transparency checker.
  * Emits `#RRGGBB` / `#RRGGBBAA` through `onChange`.
  */
-declare function buildColorPicker(color: string, theme: VelaTheme, onChange: (v: string) => void): HTMLElement;
+declare function buildColorPicker(color: string, theme: VelaTheme, onChange: (v: string) => void, options?: ColorPickerOptions): HTMLElement;
 interface ColorFieldOpts {
     shape?: ColorFieldShape;
     theme: VelaTheme;
@@ -648,6 +831,15 @@ interface ColorFieldOpts {
     onVal: (v: string) => void;
     id?: string;
     popover?: Pick<PopoverOptions, 'host' | 'position' | 'boundary' | 'zIndex' | 'gap' | 'align'>;
+    /** Opacity-drag commit policy of the popover picker (default `'live'`) — see {@link ColorCommit}. */
+    commit?: ColorCommit;
+    /** TradingView's line button: the trigger shows the swatch and a sample of the line (width + dash). */
+    line?: () => {
+        width: number;
+        style: string;
+    };
+    /** More controls under the picker in the same popover (the line button's Thickness and Line style). */
+    extra?: () => HTMLElement | null;
 }
 /** Closed-state swatch shape. `circle` is the settings-dialog preview (a square chip
  *  inset from a matching field border); `square` is the compact drawing-chrome swatch. */
@@ -655,6 +847,7 @@ declare function colorField(theme: VelaTheme, getVal: () => string, onVal: (v: s
     shape?: ColorFieldShape;
     id?: string;
     popover?: ColorFieldOpts['popover'];
+    commit?: ColorCommit;
 }): HTMLElement;
 declare class ColorField {
     readonly el: HTMLButtonElement;
@@ -663,9 +856,15 @@ declare class ColorField {
     private readonly onVal;
     private readonly theme;
     private readonly popoverOpts;
+    private readonly commit;
+    private readonly line;
+    private readonly extra;
+    private sample;
     constructor(opts: ColorFieldOpts);
-    private paint;
+    /** Repaint the swatch (and the line sample): after an outside change of the color, width or style. */
+    paint(): void;
     private toggle;
+    private content;
 }
 /** Close any open color (or other kit) popover — dialog teardown. */
 declare function closeColorPopover(): void;
@@ -773,6 +972,8 @@ type FieldControlDesc = {
     get: () => string;
     onChange: (v: string) => void;
     popover?: ColorFieldOpts['popover'];
+    /** Opacity-drag commit policy (default `'live'`): `'release'` when `onChange` recomputes rather than repaints. */
+    commit?: ColorFieldOpts['commit'];
     title?: string;
 } | {
     kind: 'text';
@@ -913,6 +1114,9 @@ interface CalloutBubbleSpec {
     label: string;
     /** Deployed panel — presence makes the bubble clickable. */
     panel?: CalloutPanel;
+    /** Icon slots side by side (default 1): a wider pill for an icon drawn `span` squares wide (several logos in
+     *  a row). The icon's viewBox should be 16*span x 16. Clamped to 1..6. */
+    span?: number;
 }
 /** Whether activating a panel button also closes the panel (defaults to yes). */
 declare function closesPanel(item: Extract<CalloutPanelItem, {
@@ -972,4 +1176,4 @@ declare class CalloutBubble {
 declare const CALLOUT_STYLE_ID = "vela-ui-callout-bubble";
 declare const CALLOUT_CSS = "\n.vela-callout {\n    display: inline-grid;\n    place-items: center;\n    border-radius: 50%;\n    flex: none;\n    line-height: 0;\n    box-sizing: border-box;\n    cursor: default;\n    user-select: none;\n    -webkit-user-select: none;\n}\n.vela-callout[role='button'] { cursor: pointer; }\n.vela-callout svg { display: block; }\n/* The deployed panel \u2014 carries the kit's elevated-card look itself (the popover\n   shell is bare positioning chrome). */\n.vela-callout-panel {\n    display: flex;\n    flex-direction: column;\n    gap: 8px;\n    padding: 10px 12px;\n    max-width: 280px;\n    box-sizing: border-box;\n    background: var(--vela-surface-elev);\n    border: 1px solid var(--vela-border-strong);\n    border-radius: 6px;\n    box-shadow: var(--vela-shadow);\n    color: var(--vela-fg);\n    font: var(--vela-font-size-md) var(--vela-font);\n}\n.vela-callout-title { font-weight: 600; color: var(--vela-fg-bright); }\n.vela-callout-text { color: var(--vela-fg-muted); line-height: 1.45; white-space: pre-line; }\n.vela-callout-actions { display: flex; flex-wrap: wrap; gap: 8px; }\n.vela-callout-btn {\n    cursor: pointer;\n    height: 26px;\n    padding: 0 10px;\n    border-radius: 5px;\n    border: 1px solid var(--vela-border);\n    background: transparent;\n    color: var(--vela-fg);\n    font-size: var(--vela-font-size-md);\n    font-family: inherit;\n    transition: background var(--vela-dur-fast) ease, color var(--vela-dur-fast) ease, opacity var(--vela-dur-fast) ease, border-color var(--vela-dur-fast) ease;\n}\n.vela-callout-btn:hover { background: var(--vela-hover); color: var(--vela-fg-bright); border-color: var(--vela-fg-muted); }\n.vela-callout-btn-primary { border-color: var(--vela-selected-bg); background: var(--vela-selected-bg); color: var(--vela-selected-fg); }\n.vela-callout-btn-primary:hover { background: var(--vela-selected-bg); color: var(--vela-selected-fg); opacity: 0.85; border-color: var(--vela-selected-bg); }\n";
 
-export { CALLOUT_CSS, CALLOUT_STYLE_ID, CalloutBubble, type CalloutBubbleOptions, type CalloutBubbleSpec, type CalloutPanel, type CalloutPanelItem, type CalloutPanelRow, ColorField, type ColorFieldOpts, type ColorFieldShape, type ColorPickerController, type ColorPickerControllerOptions, Dialog, type DialogApi, type DialogControllerOptions, type DialogOptions, type DialogService, Drawer, type DrawerApi, type DrawerControllerOptions, type DrawerOptions, type DrawerService, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, FIELD_GAP_PX, type FieldControlDesc, type FieldControlHandle, type FieldGridOptions, type FieldGridVariant, type FieldInlineItem, type FieldLabelSize, type FieldRowOptions, type FieldSectionOptions, type FieldToggleOpts, type GlyphOption, GlyphSelect, type GlyphSelectController, type GlyphSelectControllerOptions, type GlyphSelectOptions, type MachineHandle, Menu, type MenuApi, type MenuControllerOptions, type MenuItemDescriptor, type MenuOptions, type MenuService, type NumberCommit, NumberInput, type NumberInputController, type NumberInputControllerOptions, type NumberInputOptions, type NumberSize, type PlaceArgs, type PlaceResult, Popover, type PopoverAlign, type PopoverBoundary, type PopoverController, type PopoverControllerOptions, type PopoverOptions, type PopoverPosition, type Rect, Select, type SelectController, type SelectControllerOptions, type SelectListPopoverOpts, type SelectOption, type SelectOptions, type SelectSize, Switch, type SwitchController, type SwitchControllerOptions, type SwitchOptions, type SwitchSize, type SwitchTone, TextArea, type TextAreaController, type TextAreaControllerOptions, type TextAreaOptions, type TextAreaSize, TextField, type TextFieldController, type TextFieldControllerOptions, type TextFieldOptions, type TextFieldSize, Tooltip, type TooltipApi, type TooltipControllerOptions, type TooltipOptions, type TooltipService, WIDTH_FIELD_OPTIONS, applyPlotOverlayTokens, applyThemeTokens, blendOver, buildColorPicker, buildFieldControl, buildPalette, calloutPanelRows, clampNumber, closeColorPopover, closeOpenPopovers, closeWidthPopover, closesPanel, colorField, colorPickerController, combineColor, decorateSelectScroll, dialogController, drawerController, ensureUIHost, eventDismissedPopover, fieldGrid, fieldGridColumns, fieldRow, fieldSection, fieldSeparator, fillSelectList, glyphSelectController, hslHex, iconEl, injectStyles, insetRect, intersectRects, isPopoverOpen, lineWidthGlyph, menuController, nextUid, numberInputController, openPopoverTrigger, openSelectList, overlayScrollbarCss, placePopover, popoverController, runMachine, selectController, snapToStep, splitColor, switchController, textAreaController, textFieldController, toggleSelectList, tooltipController, transparencyChecker, viewportRect, widthField, widthFieldOptions, withAlpha };
+export { CALLOUT_CSS, CALLOUT_STYLE_ID, CalloutBubble, type CalloutBubbleOptions, type CalloutBubbleSpec, type CalloutPanel, type CalloutPanelItem, type CalloutPanelRow, type ColorCommit, ColorField, type ColorFieldOpts, type ColorFieldShape, type ColorPickerController, type ColorPickerControllerOptions, type ColorPickerOptions, DatePicker, type DatePickerCell, type DatePickerController, type DatePickerControllerOptions, type DatePickerOptions, type DatePickerPanel, Dialog, type DialogApi, type DialogControllerOptions, type DialogOptions, type DialogService, Drawer, type DrawerApi, type DrawerControllerOptions, type DrawerOptions, type DrawerService, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, FIELD_GAP_PX, type FieldControlDesc, type FieldControlHandle, type FieldGridOptions, type FieldGridVariant, type FieldInlineItem, type FieldLabelSize, type FieldRowOptions, type FieldSectionOptions, type FieldToggleOpts, type GlyphOption, GlyphSelect, type GlyphSelectController, type GlyphSelectControllerOptions, type GlyphSelectOptions, type MachineHandle, Menu, type MenuApi, type MenuControllerOptions, type MenuItemDescriptor, type MenuOptions, type MenuService, type NumberCommit, NumberInput, type NumberInputController, type NumberInputControllerOptions, type NumberInputOptions, type NumberSize, type PlaceArgs, type PlaceResult, Popover, type PopoverAlign, type PopoverBoundary, type PopoverController, type PopoverControllerOptions, type PopoverOptions, type PopoverPosition, type Rect, SURFACE_CLOSE_EVENT, SURFACE_OPEN_EVENT, Select, type SelectController, type SelectControllerOptions, type SelectListPopoverOpts, type SelectOption, type SelectOptions, type SelectSize, type SurfaceEventDetail, type SurfaceKind, Switch, type SwitchController, type SwitchControllerOptions, type SwitchOptions, type SwitchSize, type SwitchTone, TextArea, type TextAreaController, type TextAreaControllerOptions, type TextAreaOptions, type TextAreaSize, TextField, type TextFieldController, type TextFieldControllerOptions, type TextFieldOptions, type TextFieldSize, Tooltip, type TooltipApi, type TooltipControllerOptions, type TooltipOptions, type TooltipService, WIDTH_FIELD_OPTIONS, applyPlotOverlayTokens, applyThemeTokens, blendOver, buildColorPicker, buildFieldControl, buildPalette, calloutPanelRows, clampNumber, closeColorPopover, closeOpenPopovers, closeWidthPopover, closesPanel, colorField, colorPickerController, combineColor, datePickerController, decorateSelectScroll, dialogController, drawerController, ensureUIHost, eventDismissedPopover, fieldGrid, fieldGridColumns, fieldRow, fieldSection, fieldSeparator, fillSelectList, glyphSelectController, hexHsv, hslHex, hsvHex, iconEl, injectStyles, insetRect, intersectRects, isPopoverOpen, isoDate, lineWidthGlyph, menuController, nextUid, normalizeDateInput, numberInputController, openPopoverTrigger, openSelectList, overlayScrollbarCss, parseHexInput, placePopover, popoverController, runMachine, selectController, snapToStep, splitColor, switchController, textAreaController, textFieldController, toggleSelectList, tooltipController, transparencyChecker, viewportRect, widthField, widthFieldOptions, withAlpha };

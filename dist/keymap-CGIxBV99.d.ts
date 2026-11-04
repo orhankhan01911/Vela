@@ -47,6 +47,8 @@ declare class KeymapManager {
     unregister(id: string): void;
     /** User-level rebinding: overrides the descriptor's default chords (null resets). */
     rebind(id: string, keys: string | string[] | null): void;
+    /** A chord as this platform writes it (`'mod+v'` → `Ctrl+V`, or `⌘V` on a Mac). */
+    display(spec: string): string;
     /** Snapshot for a shortcuts help panel / rebinding UI. */
     bindings(): ResolvedBinding[];
     pushScope(scope: string): () => void;
@@ -61,4 +63,4 @@ declare class KeymapManager {
     private activeKeys;
 }
 
-export { KeymapManager as K, type ResolvedBinding as R, type KeyBindingDescriptor as a, type KeymapOptions as b };
+export { type KeyBindingDescriptor as K, type ResolvedBinding as R, KeymapManager as a, type KeymapOptions as b };

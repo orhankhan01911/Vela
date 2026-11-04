@@ -1,11 +1,11 @@
-import { overlayScrollbarCss, injectStyles, isDarkColor, mix, HIGHLIGHT, ACCENT_BRIGHT, ACCENT, withAlpha, iconAt, iconEl, BULLISH, BEARISH, WARNING, NEUTRAL } from './chunk-CAFCLMPF.js';
+import { STATIC_TOKENS, overlayScrollbarCss, themeTokens, injectStyles, vt, holdForExit, announceSurface, iconAt, iconEl, ACCENT_BRIGHT, BEARISH, ACCENT, BULLISH, WARNING, NEUTRAL } from './chunk-4YAXFTQI.js';
 import { VanillaMachine, normalizeProps, spreadProps } from '@zag-js/vanilla';
 export { normalizeProps, spreadProps } from '@zag-js/vanilla';
 import * as menu from '@zag-js/menu';
 import * as dialog from '@zag-js/dialog';
 
-function runMachine(machine3, props, render) {
-  const m = new VanillaMachine(machine3, props);
+function runMachine(machine4, props, render) {
+  const m = new VanillaMachine(machine4, props);
   const unsub = m.subscribe(render);
   m.start();
   render(m.service);
@@ -22,6 +22,49 @@ var uid = 0;
 function nextUid(prefix) {
   return `${prefix}-${++uid}`;
 }
+
+// src/ui/tokens.ts
+var STATIC_ID = "vela-ui-tokens";
+var STATIC_DECLS = Object.entries(STATIC_TOKENS).map(([k, v]) => `    ${k}: ${v};`).join("\n");
+var STATIC_CSS = `
+.vela-ui, .vela-ui-layer {
+${STATIC_DECLS}
+    font-family: var(--vela-font, -apple-system, system-ui, sans-serif);
+    box-sizing: border-box;
+    /* Chrome text (titles, buttons, menus, readouts) is UI, not copy \u2014 never selectable. */
+    user-select: none;
+    -webkit-user-select: none;
+}
+.vela-ui *, .vela-ui-layer * { box-sizing: border-box; }
+/* Text ENTRY is the one exception: selection is part of editing. */
+.vela-ui :is(input, textarea), .vela-ui-layer :is(input, textarea) { user-select: text; -webkit-user-select: text; }
+/* iOS Safari zooms the page when a focused field is under 16px, and often
+   keeps that zoom after the field blurs or a dialog closes. The shell's
+   mobile size class is the honest gate \u2014 not a media query \u2014 so an embedded
+   chart on a wide desktop still gets the rule when it is in the phone layout.
+   Scoped to the kit root so a host page's own [data-layout] is never touched. */
+.vela-ui[data-layout='mobile'] :is(input, textarea, select) { font-size: 16px; }
+.vela-icon { display: inline-flex; align-items: center; flex: none; }
+.vela-icon svg { display: block; }
+`;
+function applyThemeTokens(el, t) {
+  const tokens = themeTokens(t);
+  for (const key in tokens) el.style.setProperty(key, tokens[key]);
+}
+function applyPlotOverlayTokens(host, base, config) {
+  const layout = config?.layout;
+  const background = layout?.backgroundType === "gradient" && layout.backgroundTop ? layout.backgroundTop : layout?.background;
+  const t = background && layout?.textColor ? { ...base, background, textColor: layout.textColor } : base;
+  applyThemeTokens(host, t);
+}
+function floatingLayerHost(from, fallback) {
+  return from.closest(".vela-ui") ?? fallback ?? from;
+}
+function ensureUIHost(el, theme) {
+  injectStyles(STATIC_ID, STATIC_CSS, el.getRootNode());
+  el.classList.add("vela-ui");
+  if (theme) applyThemeTokens(el, theme);
+}
 function menuController(opts) {
   return {
     machine: menu.machine,
@@ -30,6 +73,7 @@ function menuController(opts) {
       ids: opts.triggerId ? { trigger: opts.triggerId } : void 0,
       positioning: {
         placement: opts.placement ?? "bottom-start",
+        ...opts.flip === false ? { flip: false } : {},
         ...opts.getAnchorRect ? { getAnchorRect: () => opts.getAnchorRect() } : {}
       },
       onSelect: (d) => opts.onSelect?.(d.value),
@@ -38,6 +82,351 @@ function menuController(opts) {
     connect: (service) => menu.connect(service, normalizeProps)
   };
 }
+function drawerController(opts = {}) {
+  return {
+    machine: dialog.machine,
+    props: {
+      id: nextUid("vela-drawer"),
+      modal: true,
+      closeOnEscape: opts.closeOnEscape ?? true,
+      closeOnInteractOutside: opts.closeOnInteractOutside ?? true,
+      initialFocusEl: opts.initialFocusEl,
+      onOpenChange: (d) => opts.onOpenChange?.(d.open)
+    },
+    connect: (service) => dialog.connect(service, normalizeProps)
+  };
+}
+
+// src/ui/components/drawer/styles.ts
+var DRAWER_STYLE_ID = "vela-ui-drawer";
+var DRAWER_CSS = `
+.vela-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: var(--vela-backdrop);
+    z-index: var(--vela-z-dialog);
+}
+.vela-drawer-positioner {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: var(--vela-z-dialog);
+}
+/* Inside a shell that declares a size class, the sheet scopes to the SHELL's bounds
+   (the widget root is position:relative) instead of the whole viewport \u2014 an embedded
+   chart must not curtain the host page. */
+[data-layout] .vela-drawer-backdrop, [data-layout] .vela-drawer-positioner { position: absolute; }
+.vela-drawer {
+    background: var(--vela-surface);
+    color: var(--vela-fg);
+    border: 1px solid var(--vela-border-strong);
+    border-bottom: none;
+    border-radius: 14px 14px 0 0;
+    box-shadow: var(--vela-shadow-dialog);
+    font-size: 13px;
+    width: 100%;
+    max-height: 85%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    outline: none;
+}
+.vela-drawer[data-state='open'] { animation: vela-drawer-in var(--vela-dur-med) var(--vela-ease); }
+@keyframes vela-drawer-in {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+/* The grab zone owns its touches (drag-to-dismiss), so the browser must not scroll it. */
+.vela-drawer-grab {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 0 6px;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+.vela-drawer-grab::before {
+    content: '';
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--vela-border-strong);
+}
+.vela-drawer-title {
+    flex: none;
+    padding: 0 16px 10px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    color: var(--vela-fg-bright);
+    user-select: none;
+}
+.vela-drawer-title:empty { display: none; }
+.vela-drawer-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    /* Vertical pans stay native scrolling; horizontal moves reach the sheet's gesture
+       recognizer as pointer events (tab swipes). Without this the browser claims a
+       sideways touch as a scroll attempt and CANCELS the pointer stream, so swipes
+       never registered on real touch devices. Sideways-scrolling strips inside the
+       body opt back in with their own touch-action: pan-x. */
+    touch-action: pan-y;
+    padding: 0 var(--vela-space-3) calc(var(--vela-space-3) + env(safe-area-inset-bottom, 0px));
+}
+.vela-drawer-body::-webkit-scrollbar { width: 8px; }
+.vela-drawer-body::-webkit-scrollbar-thumb {
+    background: var(--vela-scroll);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+`;
+var DISMISS_FRACTION = 0.33;
+var DISMISS_PX = 96;
+var SLOP_PX = 8;
+var HSWIPE_MIN_PX = 48;
+function classifyGesture(dx, dy, ctx) {
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < SLOP_PX) return "pending";
+  if (Math.abs(dy) > Math.abs(dx)) return dy > 0 && !ctx.scrolled ? "drag" : "scroll";
+  return ctx.canSwipe && !ctx.hScrollable ? "hswipe" : "scroll";
+}
+function dragDismisses(dy, panelHeightPx) {
+  return dy >= Math.min(DISMISS_PX, panelHeightPx * DISMISS_FRACTION);
+}
+function swipeDirection(dx, dy) {
+  if (Math.abs(dx) < HSWIPE_MIN_PX || Math.abs(dx) <= Math.abs(dy)) return null;
+  return dx < 0 ? "left" : "right";
+}
+var Drawer = class {
+  constructor(opts = {}) {
+    this.opener = null;
+    this.wasOpen = false;
+    /** The sheet and scrim's exit animation after a close; a reopen cancels it. */
+    this.exit = null;
+    this.destroyed = false;
+    const doc = (opts.host ?? document.body).ownerDocument;
+    injectStyles(DRAWER_STYLE_ID, DRAWER_CSS, doc);
+    const host = opts.host ?? doc.body;
+    this.backdrop = doc.createElement("div");
+    this.backdrop.className = "vela-drawer-backdrop vela-ui-layer";
+    this.positioner = doc.createElement("div");
+    this.positioner.className = "vela-drawer-positioner vela-ui-layer";
+    this.panel = doc.createElement("div");
+    this.panel.className = "vela-drawer";
+    this.panel.tabIndex = -1;
+    const grab = doc.createElement("div");
+    grab.className = "vela-drawer-grab";
+    this.titleEl = doc.createElement("div");
+    this.titleEl.className = "vela-drawer-title";
+    this.titleEl.textContent = vt(opts.title ?? "");
+    this.body = doc.createElement("div");
+    this.body.className = "vela-drawer-body";
+    if (opts.content instanceof Node) this.body.appendChild(opts.content);
+    else if (typeof opts.content === "function") opts.content(this.body);
+    this.panel.append(grab, this.titleEl, this.body);
+    this.positioner.appendChild(this.panel);
+    host.append(this.backdrop, this.positioner);
+    this.wireGestures(grab, opts.onSwipe);
+    this.ctrl = drawerController({ ...opts, initialFocusEl: () => this.panel });
+    const mid = String(this.ctrl.props.id);
+    this.handle = runMachine(this.ctrl.machine, this.ctrl.props, (service) => {
+      const api = this.ctrl.connect(service);
+      const closing = this.wasOpen && !api.open;
+      if (closing) this.announce(false);
+      spreadProps(this.backdrop, api.getBackdropProps(), mid);
+      spreadProps(this.positioner, api.getPositionerProps(), mid);
+      spreadProps(this.panel, api.getContentProps(), mid);
+      spreadProps(this.titleEl, api.getTitleProps(), mid);
+      if (api.open) {
+        this.exit?.cancel();
+        this.exit = null;
+        this.setShown(true);
+      } else if (closing) {
+        this.holdExit();
+      } else if (!this.exit) {
+        this.setShown(false);
+      }
+      if (api.open && !this.wasOpen) this.announce(true);
+      if (this.wasOpen && !api.open) this.restoreOpener();
+      this.wasOpen = api.open;
+    });
+  }
+  /** Any element between `from` and the panel that has already been scrolled down —
+   *  a downward pull there must scroll it back up, never drag the sheet. */
+  scrolledAncestor(from) {
+    let el = from instanceof Element ? from : null;
+    while (el && el !== this.panel) {
+      if (el.scrollTop > 0) return true;
+      el = el.parentElement;
+    }
+    return false;
+  }
+  /** Any element between `from` and the panel that scrolls horizontally on its own
+   *  (the tab strip, chip rows) — a sideways move there is ITS scroll, not a swipe. */
+  hScrollableAncestor(from) {
+    let el = from instanceof Element ? from : null;
+    while (el && el !== this.panel) {
+      if (el.scrollWidth > el.clientWidth + 1) return true;
+      el = el.parentElement;
+    }
+    return false;
+  }
+  /**
+   * One gesture recognizer for the whole sheet. A downward pull dismisses from
+   * anywhere — the grab handle immediately, the content once it is decidedly vertical
+   * and its scroller is at rest (a scrolled list keeps native scrolling). A decidedly
+   * horizontal move becomes an `onSwipe` (tabbed drawers flip pages with it). The
+   * non-passive touchmove hook is what keeps the browser from claiming the pull as a
+   * scroll once the sheet is (or may become) the drag target.
+   */
+  wireGestures(grab, onSwipe) {
+    let startX = 0;
+    let startY = 0;
+    let dx = 0;
+    let dy = 0;
+    let mode = "idle";
+    const beginDrag = (e) => {
+      mode = "drag";
+      startY = e.clientY;
+      this.panel.style.transition = "none";
+      try {
+        this.panel.setPointerCapture(e.pointerId);
+      } catch {
+      }
+    };
+    this.panel.addEventListener("pointerdown", (e) => {
+      if (e.isPrimary === false) return;
+      startX = e.clientX;
+      startY = e.clientY;
+      dx = 0;
+      dy = 0;
+      if (grab.contains(e.target)) beginDrag(e);
+      else mode = "pending";
+    });
+    this.panel.addEventListener("pointermove", (e) => {
+      if (mode === "idle" || mode === "scroll") return;
+      dx = e.clientX - startX;
+      dy = e.clientY - startY;
+      if (mode === "pending") {
+        const intent = classifyGesture(dx, dy, {
+          canSwipe: !!onSwipe,
+          scrolled: this.scrolledAncestor(e.target),
+          hScrollable: this.hScrollableAncestor(e.target)
+        });
+        if (intent === "pending") return;
+        if (intent === "drag") beginDrag(e);
+        else mode = intent;
+      }
+      if (mode === "drag") {
+        dy = Math.max(0, e.clientY - startY);
+        this.panel.style.transform = dy > 0 ? `translateY(${dy}px)` : "";
+      }
+    });
+    this.panel.addEventListener(
+      "touchmove",
+      (e) => {
+        if (mode === "drag" || mode === "hswipe") {
+          e.preventDefault();
+          return;
+        }
+        if (mode !== "pending") return;
+        const t = e.touches[0];
+        if (!t) return;
+        const mdx = t.clientX - startX;
+        const mdy = t.clientY - startY;
+        if (mdy > Math.abs(mdx) && !this.scrolledAncestor(e.target)) e.preventDefault();
+      },
+      { passive: false }
+    );
+    const settle = () => {
+      if (mode === "idle") return;
+      const finished = mode;
+      mode = "idle";
+      if (finished === "drag") {
+        this.panel.style.transition = "";
+        this.panel.style.transform = "";
+        if (dragDismisses(dy, this.panel.getBoundingClientRect().height)) this.hide();
+      } else if (finished === "hswipe") {
+        const dir = swipeDirection(dx, dy);
+        if (dir) onSwipe?.(dir);
+      }
+    };
+    this.panel.addEventListener("pointerup", settle);
+    this.panel.addEventListener("pointercancel", settle);
+  }
+  setTitle(title) {
+    this.titleEl.textContent = vt(title);
+  }
+  setShown(shown) {
+    this.backdrop.style.display = shown ? "" : "none";
+    this.positioner.style.display = shown ? "" : "none";
+  }
+  /** Keep the just-closed sheet up through its exit animation, then hide it — or
+   *  remove it, when it was destroyed meanwhile. `spreadProps` re-applies the close
+   *  props' `hidden` only when its value changes, so lifting it keeps the sheet and
+   *  scrim up until the exit ends. The positioner spans the host: inert, it lets
+   *  clicks through to the page while the sheet animates out. */
+  holdExit() {
+    const held = [this.panel, this.backdrop];
+    for (const el of held) el.hidden = false;
+    this.exit = holdForExit(
+      held,
+      () => {
+        this.exit = null;
+        if (this.destroyed) {
+          this.detach();
+        } else if (!this.open) {
+          for (const el of held) el.hidden = true;
+          this.setShown(false);
+        }
+      },
+      { inert: [this.positioner] }
+    );
+  }
+  detach() {
+    this.backdrop.remove();
+    this.positioner.remove();
+  }
+  /** Closing hands focus back to whatever opened it (Escape, the ✕, hide(), or a
+   *  teardown that outruns the machine's close notification). */
+  restoreOpener() {
+    const opener = this.opener;
+    this.opener = null;
+    if (opener?.isConnected) opener.focus({ preventScroll: true });
+  }
+  announce(open2) {
+    const opener = this.opener === this.panel.ownerDocument.body ? null : this.opener;
+    announceSurface(this.panel, open2, "drawer", opener);
+  }
+  get open() {
+    return this.ctrl.connect(this.handle.service).open;
+  }
+  show() {
+    this.opener = this.panel.ownerDocument.activeElement;
+    this.ctrl.connect(this.handle.service).setOpen(true);
+  }
+  hide() {
+    this.ctrl.connect(this.handle.service).setOpen(false);
+  }
+  destroy() {
+    if (this.wasOpen && !this.open) this.handle.flush();
+    this.handle.stop();
+    this.destroyed = true;
+    if (this.wasOpen) {
+      this.wasOpen = false;
+      this.announce(false);
+    }
+    this.restoreOpener();
+    if (!this.exit) this.detach();
+  }
+};
 
 // src/ui/components/menu/styles.ts
 var MENU_STYLE_ID = "vela-ui-menu";
@@ -46,14 +435,20 @@ var MENU_CSS = `
     /* The list is a <ul>: without this, block rows (the separator) paint a ::marker dot. */
     list-style: none;
     margin: 0;
-    background: var(--vela-surface-elev);
+    background: var(--vela-surface);
     color: var(--vela-fg);
     border: 1px solid var(--vela-border-strong);
     border-radius: 6px;
     box-shadow: var(--vela-shadow);
     padding: 6px;
     min-width: 180px;
-    max-height: 60vh;
+    /* Never wider than the screen: a row of label + hint (the chart settings' template list) ran ~630 px and
+       widened a phone's page, cutting the names off. A row that does not fit puts its hint under the label. */
+    max-width: calc(100vw - 16px);
+    box-sizing: border-box;
+    /* Never past the room on the side it opened (the positioner's --available-height): a long checklist opened
+       from low in a dialog flips up and scrolls instead of running off the top of the window. */
+    max-height: min(60vh, var(--available-height, 60vh));
     overflow-y: auto;
     font-size: 13px;
     z-index: var(--vela-z-menu);
@@ -77,8 +472,9 @@ var MENU_CSS = `
 .vela-menu-item[data-highlighted] { background: var(--vela-hover); }
 .vela-menu-item[data-disabled] { opacity: 0.4; cursor: default; }
 .vela-menu-item .vela-icon { width: 16px; height: 16px; font-size: 16px; justify-content: center; color: var(--vela-fg-muted); }
-.vela-menu-item .vela-menu-label { flex: 1 1 auto; }
-.vela-menu-item .vela-menu-hint { color: var(--vela-fg-faint); font-size: var(--vela-font-size-sm); }
+.vela-menu-item { flex-wrap: wrap; row-gap: 2px; }
+.vela-menu-item .vela-menu-label { flex: 1 1 auto; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.vela-menu-item .vela-menu-hint { color: var(--vela-fg-faint); font-size: var(--vela-font-size-sm); white-space: normal; min-width: 0; }
 /* Active entry: the row surface carries the selection \u2014 a stronger background wash
    than the hover one, plus bright ink. Declared after the hover rule so a selected
    row stays visibly selected while highlighted. */
@@ -103,6 +499,41 @@ var MENU_CSS = `
     color: var(--vela-fg-bright);
 }
 .vela-menu-item[data-checkmark] { color: var(--vela-fg-bright); }
+/* Badge mode (iconBadges): the row icon sits in a rounded tile and the row grows to fit
+   it. An icon-less row of the same level keeps an invisible slot, so labels align. */
+/* Compact: an icon menu is scanned by its tiles, so rows, gaps and separators run tighter
+   than a plain list's. */
+.vela-menu[data-badges] { padding: 4px; min-width: 0; font-size: 12.5px; }
+.vela-menu[data-badges] > .vela-menu-item { padding: 3px 10px 3px 4px; gap: 8px; }
+.vela-menu[data-badges] > .vela-menu-item .vela-menu-hint { padding-left: 14px; }
+.vela-menu[data-badges] > .vela-menu-sep { margin: 3px 4px; }
+.vela-menu-item .vela-menu-badge {
+    width: 20px;
+    height: 20px;
+    padding: 3px;
+    font-size: 13px;
+    flex: none;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--vela-radius-md);
+    background: var(--vela-hover);
+    border: 1px solid var(--vela-border);
+    color: var(--vela-fg-muted);
+    transition: background var(--vela-dur-fast) var(--vela-ease), border-color var(--vela-dur-fast) var(--vela-ease), color var(--vela-dur-fast) var(--vela-ease);
+}
+.vela-menu-item .vela-menu-badge:empty { background: transparent; border-color: transparent; }
+.vela-menu-item .vela-menu-badge .vela-icon { width: 13px; height: 13px; font-size: 13px; color: inherit; }
+.vela-menu-item[data-highlighted] .vela-menu-badge:not(:empty) { color: var(--vela-fg-bright); }
+/* The selected tile inverts: a bright fill under the surface-colored glyph. After the
+   hover rule, so a selected row keeps its tile while highlighted. */
+.vela-menu-item[data-checked] .vela-menu-badge:not(:empty),
+.vela-menu-item[data-checkmark] .vela-menu-badge:not(:empty) {
+    background: color-mix(in srgb, var(--vela-fg-bright) 83%, var(--vela-surface));
+    border-color: color-mix(in srgb, var(--vela-fg-bright) 40%, transparent);
+    color: var(--vela-surface);
+}
 /* Switch rows (boolean settings in a dropdown): a right-aligned toggle pill \u2014 the
    same control language as the settings dialog's toggles. */
 .vela-menu-switch {
@@ -167,24 +598,38 @@ var Surface = class _Surface {
     /** Trigger rect captured when this level opened — the list stays put if the
      *  trigger then moves (favorite chips shifting the caret). */
     this.pinnedAnchor = null;
+    /** The open state last announced — see {@link announce}. */
+    this.shown = false;
+    /** The list's exit animation after a close; a reopen cancels it. */
+    this.exit = null;
     this.doc = doc;
     this.host = opts.host;
     this.onSelect = opts.onSelect;
     this.onFavorite = opts.onFavorite;
     this.checkmarks = opts.checkmarks === true;
+    this.iconBadges = opts.iconBadges === true;
     this.positioner = doc.createElement("div");
     this.positioner.className = "vela-ui-layer";
     this.list = doc.createElement("ul");
     this.list.className = "vela-menu";
     if (opts.minWidth) this.list.style.minWidth = opts.minWidth;
+    if (opts.maxHeight) this.list.style.maxHeight = `min(${opts.maxHeight}, var(--available-height, ${opts.maxHeight}))`;
     this.positioner.appendChild(this.list);
     this.host.appendChild(this.positioner);
     const trigger = opts.trigger;
+    this.opener = trigger ?? opts.opener ?? null;
     this.ctrl = menuController({
       items: [],
       id: opts.id,
       placement: opts.placement,
-      onSelect: (id) => this.onSelect(id),
+      flip: opts.flip,
+      onSelect: (id) => {
+        this.onSelect(id);
+        const item = this.items.find((i) => i.id === id);
+        if (!item?.toggle) return;
+        const li = Array.from(this.list.querySelectorAll(".vela-menu-item")).find((el) => el.dataset.veiId === id);
+        li?.querySelector(".vela-menu-switch")?.classList.toggle("on");
+      },
       getAnchorRect: () => this.pinnedAnchor,
       onOpenChange: (open2) => {
         if (open2 && trigger) {
@@ -201,14 +646,36 @@ var Surface = class _Surface {
     if (opts.triggerId && trigger) trigger.id = opts.triggerId;
     this.handle = runMachine(this.ctrl.machine, this.ctrl.props, (service) => {
       const api = this.ctrl.connect(service);
+      const closing = this.shown && !api.open;
+      if (closing) this.announce(false);
+      if (api.open && this.exit) {
+        this.exit.cancel();
+        this.exit = null;
+      }
       if (trigger) spreadProps(trigger, api.getTriggerProps(), this.mid);
       spreadProps(this.positioner, api.getPositionerProps(), this.mid);
       spreadProps(this.list, api.getContentProps(), this.mid);
       this.project(api);
+      if (closing) this.holdExit();
+      if (api.open && !this.shown) this.announce(true);
+    });
+  }
+  /** Keep the just-closed list up through its exit animation. `spreadProps` re-applies
+   *  `hidden` only when the machine's value for it changes, so the list stays shown until
+   *  the exit ends — or until a reopen, which projects `hidden: false` itself. */
+  holdExit() {
+    this.list.hidden = false;
+    this.exit = holdForExit(this.list, () => {
+      this.exit = null;
+      if (!this.shown) this.list.hidden = true;
     });
   }
   get api() {
     return this.ctrl.connect(this.handle.service);
+  }
+  announce(open2) {
+    this.shown = open2;
+    announceSurface(this.list, open2, "menu", this.opener);
   }
   setItems(items) {
     this.items = items;
@@ -226,7 +693,9 @@ var Surface = class _Surface {
   destroy() {
     for (const sub of this.subs.values()) sub.destroy();
     this.subs.clear();
+    this.exit?.finish();
     this.handle.stop();
+    if (this.shown) this.announce(false);
     this.positioner.remove();
   }
   byId(id) {
@@ -250,7 +719,11 @@ var Surface = class _Surface {
   build() {
     const doc = this.doc;
     this.list.replaceChildren();
-    const markable = this.checkmarks && this.items.some((i) => !(i.submenu && i.submenu.length > 0) && !i.toggle && i.checked !== void 0);
+    const iconic = this.items.some((i) => !!i.icon);
+    const badged = this.iconBadges && iconic;
+    const markable = this.checkmarks && !badged && this.items.some((i) => !(i.submenu && i.submenu.length > 0) && !i.toggle && i.checked !== void 0);
+    if (badged) this.list.dataset.badges = "1";
+    else delete this.list.dataset.badges;
     for (const item of this.items) {
       if (item.separatorBefore) {
         const sep = doc.createElement("li");
@@ -273,18 +746,30 @@ var Surface = class _Surface {
           li.dataset.checkmark = "1";
         }
         li.appendChild(mark);
+      } else if (badged && this.checkmarks && !branch && !item.toggle && item.checked) {
+        li.dataset.checkmark = "1";
       } else if (!branch && !item.toggle && item.checked) {
         li.dataset.checked = "1";
       }
-      if (item.icon) li.appendChild(iconEl(item.icon, doc));
+      if (badged) {
+        const badge = doc.createElement("span");
+        badge.className = "vela-menu-badge";
+        const glyph = item.icon || (li.dataset.checkmark ? "check" : "");
+        if (glyph) badge.appendChild(iconEl(glyph, doc));
+        li.appendChild(badge);
+      } else if (item.icon) {
+        li.appendChild(iconEl(item.icon, doc));
+      } else if (iconic) {
+        li.appendChild(iconEl("", doc));
+      }
       const label = doc.createElement("span");
       label.className = "vela-menu-label";
-      label.textContent = item.label;
+      label.textContent = vt(item.label);
       li.appendChild(label);
       if (item.hint) {
         const hint = doc.createElement("span");
         hint.className = "vela-menu-hint";
-        hint.textContent = item.hint;
+        hint.textContent = vt(item.hint);
         li.appendChild(hint);
       }
       if (item.favorite !== void 0 && this.onFavorite) {
@@ -294,7 +779,7 @@ var Surface = class _Surface {
         if (on) star.classList.add("vela-fav");
         star.removeAttribute("aria-hidden");
         star.setAttribute("role", "button");
-        star.setAttribute("aria-label", on ? "Remove from favorites" : "Add to favorites");
+        star.setAttribute("aria-label", vt(on ? "Remove from favorites" : "Add to favorites"));
         star.setAttribute("aria-pressed", on ? "true" : "false");
         for (const ev of ["pointerdown", "pointerup", "mousedown", "mouseup"]) {
           star.addEventListener(ev, (e) => e.stopPropagation());
@@ -320,9 +805,11 @@ var Surface = class _Surface {
         const sub = new _Surface(doc, {
           host: this.host,
           placement: "right-start",
+          opener: li,
           onSelect: this.onSelect,
           onFavorite: this.onFavorite,
           checkmarks: this.checkmarks,
+          iconBadges: this.iconBadges,
           id: `${this.mid}--${item.id}`
         });
         sub.setItems(item.submenu ?? []);
@@ -332,12 +819,41 @@ var Surface = class _Surface {
     }
   }
 };
+var SHEET_STYLE_ID = "vela-menu-sheet";
+var SHEET_CSS = `
+.vela-msheet { padding: 2px 0 6px; }
+.vela-msheet-row { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 6px; border-radius: 8px; cursor: pointer; color: var(--vela-fg-bright); font-size: 15px; -webkit-tap-highlight-color: transparent; }
+.vela-msheet-row:active { background: var(--vela-hover); }
+.vela-msheet-row[aria-checked='true']:not([data-toggle]) { background: var(--vela-hover-strong); font-weight: 600; }
+.vela-msheet-row[aria-disabled='true'] { opacity: 0.4; cursor: default; }
+.vela-msheet-row[data-sep] { margin-top: 6px; border-top: 1px solid var(--vela-border); border-radius: 0 0 8px 8px; }
+.vela-msheet-row .vela-icon, .vela-msheet-row > svg { flex: none; width: 18px; height: 18px; font-size: 18px; color: var(--vela-fg-muted); }
+.vela-msheet-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vela-msheet-hint, .vela-msheet-tick { flex: none; color: var(--vela-fg-muted); font-size: 13px; }
+.vela-msheet-back { font-weight: 600; border-bottom: 1px solid var(--vela-border); border-radius: 0; margin-bottom: 4px; }
+.vela-msheet-row .vela-menu-switch { flex: none; }
+`;
+function phoneLike(doc) {
+  const win = doc.defaultView;
+  if (!win) return false;
+  let coarse = false;
+  try {
+    coarse = win.matchMedia("(pointer: coarse)").matches;
+  } catch {
+  }
+  return coarse && win.innerWidth < 900;
+}
 var Menu = class {
   constructor(opts) {
+    this.sheet = null;
+    /** Re-render the open sheet's top page (setItems while it is open: a checklist pick flips other rows). */
+    this.sheetRefresh = null;
+    this.opts = opts;
+    this.items = opts.items;
     const anchor = opts.trigger ?? opts.host ?? document.body;
     const doc = anchor.ownerDocument;
     injectStyles(MENU_STYLE_ID, MENU_CSS, doc);
-    const host = opts.host ?? anchor.closest?.(".vela-ui") ?? doc.body;
+    const host = floatingLayerHost(opts.host ?? anchor, doc.body);
     this.root = new Surface(doc, {
       host,
       placement: opts.placement,
@@ -347,8 +863,11 @@ var Menu = class {
       triggerId: opts.triggerId,
       id: opts.id,
       minWidth: opts.minWidth,
+      maxHeight: opts.maxHeight,
+      flip: opts.flip,
       onFavorite: opts.onFavorite,
-      checkmarks: opts.checkmarks
+      checkmarks: opts.checkmarks,
+      iconBadges: opts.iconBadges
     });
     this.root.setItems(opts.items);
   }
@@ -356,145 +875,144 @@ var Menu = class {
     return this.root.api;
   }
   open() {
-    this.api.setOpen(true);
+    if (this.sheetMode()) this.openSheet();
+    else this.api.setOpen(true);
+  }
+  /** On a phone a menu with no visible button to hang from opened as a small dropdown pinned in a corner, floating
+   *  over the chart (the language picker, Add widget and Templates from the More sheet; user report 2026-10-28,
+   *  "kind of slop", the third time). There it opens as a bottom sheet like the phone's other menus. */
+  sheetMode() {
+    const anchor = this.opts.trigger ?? this.opts.host ?? document.body;
+    const t = this.opts.trigger;
+    const triggerShown = !!t && t.isConnected && t.getClientRects().length > 0;
+    const inDialog = !!t?.closest?.(".vela-dialog");
+    return (!triggerShown || inDialog) && phoneLike(anchor.ownerDocument);
+  }
+  openSheet() {
+    const anchor = this.opts.host ?? this.opts.trigger ?? document.body;
+    const doc = anchor.ownerDocument;
+    injectStyles(SHEET_STYLE_ID, SHEET_CSS, doc);
+    this.sheet?.destroy();
+    const stack = [];
+    const sheet = new Drawer({
+      host: this.opts.host ?? doc.body,
+      onOpenChange: (open2) => {
+        this.opts.onOpenChange?.(open2);
+        if (open2) return;
+        setTimeout(() => sheet.destroy(), 0);
+        if (this.sheet === sheet) {
+          this.sheet = null;
+          this.sheetRefresh = null;
+        }
+      }
+    });
+    this.sheet = sheet;
+    const render = (items) => {
+      sheet.body.replaceChildren();
+      const list = doc.createElement("div");
+      list.className = "vela-msheet";
+      list.setAttribute("role", "menu");
+      const top = stack[stack.length - 1];
+      if (top) {
+        const back = doc.createElement("button");
+        back.type = "button";
+        back.className = "vela-msheet-row vela-msheet-back";
+        back.appendChild(iconEl("chevron-left", doc));
+        const t = doc.createElement("span");
+        t.className = "vela-msheet-label";
+        t.textContent = vt(top.title);
+        back.appendChild(t);
+        back.addEventListener("click", () => {
+          stack.pop();
+          render(stack[stack.length - 1]?.items ?? this.items);
+        });
+        list.appendChild(back);
+      }
+      for (const item of items) {
+        const row = doc.createElement("button");
+        row.type = "button";
+        row.className = "vela-msheet-row";
+        row.dataset.id = item.id;
+        row.setAttribute("role", item.toggle ? "menuitemcheckbox" : item.checked !== void 0 ? "menuitemradio" : "menuitem");
+        if (item.checked !== void 0) row.setAttribute("aria-checked", String(!!item.checked));
+        if (item.toggle) row.dataset.toggle = "1";
+        if (item.separatorBefore) row.dataset.sep = "1";
+        if (item.disabled) row.setAttribute("aria-disabled", "true");
+        if (item.icon) row.appendChild(iconEl(item.icon, doc));
+        const label = doc.createElement("span");
+        label.className = "vela-msheet-label";
+        label.textContent = vt(item.label);
+        row.appendChild(label);
+        if (item.hint) {
+          const hint = doc.createElement("span");
+          hint.className = "vela-msheet-hint";
+          hint.textContent = item.hint;
+          row.appendChild(hint);
+        }
+        if (item.toggle) {
+          const sw = doc.createElement("span");
+          sw.className = "vela-menu-switch" + (item.checked ? " on" : "");
+          sw.setAttribute("aria-hidden", "true");
+          row.appendChild(sw);
+        } else if (item.submenu) {
+          row.appendChild(iconEl("chevron-right", doc));
+        } else if (item.checked) {
+          const tick = doc.createElement("span");
+          tick.className = "vela-msheet-tick";
+          tick.textContent = "\u2713";
+          row.appendChild(tick);
+        }
+        row.addEventListener("click", () => {
+          if (item.disabled) return;
+          if (item.submenu) {
+            stack.push({ title: item.label, items: item.submenu });
+            render(item.submenu);
+            return;
+          }
+          if (item.toggle) {
+            this.opts.onSelect?.(item.id);
+            if (!row.isConnected) return;
+            const on = row.getAttribute("aria-checked") !== "true";
+            row.setAttribute("aria-checked", String(on));
+            row.querySelector(".vela-menu-switch")?.classList.toggle("on", on);
+            return;
+          }
+          sheet.hide();
+          this.opts.onSelect?.(item.id);
+        });
+        list.appendChild(row);
+      }
+      sheet.body.appendChild(list);
+    };
+    this.sheetRefresh = () => {
+      if (stack.length === 0) render(this.items);
+    };
+    render(this.items);
+    sheet.show();
   }
   /** Open anchored to a viewport point (context menus). */
   openAt(clientX, clientY) {
     const api = this.api;
     api.setOpen(true);
-    api.reposition({ getAnchorRect: () => ({ x: clientX, y: clientY, width: 0, height: 0 }) });
+    api.reposition({ getAnchorRect: () => ({ x: clientX, y: clientY, width: 0, height: 0 }), overlap: true });
   }
   close() {
+    this.sheet?.hide();
     this.api.setOpen(false);
   }
   /** Swap the item descriptors (e.g. checked states) and re-project. */
   setItems(items) {
+    this.items = items;
     this.root.setItems(items);
+    this.sheetRefresh?.();
   }
   destroy() {
+    this.sheet?.destroy();
+    this.sheet = null;
+    this.sheetRefresh = null;
     this.root.destroy();
   }
 };
-
-// src/core/tokens.ts
-var STATIC_TOKENS = {
-  "--vela-space-1": "4px",
-  "--vela-space-2": "8px",
-  "--vela-space-3": "12px",
-  "--vela-space-4": "16px",
-  "--vela-radius-sm": "4px",
-  "--vela-radius-md": "6px",
-  "--vela-radius-lg": "10px",
-  "--vela-z-tooltip": "60",
-  "--vela-z-menu": "50",
-  "--vela-z-dialog": "40",
-  // Form popovers portal to <body> (or a chart host) and must sit above a dialog
-  // whose own stacking context may be nested inside the chart container.
-  "--vela-z-popover": "6000",
-  "--vela-ease": "cubic-bezier(0.22, 1, 0.36, 1)",
-  "--vela-dur-fast": "90ms",
-  "--vela-dur-med": "160ms",
-  "--vela-font-size-sm": "11px",
-  "--vela-font-size-md": "12px",
-  "--vela-font-size-lg": "14px"
-};
-function themeTokens(t) {
-  const dark = isDarkColor(t.background);
-  const wash = (a) => dark ? `rgba(255,255,255,${a})` : withAlpha(t.textColor, a + 0.02);
-  const elevated = mix(t.background, dark ? "#ffffff" : t.textColor, dark ? 0.03 : 0.05);
-  return {
-    "--vela-font": t.fontFamily,
-    "--vela-bg": t.background,
-    // Chrome text is slightly brighter than the chart's own axis text, which is
-    // deliberately recessive; the chart keeps using `t.textColor` directly.
-    "--vela-fg": dark ? "#d1d4dc" : t.textColor,
-    "--vela-fg-muted": dark ? "#868a96" : withAlpha(t.textColor, 0.62),
-    "--vela-fg-faint": withAlpha(t.textColor, 0.35),
-    "--vela-fg-bright": dark ? "#f0f3fa" : "#000000",
-    "--vela-surface": t.background,
-    // Panels and menus float ABOVE the chart, so their surface is the wash flattened onto
-    // the chart background — opaque, or candles read through the panel.
-    "--vela-surface-elev": elevated,
-    "--vela-surface-overlay": elevated,
-    // Recessed fields (inputs, selects) read as cut INTO their panel, so they fall back
-    // to the chart surface and are separated from the panel by their border alone.
-    "--vela-surface-sunken": t.background,
-    "--vela-border": t.borderColor,
-    "--vela-border-strong": dark ? "#34353b" : withAlpha(t.textColor, 0.28),
-    "--vela-border-soft": t.borderColor,
-    // Barely-there rules INSIDE a panel (row separators), where a full border would
-    // chop the list into boxes.
-    "--vela-border-faint": withAlpha(t.textColor, 0.08),
-    "--vela-hover": wash(0.06),
-    "--vela-active": wash(0.1),
-    // A deliberately stronger hover for rows inside an already-tinted surface (menu
-    // items in an active flyout), where the normal wash would not separate from it.
-    "--vela-hover-strong": wash(0.16),
-    "--vela-focus": withAlpha(t.textColor, 0.5),
-    "--vela-focus-soft": withAlpha(t.textColor, 0.12),
-    // Separator hover — the SAME wash the chart's pane separators paint on hover
-    // (soft full-thickness band + solid 2px center line), so DOM-drawn dividers
-    // (the workspace grid) and canvas-drawn ones read as one family.
-    "--vela-separator-hover-band": withAlpha(t.textColor, 0.1),
-    "--vela-separator-hover-line": withAlpha(t.textColor, 0.55),
-    "--vela-scroll": withAlpha(t.textColor, 0.3),
-    "--vela-accent": ACCENT,
-    "--vela-accent-bright": ACCENT_BRIGHT,
-    "--vela-highlight": HIGHLIGHT,
-    // The inverse chip: a filled selected state (active tab, ticked checkbox). Its ink
-    // must contrast the fill, so the pair flips together with the theme.
-    "--vela-selected-bg": dark ? "#f0f3fa" : t.textColor,
-    "--vela-selected-fg": dark ? t.background : "#ffffff",
-    // Fixed ink for saturated fills (accent buttons, categorical avatars) — those fills
-    // are theme-independent, so their ink is too.
-    "--vela-fg-on-fill": "#ffffff",
-    "--vela-up": t.upColor,
-    "--vela-down": t.downColor,
-    "--vela-danger": t.downColor,
-    "--vela-shadow": "0 8px 30px rgba(0,0,0,0.5)",
-    "--vela-shadow-dialog": "0 20px 60px rgba(0,0,0,0.5)",
-    "--vela-backdrop": "rgba(0,0,0,0.45)"
-  };
-}
-
-// src/ui/tokens.ts
-var STATIC_ID = "vela-ui-tokens";
-var STATIC_DECLS = Object.entries(STATIC_TOKENS).map(([k, v]) => `    ${k}: ${v};`).join("\n");
-var STATIC_CSS = `
-.vela-ui, .vela-ui-layer {
-${STATIC_DECLS}
-    font-family: var(--vela-font, -apple-system, system-ui, sans-serif);
-    box-sizing: border-box;
-    /* Chrome text (titles, buttons, menus, readouts) is UI, not copy \u2014 never selectable. */
-    user-select: none;
-    -webkit-user-select: none;
-}
-.vela-ui *, .vela-ui-layer * { box-sizing: border-box; }
-/* Text ENTRY is the one exception: selection is part of editing. */
-.vela-ui :is(input, textarea), .vela-ui-layer :is(input, textarea) { user-select: text; -webkit-user-select: text; }
-/* iOS Safari zooms the page when a focused field is under 16px, and often
-   keeps that zoom after the field blurs or a dialog closes. The shell's
-   mobile size class is the honest gate \u2014 not a media query \u2014 so an embedded
-   chart on a wide desktop still gets the rule when it is in the phone layout.
-   Scoped to the kit root so a host page's own [data-layout] is never touched. */
-.vela-ui[data-layout='mobile'] :is(input, textarea, select) { font-size: 16px; }
-.vela-icon { display: inline-flex; align-items: center; flex: none; }
-.vela-icon svg { display: block; }
-`;
-function applyThemeTokens(el, t) {
-  const tokens = themeTokens(t);
-  for (const key in tokens) el.style.setProperty(key, tokens[key]);
-}
-function applyPlotOverlayTokens(host, base, config) {
-  const layout = config?.layout;
-  const t = layout?.background && layout.textColor ? { ...base, background: layout.background, textColor: layout.textColor } : base;
-  applyThemeTokens(host, t);
-}
-function ensureUIHost(el, theme) {
-  injectStyles(STATIC_ID, STATIC_CSS, el.getRootNode());
-  el.classList.add("vela-ui");
-  if (theme) applyThemeTokens(el, theme);
-}
 
 // src/ui/components/popover/controller.ts
 function insetRect(r, inset) {
@@ -525,7 +1043,7 @@ function intersectRects(a, b) {
   return { left, top, right, bottom, width: right - left, height: bottom - top };
 }
 function placePopover(a) {
-  let left = a.align === "end" ? a.trigger.right - a.pop.width : a.trigger.left;
+  let left = a.align === "end" ? a.trigger.right - a.pop.width : a.align === "center" ? a.trigger.left + a.trigger.width / 2 - a.pop.width / 2 : a.trigger.left;
   const below = a.trigger.bottom + a.gap;
   const above = a.trigger.top - a.pop.height - a.gap;
   const fitsBelow = below + a.pop.height <= a.clamp.bottom;
@@ -572,6 +1090,7 @@ var POPOVER_CSS = `
 
 // src/ui/components/popover/view.ts
 var open = null;
+var leaving = /* @__PURE__ */ new Set();
 function closeOpenPopovers() {
   open?.hide();
 }
@@ -597,13 +1116,19 @@ var Popover = class {
     this.onKey = null;
     this.onReflow = null;
     this.shown = false;
+    /** The pending removal of a fading-out shell; a show() that reuses the shell cancels it. */
+    this.leaveTimer = null;
+    /** The shell's exit animation before it leaves the DOM; a show() that reuses the shell cancels it. */
+    this.exit = null;
     const doc = opts.trigger.ownerDocument;
     injectStyles(POPOVER_STYLE_ID, POPOVER_CSS, doc);
     this.trigger = opts.trigger;
-    this.host = opts.host ?? doc.body;
+    this.host = opts.host ?? floatingLayerHost(opts.trigger, doc.body);
+    this.inheritsTokens = !opts.host && this.host !== doc.body;
     this.ctrl = popoverController(opts);
     this.boundary = opts.boundary ?? "viewport";
     this.theme = opts.theme;
+    this.fadeMs = Math.max(0, opts.fadeMs ?? 0);
     this.el = doc.createElement("div");
     this.el.className = "vela-popover vela-ui-layer" + (opts.className ? ` ${opts.className}` : "");
     this.el.dataset.position = this.ctrl.position;
@@ -627,11 +1152,25 @@ var Popover = class {
       return;
     }
     if (open && open !== this) open.hide();
-    ensureUIHost(this.el, this.theme);
+    if (this.leaveTimer !== null) {
+      clearTimeout(this.leaveTimer);
+      this.leaveTimer = null;
+    }
+    this.exit?.cancel();
+    this.exit = null;
+    leaving.delete(this);
+    for (const p of [...leaving]) if (p.trigger === this.trigger) p.exit?.finish();
+    ensureUIHost(this.el, this.inheritsTokens ? void 0 : this.theme);
+    if (this.fadeMs > 0) {
+      this.el.style.transition = `opacity ${this.fadeMs}ms ease`;
+      this.el.style.opacity = "0";
+      this.el.style.pointerEvents = "";
+    }
     this.host.appendChild(this.el);
     this.shown = true;
     open = this;
     this.place();
+    if (this.fadeMs > 0) this.el.style.opacity = "1";
     const onOutside = (ev) => {
       const t = ev.target;
       if (this.el.contains(t) || this.trigger.contains(t)) return;
@@ -645,16 +1184,21 @@ var Popover = class {
       this.hide();
     };
     const onReflow = () => this.place();
-    setTimeout(() => document.addEventListener("pointerdown", onOutside, true), 0);
+    setTimeout(() => {
+      if (this.onOutside === onOutside) document.addEventListener("pointerdown", onOutside, true);
+    }, 0);
     document.addEventListener("keydown", onKey, true);
     window.addEventListener("resize", onReflow, true);
     document.addEventListener("scroll", onReflow, true);
     this.onOutside = onOutside;
     this.onKey = onKey;
     this.onReflow = onReflow;
+    announceSurface(this.el, true, "popover", this.trigger);
   }
   hide() {
     if (!this.shown) return;
+    this.shown = false;
+    announceSurface(this.el, false, "popover", this.trigger);
     if (this.onOutside) document.removeEventListener("pointerdown", this.onOutside, true);
     if (this.onKey) document.removeEventListener("keydown", this.onKey, true);
     if (this.onReflow) {
@@ -664,8 +1208,21 @@ var Popover = class {
     this.onOutside = null;
     this.onKey = null;
     this.onReflow = null;
-    this.el.remove();
-    this.shown = false;
+    if (this.fadeMs > 0) {
+      this.el.style.opacity = "0";
+      this.el.style.pointerEvents = "none";
+      this.leaveTimer = setTimeout(() => {
+        this.leaveTimer = null;
+        this.el.remove();
+      }, this.fadeMs);
+    } else {
+      this.exit = holdForExit(this.el, () => {
+        this.exit = null;
+        leaving.delete(this);
+        this.el.remove();
+      });
+      if (this.exit) leaving.add(this);
+    }
     if (open === this) open = null;
     this.ctrl.onClose?.();
   }
@@ -676,6 +1233,7 @@ var Popover = class {
   }
   destroy() {
     this.hide();
+    this.exit?.finish();
   }
   reposition() {
     if (this.shown) this.place();
@@ -790,6 +1348,7 @@ var CalloutBubble = class {
     this.spec = { icon: opts.icon, background: opts.background, label: opts.label };
     if (opts.color !== void 0) this.spec.color = opts.color;
     if (opts.panel !== void 0) this.spec.panel = opts.panel;
+    if (opts.span !== void 0) this.spec.span = opts.span;
     this.size = opts.size ?? 16;
     this.host = opts.host;
     this.theme = opts.theme;
@@ -798,7 +1357,6 @@ var CalloutBubble = class {
     injectStyles(CALLOUT_STYLE_ID, CALLOUT_CSS, doc);
     this.el = doc.createElement("span");
     this.el.className = "vela-callout";
-    this.el.style.width = `${this.size}px`;
     this.el.style.height = `${this.size}px`;
     this.el.addEventListener("click", (e) => {
       if (!this.spec.panel) return;
@@ -838,8 +1396,12 @@ var CalloutBubble = class {
     const clickable = this.spec.panel !== void 0;
     this.el.style.background = this.spec.background;
     this.el.style.color = this.spec.color ?? "";
-    this.el.innerHTML = iconAt(this.spec.icon, this.size - 4);
-    this.el.setAttribute("aria-label", this.spec.label);
+    const span = Math.min(6, Math.max(1, Math.round(this.spec.span ?? 1)));
+    const ip = this.size - 4;
+    this.el.style.width = `${this.size + (span - 1) * ip}px`;
+    this.el.style.borderRadius = span > 1 ? `${this.size / 2}px` : "";
+    this.el.innerHTML = iconAt(this.spec.icon, ip, ip * span);
+    this.el.setAttribute("aria-label", vt(this.spec.label));
     if (clickable) {
       this.el.setAttribute("role", "button");
       this.el.tabIndex = 0;
@@ -873,14 +1435,14 @@ var CalloutBubble = class {
     if (panel.title) {
       const title = doc.createElement("div");
       title.className = "vela-callout-title";
-      title.textContent = panel.title;
+      title.textContent = vt(panel.title);
       root.appendChild(title);
     }
     for (const row of calloutPanelRows(panel.items)) {
       if (row.type === "text") {
         const text = doc.createElement("div");
         text.className = "vela-callout-text";
-        text.textContent = row.text;
+        text.textContent = vt(row.text);
         root.appendChild(text);
         continue;
       }
@@ -890,7 +1452,7 @@ var CalloutBubble = class {
         const btn = doc.createElement("button");
         btn.type = "button";
         btn.className = "vela-callout-btn" + (item.primary ? " vela-callout-btn-primary" : "");
-        btn.textContent = item.label;
+        btn.textContent = vt(item.label);
         btn.addEventListener("click", () => {
           item.run();
           if (closesPanel(item)) this.pop?.hide();
@@ -1054,7 +1616,7 @@ function fillSelectList(menu2, options, current, onPick) {
     const item = menu2.ownerDocument.createElement("button");
     item.type = "button";
     item.className = "vela-select-item";
-    item.textContent = p.label;
+    item.textContent = vt(p.label);
     if (p.value === current) item.dataset.checked = "1";
     item.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1135,7 +1697,7 @@ var Select = class {
     if (this.ctrl.disabled) btn.disabled = true;
     const label = doc.createElement("span");
     label.className = "vela-select-label";
-    label.textContent = this.ctrl.labelOf(this.ctrl.value);
+    label.textContent = vt(this.ctrl.labelOf(this.ctrl.value));
     const chevron = doc.createElement("span");
     chevron.className = "vela-select-chevron";
     chevron.appendChild(iconEl("chevron-down", doc));
@@ -1147,7 +1709,7 @@ var Select = class {
       sizer.setAttribute("aria-hidden", "true");
       for (const o of this.ctrl.options) {
         const s = doc.createElement("span");
-        s.textContent = o.label;
+        s.textContent = vt(o.label);
         sizer.appendChild(s);
       }
       wrap.appendChild(sizer);
@@ -1158,7 +1720,8 @@ var Select = class {
     });
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      this.toggle();
+      if (opts.onTrigger) opts.onTrigger(btn);
+      else this.toggle();
     });
     this.el = wrap;
     this.trigger = btn;
@@ -1169,16 +1732,37 @@ var Select = class {
   }
   setValue(v) {
     this.ctrl.setValue(v);
-    this.labelEl.textContent = this.ctrl.labelOf(v);
+    this.labelEl.textContent = vt(this.ctrl.labelOf(v));
+  }
+  /** Show `text` on the trigger without changing the value (a host menu's own label). */
+  setText(text) {
+    this.labelEl.textContent = vt(text);
   }
   toggle() {
+    if (this.trigger.closest(".vela-dialog") && phoneLike(this.trigger.ownerDocument)) {
+      const m = new Menu({
+        trigger: this.trigger,
+        items: this.ctrl.options.map((o) => ({ id: o.value, label: o.label, checked: o.value === this.ctrl.value })),
+        onOpenChange: (open2) => {
+          if (!open2) setTimeout(() => m.destroy(), 0);
+        },
+        onSelect: (value) => {
+          const o = this.ctrl.options.find((x) => x.value === value);
+          if (!o) return;
+          this.ctrl.pick(o.value);
+          this.labelEl.textContent = vt(o.label);
+        }
+      });
+      m.open();
+      return;
+    }
     this.list = toggleSelectList(
       this.trigger,
       this.ctrl.options,
       this.ctrl.value,
       (value, label) => {
         this.ctrl.pick(value);
-        this.labelEl.textContent = label;
+        this.labelEl.textContent = vt(label);
         this.list = null;
       },
       { ...this.listOpts, onClose: () => {
@@ -1199,6 +1783,11 @@ function dialogController(opts = {}) {
       id: nextUid("vela-dialog"),
       modal: opts.modal ?? true,
       closeOnEscape: opts.closeOnEscape ?? true,
+      // Escape on an open dropdown (a Select's list) closes only the list, not the dialog under it. The dialog's
+      // key listener runs before the list's (it was attached first), so it checks for the open list here.
+      onEscapeKeyDown: (e) => {
+        if (isPopoverOpen()) e.preventDefault();
+      },
       closeOnInteractOutside: opts.closeOnInteractOutside ?? false,
       initialFocusEl: opts.initialFocusEl,
       onOpenChange: (d) => opts.onOpenChange?.(d.open)
@@ -1208,7 +1797,7 @@ function dialogController(opts = {}) {
 }
 
 // src/ui/components/dialog/styles.ts
-var DIALOG_STYLE_ID = "vela-ui-dialog-5";
+var DIALOG_STYLE_ID = "vela-ui-dialog-6";
 var DIALOG_CSS = `
 .vela-dialog-backdrop {
     position: fixed;
@@ -1280,7 +1869,9 @@ var DIALOG_CSS = `
 .vela-dialog-footer { flex: 0 0 auto; }
 .vela-dialog--settings {
     width: fit-content;
-    min-width: min(560px, 94vw);
+    /* One stable width: a fit-content card re-sized per tab/page, so the dialog jumped sideways
+       while clicking through the Footprint pages (their selects now show their full value). */
+    min-width: min(680px, 94vw);
     max-width: min(720px, 94vw);
     max-height: 70vh;
     font-size: 13px;
@@ -1297,6 +1888,37 @@ var DIALOG_CSS = `
    line under the header, and the footer carries its own top delimiter. */
 .vela-dialog--form .vela-dialog-header { align-items: flex-start; padding: 16px 20px 20px; border-bottom: none; }
 .vela-dialog--form .vela-dialog-title { font-size: 20px; line-height: 28px; }
+.vela-dialog--form .vela-dialog-title:has(.vela-drawing-rename, .vela-drawing-rename-input) { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.vela-drawing-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.vela-drawing-rename {
+    all: unset;
+    cursor: pointer;
+    flex: none;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--vela-fg-muted);
+    font-size: 18px;
+}
+.vela-drawing-rename:hover { background: var(--vela-hover); color: var(--vela-fg-bright); }
+.vela-drawing-rename:focus-visible { outline: 2px solid var(--vela-accent); outline-offset: 1px; }
+.vela-drawing-rename-input {
+    flex: 1;
+    min-width: 0;
+    box-sizing: border-box;
+    height: 34px;
+    margin: -3px 0;
+    padding: 0 9px;
+    border: 1px solid var(--vela-accent);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--vela-fg-bright);
+    font: inherit;
+    outline: none;
+}
 .vela-dialog--form .vela-dialog-footer {
     padding: 16px 20px;
     display: flex;
@@ -1351,6 +1973,11 @@ ${overlayScrollbarCss(".vela-dialog *")}
 `;
 var Dialog = class {
   constructor(opts = {}) {
+    this.opener = null;
+    this.wasOpen = false;
+    /** The panel and scrim's exit animation after a close; a reopen cancels it. */
+    this.exit = null;
+    this.destroyed = false;
     const doc = (opts.host ?? document.body).ownerDocument;
     injectStyles(DIALOG_STYLE_ID, DIALOG_CSS, doc);
     const host = opts.host ?? doc.body;
@@ -1396,10 +2023,11 @@ var Dialog = class {
     if (opts.headerStart) header.appendChild(opts.headerStart);
     const title = doc.createElement("div");
     title.className = "vela-dialog-title";
-    title.textContent = opts.title ?? "";
+    title.textContent = vt(opts.title ?? "");
     this.titleEl = title;
     const close = doc.createElement("button");
     close.className = "vela-dialog-close";
+    close.setAttribute("aria-label", vt("Close"));
     close.appendChild(iconEl("close", doc));
     header.append(title, close);
     this.body = doc.createElement("div");
@@ -1447,19 +2075,73 @@ var Dialog = class {
     const mid = String(this.ctrl.props.id);
     this.handle = runMachine(this.ctrl.machine, this.ctrl.props, (service) => {
       const api = this.ctrl.connect(service);
+      const closing = this.wasOpen && !api.open;
+      if (closing) this.announce(false);
       spreadProps(this.backdrop, api.getBackdropProps(), mid);
       spreadProps(this.positioner, api.getPositionerProps(), mid);
       spreadProps(this.panel, api.getContentProps(), mid);
       spreadProps(title, api.getTitleProps(), mid);
       spreadProps(close, api.getCloseTriggerProps(), mid);
-      this.backdrop.style.display = api.open ? "" : "none";
-      this.positioner.style.display = api.open ? "" : "none";
+      if (api.open) {
+        this.exit?.cancel();
+        this.exit = null;
+        this.setShown(true);
+      } else if (closing) {
+        this.holdExit();
+      } else if (!this.exit) {
+        this.setShown(false);
+      }
+      if (api.open && !this.wasOpen) this.announce(true);
+      if (this.wasOpen && !api.open) this.restoreOpener();
+      this.wasOpen = api.open;
     });
+  }
+  setShown(shown) {
+    this.backdrop.style.display = shown ? "" : "none";
+    this.positioner.style.display = shown ? "" : "none";
+  }
+  /** Keep the just-closed dialog up through its exit animation, then hide it — or
+   *  remove it, when it was destroyed meanwhile. `spreadProps` re-applies the close
+   *  props' `hidden` only when its value changes, so lifting it keeps the panel and
+   *  scrim up until the exit ends. The positioner spans the viewport: inert, it lets
+   *  clicks through to the page while the panel animates out. */
+  holdExit() {
+    const held = [this.panel, this.backdrop];
+    for (const el of held) el.hidden = false;
+    this.exit = holdForExit(
+      held,
+      () => {
+        this.exit = null;
+        if (this.destroyed) {
+          this.detach();
+        } else if (!this.open) {
+          for (const el of held) el.hidden = true;
+          this.setShown(false);
+        }
+      },
+      { inert: [this.positioner] }
+    );
+  }
+  detach() {
+    this.backdrop.remove();
+    this.positioner.remove();
+  }
+  /** Closing hands focus back to whatever opened it (Escape, the ✕, hide(), or a
+   *  teardown that outruns the machine's close notification). */
+  restoreOpener() {
+    const opener = this.opener;
+    this.opener = null;
+    if (opener?.isConnected) opener.focus({ preventScroll: true });
+  }
+  announce(open2) {
+    const opener = this.opener === this.panel.ownerDocument.body ? null : this.opener;
+    announceSurface(this.panel, open2, "dialog", opener);
   }
   get open() {
     return this.ctrl.connect(this.handle.service).open;
   }
   show() {
+    this.opener = this.panel.ownerDocument.activeElement;
     this.ctrl.connect(this.handle.service).setOpen(true);
   }
   hide() {
@@ -1472,10 +2154,274 @@ var Dialog = class {
     return el?.closest(".vela-popover, .vela-menu") != null;
   }
   destroy() {
+    if (this.wasOpen && !this.open) this.handle.flush();
     if (this.open) this.hide();
     this.handle.stop();
-    this.backdrop.remove();
-    this.positioner.remove();
+    this.destroyed = true;
+    if (this.wasOpen) {
+      this.wasOpen = false;
+      this.announce(false);
+    }
+    this.restoreOpener();
+    if (!this.exit) this.detach();
+  }
+};
+
+// src/ui/components/date-picker/controller.ts
+var MONTH_LABELS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+var MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+var WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function normalizeDateInput(raw) {
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(raw.trim());
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+  return isoDate(dt);
+}
+function parseIsoDate(raw) {
+  const iso = raw ? normalizeDateInput(raw) : null;
+  if (!iso) return null;
+  const [y, mo, d] = iso.split("-").map(Number);
+  return new Date(y, mo - 1, d);
+}
+function datePickerController(opts = {}) {
+  const today = opts.today ?? /* @__PURE__ */ new Date();
+  let selected = parseIsoDate(opts.value);
+  let year = selected?.getFullYear() ?? today.getFullYear();
+  let month = selected?.getMonth() ?? today.getMonth();
+  let panel = "date";
+  const decade = () => Math.floor(year / 10) * 10;
+  return {
+    get panel() {
+      return panel;
+    },
+    get year() {
+      return year;
+    },
+    get month() {
+      return month;
+    },
+    get value() {
+      return selected ? isoDate(selected) : null;
+    },
+    header() {
+      return {
+        month: MONTH_LABELS[month] ?? "",
+        monthVisible: panel === "date",
+        year: panel === "year" ? `${decade()}-${decade() + 9}` : String(year),
+        yearDisabled: panel === "year"
+        // in the decade panel the year reads as its title
+      };
+    },
+    navLabels() {
+      if (panel === "date") return { prev: "Previous month", next: "Next month" };
+      if (panel === "month") return { prev: "Previous year", next: "Next year" };
+      return { prev: "Previous decade", next: "Next decade" };
+    },
+    cells() {
+      const out = [];
+      if (panel === "date") {
+        const startPad = new Date(year, month, 1).getDay();
+        const days = new Date(year, month + 1, 0).getDate();
+        const todayIso = isoDate(today);
+        const selectedIso = selected ? isoDate(selected) : "";
+        for (let i = 0; i < startPad; i++) out.push({ label: "", value: "", checked: false, today: false, blank: true });
+        for (let day = 1; day <= days; day++) {
+          const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          out.push({ label: String(day), value: iso, checked: iso === selectedIso, today: iso === todayIso });
+        }
+        return out;
+      }
+      if (panel === "month") {
+        for (let m = 0; m < 12; m++) {
+          out.push({
+            label: MONTH_SHORT[m] ?? "",
+            value: m,
+            checked: selected?.getFullYear() === year && selected.getMonth() === m,
+            today: today.getFullYear() === year && today.getMonth() === m
+          });
+        }
+        return out;
+      }
+      const d = decade();
+      for (let y = d - 1; y <= d + 10; y++) {
+        out.push({ label: String(y), value: y, checked: selected?.getFullYear() === y, today: today.getFullYear() === y, outside: y < d || y > d + 9 });
+      }
+      return out;
+    },
+    step(dir) {
+      if (panel === "date") {
+        month += dir;
+        if (month < 0) {
+          month = 11;
+          year -= 1;
+        }
+        if (month > 11) {
+          month = 0;
+          year += 1;
+        }
+      } else {
+        year += panel === "month" ? dir : dir * 10;
+      }
+    },
+    showMonths() {
+      panel = "month";
+    },
+    showYears() {
+      panel = "year";
+    },
+    choose(cell) {
+      if (cell.blank) return null;
+      if (panel === "date") {
+        selected = parseIsoDate(String(cell.value));
+        return selected ? isoDate(selected) : null;
+      }
+      if (panel === "month") {
+        month = Number(cell.value);
+        panel = "date";
+        return null;
+      }
+      year = Number(cell.value);
+      panel = "month";
+      return null;
+    },
+    setValue(value) {
+      selected = parseIsoDate(value);
+      if (selected) {
+        year = selected.getFullYear();
+        month = selected.getMonth();
+      }
+      panel = "date";
+    }
+  };
+}
+
+// src/ui/components/date-picker/styles.ts
+var DATE_PICKER_STYLE_ID = "vela-date-picker-styles";
+var DATE_PICKER_CSS = `
+.vela-date-picker{color:var(--vela-fg);font:14px var(--vela-font);user-select:none;}
+.vela-date-picker [hidden]{display:none !important;}
+.vela-date-picker-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
+.vela-date-picker-title{flex:1;display:flex;align-items:center;justify-content:center;gap:2px;min-width:0;}
+.vela-date-picker-switch{border:none;background:transparent;color:var(--vela-fg-bright);font:inherit;font-weight:600;font-size:14px;padding:2px 6px;border-radius:4px;cursor:pointer;}
+.vela-date-picker-switch:not(:disabled):hover{background:var(--vela-hover);}
+.vela-date-picker-switch:disabled{cursor:default;}
+.vela-date-picker-nav{width:24px;height:24px;border:none;background:transparent;color:var(--vela-fg-muted);border-radius:4px;padding:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:14px;}
+.vela-date-picker-nav:hover{background:var(--vela-hover);color:var(--vela-fg-bright);}
+.vela-date-picker-week,.vela-date-picker-grid{display:grid;grid-template-columns:repeat(7,28px);gap:2px;}
+.vela-date-picker-week{margin-bottom:4px;color:var(--vela-fg-muted);font-size:11px;text-align:center;}
+.vela-date-picker-week span{line-height:20px;}
+.vela-date-picker-blank{width:28px;height:28px;}
+.vela-date-picker-day{width:28px;height:28px;border:none;background:transparent;color:inherit;border-radius:4px;padding:0;cursor:pointer;font:inherit;font-size:14px;}
+.vela-date-picker-day:hover{background:var(--vela-hover);}
+.vela-date-picker-day[data-checked]{background:var(--vela-hover-strong);color:var(--vela-fg-bright);}
+.vela-date-picker-day[data-today]:not([data-checked]){box-shadow:inset 0 0 0 1px var(--vela-border-strong);}
+.vela-date-picker-cells{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:calc(7 * 28px + 6 * 2px);}
+.vela-date-picker-cell{height:36px;border:none;background:transparent;color:inherit;border-radius:4px;padding:0 4px;cursor:pointer;font:inherit;font-size:14px;}
+.vela-date-picker-cell:hover{background:var(--vela-hover);}
+.vela-date-picker-cell[data-checked]{background:var(--vela-hover-strong);color:var(--vela-fg-bright);}
+.vela-date-picker-cell[data-today]:not([data-checked]){box-shadow:inset 0 0 0 1px var(--vela-border-strong);}
+.vela-date-picker-cell[data-outside]{opacity:0.45;}
+`;
+
+// src/ui/components/date-picker/view.ts
+var DatePicker = class {
+  constructor(opts = {}) {
+    this.opts = opts;
+    const doc = document;
+    injectStyles(DATE_PICKER_STYLE_ID, DATE_PICKER_CSS, doc);
+    this.ctrl = datePickerController(opts);
+    const button = (className) => {
+      const b = doc.createElement("button");
+      b.type = "button";
+      b.className = className;
+      return b;
+    };
+    this.prev = button("vela-date-picker-nav");
+    this.prev.append(iconEl("chevron-left", doc));
+    this.next = button("vela-date-picker-nav");
+    this.next.append(iconEl("chevron-right", doc));
+    this.monthBtn = button("vela-date-picker-switch");
+    this.monthBtn.setAttribute("aria-label", vt("Choose month"));
+    this.yearBtn = button("vela-date-picker-switch");
+    this.yearBtn.setAttribute("aria-label", vt("Choose year"));
+    const title = doc.createElement("div");
+    title.className = "vela-date-picker-title";
+    title.append(this.monthBtn, this.yearBtn);
+    const head = doc.createElement("div");
+    head.className = "vela-date-picker-head";
+    head.append(this.prev, title, this.next);
+    this.week = doc.createElement("div");
+    this.week.className = "vela-date-picker-week";
+    for (const d of WEEKDAY_LABELS) {
+      const cell = doc.createElement("span");
+      cell.textContent = d;
+      this.week.appendChild(cell);
+    }
+    this.grid = doc.createElement("div");
+    const on = (el, run) => el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      run();
+      this.paint();
+    });
+    on(this.prev, () => this.ctrl.step(-1));
+    on(this.next, () => this.ctrl.step(1));
+    on(this.monthBtn, () => this.ctrl.showMonths());
+    on(this.yearBtn, () => this.ctrl.showYears());
+    this.el = doc.createElement("div");
+    this.el.className = "vela-date-picker";
+    this.el.append(head, this.week, this.grid);
+    this.paint();
+  }
+  get value() {
+    return this.ctrl.value;
+  }
+  /** Rewrite the selection without emitting (the calendar opens on its month). */
+  setValue(value) {
+    this.ctrl.setValue(value);
+    this.paint();
+  }
+  paint() {
+    const doc = this.el.ownerDocument;
+    const h = this.ctrl.header();
+    this.monthBtn.hidden = !h.monthVisible;
+    this.monthBtn.textContent = h.month;
+    this.yearBtn.textContent = h.year;
+    this.yearBtn.disabled = h.yearDisabled;
+    const nav = this.ctrl.navLabels();
+    this.prev.setAttribute("aria-label", vt(nav.prev));
+    this.next.setAttribute("aria-label", vt(nav.next));
+    const dates = this.ctrl.panel === "date";
+    this.week.hidden = !dates;
+    this.grid.className = dates ? "vela-date-picker-grid" : "vela-date-picker-cells";
+    this.grid.replaceChildren(...this.ctrl.cells().map((cell) => this.cellEl(doc, cell, dates)));
+  }
+  cellEl(doc, cell, dates) {
+    if (cell.blank) {
+      const blank = doc.createElement("span");
+      blank.className = "vela-date-picker-blank";
+      return blank;
+    }
+    const b = doc.createElement("button");
+    b.type = "button";
+    b.className = dates ? "vela-date-picker-day" : "vela-date-picker-cell";
+    b.textContent = vt(cell.label);
+    if (cell.checked) b.dataset.checked = "1";
+    if (cell.today) b.dataset.today = "1";
+    if (cell.outside) b.dataset.outside = "1";
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const picked = this.ctrl.choose(cell);
+      if (picked) this.opts.onPick?.(picked);
+      else this.paint();
+    });
+    return b;
   }
 };
 
@@ -1556,6 +2502,7 @@ var Switch = class {
     b.dataset.size = this.ctrl.size;
     b.dataset.tone = this.ctrl.tone;
     b.setAttribute("role", "switch");
+    if (opts.label) b.setAttribute("aria-label", opts.label);
     if (this.ctrl.disabled) b.disabled = true;
     b.appendChild(iconEl("check", b.ownerDocument));
     this.el = b;
@@ -1740,7 +2687,7 @@ var NumberInput = class {
     const ni = doc.createElement("input");
     ni.type = "number";
     if (opts.id) ni.id = opts.id;
-    if (opts.title) ni.title = opts.title;
+    if (opts.title) ni.title = vt(opts.title);
     if (opts.min !== void 0) ni.min = String(opts.min);
     if (opts.max !== void 0) ni.max = String(opts.max);
     ni.step = String(this.ctrl.step);
@@ -1807,7 +2754,7 @@ var NumberInput = class {
       const b = doc.createElement("button");
       b.type = "button";
       b.tabIndex = -1;
-      b.setAttribute("aria-label", label);
+      b.setAttribute("aria-label", vt(label));
       b.appendChild(iconEl(icon, doc));
       let timer = 0;
       const apply = () => applyDir(dir);
@@ -2011,7 +2958,7 @@ var TextArea = class {
     const ta = doc.createElement("textarea");
     ta.className = "vela-textarea-field";
     if (opts.id) ta.id = opts.id;
-    if (opts.placeholder) ta.placeholder = opts.placeholder;
+    if (opts.placeholder) ta.placeholder = vt(opts.placeholder);
     ta.rows = this.ctrl.rows;
     ta.value = this.ctrl.value;
     if (this.ctrl.disabled) ta.disabled = true;
@@ -2089,6 +3036,29 @@ function hslHex(h, s, l) {
   const to = (x) => Math.round(x * 255).toString(16).padStart(2, "0");
   return `#${to(f(0))}${to(f(8))}${to(f(4))}`;
 }
+function hsvHex(h, s, v) {
+  const f = (n) => {
+    const k = (n + h / 60) % 6;
+    return v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
+  };
+  const to = (x) => Math.round(Math.max(0, Math.min(1, x)) * 255).toString(16).padStart(2, "0");
+  return `#${to(f(5))}${to(f(3))}${to(f(1))}`;
+}
+function hexHsv(hex) {
+  const n = parseInt(splitColor(hex).hex6.slice(1), 16);
+  const [r, g, b] = [n >> 16 & 255, n >> 8 & 255, n & 255].map((x) => x / 255);
+  const max = Math.max(r, g, b);
+  const d = max - Math.min(r, g, b);
+  let h = 0;
+  if (d > 0) h = max === r ? (g - b) / d % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return { h: (h * 60 + 360) % 360, s: max > 0 ? d / max : 0, v: max };
+}
+function parseHexInput(text) {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(text.trim());
+  if (!m) return null;
+  const h = m[1].toLowerCase();
+  return h.length === 3 ? `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}` : `#${h}`;
+}
 function buildPalette() {
   const grays = [100, 90, 80, 68, 56, 45, 35, 25, 14, 0].map((l) => hslHex(0, 0, l));
   const hues = [4, 28, 50, 96, 140, 174, 200, 224, 270, 322];
@@ -2137,6 +3107,9 @@ var COLOR_CSS = `
 .vela-color-field-swatch{display:block;width:100%;height:100%;border-radius:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.25);}
 .vela-color-field-circle{width:26px;height:26px;padding:3px;border:1px solid var(--vela-border-strong);border-radius:4px;background:transparent;overflow:hidden;}
 .vela-color-field-circle .vela-color-field-swatch{border-radius:2px;box-shadow:none;}
+.vela-color-field-line{width:auto;height:32px;padding:0 10px 0 6px;gap:8px;align-items:center;border:1px solid var(--vela-border-strong);border-radius:6px;background:transparent;}
+.vela-color-field-line .vela-color-field-swatch{width:20px;height:20px;flex:none;border-radius:3px;box-shadow:none;}
+.vela-color-field-sample{display:block;width:34px;height:0;}
 .vela-color-field-pop{background:var(--vela-surface-overlay);border:1px solid var(--vela-border);border-radius:var(--vela-radius-lg);box-shadow:var(--vela-shadow);padding:10px;}
 `;
 
@@ -2151,7 +3124,8 @@ function addRecent(hex6) {
   recents.unshift(hex6);
   if (recents.length > 10) recents.length = 10;
 }
-function buildColorPicker(color, theme, onChange) {
+function buildColorPicker(color, theme, onChange, options = {}) {
+  const commit = options.commit ?? "live";
   const parsed = splitColor(color);
   let curHex = parsed.hex6;
   let curAlpha = parsed.alpha;
@@ -2187,16 +3161,13 @@ function buildColorPicker(color, theme, onChange) {
   recentRow.style.cssText = "display:flex;align-items:center;gap:5px;flex-wrap:wrap;border-top:1px solid var(--vela-border);padding-top:9px;";
   const recentSwatches = document.createElement("div");
   recentSwatches.style.cssText = "display:contents;";
-  const add = document.createElement("label");
-  add.style.cssText = `width:17px;height:17px;border-radius:var(--vela-radius-sm);border:1px dashed var(--vela-border-strong);cursor:pointer;display:flex;align-items:center;justify-content:center;color:${theme.textColor};font:14px ${theme.fontFamily};position:relative;`;
+  const add = document.createElement("button");
+  add.type = "button";
+  add.title = vt("Custom color");
+  add.setAttribute("aria-label", vt("Custom color"));
+  add.dataset.testid = "color-custom";
+  add.style.cssText = `width:17px;height:17px;border-radius:var(--vela-radius-sm);border:1px dashed var(--vela-border-strong);cursor:pointer;display:flex;align-items:center;justify-content:center;color:${theme.textColor};font:14px ${theme.fontFamily};background:transparent;padding:0;`;
   add.textContent = "+";
-  const customInput = document.createElement("input");
-  customInput.type = "color";
-  customInput.value = curHex;
-  customInput.style.cssText = "position:absolute;inset:0;opacity:0;cursor:pointer;";
-  customInput.addEventListener("input", () => previewHex(customInput.value));
-  customInput.addEventListener("change", () => pickHex(customInput.value, true));
-  add.appendChild(customInput);
   recentRow.append(recentSwatches, add);
   const renderRecents = () => {
     recentSwatches.replaceChildren();
@@ -2212,7 +3183,7 @@ function buildColorPicker(color, theme, onChange) {
     }
   };
   const opLabel = document.createElement("div");
-  opLabel.textContent = "Opacity";
+  opLabel.textContent = vt("Opacity");
   opLabel.style.cssText = `font:11px ${theme.fontFamily};color:var(--vela-fg-muted);`;
   const opRow = document.createElement("div");
   opRow.style.cssText = "display:flex;align-items:center;gap:10px;";
@@ -2221,20 +3192,60 @@ function buildColorPicker(color, theme, onChange) {
   const knob = document.createElement("div");
   knob.style.cssText = "position:absolute;top:50%;width:15px;height:15px;border-radius:50%;background:var(--vela-selected-bg);box-shadow:0 1px 3px rgba(0,0,0,0.55);transform:translate(-50%,-50%);pointer-events:none;";
   track.appendChild(knob);
-  const pctBox = document.createElement("div");
-  pctBox.style.cssText = `min-width:42px;text-align:center;font:var(--vela-font-size-md) ${theme.fontFamily};color:var(--vela-fg);border:1px solid var(--vela-border);border-radius:5px;padding:3px 4px;`;
+  const pctBox = document.createElement("input");
+  pctBox.type = "text";
+  pctBox.inputMode = "numeric";
+  pctBox.title = vt("Opacity (%)");
+  pctBox.style.cssText = `width:46px;box-sizing:border-box;text-align:center;font:var(--vela-font-size-md) ${theme.fontFamily};color:var(--vela-fg);background:transparent;border:1px solid var(--vela-border);border-radius:5px;padding:3px 4px;outline:none;`;
+  pctBox.addEventListener("focus", () => {
+    pctBox.style.borderColor = "var(--vela-border-strong)";
+    pctBox.select();
+  });
   opRow.append(track, pctBox);
   const paintOpacity = () => {
     track.style.background = `linear-gradient(to right, ${curHex}00, ${curHex}ff), ${CHECKER}`;
     knob.style.left = `${curAlpha * 100}%`;
-    pctBox.textContent = `${Math.round(curAlpha * 100)}%`;
+    pctBox.value = `${Math.round(curAlpha * 100)}%`;
   };
+  const commitTyped = () => {
+    pctBox.style.borderColor = "var(--vela-border)";
+    const n = parseFloat(pctBox.value.replace("%", ""));
+    if (Number.isFinite(n)) {
+      const next = Math.max(0, Math.min(100, n)) / 100;
+      if (Math.round(next * 100) !== Math.round(curAlpha * 100)) {
+        curAlpha = next;
+        paintOpacity();
+        emit();
+        return;
+      }
+    }
+    paintOpacity();
+  };
+  pctBox.addEventListener("change", commitTyped);
+  pctBox.addEventListener("blur", () => {
+    pctBox.style.borderColor = "var(--vela-border)";
+    paintOpacity();
+  });
+  pctBox.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") return;
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitTyped();
+      pctBox.blur();
+    }
+  });
   let dragging = false;
   const onDrag = (clientX) => {
     const r = track.getBoundingClientRect();
     curAlpha = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
     paintOpacity();
-    emit();
+    if (commit === "live") emit();
+  };
+  const endDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    if (commit === "release") emit();
   };
   track.addEventListener("pointerdown", (e) => {
     e.stopPropagation();
@@ -2245,7 +3256,8 @@ function buildColorPicker(color, theme, onChange) {
   track.addEventListener("pointermove", (e) => {
     if (dragging) onDrag(e.clientX);
   });
-  track.addEventListener("pointerup", () => dragging = false);
+  track.addEventListener("pointerup", endDrag);
+  track.addEventListener("pointercancel", endDrag);
   function emit() {
     onChange(combineColor(curHex, curAlpha));
   }
@@ -2255,28 +3267,157 @@ function buildColorPicker(color, theme, onChange) {
     paintOpacity();
     emit();
   }
-  function pickHex(hex, custom = false) {
+  function pickHex(hex, custom2 = false) {
     previewHex(hex);
     addRecent(curHex);
-    customInput.value = curHex;
-    if (custom) renderRecents();
+    if (custom2) renderRecents();
   }
+  const palette = document.createElement("div");
+  palette.style.cssText = "display:contents;";
+  palette.append(grid, recentRow, opLabel, opRow);
+  let custom = null;
+  const back = () => {
+    custom?.remove();
+    custom = null;
+    palette.style.display = "contents";
+  };
+  add.addEventListener("click", (e) => {
+    e.stopPropagation();
+    palette.style.display = "none";
+    custom = buildCustomPanel(curHex, theme, previewHex, (hex) => {
+      pickHex(hex, true);
+      back();
+    });
+    root.appendChild(custom);
+    custom.querySelector("input")?.focus();
+  });
   renderRecents();
   paintSelection();
   paintOpacity();
-  root.append(grid, recentRow, opLabel, opRow);
+  root.append(palette);
   return root;
 }
+function buildCustomPanel(start, theme, preview, done) {
+  let { h, s, v } = hexHsv(start);
+  let hex = splitColor(start).hex6;
+  const panel = document.createElement("div");
+  panel.dataset.testid = "color-custom-panel";
+  panel.style.cssText = "display:flex;flex-direction:column;gap:10px;";
+  const top = document.createElement("div");
+  top.style.cssText = "display:flex;align-items:center;gap:8px;";
+  const chip = document.createElement("span");
+  chip.style.cssText = "flex:none;width:28px;height:28px;border-radius:5px;border:1px solid var(--vela-border);";
+  const field = document.createElement("input");
+  field.type = "text";
+  field.spellcheck = false;
+  field.maxLength = 7;
+  field.setAttribute("aria-label", vt("Hex color"));
+  field.dataset.testid = "color-hex";
+  field.style.cssText = `flex:1;min-width:0;box-sizing:border-box;height:28px;font:var(--vela-font-size-md) ${theme.fontFamily};color:var(--vela-fg);background:transparent;border:1px solid var(--vela-border);border-radius:5px;padding:0 8px;outline:none;`;
+  const ok = document.createElement("button");
+  ok.type = "button";
+  ok.textContent = vt("Add");
+  ok.dataset.testid = "color-add";
+  ok.style.cssText = `flex:none;height:28px;padding:0 12px;border-radius:6px;border:none;cursor:pointer;font:600 var(--vela-font-size-md) ${theme.fontFamily};color:var(--vela-selected-fg, var(--vela-bg));background:var(--vela-selected-bg, var(--vela-fg));`;
+  top.append(chip, field, ok);
+  const body = document.createElement("div");
+  body.style.cssText = "display:flex;gap:10px;height:180px;";
+  const square = document.createElement("div");
+  square.dataset.testid = "color-square";
+  square.style.cssText = "flex:1;position:relative;border-radius:4px;cursor:crosshair;touch-action:none;";
+  const dot = document.createElement("div");
+  dot.style.cssText = "position:absolute;width:12px;height:12px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,0.5);transform:translate(-50%,-50%);pointer-events:none;";
+  square.appendChild(dot);
+  const bar = document.createElement("div");
+  bar.dataset.testid = "color-hue";
+  bar.style.cssText = `flex:none;width:18px;position:relative;border-radius:4px;cursor:pointer;touch-action:none;background:linear-gradient(to bottom,${[0, 60, 120, 180, 240, 300, 360].map((hue) => hsvHex(hue % 360, 1, 1)).join(",")});`;
+  const tab = document.createElement("div");
+  tab.style.cssText = "position:absolute;left:-3px;right:-3px;height:6px;border-radius:2px;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,0.5);transform:translateY(-50%);pointer-events:none;";
+  bar.appendChild(tab);
+  body.append(square, bar);
+  panel.append(top, body);
+  const paint = (typed = false) => {
+    square.style.background = `linear-gradient(to top,#000,rgba(0,0,0,0)),linear-gradient(to right,#fff,${hsvHex(h, 1, 1)})`;
+    dot.style.left = `${s * 100}%`;
+    dot.style.top = `${(1 - v) * 100}%`;
+    dot.style.background = hex;
+    tab.style.top = `${h / 360 * 100}%`;
+    chip.style.background = hex;
+    if (!typed) field.value = hex;
+    field.style.borderColor = "var(--vela-border)";
+  };
+  const fromHsv = () => {
+    hex = hsvHex(h, s, v);
+    paint();
+    preview(hex);
+  };
+  const drag = (el, at) => {
+    let on = false;
+    const move = (e) => {
+      const r = el.getBoundingClientRect();
+      at(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)));
+    };
+    el.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      on = true;
+      el.setPointerCapture(e.pointerId);
+      move(e);
+    });
+    el.addEventListener("pointermove", (e) => on && move(e));
+    el.addEventListener("pointerup", () => on = false);
+    el.addEventListener("pointercancel", () => on = false);
+  };
+  drag(square, (x, y) => {
+    s = x;
+    v = 1 - y;
+    fromHsv();
+  });
+  drag(bar, (_x, y) => {
+    h = Math.min(359.9, y * 360);
+    fromHsv();
+  });
+  field.addEventListener("input", () => {
+    const got = parseHexInput(field.value);
+    if (!got) {
+      field.style.borderColor = `var(--vela-down, ${BEARISH})`;
+      return;
+    }
+    hex = got;
+    ({ h, s, v } = hexHsv(got));
+    paint(true);
+    preview(hex);
+  });
+  field.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") return;
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      e.preventDefault();
+      ok.click();
+    }
+  });
+  ok.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const got = parseHexInput(field.value);
+    if (got) done(got);
+    else field.style.borderColor = `var(--vela-down, ${BEARISH})`;
+  });
+  paint();
+  return panel;
+}
 function colorField(theme, getVal, onVal, opts) {
-  return new ColorField({ theme, getVal, onVal, shape: opts?.shape, id: opts?.id, popover: opts?.popover }).el;
+  return new ColorField({ theme, getVal, onVal, shape: opts?.shape, id: opts?.id, popover: opts?.popover, commit: opts?.commit }).el;
 }
 var ColorField = class {
   constructor(opts) {
+    this.sample = null;
     injectStyles(COLOR_STYLE_ID, COLOR_CSS, document);
     this.theme = opts.theme;
     this.getVal = opts.getVal;
     this.onVal = opts.onVal;
     this.popoverOpts = opts.popover;
+    this.commit = opts.commit;
+    this.line = opts.line;
+    this.extra = opts.extra;
     const trigger = document.createElement("button");
     trigger.type = "button";
     if (opts.id) trigger.id = opts.id;
@@ -2284,6 +3425,12 @@ var ColorField = class {
     const swatch = document.createElement("span");
     swatch.className = "vela-color-field-swatch";
     trigger.appendChild(swatch);
+    if (opts.line) {
+      trigger.classList.add("vela-color-field-line");
+      this.sample = document.createElement("span");
+      this.sample.className = "vela-color-field-sample";
+      trigger.appendChild(this.sample);
+    }
     this.el = trigger;
     this.swatch = swatch;
     this.paint();
@@ -2297,9 +3444,15 @@ var ColorField = class {
       this.toggle();
     });
   }
+  /** Repaint the swatch (and the line sample): after an outside change of the color, width or style. */
   paint() {
     const v = this.getVal();
+    this.el.setAttribute("aria-label", `${vt("Color")} ${v}`);
     this.swatch.style.background = `linear-gradient(${v}, ${v}), ${FIELD_CHECKER}`;
+    if (this.sample && this.line) {
+      const { width, style } = this.line();
+      this.sample.style.borderTop = `${Math.max(1, Math.min(4, width))}px ${style === "dashed" ? "dashed" : style === "dotted" ? "dotted" : "solid"} ${v}`;
+    }
   }
   toggle() {
     if (openPopoverTrigger() === this.el) {
@@ -2316,12 +3469,26 @@ var ColorField = class {
       boundary: this.popoverOpts?.boundary,
       zIndex: this.popoverOpts?.zIndex,
       className: "vela-color-field-pop",
-      content: buildColorPicker(this.getVal(), this.theme, (val) => {
-        this.onVal(val);
-        this.paint();
-      })
+      content: this.content()
     });
     pop.show();
+  }
+  content() {
+    const picker = buildColorPicker(
+      this.getVal(),
+      this.theme,
+      (val) => {
+        this.onVal(val);
+        this.paint();
+      },
+      { commit: this.commit }
+    );
+    const extra = this.extra?.();
+    if (!extra) return picker;
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex;flex-direction:column;gap:12px;";
+    wrap.append(picker, extra);
+    return wrap;
   }
 };
 function closeColorPopover() {
@@ -2432,7 +3599,7 @@ var GlyphSelect = class {
     const trigger = document.createElement("button");
     trigger.type = "button";
     trigger.className = "vela-glyph-select";
-    if (opts.title) trigger.title = opts.title;
+    if (opts.title) trigger.title = vt(opts.title);
     this.el = trigger;
     this.paint();
     trigger.addEventListener("pointerdown", (e) => {
@@ -2593,7 +3760,7 @@ function fieldSection(title, opts = {}) {
   el.className = "vela-field-section";
   if (opts.variant) el.dataset.variant = opts.variant;
   if (opts.first) el.dataset.first = "";
-  el.textContent = title;
+  el.textContent = vt(title);
   return el;
 }
 function fieldSeparator() {
@@ -2606,7 +3773,7 @@ function labelEl(text, opts) {
   const el = document.createElement("span");
   el.className = "vela-field-label";
   if (opts.size) el.dataset.size = opts.size;
-  el.textContent = text;
+  el.textContent = vt(text);
   const id = opts.id;
   if (id) {
     el.id = `${id}--title`;
@@ -2662,12 +3829,16 @@ function fieldRow(opts) {
     wrap2.className = "vela-field-span vela-field-bool";
     const sw = new Switch({
       id: opts.toggle?.id ?? opts.id,
+      label: vt(opts.label),
       checked: opts.toggle?.checked ?? false,
       size: "md",
       tone: "bright",
       onChange: (v) => opts.toggle?.onChange(v)
     });
-    wrap2.append(sw.el, labelEl(opts.label, { id: opts.toggle?.id ?? opts.id, size }));
+    const lab = labelEl(opts.label, { id: opts.toggle?.id ?? opts.id, size });
+    lab.style.cursor = "pointer";
+    lab.addEventListener("click", () => sw.el.click());
+    wrap2.append(sw.el, lab);
     if (opts.info) wrap2.appendChild(opts.info);
     if (opts.toggle?.get) {
       const get = opts.toggle.get;
@@ -2698,6 +3869,7 @@ function fieldRow(opts) {
     left.className = "vela-field-toggle-label";
     const sw = new Switch({
       id: opts.toggle.id ?? opts.id,
+      label: vt(opts.label),
       checked: opts.toggle.checked,
       size: "md",
       tone: "bright",
@@ -2719,6 +3891,10 @@ function fieldRow(opts) {
     }
   } else {
     wrap.appendChild(labelEl(opts.label, { id: opts.id, size }));
+    if (!opts.id) {
+      const c = controls[0]?.matches("input,button,select,textarea") ? controls[0] : controls[0]?.querySelector("input,button,select,textarea");
+      if (c && !c.hasAttribute("aria-label") && !c.hasAttribute("aria-labelledby")) c.setAttribute("aria-label", vt(opts.label));
+    }
   }
   const cell = document.createElement("div");
   cell.className = "vela-field-cell";
@@ -2774,7 +3950,7 @@ function buildFieldControl(desc) {
       list: desc.list,
       onChange: desc.onChange
     });
-    if (desc.title) sel.el.title = desc.title;
+    if (desc.title) sel.el.title = vt(desc.title);
     if (desc.sync) {
       const sync = desc.sync;
       sel.el.addEventListener("vela-sync", () => {
@@ -2803,9 +3979,10 @@ function buildFieldControl(desc) {
     const el2 = colorField(desc.theme, desc.get, desc.onChange, {
       shape: "circle",
       id: desc.id,
-      popover: desc.popover
+      popover: desc.popover,
+      commit: desc.commit
     });
-    if (desc.title) el2.title = desc.title;
+    if (desc.title) el2.title = vt(desc.title);
     return { el: el2 };
   }
   if (desc.kind === "text") {
@@ -2816,7 +3993,7 @@ function buildFieldControl(desc) {
       fill: desc.fill,
       onChange: desc.onChange
     });
-    if (desc.placeholder) tf.input.placeholder = desc.placeholder;
+    if (desc.placeholder) tf.input.placeholder = vt(desc.placeholder);
     if (desc.sync) {
       const sync = desc.sync;
       tf.el.addEventListener("vela-sync", () => {
@@ -2844,8 +4021,8 @@ function buildFieldControl(desc) {
     return { el: ta.el, setValue: (v) => ta.setValue(String(v)) };
   }
   const el = widthField(desc.theme, desc.get, desc.onChange);
-  if (desc.title) el.title = desc.title;
+  if (desc.title) el.title = vt(desc.title);
   return { el };
 }
 
-export { CALLOUT_CSS, CALLOUT_STYLE_ID, CalloutBubble, ColorField, Dialog, FIELD_GAP_PX, GlyphSelect, Menu, NumberInput, Popover, STATIC_TOKENS, Select, Switch, TextArea, TextField, WIDTH_FIELD_OPTIONS, applyPlotOverlayTokens, applyThemeTokens, blendOver, buildColorPicker, buildFieldControl, buildPalette, calloutPanelRows, clampNumber, closeColorPopover, closeOpenPopovers, closeWidthPopover, closesPanel, colorField, colorPickerController, combineColor, decorateSelectScroll, dialogController, ensureUIHost, eventDismissedPopover, fieldGrid, fieldGridColumns, fieldRow, fieldSection, fieldSeparator, fillSelectList, glyphSelectController, hslHex, insetRect, intersectRects, isPopoverOpen, lineWidthGlyph, menuController, nextUid, numberInputController, openPopoverTrigger, openSelectList, placePopover, popoverController, runMachine, selectController, snapToStep, splitColor, switchController, textAreaController, textFieldController, themeTokens, toggleSelectList, transparencyChecker, viewportRect, widthField, widthFieldOptions };
+export { CALLOUT_CSS, CALLOUT_STYLE_ID, CalloutBubble, ColorField, DatePicker, Dialog, Drawer, FIELD_GAP_PX, GlyphSelect, Menu, NumberInput, Popover, Select, Switch, TextArea, TextField, WIDTH_FIELD_OPTIONS, applyPlotOverlayTokens, applyThemeTokens, blendOver, buildColorPicker, buildFieldControl, buildPalette, calloutPanelRows, clampNumber, closeColorPopover, closeOpenPopovers, closeWidthPopover, closesPanel, colorField, colorPickerController, combineColor, datePickerController, decorateSelectScroll, dialogController, drawerController, ensureUIHost, eventDismissedPopover, fieldGrid, fieldGridColumns, fieldRow, fieldSection, fieldSeparator, fillSelectList, glyphSelectController, hexHsv, hslHex, hsvHex, insetRect, intersectRects, isPopoverOpen, isoDate, lineWidthGlyph, menuController, nextUid, normalizeDateInput, numberInputController, openPopoverTrigger, openSelectList, parseHexInput, placePopover, popoverController, runMachine, selectController, snapToStep, splitColor, switchController, textAreaController, textFieldController, toggleSelectList, transparencyChecker, viewportRect, widthField, widthFieldOptions };

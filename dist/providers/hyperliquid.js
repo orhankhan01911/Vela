@@ -156,7 +156,7 @@ var HyperliquidProvider = class {
     if (coin.includes("/")) {
       const spot = await this.fetchSpotMeta().catch(() => null);
       const entry = spot?.universe?.find((u) => u.name === coin);
-      const baseTok = entry && spot?.tokens ? spot.tokens[entry.tokens?.[0] ?? -1] : void 0;
+      const baseTok = entry ? tokenAt(spot?.tokens, entry.tokens?.[0]) : void 0;
       const [base = coin, quote = "USDC"] = coin.split("/");
       const mintick = decimalsToTick(Math.max(0, 8 - (baseTok?.szDecimals ?? 2)));
       return symbolInfo(ticker, base, quote, "crypto", `${base} / ${quote}`, mintick);
@@ -190,8 +190,7 @@ var HyperliquidProvider = class {
   }
   async listSpot() {
     const meta = await this.fetchSpotMeta();
-    const tokens = meta.tokens ?? [];
-    const nameOf = (i) => i != null ? tokens[i]?.name ?? null : null;
+    const nameOf = (i) => tokenAt(meta.tokens, i)?.name ?? null;
     return (meta.universe ?? []).map((u) => {
       const base = nameOf(u.tokens?.[0]);
       const quote = nameOf(u.tokens?.[1]);
@@ -361,6 +360,16 @@ function symbolInfo(ticker, basecurrency, currency, type, description, mintick) 
 }
 function decimalsToTick(decimals) {
   return Math.pow(10, -decimals);
+}
+var tokenIndex = /* @__PURE__ */ new WeakMap();
+function tokenAt(tokens, i) {
+  if (!tokens || i == null) return void 0;
+  let m = tokenIndex.get(tokens);
+  if (!m) {
+    m = new Map(tokens.map((t, k) => [t.index ?? k, t]));
+    tokenIndex.set(tokens, m);
+  }
+  return m.get(i);
 }
 
 export { HyperliquidProvider };

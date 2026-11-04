@@ -1,12 +1,71 @@
-import { D as DrawingsDocument, R as Resolved } from './contributions-Dlj1yb_X.cjs';
-export { B as BarsChangeReason, C as CellStateContext, b as ContextSelect, c as DataControl, d as DrawingsControl, e as EngineAlert, f as EngineCapabilities, g as EngineContextSnapshot, h as EngineFactory, i as EngineWarning, j as ExecutionHandlers, k as ExecutionMarket, l as ExecutionRequest, m as ExecutionSession, E as ExternalIndicatorEntry, F as FetchSeries, n as IndicatorEventMap, I as IndicatorHandle, o as IndicatorSummary, L as LegendActionDescriptor, p as LegendCalloutContent, q as LegendCalloutDescriptor, r as LegendCalloutItem, s as LegendCalloutSpec, t as LegendIndicatorInfo, N as NativeIndicator, u as NativeIndicatorContext, v as NativeIndicatorDescriptor, w as NativeIndicatorInfo, x as NativeIndicatorOutput, O as OVERRIDABLE_TOPBAR_IDS, P as ParsedSymbol, y as PreparedScript, z as RendererControl, A as RunIndicatorResult, G as SceneInspection, a as ScriptRun, H as ScriptRunCause, J as ScriptRunResult, S as ScriptingEngine, K as SidePanelButton, M as SidePanelDescriptor, Q as SidePanelHandle, T as SidePanelHeader, U as StatePersistenceHandler, X as StrategyFill, Y as StrategyState, Z as StrategyTrade, _ as SymbolRankingHook, $ as TypedEventBus, V as Vela, a0 as VelaDeps, a1 as VelaEventMap, a2 as VisibleBarRange, a3 as WidgetActionDescriptor, a4 as WidgetActionTarget, a5 as WidgetAttachment, W as WidgetContext, a6 as getNativeIndicator, a7 as legendActions, a8 as legendCallouts, a9 as nativeIndicatorDescriptors, aa as nativeIndicatorTypes, ab as registerDefaultEngine, ac as registerLegendAction, ad as registerLegendCallout, ae as registerNativeIndicator, af as registerSidePanel, ag as registerStatePersistence, ah as registerSymbolRanking, ai as registerWidgetAction, aj as registerWidgetAttachment, ak as resolveEngines, al as sidePanels, am as statePersistenceHandlers, an as symbolRanking, ao as topbarActionOverride, ap as unregisterDefaultEngine, aq as unregisterLegendAction, ar as unregisterLegendCallout, as as unregisterNativeIndicator, at as unregisterSidePanel, au as unregisterStatePersistence, av as unregisterWidgetAction, aw as unregisterWidgetAttachment, ax as widgetActions, ay as widgetAttachments } from './contributions-Dlj1yb_X.cjs';
-import { D as Drawing, S as SerializedDrawing, U as Unsubscribe, L as LineStyle, P as PriceStyle, e as IChartRenderer, R as RendererCapabilities, f as RendererDisplayOptions, g as IndicatorRenderHandle, h as IndicatorStatus, c as VelaTheme, O as OHLCV, i as Pane, j as PaneAction, k as MoveTarget, l as IndicatorModel, m as ScenePatch, I as InputValue, n as SymbolPickerFn, o as LegendActionView, p as LegendCalloutView, q as InputChangeEvent, T as ThemeName, C as CrosshairEvent, r as ClickEvent, A as AxisLongPressEvent, a as VisibleRange, s as DataWindowReadout, t as IDrawingsRendererPort, u as Millis, v as SnapMode, w as DrawingTypeKey, x as ToolbarDefinition, M as MarketConfig } from './options-BSbXQdMy.cjs';
-export { y as AddIndicatorOptions, z as AnimationConfig, B as Background, E as BoxFontFamily, F as BoxHAlign, G as BoxTextSize, H as BoxVAlign, J as CandleBarColor, K as CandleSeries, Q as CandleStyle, W as DataWindowGroup, X as DataWindowOHLC, Y as DataWindowRow, Z as DirtyRange, _ as DrawingBox, $ as DrawingExtend, a0 as DrawingIntent, a1 as DrawingLabel, a2 as DrawingLine, a3 as DrawingLinefill, a4 as DrawingMode, a5 as DrawingPoint, a6 as DrawingPolyline, a7 as DrawingSeriesBar, a8 as DrawingSeriesGateway, a9 as DrawingSeriesState, aa as DrawingStyle, ab as DrawingTable, ac as DrawingText, ad as DrawingXLoc, ae as DrawingsOption, af as Fill, ag as FillGradientStop, ah as IndicatorMeta, ai as InputCondition, aj as InputSchema, ak as InputType, al as InputWhen, am as LabelStyle, an as LabelYLoc, ao as LineLikeKind, ap as LineLikeSeries, aq as LineLikeStyle, ar as MarkerPoint, as as MarkerSeries, at as MarketSnapshot, au as MarketSwitch, av as PaneAxis, aw as PaneAxisBand, ax as PaneHint, ay as PaneKind, az as PolylinePoint, aA as PriceLine, aB as Projector, aC as ProviderName, aD as RendererConstructor, aE as Scene, aF as SchemaPatch, aG as SeriesKind, aH as SeriesPoint, aI as SeriesSpec, aJ as SeriesValueDelta, aK as SettingsField, aL as SettingsSchema, aM as SettingsVisibilityPolicy, aN as TableCell, aO as TableMerge, aP as TablePosition, aQ as ToolbarGroupConfig, aR as TradeExecution, aS as ValuePatch, b as VelaOptions, V as VisibleRangePreset, aT as buildToolbar, aU as defaultToolbar, aV as inputDeltas, aW as inputVisible } from './options-BSbXQdMy.cjs';
-import { M as MarketDataFeed, D as DataProvider, P as ProviderInfo, a as SymbolDescriptor, S as SymbolInfo, b as ProviderCapabilities, B as BarRange } from './DataProvider-BkC1cCw8.cjs';
-export { A as ACCENT, a as ACCENT_BRIGHT, B as BEARISH, b as BULLISH, c as BarTransform, d as BasePaintingModulation, C as CATEGORICAL, e as CHIP_PLATE, f as CROSSHAIR, g as ChartTypeDefinition, h as ChartTypeSettingsInstance, i as ChartTypeSettingsSection, j as ChartTypeSettingsSubsection, D as DrawingTypeMeta, H as HIGHLIGHT, I as INFO, k as INVALID, l as IdentifiableKind, M as MARKER, N as NEUTRAL, m as NormalizedSettingsRow, R as RendererLayerArgs, n as RendererLayerDefinition, o as RendererLayerInstance, S as SERIES_LINE, p as SESSION_OFF, q as SESSION_POST, r as SESSION_PRE, s as SLATE, t as SLATE_DEEP, u as SeriesDataEngine, v as SeriesDataEngineHost, w as SettingsInlineControl, x as SettingsRowCondition, y as SettingsRowDescriptor, z as SettingsRowInlineNumber, E as SettingsRowSwatch, F as SettingsRowValueKey, G as SettingsRowWhen, J as SettingsRowWidth, K as SettingsSelectOption, L as SettingsValueRow, T as TRADE_EXIT, O as TRADE_LONG, P as TRADE_SHORT, V as VALID, W as WARNING, Q as categoricalColor, U as chartType, X as chartTypes, Y as createDrawing, Z as deserializeDrawing, _ as drawingTypes, $ as getDrawingType, a0 as normalizeSettingsRow, a1 as registerChartType, a2 as registerDrawingType, a3 as registerRendererDefaults, a4 as registerRendererLayer, a5 as rendererDefaults, a6 as rendererLayers, a7 as settingsRowValueKeys, a8 as stableSeriesId, a9 as tickerModifierIds, aa as unregisterChartType, ab as unregisterRendererDefaults, ac as unregisterRendererLayer } from './plugin-DvZPxFrH.cjs';
-export { D as DEFAULT_PANEL_MAX_WIDTH, a as DEFAULT_PANEL_MIN_WIDTH, b as DEFAULT_PANEL_WIDTH, S as SidePanelOptions, c as clampPanelWidth } from './side-panel-HF0IAzwf.cjs';
+import { D as DrawingsDocument, H as HostSettingsSection, R as Resolved, a as ReplayTick, b as DataControl, c as ReplayTickSource } from './contributions-Bfkvj5fx.cjs';
+export { B as BarTransform, d as BarsChangeReason, C as CellStateContext, e as ChartTypeDefinition, f as ChartTypeSettingsInstance, g as ChartTypeSettingsSection, h as ChartTypeSettingsSubsection, i as CodeUpdateResult, j as ContextMenuPointer, k as ContextSelect, l as DrawingsControl, E as EngineAlert, m as EngineCapabilities, n as EngineContextSnapshot, o as EngineFactory, p as EngineWarning, q as ExecutionHandlers, r as ExecutionMarket, s as ExecutionRequest, t as ExecutionSession, u as ExternalIndicatorEntry, F as FetchSeries, v as HistoryLayerState, w as HostSettingsSectionDescriptor, I as IndicatorEventMap, x as IndicatorHandle, y as IndicatorSettings, z as IndicatorSummary, L as LegendActionDescriptor, A as LegendCalloutContent, G as LegendCalloutDescriptor, J as LegendCalloutItem, K as LegendCalloutSpec, M as LegendIndicatorInfo, N as MarksControl, O as NativeIndicator, P as NativeIndicatorContext, Q as NativeIndicatorDescriptor, S as NativeIndicatorInfo, T as NativeIndicatorOutput, U as NormalizedSettingsRow, V as OVERRIDABLE_TOPBAR_IDS, W as ParsedSymbol, X as PeriodBars, Y as PreparedScript, Z as RendererControl, _ as ReplayBounds, $ as ReplayControl, a0 as ReplayEndReason, a1 as ReplayStartOptions, a2 as ReplayState, a3 as RunIndicatorResult, a4 as SceneInspection, a5 as ScriptRun, a6 as ScriptRunCause, a7 as ScriptRunResult, a8 as ScriptingEngine, a9 as SeriesDataEngine, aa as SeriesDataEngineHost, ab as SettingsInlineControl, ac as SettingsRowCondition, ad as SettingsRowDescriptor, ae as SettingsRowInlineNumber, af as SettingsRowSwatch, ag as SettingsRowValueKey, ah as SettingsRowWhen, ai as SettingsRowWidth, aj as SettingsSelectOption, ak as SettingsTemplateMenuDescriptor, al as SettingsValueRow, am as SidePanelButton, an as SidePanelDescriptor, ao as SidePanelHandle, ap as SidePanelHeader, aq as StatePersistenceHandler, ar as StrategyFill, as as StrategyState, at as StrategyTrade, au as SymbolRankingHook, av as TypedEventBus, aw as Vela, ax as VelaDeps, ay as VelaEventMap, az as VisibleBarRange, aA as WidgetActionDescriptor, aB as WidgetActionTarget, aC as WidgetAttachment, aD as WidgetContext, aE as chartType, aF as chartTypes, aG as getNativeIndicator, aH as legendActions, aI as legendCallouts, aJ as nativeIndicatorDescriptors, aK as nativeIndicatorTypes, aL as nativeInstanceCap, aM as normalizeSettingsRow, aN as registerChartType, aO as registerDefaultEngine, aP as registerLegendAction, aQ as registerLegendCallout, aR as registerNativeIndicator, aS as registerSettingsSection, aT as registerSettingsTemplateMenu, aU as registerSidePanel, aV as registerStatePersistence, aW as registerSymbolRanking, aX as registerWidgetAction, aY as registerWidgetAttachment, aZ as replacesSeries, a_ as resolveEngines, a$ as setNativeInstanceCap, b0 as settingsRowValueKeys, b1 as sidePanels, b2 as statePersistenceHandlers, b3 as symbolRanking, b4 as tickerModifierIds, b5 as topbarActionOverride, b6 as unregisterChartType, b7 as unregisterDefaultEngine, b8 as unregisterLegendAction, b9 as unregisterLegendCallout, ba as unregisterNativeIndicator, bb as unregisterSettingsTemplateMenu, bc as unregisterSidePanel, bd as unregisterStatePersistence, be as unregisterWidgetAction, bf as unregisterWidgetAttachment, bg as widgetActions, bh as widgetAttachments } from './contributions-Bfkvj5fx.cjs';
+import { D as DrawingStyle, a as DrawingText, b as DrawingTypeKey, c as Drawing, S as SerializedDrawing, U as Unsubscribe, L as LineStyle, P as PriceStyle, I as IChartRenderer, R as RendererCapabilities, d as RendererDisplayOptions, e as IndicatorRenderHandle, f as IndicatorStatus, V as VelaTheme, W as WallClock, O as OHLCV, g as Pane, h as PaneAction, M as MoveTarget, i as IndicatorModel, j as ScenePatch, k as InputValue, l as SymbolPickerFn, m as LegendActionView, n as LegendCalloutView, o as InputChangeEvent, p as SettingsTemplateMenuView, T as ThemeName, C as CrosshairEvent, q as ClickEvent, A as AxisLongPressEvent, r as TimelineMark, s as MarkGroup, t as MarkClickEvent, u as VisibleRange, v as DataWindowReadout, w as IDrawingsRendererPort, x as Millis, y as SnapMode, z as ToolbarDefinition, B as MarketConfig, E as MarketSnapshot } from './options-E_TmxEA7.cjs';
+export { F as AddIndicatorOptions, G as AnimationConfig, H as Background, J as BoxFontFamily, K as BoxHAlign, N as BoxTextSize, Q as BoxVAlign, X as CandleBarColor, Y as CandleSeries, Z as CandleStyle, _ as DataWindowGroup, $ as DataWindowOHLC, a0 as DataWindowRow, a1 as DirtyRange, a2 as DrawingBox, a3 as DrawingExtend, a4 as DrawingInputsDialog, a5 as DrawingIntent, a6 as DrawingLabel, a7 as DrawingLine, a8 as DrawingLinefill, a9 as DrawingMode, aa as DrawingPoint, ab as DrawingPolyline, ac as DrawingSeriesBar, ad as DrawingSeriesGateway, ae as DrawingSeriesState, af as DrawingTable, ag as DrawingToolbarAction, ah as DrawingXLoc, ai as DrawingsOption, aj as Fill, ak as FillGradientStop, al as IndicatorMeta, am as InputCondition, an as InputMenu, ao as InputMenuItem, ap as InputMenuResolver, aq as InputSchema, ar as InputType, as as InputWhen, at as IntroAnimation, au as IntroConfig, av as IntroStyle, aw as LabelStyle, ax as LabelYLoc, ay as LineLikeKind, az as LineLikeSeries, aA as LineLikeStyle, aB as MarkContent, aC as MarkContentSource, aD as MarkGlyph, aE as MarkPanelItem, aF as MarkShape, aG as MarkerPoint, aH as MarkerSeries, aI as MarketSwitch, aJ as PaneAxis, aK as PaneAxisBand, aL as PaneHint, aM as PaneKind, aN as PolylinePoint, aO as PriceAxisOptions, aP as PriceAxisTick, aQ as PriceAxisTickContext, aR as PriceAxisTicksFn, aS as PriceLine, aT as Projector, aU as ProviderName, aV as RendererConstructor, aW as Scene, aX as SchemaPatch, aY as ScreenshotOptions, aZ as SecondClock, a_ as SeriesDisplay, a$ as SeriesKind, b0 as SeriesPoint, b1 as SeriesSpec, b2 as SeriesSurface, b3 as SeriesValueDelta, b4 as SettingsField, b5 as SettingsMenuRowView, b6 as SettingsSchema, b7 as SettingsVisibilityPolicy, b8 as TableCell, b9 as TableMerge, ba as TablePosition, bb as ToolbarGroupConfig, bc as TradeExecution, bd as ValuePatch, be as VelaOptions, bf as VisibleRangePreset, bg as buildToolbar, bh as defaultToolbar, bi as inputDeltas, bj as inputMenuFor, bk as inputVisible, bl as registerInputMenu, bm as seriesInScale, bn as seriesShownOn } from './options-E_TmxEA7.cjs';
+import { M as MarketDataFeed, D as DataProvider, P as ProviderInfo, a as SymbolDescriptor, S as SymbolInfo, b as ProviderCapabilities, B as BarRange } from './DataProvider-_iHbkEgK.cjs';
+export { A as ACCENT, a as ACCENT_BRIGHT, B as BEARISH, b as BUILTIN_INTERVAL_ORDER, c as BULLISH, d as BasePaintingModulation, C as CATEGORICAL, e as CHIP_PLATE, f as CROSSHAIR, g as ChromeHintOptions, h as ChromeTooltipOptions, i as ClassicPlotValues, D as DrawingTypeMeta, H as HIGHLIGHT, I as INFO, j as INVALID, k as IdentifiableKind, l as IntervalChoice, m as IntervalSection, M as MARKER, N as NEUTRAL, P as PlotRightInsetFn, R as RendererLayerArgs, n as RendererLayerDefinition, o as RendererLayerInstance, S as SERIES_LINE, p as SESSION_OFF, q as SESSION_POST, r as SESSION_PRE, s as SLATE, t as SLATE_DEEP, T as TRADE_EXIT, u as TRADE_LONG, v as TRADE_SHORT, w as TV_COLORS, V as VALID, W as WARNING, X as XPOST_DARK, x as XPOST_LIGHT, y as activeIntervalSection, z as attachChromeTooltip, E as categoricalColor, F as chromeHint, G as classicCatalog, J as classicPlots, K as createDrawing, L as deserializeDrawing, O as drawingTypes, Q as getDrawingType, U as intervalSections, Y as notifyIntervalSectionsChanged, Z as plotRightInset, _ as registerBuiltinIndicators, $ as registerDrawingType, a0 as registerIntervalSection, a1 as registerPlotRightInset, a2 as registerRendererDefaults, a3 as registerRendererLayer, a4 as rendererDefaults, a5 as rendererLayers, a6 as stableSeriesId, a7 as unregisterIntervalSection, a8 as unregisterRendererDefaults, a9 as unregisterRendererLayer } from './plugin-BDOLiML5.cjs';
+export { C as CONTEXT_MENU_BUILTIN_ORDER, D as DEFAULT_PANEL_MAX_WIDTH, a as DEFAULT_PANEL_MIN_WIDTH, b as DEFAULT_PANEL_WIDTH, S as SidePanelOptions, c as clampPanelWidth } from './side-panel-DPWdgW2J.cjs';
+export { K as KeyBindingDescriptor, R as ResolvedBinding } from './keymap-CGIxBV99.cjs';
 export { i as iconMarkup, r as registerIcon } from './icons-BZYbJXSV.cjs';
-export { a as KeyBindingDescriptor, R as ResolvedBinding } from './keymap-CGOz5F5f.cjs';
+
+/**
+ * Per-tool "last used" settings (TradingView: change a tool's settings and the next one you draw starts from them,
+ * across reloads). Holds the cosmetics of the last drawing edited or placed of each type: its style, its per-type
+ * extras (`props`: profile rows, fib levels, extend options ...) and its text look (never the text itself). Shared by
+ * every chart on the page and kept in localStorage when it is there (a private window or blocked storage just keeps
+ * it for the session).
+ *
+ * Types whose `props` are CONTENT, not settings (an image's url, a post card, a table's cells, an alert's condition,
+ * a pinned label's position), remember their style only.
+ */
+interface ToolSettings {
+    style: DrawingStyle;
+    props?: Record<string, unknown>;
+    /** Text cosmetics only: color, size, bold, italic, alignment. */
+    text?: Omit<DrawingText, 'value'>;
+}
+/** The last-used settings of `type`, or undefined when none were kept. */
+declare function toolSettings(type: DrawingTypeKey): ToolSettings | undefined;
+/** Forget every tool's last-used settings (tests, a "reset all tools" action). */
+declare function clearToolSettings(): void;
+
+/** TradingView's limits for an image put on a chart: its Image dialog says "JPG, PNG or WEBP, Max size 2MB" (read live
+ *  2026-10-26); its help adds at most 2000 x 2000 px. Hosts check them where a picture comes in; see {@link checkImageFile}. */
+declare const IMAGE_MAX_BYTES: number;
+declare const IMAGE_MAX_SIDE = 2000;
+declare const IMAGE_TYPES: readonly string[];
+/** Why a picture cannot go on the chart (TradingView's words), or null when it can. */
+declare function checkImageFile(file: {
+    type: string;
+    size: number;
+}, dims?: {
+    width: number;
+    height: number;
+}): string | null;
+
+/** The card's width in CSS px before the painter has measured it (TradingView sizes it to its text). */
+declare const XPOST_W = 300;
+/** One X post as the host fetched it. Pictures are same-origin paths (a host relay): a cross-origin picture
+ *  on the canvas would block screenshots. */
+interface XPostCard {
+    id: string;
+    url: string;
+    /** When it was posted, epoch ms. */
+    t: number;
+    text: string;
+    name: string;
+    handle: string;
+    avatar: string;
+    verified: boolean;
+    media: string[];
+    likes: number;
+    replies: number;
+}
+/** A post read back from a saved layout or a host, every field checked; null when it is not one. */
+declare function toXPostCard(v: unknown): XPostCard | null;
+/** The card's height above (+) or below (-) its bar, TradingView's `position`: 0..100 % of the room between the bar
+ *  and the pane's edge. A new post sits half way up, as on TradingView. */
+declare const XPOST_POSITION = 50;
 
 /**
  * The single source of truth for a chart's user drawings. Owns identity + paint
@@ -51,10 +110,6 @@ declare class DrawingStore {
     private bumpSeqPast;
     private emit;
 }
-
-/** Price-axis display mode: absolute price, percent change vs a visible baseline, or
- *  values indexed to 100 at that same baseline (`index = price / baseline * 100`). */
-type ScaleMode = 'price' | 'percent' | 'indexed';
 
 interface GridLineStyle {
     visible: boolean;
@@ -138,11 +193,41 @@ interface SessionShadeStyle {
     postmarketColor: string;
     extendedColor: string;
 }
+/**
+ * Empty space kept around the data. `top` / `bottom` are the share of each pane's
+ * PIXEL height the autoscaled window reserves above the highest / below the lowest
+ * visible value (percent); `right` is the whitespace after the newest bar, in bars,
+ * that fit, re-frame and scroll-to-latest land on.
+ */
+interface ChartMargins {
+    top: number;
+    bottom: number;
+    right: number;
+}
+/**
+ * How the plot background is painted: one flat color (`layout.background`) or a vertical
+ * gradient from `top` (at the top of the chart) to `bottom`. Switching the type never loses
+ * the other mode's colors, so a Solid ⇄ Gradient toggle is lossless.
+ */
+type BackgroundType = 'solid' | 'gradient';
+interface BackgroundStyle {
+    type: BackgroundType;
+    /** The Solid color; `null` ⇒ the app theme's chart background. */
+    solid: string | null;
+    /** Gradient top; `null` ⇒ the solid color. */
+    top: string | null;
+    /** Gradient bottom; `null` ⇒ the top color eased {@link GRADIENT_BOTTOM_EASE} toward black
+     *  (light top) or white (dark top), so a first switch to Gradient is already visible. */
+    bottom: string | null;
+}
 interface ChartStyle {
     /** Per-chart-type settings (plugin SDK sections), keyed by type id then row key. */
     chartTypes: Record<string, Record<string, unknown>>;
     /** Axis/label font size in CSS px (the family stays on the theme). */
     fontSize: number;
+    /** Solid or gradient plot background (see {@link BackgroundStyle}). */
+    background: BackgroundStyle;
+    margins: ChartMargins;
     gridVert: GridLineStyle;
     gridHorz: GridLineStyle;
     /** Axis frame lines (the right price-axis border); `null` ⇒ inherit `theme.borderColor`. */
@@ -160,7 +245,12 @@ interface ChartStyle {
 interface ChartConfig {
     version: number;
     layout: {
+        /** The Solid color. Kept while `backgroundType` is `'gradient'` so toggling back restores it. */
         background: string;
+        /** `'solid'` paints `background`; `'gradient'` paints `backgroundTop` → `backgroundBottom`. */
+        backgroundType: BackgroundType;
+        backgroundTop: string;
+        backgroundBottom: string;
         textColor: string;
         fontFamily: string;
         fontSize: number;
@@ -187,6 +277,13 @@ interface ChartConfig {
         log: boolean;
         /** Inverted price axis (high at the bottom). */
         invert: boolean;
+        /** TradingView's "Scale price chart only": the price pane's autoscale fits the main
+         *  series alone, so overlays (VWAP bands, order-book pressure, Pine drawings) never
+         *  widen it. They still paint; whatever falls outside the window is clipped. */
+        scalePriceOnly: boolean;
+        /** Version of `scalePriceOnly` in a saved document. 2 = written since it defaults ON (2026-10-17): its value
+         *  is a choice. A saved document without it holds the old default (false, never chosen): it is ignored. */
+        priceOnlyVersion: number;
         borderColor: string;
         labelsVisible: boolean;
         currentPriceLine: boolean;
@@ -197,10 +294,25 @@ interface ChartConfig {
          *  `animLiveBar` feature; this is only the on/off switch the settings dialog shows. */
         animateLastPrice: boolean;
     };
+    /** Motion on/off switches (the settings dialog's Animation group). On/off only — each
+     *  motion's duration stays what the host configured (`animations` option / renderer
+     *  features); switching one back on restores that duration. `pan` covers both the
+     *  drag-release inertia and the programmatic scroll glide. The live-bar glide's switch
+     *  is `priceScale.animateLastPrice` (it predates this block). */
+    animations: {
+        zoom: boolean;
+        pan: boolean;
+        autoscale: boolean;
+        /** The first-paint candle reveal — takes effect on the next load. */
+        intro: boolean;
+    };
     /** Stacked-pane chrome — the draggable line between an indicator's pane and the one above it. */
     panes: {
         separatorColor: string;
     };
+    /** Whitespace around the data (the Canvas tab's Margins group): top/bottom in percent
+     *  of pane height, right in bars. See {@link ChartMargins}. */
+    margins: ChartMargins;
     /** Strategy trade markers (the `tradeMarkers` feature): the order-fill units on the price pane. */
     trades: {
         visible: boolean;
@@ -214,6 +326,12 @@ interface ChartConfig {
     };
     timeScale: {
         timezone: string;
+    };
+    /** Timeline marks (the `marks` feature): the lane's master toggle + per-group visibility
+     *  (the Events tab's checkboxes). `groups` merges additively, like `stacking.series`. */
+    marks: {
+        visible: boolean;
+        groups: Record<string, boolean>;
     };
     /** Per-chart-type settings (plugin SDK sections), keyed by type id then row key. */
     chartTypes: Record<string, Record<string, unknown>>;
@@ -281,55 +399,24 @@ interface ChartConfig {
     };
 }
 
-/**
- * The native renderer's chart-settings dialog (item 15): a DOM overlay, opened from
- * an in-chart gear, that edits a curated slice of the serializable `ChartConfig`
- * (background, candle/grid/crosshair colors, fonts, price scale, timezone, …). Each
- * control emits a minimal nested patch via `onChange`; the renderer merges it onto
- * the live config and repaints with NO indicator re-run. A footer exposes the whole
- * config as JSON for export/import — the templating surface.
- *
- * It is renderer chrome (a positioned overlay on the chart container), kept
- * dependency-free and themed to match the chart, mirroring `InputsUI`.
- */
-/** A host-contributed settings row: callback-based (the host owns the state).
- *  `heading` opens a titled group inside the tab (an in-pane section title);
- *  `color` is a swatch opening the themed picker (any CSS color, alpha included).
- *  `id` is the row's stable visibility id (defaults to the label's slug) — hiding a
- *  heading's id hides its whole group (see `settings-visibility.ts`). */
-type HostSettingsRow = {
-    kind: 'heading';
-    label: string;
-    id?: string;
-} | {
-    kind: 'toggle';
-    label: string;
-    get: () => boolean;
-    set: (v: boolean) => void;
-    id?: string;
-} | {
-    kind: 'select';
-    label: string;
-    options: readonly string[];
-    get: () => string;
-    set: (v: string) => void;
-    id?: string;
-} | {
-    kind: 'color';
-    label: string;
-    get: () => string;
-    set: (v: string) => void;
-    id?: string;
-};
-/** A host-contributed settings tab (see `RendererControl.setSettingsSections`). */
-interface HostSettingsSection {
-    title: string;
-    rows: readonly HostSettingsRow[];
-    /** Tab position: own tab after Symbol (default), end of the rail, or rows INSIDE
-     *  the Symbol tab itself (`'symbol'` — e.g. the widget's watermark toggle). */
-    placement?: 'after-symbol' | 'end' | 'symbol';
-    /** Stable visibility id (defaults to the title's slug). Row ids scope under it. */
-    id?: string;
+/** Price-axis display mode: absolute price, percent change vs a visible baseline, or
+ *  values indexed to 100 at that same baseline (`index = price / baseline * 100`). */
+type ScaleMode = 'price' | 'percent' | 'indexed';
+
+/** One entry of the Zoom Out stack: the view before a Zoom In. */
+interface ZoomSnapshot {
+    viewport: {
+        barSpacing: number;
+        rightOffset: number;
+    };
+    paneId: string;
+    /** The pane's manual price window then, or null when it was autoscaled. */
+    manual: {
+        min: number;
+        max: number;
+        log?: boolean;
+        invert?: boolean;
+    } | null;
 }
 
 /**
@@ -356,10 +443,25 @@ declare class NativeRenderer implements IChartRenderer {
     private drawingsCanvas;
     private cursorCanvas;
     private overlayRoot;
+    /** The host-styleable twin of the `shadeRight` veil (`.vela-shade-right`), directly under
+     *  the cursor canvas; hidden whenever the crosshair layer paints no veil. */
+    private shadeRightEl;
+    /** The veil geometry last written to {@link shadeRightEl} ('' = hidden) — the DOM is
+     *  touched only when it changes, never on a plain pointer move. */
+    private shadeRightSig;
     private userDrawings;
+    /** One price-axis tick source for the gridlines (backdrop) and the labels (chrome). */
+    private readonly priceAxisTicks;
     private readonly backdropRenderer;
     private readonly volumeRenderer;
     /** SDK renderer layers instantiated at mount ({@link registerRendererLayer}). */
+    /**
+     * The mounted SDK layers. One BASE entry per registered definition (channel = the layer
+     * id, no owner of its own), plus one DEDICATED entry per mounted native indicator whose
+     * model names its own channel (`native.channel` — an instance of a multi-instance type):
+     * same definition, its own canvas, reading that instance's channel and following that
+     * instance's pane and z key. `channel` is unique across the array.
+     */
     private extLayers;
     /** Last applied layer-canvas order (ids below + above the data canvas) — re-slotted only on change. */
     private layerOrderSig;
@@ -375,6 +477,10 @@ declare class NativeRenderer implements IChartRenderer {
      *  it paints the plot into. `null` until the first report or where the box type is
      *  unsupported (WebKit); syncSize then falls back to rounding the client rect. */
     private plotDeviceSize;
+    /** Pixel ratio forced for the length of one screenshot (null: the screen's own). */
+    private shotDpr;
+    /** CSS box (viewport coordinates) the last {@link screenshotCanvas} covers: the plot plus the left scales. */
+    private shotBox;
     private readonly coords;
     private readonly scene;
     private backend;
@@ -385,10 +491,21 @@ declare class NativeRenderer implements IChartRenderer {
     private readonly indicatorSlices;
     /** Hover tooltips for Pine labels (canvas hit-rects collected by the chrome layer). */
     private labelTooltip;
+    /** The timeline-mark popup (a kit Popover anchored on a lane glyph); null before mount. */
+    private markPopover;
+    /** How the fanned mark stack was opened: a hover folds when the pointer leaves, a tap only on a tap elsewhere. */
+    private marksExpandedBy;
+    /** The rAF loop keeping the chrome repainting while a lane glyph pulses (hover) or flashes (click); null when idle. */
+    private markPulseRaf;
+    private readonly markClickCbs;
     private readonly crosshairLayer;
     private scheduler;
-    /** 1 Hz repaint pump so the price-axis countdown-to-bar-close ticks; null when off. */
-    private countdownTimer;
+    /** The second pulse the countdown-to-bar-close chip ticks on: the host's (`setWallClock`)
+     *  when one is wired, else the renderer's own second-aligned clock. */
+    private hostClock;
+    private ownClock;
+    /** Live subscription to the pulse while the countdown is on; null when off. */
+    private countdownUnsub;
     private animator;
     private input;
     private inputsUI;
@@ -408,13 +525,15 @@ declare class NativeRenderer implements IChartRenderer {
     /** Drawings layer self-serves Ctrl+Z/Y (see the `historyChords` feature). */
     private historyChordsEnabled;
     private liveRegion;
-    private animZoom;
-    private animPan;
-    private animLiveBarMs;
-    private animLiveBarOnMs;
+    private readonly animZoom;
+    private readonly animPan;
+    private readonly animScroll;
+    private readonly animAutoscale;
+    private readonly animLiveBar;
     private candleUp;
     private candleDown;
-    private introStyle;
+    private intro;
+    private introOnStyle;
     private introPlayed;
     private introRaf;
     /** The load affordance (three pulsing dots) — up while the host reports a bar load in
@@ -427,6 +546,7 @@ declare class NativeRenderer implements IChartRenderer {
     private zoomAnchorX;
     private zoomAnchorMode;
     private panVelocity;
+    private olderPending;
     private bars;
     private didInitialFit;
     /** A data-tier paint has happened (scales + drawing resolvers are real) — gates the
@@ -444,6 +564,11 @@ declare class NativeRenderer implements IChartRenderer {
     private liveEaseHigh;
     private liveEaseLow;
     private liveEaseClose;
+    /** `animNewBar`: a NEW last bar grows from its open to its high/low/close with this time-constant (ms; 0 = it
+     *  appears at once). For a replay, whose steps reveal whole finished bars: drawing only, readers see the real bar. */
+    private animNewBarMs;
+    /** The glide in flight is a new bar growing in (it uses `animNewBarMs`, not the live-bar glide's rate). */
+    private newBarEasing;
     private axisDragEnabled;
     private scaleDragHolder;
     private scaleDragHeight;
@@ -452,9 +577,22 @@ declare class NativeRenderer implements IChartRenderer {
     private resizeAbove;
     private resizeBelow;
     private resizeSplitStart;
+    /** The user drawings take part in pointer input (the runtime `drawingsInteractive` feature). */
+    private drawingsInteractive;
+    /** TradingView's "Lock vertical cursor line by time": the crosshair's vertical line stays on this bar's time
+     *  while the horizontal line follows the pointer. Null = unlocked. Runtime-only (never in getConfig). */
+    private crosshairLockTime;
     private hoverSeparatorY;
     private maximizedPaneId;
     private rightAxisW;
+    /** Left-gutter width: one column per merged (own-scale) indicator, TradingView's "new left scale". 0 = none. */
+    private leftAxisW;
+    private leftScaleCol;
+    /** A vertical drag on the left scale rescales that merged indicator's own window. */
+    private leftScaleDrag;
+    /** Width of the master price column: RIGHT_AXIS_W at least, wider when the price labels need it. */
+    private masterAxisW;
+    private fitAxisRaf;
     private paneControls;
     private axisScaleButtons;
     private readonly paneActionCbs;
@@ -483,6 +621,8 @@ declare class NativeRenderer implements IChartRenderer {
     /** First-run config snapshot — what "Reset defaults" restores. */
     private factoryConfig;
     private hostSettingsSections;
+    /** The host's "Template ▾" menu for the settings dialog footer (see `setSettingsTemplateMenu`). */
+    private settingsTemplateMenu;
     private readonly clickCbs;
     private readonly axisLongPressCbs;
     private readonly inputChangeCbs;
@@ -490,6 +630,7 @@ declare class NativeRenderer implements IChartRenderer {
     private readonly toggleVisibleCbs;
     private readonly moveIndicatorCbs;
     private readonly priceStyleCbs;
+    private readonly priceStyleWillChangeCbs;
     constructor(opts?: RendererDisplayOptions);
     readonly name = "native";
     readonly features: readonly string[];
@@ -510,11 +651,14 @@ declare class NativeRenderer implements IChartRenderer {
      * so no stylesheet crosses the renderer boundary; pointer-transparent, and removed (not
      * hidden) on clear so a re-show picks up the current theme.
      */
+    /** See the port: hold panning at the oldest loaded bar while older ones still load. */
+    setOlderHistoryPending(pending: boolean): void;
     setLoading(loading: boolean): void;
     /**
      * Set the active symbol's tick size so the price axis shows the instrument's true
      * precision (see the port). Undefined / non-positive ⇒ fall back to the zoom formula.
      */
+    getPricePrecision(): number | undefined;
     setPricePrecision(mintick: number | undefined): void;
     /**
      * Snapshot the full chart cosmetics as one serializable, versioned document.
@@ -547,6 +691,13 @@ declare class NativeRenderer implements IChartRenderer {
      *  canonical theme. */
     private syncThemeControl;
     private toggleSettingsDialog;
+    /**
+     * The document "Reset defaults" applies: every setting back to its first-run value,
+     * with two things that are NOT settings held or resolved here — the price style
+     * stays the one the user is looking at, and the timeline-mark groups (an additive
+     * merge, like the type bags) are named back to their host-declared visibility.
+     */
+    private factoryResetDocument;
     /** Close the in-chart dialogs (indicator settings + chart-settings gear). No-op when none are open. */
     closeDialogs(): void;
     /** Jump-back-to-latest button — same size/border chrome as the drawing-toolbar collapse toggle. */
@@ -570,7 +721,7 @@ declare class NativeRenderer implements IChartRenderer {
     /** Glide the view back to the most recent bars, keeping the current zoom (barSpacing). */
     private scrollToRealtime;
     /** Ease rightOffset to `target` at constant zoom (see animTick's scroll glide);
-     *  instant when pan animation is off. Shared by scroll-to-latest and panBy. */
+     *  instant when the scroll glide is off. Shared by scroll-to-latest and panBy. */
     private glideRightOffset;
     /**
      * Export the current chart as a PNG data URL by compositing EVERY plot canvas onto
@@ -589,14 +740,28 @@ declare class NativeRenderer implements IChartRenderer {
      * crosshair (L2) is intentionally excluded. {@link screenshot} is this canvas
      * as a PNG data URL.
      */
-    screenshotCanvas(): HTMLCanvasElement | null;
-    screenshot(): string | null;
+    screenshotCanvas(opts?: {
+        scale?: number;
+    }): HTMLCanvasElement | null;
+    /** The canvas the screenshot is, at the canvases' current pixel ratio (see {@link screenshotCanvas}). */
+    private composeShot;
+    /** CSS box (viewport coordinates) of the last {@link screenshotCanvas}, for a host placing it in a layout. */
+    screenshotBox(): {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+    } | null;
+    screenshot(opts?: {
+        scale?: number;
+    }): string | null;
     /**
      * The candles-first-appear reveal — animates the **candles themselves** (no extra
      * element). Each candle's OHLC is interpolated from a flat tick at its open up to
      * full size, eased, with a left→right stagger so the chart draws itself; `settle`
      * adds an ease-out-back overshoot. Autoscale stays on the real bars so the frame
      * never moves. Re-callable, so styles can be compared live from the console.
+     * Style and sweep duration come from the resolved `intro` setting.
      */
     private playIntro;
     /** After the candle reveal, fade the indicator models (series/fills/…) from hidden to full. */
@@ -617,6 +782,19 @@ declare class NativeRenderer implements IChartRenderer {
      *  (`layout.background`) and its contrast-corrected text, so the scales read as part of the
      *  plot. Only the toolbar/dialog chrome stays on the stable app-theme surface. */
     private axisSurface;
+    /** The scale-button strip sits at the bottom of each pane's axis column and is painted SOLID so
+     *  the buttons cover the tick labels: on a gradient it takes the gradient's bottom color, the
+     *  nearest solid to where it sits. */
+    private axisButtonsTheme;
+    /** The Solid background color: the configured one, else the app theme's chart background. */
+    private solidBackground;
+    /** The plot's background as the CSS `background` of the wrapper — solid, or the vertical
+     *  gradient (painted by the browser once per setting change, never per frame). */
+    private backgroundCss;
+    /** A mount/theme swap re-bases the plot background to the app theme: drop the colors a config
+     *  set (`keepType`: the Solid/Gradient choice survives an app light/dark swap, only its colors
+     *  follow the new theme). */
+    private rebaseBackgroundToTheme;
     mount(container: HTMLElement, theme: VelaTheme): void;
     /**
      * Create + mount the L0 geometry backend and return its canvas. Picks WebGL2
@@ -643,19 +821,25 @@ declare class NativeRenderer implements IChartRenderer {
     private readonly onDprChange;
     setTheme(theme: VelaTheme): void;
     resize(): void;
-    /** Run a 1 Hz repaint pump while the countdown chip is on (so it ticks); stop it otherwise.
-     *  Chrome tier: only the chip's wall-clock text moves — an idle chart must not recompute
+    /** Drive the countdown chip from the host's second pulse (`null` → the renderer's own). */
+    setWallClock(clock: WallClock | null): void;
+    /** Subscribe to the second pulse while the countdown chip is on (so it ticks); unsubscribe
+     *  otherwise. Chrome tier: only the chip's text moves — an idle chart must not recompute
      *  scales or repaint the geometry/volume/VPVR/SDK layers once a second (that cost
      *  multiplies by the cell count in a multi-chart workspace). */
     private syncCountdownTimer;
+    /** Host hook for the price-axis countdown chip: return rows of text to show instead of
+     *  the bar-close countdown (e.g. while the market is shut), or null for the normal one.
+     *  Pass null to remove the hook. See `SceneGraph.countdownLines`. */
+    setCountdownLines(fn: ((lastBarEndMs: number, nowMs: number) => string[] | null) | null): void;
     destroy(): void;
     setBars(bars: OHLCV[], opts?: {
         preserveView?: boolean;
     }): void;
     updateBar(bar: OHLCV): void;
-    /** Set the live-bar glide duration (0 = off). A non-zero value is also remembered as
-     *  what the config's on/off toggle (`priceScale.animateLastPrice`) switches back on to. */
-    private setLiveBarEase;
+    /** Set the reveal (style + duration). A non-off style is also remembered as what the
+     *  config's on/off toggle (`animations.intro`) switches back on to. */
+    private setIntro;
     /** Snap the eased forming-bar state to `bar` — no glide (a fresh bar or the first tick of one). */
     private syncLiveEase;
     /** Glide the forming bar's displayed high/low/close toward the actual latest. Returns true while easing. */
@@ -674,8 +858,20 @@ declare class NativeRenderer implements IChartRenderer {
     onMoveIndicator(cb: (id: string, target: MoveTarget) => void): Unsubscribe;
     /** The number of merged (own-scale) scale columns needed = max across panes. */
     private maxOwnScaleColumns;
-    /** Recompute the right-gutter width (master column + one per merged scale). Re-sizes on change. */
+    /** Width of the pane master price column in px (grows to fit long price labels; AXIS_MASTER_W at least). */
+    priceColumnWidth(): number;
+    /** CSS x (from the plot's left edge) of a bar time; null before bars are laid out. */
+    timeToX(ms: number): number | null;
+    /** After a chrome paint: widen (or, with slack, narrow) the master price column to fit the widest label just
+     *  drawn. The resize runs on the next frame, never inside the paint. */
+    private fitPriceColumn;
+    /** Recompute the gutters: the master column on the right, one left column per merged scale. Re-sizes on change. */
     private refreshAxisWidth;
+    /** The plot's left edge in the wrapper: right of the drawings toolbar and the left scale. */
+    private plotLeft;
+    /** Drag the left scale up/down to stretch a merged indicator's own window (like the right scale); double-click
+     *  gives it back to autoscale. */
+    private wireLeftScale;
     /**
      * Re-derive one model's index offset: the chart bar index of its `anchorTime` (see
      * `IndicatorModel.anchorTime`). Absent anchor, or an anchor matching the first bar,
@@ -686,7 +882,7 @@ declare class NativeRenderer implements IChartRenderer {
     mountIndicator(model: IndicatorModel): IndicatorRenderHandle;
     updateIndicator(handle: IndicatorRenderHandle, patch: ScenePatch): void;
     removeIndicator(handle: IndicatorRenderHandle): void;
-    setIndicatorInputs(handle: IndicatorRenderHandle, values: Record<string, InputValue>, props?: Record<string, InputValue>): void;
+    setIndicatorInputs(handle: IndicatorRenderHandle, values: Record<string, InputValue>, props?: Record<string, InputValue>, style?: Record<string, InputValue>): void;
     setSymbolPicker(picker: SymbolPickerFn | null): void;
     setLegendActions(provider: ((indicatorId: string) => LegendActionView[]) | null): void;
     setLegendCallouts(provider: ((indicatorId: string) => LegendCalloutView[]) | null): void;
@@ -702,11 +898,13 @@ declare class NativeRenderer implements IChartRenderer {
     onInputChange(cb: (e: InputChangeEvent) => void): Unsubscribe;
     onToggleIndicatorVisible(cb: (id: string, visible: boolean) => void): Unsubscribe;
     onPriceStyleChange(cb: (style: PriceStyle) => void): Unsubscribe;
+    onPriceStyleWillChange(cb: (from: PriceStyle, to: PriceStyle) => void): Unsubscribe;
     /**
      * THE single write path for the base price style at runtime (feature set / settings dialog /
-     * config template — the constructor seeds the field directly, pre-listeners). Updates the
-     * scene, eases any reveal layer toward the new style's target, and notifies the core —
-     * which owns the DATA side of styles that need one (a chart type's SeriesDataEngine).
+     * config template — the constructor seeds the field directly, pre-listeners). Announces the
+     * switch while the scene still holds the old style (a listener may paint/capture that frame),
+     * then updates the scene, eases any reveal layer toward the new style's target, and notifies
+     * the core — which owns the DATA side of styles that need one (a chart type's SeriesDataEngine).
      */
     private setPriceStyle;
     onRemoveIndicator(cb: (id: string) => void): Unsubscribe;
@@ -716,6 +914,7 @@ declare class NativeRenderer implements IChartRenderer {
      *  whenever the latest bars are off-screen (touch has no cursor proximity). */
     setLayoutMode(mode: 'mobile' | 'desktop'): void;
     setSettingsSections(sections: HostSettingsSection[]): void;
+    setSettingsTemplateMenu(provider: (() => SettingsTemplateMenuView | null) | null): void;
     setSettingsVisibility(policy: {
         hidden?: readonly string[];
     }): void;
@@ -726,9 +925,30 @@ declare class NativeRenderer implements IChartRenderer {
     onCrosshairMove(cb: (e: CrosshairEvent) => void): Unsubscribe;
     onClick(cb: (e: ClickEvent) => void): Unsubscribe;
     onAxisLongPress(cb: (e: AxisLongPressEvent) => void): Unsubscribe;
+    setTimelineMarks(marks: readonly TimelineMark[], groups: readonly MarkGroup[]): void;
+    onMarkClick(cb: (e: MarkClickEvent) => void): Unsubscribe;
+    /** Every group the lane knows: the defined ones, then those marks name without a definition. */
+    private markGroupsInUse;
+    /**
+     * The groups as the Events tab lists them: nested only under a DEFINED parent. The
+     * painter's visibility chain resolves parents against the defined groups alone, so a
+     * parent that marks merely name must not nest (and dim) a child the painter still shows.
+     */
+    private markGroupsForEventsTab;
     onViewportChange(cb: (range: VisibleRange) => void): Unsubscribe;
     getVisibleRange(): VisibleRange | null;
     setVisibleRange(range: VisibleRange): void;
+    /** The x of the bar centre nearest to `x` (the Zoom In box runs between bar centres). */
+    zoomSnapX(x: number): number;
+    /**
+     * TradingView's Zoom In (`zoomToViewport`, module 649873): the bars from the press to the release fill the
+     * width, and the pane under the press shows the two prices top to bottom with autoscale off. Returns what
+     * {@link restoreZoom} needs to put the view back (the zoom stack's entry), or null when both ends sit on the
+     * same bar (TradingView then does nothing).
+     */
+    zoomToBox(x0: number, y0: number, x1: number, y1: number): ZoomSnapshot | null;
+    /** Zoom Out: back to the view a {@link zoomToBox} left (its bar spacing and offset, and the pane's scale mode). */
+    restoreZoom(snap: ZoomSnapshot): void;
     /** Pan by a fraction of the visible width at constant zoom (positive ⇒ toward the
      *  latest bars). Mirrors a drag exactly: the target is clamped by the same viewport
      *  bounds (so panning forward stops at the newest candle plus the bounded right
@@ -747,7 +967,9 @@ declare class NativeRenderer implements IChartRenderer {
      *  - zoom OUT no further than "all bars + a small margin fill the width" (no thin strip
      *    of compressed candles floating in whitespace);
      *  - zoom IN no further than keeping ≥ {@link MIN_VISIBLE_BARS} candles on screen;
-     *  - pan no further than a bounded right whitespace / the same minimum visible.
+     *  - pan no further than a bounded right whitespace / the same minimum visible;
+     *  - while older bars still load, pan no further back than the oldest loaded bar at
+     *    {@link OLDER_HOLD_FRAC} of the width (the hold moves back as each page lands).
      * Applied at every viewport write (drag, wheel, fling, time-axis drag, keyboard).
      */
     private clampViewport;
@@ -760,6 +982,24 @@ declare class NativeRenderer implements IChartRenderer {
     private emitViewportChange;
     private handlePointerMove;
     private handleClick;
+    /**
+     * Fan out (or collapse, with null) a multi-group mark stack; repaints the chrome tier when
+     * it changes. A stack whose glyph holds the open popup stays fanned — the pointer leaving
+     * the plot for the popup must not bury the glyph under the deck (which would close it).
+     */
+    private setMarksExpanded;
+    /**
+     * A click on the mark lane: a collapsed deck fans out (the touch path — a mouse already
+     * fanned it by hovering), a glyph reports its cluster (`onMarkClick`) and opens the popup
+     * when any of its marks carries content. True when the click landed on the lane.
+     */
+    private handleMarkClick;
+    /** After a chrome frame: keep the open mark popup on its glyph, or close it once the glyph is gone. */
+    private trackMarkPopover;
+    /** The lane glyph under the pointer — it swells once as the pointer lands (a rAF-driven chrome repaint for the pulse's duration). */
+    private setMarkHover;
+    /** Run a chrome-tier repaint loop while a glyph's hover pulse or click flash plays; it stops itself once both are over. */
+    private syncMarkPulse;
     private paneAtY;
     /** The pane node whose vertical bounds contain `y` (linear scan; panes don't overlap). */
     private paneNodeAtY;
@@ -786,8 +1026,8 @@ declare class NativeRenderer implements IChartRenderer {
      * still fits the view.)
      */
     private dataDblClick;
-    /** Re-fit the view and drop every manual scale (keyboard `0`). */
-    private resetView;
+    /** Re-fit the view and drop every manual scale (keyboard `0`, Alt+R): the newest 200 bars at the right margin. */
+    resetView(): void;
     private setManualScale;
     /** Relayout + repaint + refresh the hover buttons after a collapse/maximize/order change. */
     private afterPaneLayoutChange;
@@ -795,6 +1035,9 @@ declare class NativeRenderer implements IChartRenderer {
     private paneControlViews;
     /** Reorder a study pane one slot up/down (renderer-applied, mirrored to core via onPaneAction). */
     private movePaneLocal;
+    /** Merge a study pane into its neighbour (TradingView's "Merge pane up / down"): every indicator moves there, each
+     *  on its own scale; the emptied pane closes. One gesture, so the host undoes it as one step. */
+    private mergePaneLocal;
     /** True when `y` is within the hit zone of a draggable sub-pane separator. */
     private paneSeparatorAt;
     /** Pixel y of the draggable separator under the cursor (for the hover highlight), or null. */
@@ -831,29 +1074,44 @@ declare class NativeRenderer implements IChartRenderer {
     private dataWindowPricePane;
     private dataWindowFmt;
     private dataWindowOHLC;
-    /** One group per indicator (name = indicator title), each with a row per drawable plot. */
+    /** One group per indicator (name = indicator title), each with a row per plot shown in the data window. */
     private dataWindowGroups;
-    /** One indicator's readout at bar `idx`: a row per drawable plot, formatted on its pane's scale. */
-    private dataWindowRowsFor;
+    /** One indicator's readout at bar `idx` for one value surface (the legend or the data window):
+     *  a row per plot shown on that surface, formatted on its pane's scale. A plot's `display`
+     *  decides per surface — a data-window-only plot has a row here and none in the legend. */
+    private readoutRowsFor;
     /** The volume indicator's readout: the bar's volume, tinted with the layer's own direction
      *  colors. Hiding volume keeps its model in the scene (only the layer is suppressed — see
      *  `setIndicatorVisible`), so the hidden flag is checked here rather than by model absence. */
     private volumeReadoutRows;
-    /** Refresh the plot values beside every legend title — the same readout the data window
-     *  shows (crosshair bar, else the latest bar), pushed per paint. A hidden indicator has
-     *  no scene model, so its row is absent from the map and its readout clears. */
+    /** Refresh the plot values beside every legend title — the same bar the data window reads
+     *  (crosshair bar, else the latest bar), pushed per paint, filtered to the plots whose
+     *  `display` includes the legend. A hidden indicator has no scene model, so its row is
+     *  absent from the map and its readout clears. */
     private updateLegendValues;
     private renderFrame;
+    /** Repaint the L2 crosshair canvas and keep the `.vela-shade-right` element on the veil it painted. */
+    private renderCrosshairLayer;
+    /** Position (or hide) the `.vela-shade-right` element over the veil of the last crosshair frame. */
+    private syncShadeRight;
     /** Repaint the SDK layers that opted into cursor tracking (their own canvas only). */
     private repaintCursorLayers;
     /** Blank one SDK layer canvas (a collapsed host pane suppresses the layer's painting). */
     private clearLayerCanvas;
-    /** One frame's args for an SDK renderer layer (shared by the data + cursor paint paths). */
+    /** One frame's args for an SDK renderer layer (shared by the data + cursor paint paths).
+     *  Data + pending come from the entry's channel (per instance for a dedicated entry);
+     *  the settings bag is the TYPE's — a chart type's dialog values, one bag per type. */
     private extLayerArgs;
     /** Paint the below-data (L-1) + geometry (L0) + chrome (L1) layers from the current scene/coords. */
     private paintData;
     /** Build the data→pixel projector user drawings resolve their anchors through. */
     private drawingProjector;
+    /** The bar axis drawings place their future anchors on, while the chart type supplies its own bars (their x
+     *  counts bars, not time); null on a time chart. See core `futureAnchors`. */
+    private drawingBarAxis;
+    /** The bar holding `t`: the last one opened at or before it (TradingView also takes the first bar for a time up
+     *  to a day before it). `this.bars` is ascending, so a binary search. */
+    private barAtTime;
     /** OHLC bars whose open-time falls within `[from, to]` (inclusive) — the data a regression
      *  (or other statistical) drawing fits against. `this.bars` is ascending, so a linear scan is fine. */
     private barsInTimeRange;
@@ -900,7 +1158,7 @@ declare class NativeRenderer implements IChartRenderer {
     private tradesScaleHints;
     private fitContent;
     /** Re-frame after a series replacement (a symbol/timeframe switch): keep the user's
-     *  zoom (bar spacing), re-anchor the newest bars at the default right offset.
+     *  zoom (bar spacing), re-anchor the newest bars at the configured right margin.
      *  `clampViewport`'s fit-all-bars floor deliberately does NOT apply — a progressive
      *  head may still be backfilling toward the previous depth, and raising the spacing
      *  to its temporary bar count would lose the zoom this exists to keep. */
@@ -911,10 +1169,39 @@ declare class NativeRenderer implements IChartRenderer {
     private paneMasterTitle;
     /** The pane a bespoke-layer native indicator (volume/vpvr) currently lives in (null = not mounted). */
     private nativeLayerPane;
-    /** The mounted native indicator that OWNS an SDK layer — the one whose type equals the
-     *  layer id (the id doubles as the data channel, so the pairing is the SDK's own
-     *  contract). Null for chart-type channels and while the owner is hidden (a hidden
-     *  indicator leaves the scene; its cleared data channel paints nothing anyway). */
+    /**
+     * Types of the INDICATOR layers no indicator on this chart paints through: their base entries hold no canvas
+     * memory and are not painted (2026-10-26, a tab crash adding copies). Every registered layer gets a base entry,
+     * and each held a full plot-sized canvas whether or not its indicator was on the chart: 77 canvases, ~1.4 GB of
+     * backing store at 2x DPI on a page with nothing added. A layer of an indicator type paints only data its
+     * indicator pushes, so with no copy of that indicator using the base channel there is nothing to show. Layers
+     * that are not an indicator's (a chart type, chrome, a background) keep painting as before.
+     */
+    private idleLayerTypes;
+    private layerIdle;
+    /** Drop an idle layer canvas's backing store (a 0x0 canvas holds none). */
+    private releaseLayerCanvas;
+    /** Give a layer canvas the plot's backing size again (it was idle, or is new). */
+    private fitLayerCanvas;
+    /** One transparent, pointer-transparent SDK layer canvas covering the plot. */
+    private createLayerCanvas;
+    /**
+     * Mount the DEDICATED layer of a native indicator that names its own channel (an
+     * instance of a multi-instance type painting through a registered layer): a fresh
+     * instance of the layer's definition on its own canvas, reading that channel. Idempotent
+     * — a show after hide re-mounts the model, and the layer (kept across the hide, like the
+     * z key) is simply reused. Skipped while the renderer itself is unmounted (`mount()`
+     * catches up from the scene).
+     */
+    private ensureInstanceLayer;
+    /** Tear down the dedicated layer of a removed indicator (a hide keeps it). */
+    private dropInstanceLayer;
+    /** The mounted native indicator that OWNS an SDK layer entry. A dedicated entry is
+     *  owned by the instance it was mounted for; the base entry by the mounted indicator
+     *  whose type equals the layer id and that has no channel of its own (the id doubles
+     *  as the data channel, so the pairing is the SDK's own contract). Null for chart-type
+     *  channels and while the owner is hidden (a hidden indicator leaves the scene; its
+     *  cleared data channel paints nothing anyway). */
     private layerOwner;
     /** The pane an SDK layer paints on: its owner's pane, else the price pane. */
     private layerPane;
@@ -938,6 +1225,25 @@ declare class NativeRenderer implements IChartRenderer {
      *  models whose type names a mounted layer) — its scale then follows the visible bars
      *  (see the call site). Any real master series takes over the scale as usual. */
     private layerNativesOwnPane;
+    /**
+     * True for the layer painting the ACTIVE chart type (the base entry whose id is the
+     * current price style) while the price series is hidden. The chart type IS the price
+     * series, so "hide chart" blanks its layer along with the bars; an indicator's layer
+     * (an overlay layer native, on any pane) is independent content and keeps painting.
+     */
+    private layerHiddenWithCandles;
+    /**
+     * True when an overlay layer native (a series-less model whose type names a mounted
+     * layer) sits on the price pane: it paints at BAR PRICES without contributing a series,
+     * so hiding the candles must keep the bars in the price scale — with nothing else on the
+     * pane the scale would fall to the {0,1} placeholder and the layer would paint off-screen
+     * and vanish. The chart type's own layer does not count: it is blanked with the candles.
+     */
+    private priceLayersAnchoredToBars;
+    /** True when the pane's master content contributes SOMETHING to its autoscale besides
+     *  the candles: a series painted on the pane (force_overlay ones scale elsewhere), a
+     *  price line, or a measured drawings range. Mirrors what `computePaneScale` considers. */
+    private paneHasMeasurableContent;
     /** Per-pane scale state for a host UI (e.g. a price-axis context menu): the pane's pixel
      *  band (`top`/`height`, so a click y maps to a pane) plus its current axis `mode`/`log`.
      *  Top-to-bottom order. Every pane is independent — the price pane from the scene setting,
@@ -1008,6 +1314,66 @@ declare class NativeRenderer implements IChartRenderer {
     private applyBackground;
 }
 
+interface FavoritesBarOptions {
+    /** The element the bar floats over (the chart area). It must be positioned. */
+    host: HTMLElement;
+    theme: VelaTheme;
+    /** Pick a tool (same path as the left toolbar's buttons). */
+    onPick: (type: DrawingTypeKey) => void;
+    /** localStorage key for position and visibility. `null` keeps nothing. */
+    storageKey?: string | null;
+    /** Told when the user shows or hides the bar, so the left toolbar's toggle can follow. */
+    onShownChange?: (shown: boolean) => void;
+}
+/**
+ * The floating favourites toolbar (TradingView's "Favorites toolbar"): a compact horizontal pill
+ * with a drag grip on the left and one button per starred drawing tool, in the order the tools
+ * were starred. It floats over the chart, can be dragged anywhere inside the host and keeps its
+ * position (localStorage). It shows only when at least one tool is starred AND the user has not
+ * hidden it with the left toolbar's star toggle. Icons come from the toolbar definition, so they
+ * are the same glyphs as the left toolbar; the active tool is highlighted.
+ */
+declare class FavoritesBar {
+    private readonly opts;
+    private readonly root;
+    private readonly grip;
+    private readonly items;
+    private def;
+    private favorites;
+    private active;
+    private theme;
+    private shown;
+    /** The host-side visibility (the drawing toolbar itself is visible). */
+    private enabled;
+    private pos;
+    private drag;
+    private readonly btns;
+    private tipDisposers;
+    private readonly ro;
+    constructor(opts: FavoritesBarOptions);
+    setDefinition(def: ToolbarDefinition): void;
+    setFavorites(types: readonly DrawingTypeKey[]): void;
+    setActiveTool(type: DrawingTypeKey | null): void;
+    setTheme(theme: VelaTheme): void;
+    /** Host-side visibility (the drawing toolbar was hidden or shown). */
+    setEnabled(on: boolean): void;
+    /** User-facing show/hide (the left toolbar's star toggle). Persisted. */
+    isShown(): boolean;
+    setShown(on: boolean): void;
+    /** True when the bar is on screen right now. */
+    isVisible(): boolean;
+    destroy(): void;
+    private toolOf;
+    private render;
+    /** Show or hide, then place the bar inside the host (clamped; the saved spot is kept). */
+    private layout;
+    private readonly onGripDown;
+    private readonly onGripMove;
+    private readonly onGripUp;
+    private load;
+    private save;
+}
+
 /** Cosmetic/placement options — defaults reproduce the in-renderer docked bar exactly. */
 interface DrawingToolbarOptions {
     /** Border/divider color. Default: the theme's border color (follows theme swaps). */
@@ -1021,11 +1387,23 @@ interface DrawingToolbarOptions {
     /** Collapse/expand notification — a docked host resizes its gutter reservation to
      *  {@link TOOLBAR_COLLAPSED_WIDTH} / the full width (a static bar reflows on its own). */
     onCollapse?: (collapsed: boolean) => void;
+    /** TradingView's Zoom In button (under Measure): arms or disarms the zoom box. No button without it. */
+    onZoom?: () => void;
+    /** TradingView's Zoom Out button, shown under Zoom In while there is a zoom to go back from. */
+    onZoomOut?: () => void;
     /** When given, a drawings-sync toggle renders below the stay button: enabled, every
      *  NEWLY CREATED drawing is copied onto the other linked charts and the set stays
      *  linked — edits and removals follow (a multi-chart host's concern — a
      *  single-chart bar omits the callback and never shows it). */
     onDrawingsSync?: (on: boolean) => void;
+    /** When given, starred tools also show on a floating favourites bar over `host` (the
+     *  chart area, positioned), and a "Show Favorites Toolbar" star toggle renders at the
+     *  bottom of this bar. Position and visibility persist under `storageKey`
+     *  (localStorage; `null` keeps nothing). */
+    favoritesBar?: {
+        host: HTMLElement;
+        storageKey?: string | null;
+    };
 }
 /**
  * The vertical drawing toolbar (renderer chrome), docked as a flush bar in the left gutter. Each
@@ -1061,6 +1439,9 @@ declare class DrawingToolbar {
     private flyout;
     private flyoutOwnerId;
     private flyoutCell;
+    /** Closed flyouts still playing their exit animation, by owner id — reopening the same
+     *  owner takes its element back instead of stacking a second one on it. */
+    private readonly exitingFlyouts;
     private readonly groupCells;
     private readonly groupIcons;
     private cursorBtn;
@@ -1070,12 +1451,21 @@ declare class DrawingToolbar {
     private lastMagnetOn;
     private measureBtn;
     private measureActive;
+    private zoomBtn;
+    private zoomActive;
+    private zoomOutBtn;
+    private zoomOutShown;
+    private readonly onZoom;
+    private readonly onZoomOut;
     private eraserBtn;
     private eraserActive;
     private stayBtn;
     private stayActive;
     private syncBtn;
     private syncActive;
+    /** The floating favourites bar (only when the host passed `favoritesBar`). */
+    private readonly favBar;
+    private favToggleBtn;
     private collapseBtn;
     private collapsed;
     private visible;
@@ -1089,6 +1479,8 @@ declare class DrawingToolbar {
     private readonly onCollapse;
     private readonly onDrawingsSync;
     constructor(host: HTMLElement, theme: VelaTheme, onArm: (type: DrawingTypeKey | null) => void, onMagnet?: (mode: SnapMode) => void, onMeasure?: () => void, onEraser?: () => void, onToggleFavorite?: (type: DrawingTypeKey, on: boolean) => void, onStayMode?: (on: boolean) => void, options?: DrawingToolbarOptions);
+    /** The floating favourites bar, when this toolbar hosts one (tests and hosts read it). */
+    get favoritesBar(): FavoritesBar | null;
     /** Live divider/border ink — the option override, else the current theme's border
      *  (so a theme swap re-inks the bar without a rebuild option). */
     private get borderColor();
@@ -1111,6 +1503,8 @@ declare class DrawingToolbar {
     setTheme(theme: VelaTheme): void;
     destroy(): void;
     private rebuild;
+    /** The star toggle: lit while the favourites bar is switched on. */
+    private paintFavToggle;
     /** Collapse to a slim expand-strip / restore the full bar, and tell the host so a
      *  docked renderer can resize its gutter reservation. */
     private toggleCollapsed;
@@ -1131,6 +1525,8 @@ declare class DrawingToolbar {
     private onGroupIconClick;
     /** Clicking the chevron toggles the group's flyout (same group → close; another → switch). */
     private onArrowClick;
+    /** TradingView's Icons panel: pick an emoji or an icon, and the tool is armed with it. */
+    private openIconsPanel;
     /** The magnet icon toggles the last-used strength on/off; the chevron opens the strength menu. */
     private toggleMagnet;
     private onMagnetArrowClick;
@@ -1141,6 +1537,11 @@ declare class DrawingToolbar {
     /** Highlight the Measure ruler button while the transient ruler is armed. */
     setMeasureActive(active: boolean): void;
     private paintMeasure;
+    /** Highlight Zoom In while its box is armed. */
+    setZoomActive(active: boolean): void;
+    /** Show Zoom Out while there is a Zoom In to go back from (TradingView hides it otherwise). */
+    setZoomOutShown(shown: boolean): void;
+    private paintZoom;
     /** Highlight the Eraser button while erase mode is active. */
     setEraserActive(active: boolean): void;
     private paintEraser;
@@ -1162,9 +1563,9 @@ declare class DrawingToolbar {
     private openMagnetFlyout;
     private flyoutHeader;
     private flyoutSeparator;
-    /** A flyout row, left to right: optional leading icon, label, a check when it's the selected
-     *  entry, an optional shortcut hint, and — at the far right — the favorite star (tool rows).
-     *  Hover tint is CSS (`.vela-dtb-item:hover`), so navigating the menu stays smooth. */
+    /** A flyout row, left to right: optional leading icon badge, label, a check when it's the
+     *  selected entry, an optional shortcut hint, and — at the far right — the favorite star (tool
+     *  rows). Hover tint is CSS (`.vela-dtb-item:hover`), so navigating the menu stays smooth. */
     private makeFlyoutItem;
     private readonly onOutside;
     private closeFlyout;
@@ -1260,6 +1661,8 @@ declare class MultiProviderFeed implements MarketDataFeed {
     private liveBars;
     /** Sync-accessible symbol metadata, warmed by load()/symbolInfoFor (the engine reads it synchronously). */
     private readonly symInfoCache;
+    /** Requests in flight, keyed like the cache — every concurrent asker shares one round trip. */
+    private readonly symInfoInflight;
     constructor(store?: BarStore);
     registerProvider(name: string, provider: DataProvider): Promise<void>;
     unregisterProvider(name: string): void;
@@ -1277,6 +1680,8 @@ declare class MultiProviderFeed implements MarketDataFeed {
     providerInstance(name: string): DataProvider | undefined;
     /** The icon URL for a DESCRIPTOR — its owning provider's `resolveSymbolIcon` (picker rows). */
     symbolIconOf(d: SymbolDescriptor): string | undefined;
+    /** The venue logo for a DESCRIPTOR — its owning provider's `resolveVenueIcon` (picker badge). */
+    venueIconOf(d: SymbolDescriptor): string | undefined;
     /** The icon URL for a raw SYMBOL string — resolve, then route (statusline, object tree). */
     symbolIcon(raw: string): string | undefined;
     symbols(name?: string): SymbolDescriptor[];
@@ -1291,6 +1696,19 @@ declare class MultiProviderFeed implements MarketDataFeed {
     ready(): Promise<void>;
     /** Async per-symbol metadata (the facade's `chart.data.symbolInfo`); also warms the sync cache. */
     symbolInfoFor(raw: string): Promise<SymbolInfo | undefined>;
+    /**
+     * One round trip per symbol, shared. A market switch probes this metadata from five
+     * places at once (the bar load's prefetch, the renderer's tick size, the market-status
+     * badge, the session shading, the session toggle) — without the in-flight map each
+     * would open its own request for the same answer, and the last one to land decided how
+     * late the chrome settled.
+     *
+     * Cached for {@link SYMBOL_INFO_TTL_MS}: this metadata is stable within a session
+     * (tick size, session vocabulary, listing prefix), but not immutable — a continuous
+     * futures row rolls its current contract — so the entry expires rather than pinning the
+     * session's first answer forever. A failed probe is NOT remembered: the next asker retries.
+     */
+    private fetchSymbolInfo;
     /**
      * Per-symbol capabilities, resolved through the owning provider's `capabilitiesFor`
      * refinement (an instrument may support more than its provider-wide baseline), falling back to the
@@ -1380,12 +1798,28 @@ declare class CachingDataFeed implements MarketDataFeed {
 /**
  * Bar duration in ms for a Vela timeframe: a bare number is **minutes** (Pine
  * resolution — `60` = 1h, `240` = 4h), `D`/`W`/`M` are the named periods, and the
- * `15m`/`4h`/`1d`/`1w` aliases are also accepted. Falls back to 1h for anything unparsed.
+ * `15m`/`4h`/`1d`/`1w` aliases are also accepted, and seconds as `15S` (Pine / the timeframe picker) or `15s`. Falls back to 1h for anything unparsed.
  */
 declare function timeframeToMs(timeframe: string): number;
+
+/**
+ * Ticks from the chart's own data provider at a finer `timeframe` (`'1'`, `'5'`, …): for
+ * each replayed bar, the lower-timeframe bars inside its span are fetched and each becomes
+ * one update ({@link barsToTicks}) — a 15m bar replayed from 1m bars takes 15 intervals. The symbol and session are read when the bar is due, so the
+ * source follows a market switch. Unresolvable symbol or nothing served ⇒ the bar plays whole.
+ */
+declare function lowerTimeframeTicks(chart: {
+    readonly market: MarketSnapshot;
+    readonly data: DataControl;
+}, timeframe: string): ReplayTickSource;
+/**
+ * Turn bars into the ticks a replay plays: one update per bar — the candle closes at its
+ * close and stretches to its high and low, with its volume; the first bar also sets the open.
+ */
+declare function barsToTicks(bars: readonly OHLCV[]): ReplayTick[];
 
 declare const DARK_THEME: VelaTheme;
 declare const LIGHT_THEME: VelaTheme;
 declare function resolveTheme(theme?: ThemeName | VelaTheme): VelaTheme;
 
-export { AxisLongPressEvent, BarRange, BarStore, CachingDataFeed, type ChartConfig, type ChartStyle, ClickEvent, CrosshairEvent, DARK_THEME, DataProvider, DataWindowReadout, Drawing, DrawingStore, DrawingToolbar, type DrawingToolbarOptions, DrawingTypeKey, DrawingsDocument, IChartRenderer, IDrawingsRendererPort, IndicatorModel, IndicatorRenderHandle, InputChangeEvent, InputValue, LIGHT_THEME, LineStyle, MarketConfig, MarketDataFeed, Millis, MultiProviderFeed, NativeRenderer, OHLCV, Pane, PriceStyle, ProviderCapabilities, ProviderInfo, RendererCapabilities, RendererDisplayOptions, Resolved, ScenePatch, SerializedDrawing, SnapMode, SymbolDescriptor, SymbolInfo, ThemeName, ToolbarDefinition, VelaTheme, VisibleRange, resolveTheme, sharedBarStore, timeframeToMs };
+export { AxisLongPressEvent, BarRange, BarStore, CachingDataFeed, type ChartConfig, type ChartStyle, ClickEvent, CrosshairEvent, DARK_THEME, DataControl, DataProvider, DataWindowReadout, Drawing, DrawingStore, DrawingStyle, DrawingText, DrawingToolbar, type DrawingToolbarOptions, DrawingTypeKey, DrawingsDocument, IChartRenderer, IDrawingsRendererPort, IMAGE_MAX_BYTES, IMAGE_MAX_SIDE, IMAGE_TYPES, IndicatorModel, IndicatorRenderHandle, InputChangeEvent, InputValue, LIGHT_THEME, LineStyle, MarkClickEvent, MarkGroup, MarketConfig, MarketDataFeed, MarketSnapshot, Millis, MultiProviderFeed, NativeRenderer, OHLCV, Pane, PriceStyle, ProviderCapabilities, ProviderInfo, RendererCapabilities, RendererDisplayOptions, ReplayTick, ReplayTickSource, Resolved, ScenePatch, SerializedDrawing, SnapMode, SymbolDescriptor, SymbolInfo, ThemeName, TimelineMark, type ToolSettings, ToolbarDefinition, VelaTheme, VisibleRange, WallClock, XPOST_POSITION, XPOST_W, type XPostCard, barsToTicks, checkImageFile, clearToolSettings, lowerTimeframeTicks, resolveTheme, sharedBarStore, timeframeToMs, toXPostCard, toolSettings };

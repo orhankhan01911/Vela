@@ -1,5 +1,5 @@
-import { O as OHLCV, U as Unsubscribe } from '../options-BSbXQdMy.cjs';
-import { D as DataProvider, P as ProviderInfo, B as BarRange, S as SymbolInfo, a as SymbolDescriptor } from '../DataProvider-BkC1cCw8.cjs';
+import { O as OHLCV, U as Unsubscribe } from '../options-E_TmxEA7.cjs';
+import { D as DataProvider, P as ProviderInfo, B as BarRange, S as SymbolInfo, a as SymbolDescriptor } from '../DataProvider-_iHbkEgK.cjs';
 
 /**
  * Binance market-data provider, built from scratch on the public REST + WebSocket

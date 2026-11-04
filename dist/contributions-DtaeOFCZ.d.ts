@@ -1,5 +1,5 @@
-import { u as Millis, aj as InputSchema, ah as IndicatorMeta, P as PriceStyle, O as OHLCV, I as InputValue, l as IndicatorModel, k as MoveTarget, av as PaneAxis, aI as SeriesSpec, af as Fill, B as Background, aA as PriceLine, a2 as DrawingLine, _ as DrawingBox, a1 as DrawingLabel, a6 as DrawingPolyline, a3 as DrawingLinefill, ab as DrawingTable, h as IndicatorStatus, a as VisibleRange, c as VelaTheme, S as SerializedDrawing, w as DrawingTypeKey, v as SnapMode, a4 as DrawingMode, e as IChartRenderer, R as RendererCapabilities, o as LegendActionView, p as LegendCalloutView, U as Unsubscribe, C as CrosshairEvent, A as AxisLongPressEvent, s as DataWindowReadout, n as SymbolPickerFn, aX as PaneInfo, ae as DrawingsOption, a8 as DrawingSeriesGateway, D as Drawing, b as VelaOptions, y as AddIndicatorOptions, au as MarketSwitch, at as MarketSnapshot, V as VisibleRangePreset, T as ThemeName } from './options-BSbXQdMy.js';
-import { S as SymbolInfo, B as BarRange, M as MarketDataFeed, D as DataProvider, P as ProviderInfo, a as SymbolDescriptor, b as ProviderCapabilities } from './DataProvider-BPCAysxU.js';
+import { x as Millis, aq as InputSchema, al as IndicatorMeta, P as PriceStyle, O as OHLCV, k as InputValue, i as IndicatorModel, M as MoveTarget, aJ as PaneAxis, b1 as SeriesSpec, aj as Fill, H as Background, aS as PriceLine, a7 as DrawingLine, a2 as DrawingBox, a6 as DrawingLabel, ab as DrawingPolyline, a8 as DrawingLinefill, af as DrawingTable, f as IndicatorStatus, u as VisibleRange, bq as IndicatorPlacement, V as VelaTheme, S as SerializedDrawing, b as DrawingTypeKey, y as SnapMode, a9 as DrawingMode, t as MarkClickEvent, I as IChartRenderer, R as RendererCapabilities, m as LegendActionView, n as LegendCalloutView, aY as ScreenshotOptions, U as Unsubscribe, C as CrosshairEvent, q as ClickEvent, A as AxisLongPressEvent, v as DataWindowReadout, l as SymbolPickerFn, p as SettingsTemplateMenuView, W as WallClock, br as PaneInfo, ai as DrawingsOption, ad as DrawingSeriesGateway, c as Drawing, r as TimelineMark, s as MarkGroup, be as VelaOptions, F as AddIndicatorOptions, aI as MarketSwitch, E as MarketSnapshot, bf as VisibleRangePreset, T as ThemeName, b5 as SettingsMenuRowView } from './options-E_TmxEA7.js';
+import { S as SymbolInfo, B as BarRange, M as MarketDataFeed, D as DataProvider, P as ProviderInfo, a as SymbolDescriptor, b as ProviderCapabilities } from './DataProvider-Brs7Yc4U.js';
 
 /**
  * A strategy's broker state at ONE bar — the flat summary a host reads while a script
@@ -47,6 +47,23 @@ interface StrategyTrade {
     exit?: StrategyFill;
     /** Still open at the last computed bar. */
     open: boolean;
+    /**
+     * Realized P&L of this round trip in account currency, net of commission. Absent
+     * while the trade is open, and for an engine that reports no per-trade ledger.
+     */
+    pnl?: number;
+    /** Commission charged on this trade, in account currency. */
+    commission?: number;
+    /**
+     * Worst / best unrealized excursion of THIS trade from its entry, in account
+     * currency (positive magnitudes). Read `maxDrawdown` as the adverse excursion and
+     * `maxRunup` as the favorable one — the per-trade counterparts of the account-level
+     * {@link StrategyState.maxDrawdown} / {@link StrategyState.maxRunup}. An engine
+     * defines the exact convention (intrabar extremes, commission handling); absent when
+     * it does not track them.
+     */
+    maxDrawdown?: number;
+    maxRunup?: number;
 }
 /** One side of a {@link StrategyTrade}. */
 interface StrategyFill {
@@ -275,16 +292,30 @@ interface IndicatorEventMap extends Record<string, unknown> {
         time: number;
     };
 }
+/** How a {@link IndicatorHandle.updateCode} call ended. Never a rejection. */
+interface CodeUpdateResult {
+    /** The new code is the one running (or, hidden, the one that will run when shown). */
+    ok: boolean;
+    /** Why the update did not land — the previous code is running again. Null on success. */
+    error: Error | null;
+}
 /**
  * What `chart.addIndicator(...)` returns to the developer. The handle is usable
  * synchronously; data renders when execution resolves (see `on('ready')`).
  */
+/** An indicator's settings at one moment (see {@link IndicatorHandle.settings}). */
+interface IndicatorSettings {
+    inputs: Record<string, InputValue>;
+    props: Record<string, InputValue>;
+    style: Record<string, InputValue>;
+}
 interface IndicatorHandle {
     readonly id: string;
     readonly title: string;
-    /** The script source this indicator was added with. `undefined` for a NATIVE
-     *  (core-computed) indicator — there is no script to show. What a host editor
-     *  opens when a legend action asks for "the code behind this row". */
+    /** The script source this indicator currently runs (the one it was added with,
+     *  until {@link updateCode} replaces it). `undefined` for a NATIVE (core-computed)
+     *  indicator — there is no script to show. What a host editor opens when a legend
+     *  action asks for "the code behind this row". */
     readonly source?: string;
     /** The registered type of a NATIVE (core-computed) indicator — `undefined` for a
      *  script indicator. The two are exclusive: a handle has a `source` or a `nativeType`. */
@@ -303,12 +334,43 @@ interface IndicatorHandle {
     /** The CURRENT stored declaration-prop values (overrides only — props keep no
      *  merged defaults; absent keys mean the declaration value). */
     propValues(): Record<string, InputValue>;
+    /** The CURRENT style overrides (the settings dialog's "Style" tab): overrides only,
+     *  absent keys mean the script's own look. Empty for natives. */
+    styleValues(): Record<string, InputValue>;
+    /** Override plot / level / fill styles without re-running the script. */
+    setStyle(values: Record<string, InputValue>): void;
+    /** Every settings bag as it is now (inputs, prop overrides, style overrides): an undo point. */
+    settings(): IndicatorSettings;
+    /** Put the settings back EXACTLY as `settings` holds them (overrides added since are dropped, not merged):
+     *  what Ctrl+Z on a settings edit runs. One re-run. */
+    restoreSettings(settings: IndicatorSettings): void;
     setInput(key: string, value: InputValue): void;
     setInputs(values: Record<string, InputValue>): void;
     /** Override one declaration prop and re-run (a prop change replays the whole script). */
     setProp(key: string, value: InputValue): void;
     /** Override several declaration props at once and re-run. */
     setProps(values: Record<string, InputValue>): void;
+    /**
+     * Replace the script and re-run it **in place** — same `id`, same legend row, same
+     * pane placement, same handle; the seam for a host editor's "run my edit" and for a
+     * library's "update to the new version". The new source is prepared first: only once
+     * it compiles is the running script stopped and the new one started. Until the new
+     * code's first run has landed, a failure — at compile time or at run time — puts the
+     * previous code back, with its input and prop values, and reports through `error`; the
+     * visuals on the chart are never dropped in between.
+     *
+     * An edited input or prop value survives where the new script still declares its key;
+     * a value still at its old declared default takes the NEW default, and anything else
+     * takes the new declaration default — all before the first run, so the new code
+     * computes once, with its final values.
+     *
+     * Resolves once the new code's first run has landed (`{ ok: true }`), or with
+     * `{ ok: false, error }` after a failure. A HIDDEN indicator resolves as soon as the
+     * source has compiled — it computes nothing until shown. An unchanged source resolves
+     * at once; a call superseded by a later one resolves with that later call's outcome.
+     * Never rejects; a native indicator resolves `ok: false`.
+     */
+    updateCode(source: string): Promise<CodeUpdateResult>;
     /**
      * Hide or show the indicator. Hiding **suspends** it — its visuals are dropped (the legend
      * row stays, marked hidden) and its computation stops (the engine session is torn down), so a
@@ -422,10 +484,13 @@ interface NativeIndicatorOutput {
     /**
      * Value-axis override for the pane this native OWNS (see `IndicatorModel.paneAxis`):
      * `'none'` for content that is not value-mapped, or band labels for a categorical
-     * axis. Emitted per compute, so it can follow the inputs (e.g. row toggles relabel
-     * the axis). Absent ⇒ the pane derives a scale from its content as usual.
+     * axis; `'compact'` keeps the value axis but abbreviates its labels (K/M/B). Emitted per
+     * compute, so it can follow the inputs (e.g. row toggles relabel the axis). Absent ⇒ the
+     * pane derives a scale from its content as usual.
      */
     paneAxis?: PaneAxis;
+    /** Input values the legend shows after the title (TradingView's "Inputs in status line"), e.g. `14 close`. */
+    statusInputs?: string;
     series?: SeriesSpec[];
     fills?: Fill[];
     backgrounds?: Background[];
@@ -439,8 +504,14 @@ interface NativeIndicatorOutput {
 }
 /** Services the host gives a running native indicator. */
 interface NativeIndicatorContext {
+    /** This instance's indicator id — the same id its `IndicatorHandle`, `inspect()` and
+     *  the pane listing report. Lets an instance name itself to host code (a picker, a
+     *  hit-test) and tell itself apart from siblings of a `multiInstance` type. */
+    readonly id: string;
     readonly symbol: string;
     readonly timeframe: string;
+    /** Whether the chart streams live data. False during a bar replay — entering and
+     *  leaving replay RESTARTS the indicator, so this never changes within one context. */
     readonly live: boolean;
     /** The chart's trading session (`'regular'` | `'extended'`); undefined = regular /
      *  no session model. A session switch reloads the market and RESTARTS the
@@ -459,6 +530,28 @@ interface NativeIndicatorContext {
     pushData(data: unknown): void;
     /** Set the indicator's legend status: `'loading'` (fetching), `'live'` (live-updating), `'idle'`. */
     setStatus(status: IndicatorStatus): void;
+    /**
+     * Optional, host-provided: the TIME candles a period-anchored classic (Pivot Points) builds each period's open,
+     * high, low and close from when the drawn bars are not time candles (bars built from trades, Renko), plus the
+     * chart's own interval for its "Auto" period. Null / absent = the drawn bars, as on a time chart.
+     */
+    periodBars?(): PeriodBars | null;
+    /**
+     * Optional, host-provided: this chart's symbol at another timeframe over `[from, to]` (epoch ms, oldest first),
+     * for an indicator that works from finer candles than the chart's, as TradingView's volume profiles do. Absent
+     * during a bar replay (finer candles would show what the replay has not reached yet).
+     */
+    loadBars?(timeframe: string, range: {
+        from: number;
+        to: number;
+    }): Promise<readonly OHLCV[]>;
+}
+/** See {@link NativeIndicatorContext.periodBars}. */
+interface PeriodBars {
+    /** Time candles at a period or finer step (e.g. daily), oldest first. */
+    bars: readonly OHLCV[];
+    /** The chart's interval in ms (what "Auto" reads instead of the drawn bars' spacing). */
+    intervalMs: number;
 }
 /**
  * A core-computed (non-Pine) indicator instance — the compute + lifecycle behind one on-chart
@@ -475,11 +568,13 @@ interface NativeIndicator {
     onViewport(range: VisibleRange): void;
     /** Settings changed — recompute + emit. */
     setInputs(inputs: Record<string, InputValue>): void;
-    /** Hidden — stop timers/fetches (free resources); the instance + its state are kept for resume. */
+    /** Hidden — stop timers/fetches (free resources); the instance + its state are kept for resume.
+     *  Only ever called after `start` (an instance added hidden is not suspended — it is
+     *  started when first shown). */
     suspend(): void;
     /** Shown again — resume + re-emit. */
     resume(): void;
-    /** Removed — full teardown (clear caches, stop timers). */
+    /** Removed — full teardown (clear caches, stop timers). Only ever called after `start`. */
     stop(): void;
 }
 /**
@@ -489,10 +584,13 @@ interface NativeIndicator {
  */
 interface NativeIndicatorDescriptor {
     readonly type: string;
+    /** Gets the TradingView Style tab (a row per plot, level and fill, plus output / input value switches). */
+    readonly styleTab?: boolean;
     /** Full display name (picker, settings header, handle title). */
     readonly title: string;
     /**
-     * Compact name for the on-chart legend chip and the settings-dialog header.
+     * Compact name for the on-chart legend chip, the settings-dialog header and the
+     * object tree's indicator rows.
      * Absent ⇒ {@link title}. The picker keeps the full title either way.
      */
     readonly shortTitle?: string;
@@ -503,12 +601,29 @@ interface NativeIndicatorDescriptor {
     /** Marks the type as beta — surfaced in the catalog so a host "add indicator" UI can badge it. */
     readonly beta?: boolean;
     /**
+     * Whether instances get in-chart chrome. Absent ⇒ a legend row like any indicator.
+     * `false` ⇒ the output paints, but there is NO legend row (no title chip, no eye/gear/✕,
+     * uncounted by the fold chip) and `panes.list()` does not report it — for host-owned
+     * overlays (trade markers, event flags) whose on/off lives in the host's own UI. Distinct
+     * from hidden: a legend-less indicator still computes and paints; the host controls it
+     * through its handle.
+     */
+    readonly legend?: boolean;
+    /**
      * Allow several instances of this type on one chart — every add creates a new one (a study
      * like a moving average is typically stacked at different lengths). Absent ⇒ SINGLE instance
-     * per type: a second add returns the existing handle. A type that pushes a bespoke layer
-     * payload through `pushData` must stay single-instance (the layer is keyed by type).
+     * per type: a second add returns the existing handle. A type that paints through a renderer
+     * layer (`pushData`) gets ONE layer instance per indicator instance, each fed by that
+     * instance's own channel and painting on that instance's pane — so instances never
+     * overwrite each other (see `IndicatorModel.native.channel`).
      */
     readonly multiInstance?: boolean;
+    /**
+     * Most instances of a `multiInstance` type on one chart; an add past it does nothing and the chart emits
+     * `indicator:limit`. Absent => {@link nativeInstanceCap} (a host-wide cap per type), else no limit. A type that
+     * paints through its own renderer layer costs a full plot-sized canvas per instance, so a host caps those.
+     */
+    readonly maxInstances?: number;
     inputsSchema(): InputSchema[];
     defaultInputs(): Record<string, InputValue>;
     create(): NativeIndicator;
@@ -543,6 +658,10 @@ declare function registerNativeIndicator(descriptor: NativeIndicatorDescriptor):
 declare function unregisterNativeIndicator(type: string): void;
 /** Look up a registered native-indicator descriptor (undefined if the type isn't registered). */
 declare function getNativeIndicator(type: string): NativeIndicatorDescriptor | undefined;
+/** Cap the instances of `type` per chart (a host policy for types it did not register itself); `undefined` removes it. */
+declare function setNativeInstanceCap(type: string, max: number | undefined): void;
+/** The most instances of `type` one chart may hold (the descriptor's `maxInstances`, else the host cap), or undefined. */
+declare function nativeInstanceCap(type: string): number | undefined;
 /** All registered native-indicator types (for a host "add native indicator" menu). */
 declare function nativeIndicatorTypes(): string[];
 /** All registered native-indicator descriptors (for building a catalog with metadata + capability). */
@@ -564,6 +683,8 @@ type ScriptRunCause =
  | 'bar'
 /** An input was edited. */
  | 'inputs'
+/** The script's source was replaced in place (`handle.updateCode`). */
+ | 'code'
 /** The visible range moved (viewport-aware scripts only). */
  | 'viewport'
 /** The chart's market changed and the script re-executed over the new bars. */
@@ -632,6 +753,136 @@ interface ScriptRunResult {
     remove(): void;
 }
 
+/** Where a bar replay stands (`chart.replay.state`). */
+interface ReplayState {
+    /** Replay mode is on: the chart shows history up to the cursor, live updates are paused.
+     *  Stays on through a timeframe/session switch while the new bars load (`cursorTime`
+     *  is null until the replay resumes on them). */
+    active: boolean;
+    /** Bars are being revealed on a timer (`play`), as opposed to paused / stepped by hand. */
+    playing: boolean;
+    /** Open time (epoch ms) of the newest bar on screen; null when replay is off. */
+    cursorTime: number | null;
+    /** Bars still hidden to the right of the cursor. */
+    remaining: number;
+    /** Open time (epoch ms) of the next bar a step completes — the one forming tick by tick,
+     *  else the next hidden one; null when nothing is left or replay is off. Lets a host
+     *  keep several charts on one clock (see `VelaWorkspace.replay`). */
+    nextTime: number | null;
+    /** Delay between two updates while playing (ms) — two bars, or two ticks with {@link ReplayControl.setTicks}. */
+    intervalMs: number;
+}
+/** Options for {@link ReplayControl.start}. */
+interface ReplayStartOptions {
+    /**
+     * Epoch ms. The chart keeps every bar that opened at or before it and hides the rest.
+     * Older than the loaded history ⇒ the history is deepened first (clamped to the
+     * oldest bar the source serves).
+     */
+    from: number;
+    /**
+     * Bars of history to show BEFORE the start bar (default: the last value given, initially 0).
+     * When fewer are loaded, the history is deepened first, unless it already reaches the oldest
+     * bar the source has. Without it a start at (or before) the oldest loaded bar showed a single
+     * candle. Kept for the session, so a timeframe switch during the replay keeps it too.
+     */
+    context?: number;
+}
+/** Why a replay ended (`replay:end`). */
+type ReplayEndReason = 'stopped' | 'finished' | 'market';
+/** One intrabar update of a replayed bar ({@link ReplayControl.setTicks}). */
+interface ReplayTick {
+    /** The price the forming candle closes at after this update. */
+    price: number;
+    /** The extremes traded since the previous update (default: `price`) — lets one update
+     *  stand for a whole span, e.g. a lower-timeframe bar. */
+    high?: number;
+    low?: number;
+    /** Where the candle opens — read on a bar's first update only (default: `price`). */
+    open?: number;
+    /** Volume traded by this update. When no tick of a bar carries one, the bar's volume
+     *  is spread evenly across its ticks. */
+    volume?: number;
+}
+/**
+ * Where a replay gets the intrabar prices of a bar it is about to reveal: `bar` is the
+ * stored bar, `end` the open time of the bar after it (the span the ticks cover is
+ * `[bar.time, end)`), `signal` aborts when the replay moves on (seek, stop, new source).
+ * Prices come oldest first. An empty list — or a failure — reveals the bar whole.
+ */
+type ReplayTickSource = (bar: OHLCV, opts: {
+    end: number;
+    signal: AbortSignal;
+}) => readonly ReplayTick[] | Promise<readonly ReplayTick[]>;
+/** What the chart implements behind {@link ReplayControl}. */
+interface ReplayController {
+    replayStart(opts: ReplayStartOptions): Promise<void>;
+    replayStep(): boolean;
+    replayStepUpdate(): boolean;
+    replayPlay(intervalMs?: number): void;
+    replayPause(): void;
+    replayStop(): void;
+    replayState(): ReplayState;
+    replayBounds(): ReplayBounds | null;
+    replaySetTicks(source: ReplayTickSource | null): void;
+}
+/** The open times of the oldest and newest bar a replay can start from (`chart.replay.bounds`). */
+interface ReplayBounds {
+    first: number;
+    last: number;
+}
+/**
+ * The chart's bar-replay control surface (`chart.replay`) — sibling of `chart.data` /
+ * `chart.marks`. Rewinds the chart to a past bar and reveals the following bars one at a
+ * time, by hand or on a timer, from the history already in memory (nothing is refetched).
+ * Revealed bars travel the exact path of a live bar: indicators, chart-type engines and
+ * the `bar` event see them as new bars — but script alerts stay quiet (a replayed bar is
+ * history, not a live signal). Live updates pause for the duration; `stop()` (or
+ * revealing the last bar) restores the full history and resumes them. A timeframe or
+ * session switch carries the replay over to the new bars at the same point in time; a
+ * symbol switch ends it.
+ */
+declare class ReplayControl {
+    private readonly ctrl;
+    constructor(ctrl: ReplayController);
+    /**
+     * Enter replay (or seek, when already replaying) at `opts.from`. Resolves once the
+     * chart shows the rewound history — after any in-flight history load has finished.
+     * Starts paused; call {@link play} or {@link step}.
+     */
+    start(opts: ReplayStartOptions): Promise<void>;
+    /** Reveal the next bar — or, mid-way through a bar played tick by tick, complete it.
+     *  Returns false when replay is off or nothing is left. */
+    step(): boolean;
+    /** Reveal the next UPDATE: with {@link setTicks}, the next tick of the forming bar — or
+     *  the next bar opened at its first tick (once its ticks are in, if still loading);
+     *  otherwise the next whole bar, like {@link step}. Returns false when nothing is left. */
+    stepUpdate(): boolean;
+    /** Reveal one bar (one tick, with {@link setTicks}) every `intervalMs` (default: the last
+     *  interval used, else 1000). Calling it again while playing changes the pace. */
+    play(intervalMs?: number): this;
+    pause(): this;
+    /** Leave replay: the full history comes back and live updates resume. Also cancels a
+     *  `start()` still loading older history (the chart returns to its previous depth). */
+    stop(): this;
+    get state(): ReplayState;
+    /** The loaded history a replay can walk — hidden bars included while replaying. Null
+     *  before any bar loaded. A start older than `first` deepens the history first. */
+    get bounds(): ReplayBounds | null;
+    /**
+     * Play each revealed bar as a series of intrabar updates instead of whole: while
+     * playing, the forming candle opens at the first tick, then every tick moves its close
+     * and stretches its high and low, exactly like a live tick — indicators, chart types
+     * and the `bar` event follow — and the last one settles it on the stored bar. The play
+     * interval is then the time between two TICKS: a bar lasts as many intervals as it
+     * has ticks (below ~16 ms, ticks are batched per frame). The next bar's ticks are
+     * requested while the current one plays; playback waits for them. `null` goes back to
+     * whole bars. Takes effect from the next bar; a bar forming when the source changes
+     * completes at once.
+     */
+    setTicks(source: ReplayTickSource | null): this;
+}
+
 /** Chart-level events emitted on `chart.on(...)`. */
 interface VelaEventMap extends Record<string, unknown> {
     ready: undefined;
@@ -680,6 +931,12 @@ interface VelaEventMap extends Record<string, unknown> {
     "indicator:removed": {
         id: string;
     };
+    /** An add of a native type was refused: the chart already holds its cap of instances (see `maxInstances`). */
+    "indicator:limit": {
+        type: string;
+        title: string;
+        max: number;
+    };
     /** An indicator's stored input/prop VALUES changed (settings dialog, `setInputs`) — what state persistence listens to. */
     "indicator:inputs": {
         id: string;
@@ -698,6 +955,8 @@ interface VelaEventMap extends Record<string, unknown> {
     "indicator:moved": {
         id: string;
         paneId: string;
+        ownScale?: boolean;
+        from?: IndicatorPlacement;
     };
     /** An indicator was shown/hidden (legend eye, `handle.setVisible`, or object tree). */
     "indicator:visibility": {
@@ -714,6 +973,21 @@ interface VelaEventMap extends Record<string, unknown> {
      * leave the app theme alone.
      */
     "theme:changed": VelaTheme;
+    /**
+     * The base price style is switching `from` → `to` (candles, line, area, a chart-type
+     * id, …). Fires synchronously BEFORE the chart repaints in the new style, whatever
+     * the path: the topbar style menu, `ctx.setPriceStyle`,
+     * `chart.renderer.set('priceStyle', …)`, the settings dialog, `applyConfig` and
+     * config templates, or a state restore. Never fires for the style the chart was
+     * created with, nor for a set to the style already shown. While it runs the chart
+     * still shows `from`, so a listener can capture the outgoing frame
+     * (`chart.renderer.screenshotCanvas()`) to animate the switch. Listeners must not
+     * change the price style again from inside it.
+     */
+    "priceStyle:change": {
+        from: string;
+        to: string;
+    };
     /** A study pane was reordered one slot (`dir`) — carries enough to invert for undo/redo. */
     "pane:moved": {
         paneId: string;
@@ -734,9 +1008,16 @@ interface VelaEventMap extends Record<string, unknown> {
     "drawing:edited": {
         id: string;
     };
-    /** Selection changed (`id` is null when nothing is selected). */
+    /** Selection changed. `ids` is every selected drawing in selection order; `id` is the
+     *  primary (`ids[0]`, the one a settings popup edits), null when nothing is selected. */
     "drawing:selected": {
         id: string | null;
+        ids: string[];
+    };
+    /** Drawings were copied (Ctrl+C or `drawings.copyToClipboard`). A host that pastes pictures or links from the
+     *  system clipboard marks it here, so a later Ctrl+V pastes whatever was copied last, as on TradingView. */
+    "drawing:copied": {
+        ids: string[];
     };
     /** The favorite-tool set changed (star toggles or a bulk restore). */
     "drawing:favorites": {
@@ -769,6 +1050,15 @@ interface VelaEventMap extends Record<string, unknown> {
     "drawing:settings": {
         id: string;
     };
+    /** The drawing toolbar's Add Alert button (TradingView's alert on a drawing): the host creates the alert. Shown
+     *  only on the types the host listed with `chart.drawings.setAlertTypes`. */
+    "drawing:alert": {
+        id: string;
+        drawing: SerializedDrawing;
+    };
+    /** A timeline-mark glyph was clicked — `ids` lists every mark under it (a cluster). Fires
+     *  before the popup opens; a mark without content opens none, so this is the host's hook. */
+    "mark:click": MarkClickEvent;
     /**
      * A SCRIPT computed — the first run over the history, a live tick, a new bar, an input
      * edit, a viewport move, a market switch. The payload carries the run itself (title,
@@ -784,8 +1074,18 @@ interface VelaEventMap extends Record<string, unknown> {
     "context:changed": {
         id: string;
     };
-    /** A live tick: the forming bar was updated or a new bar appended. */
+    /** A live tick: the forming bar was updated or a new bar appended (a bar revealed by replay included). */
     bar: OHLCV;
+    /**
+     * The VIEW series changed under a series-replacing chart type (Renko, tick bars — see
+     * `ChartTypeDefinition.replacesSeries`): `bar` is the newest view bar (a brick, an N-trade
+     * bar), `null` when the view is empty. Fires on every `setSeries`/`updateSeries`; the raw
+     * `bar` event keeps carrying the feed's own bars. Readouts that show what is PAINTED (the
+     * status line's OHLC) follow this while such a style is active.
+     */
+    "series:bar": {
+        bar: OHLCV | null;
+    };
     /**
      * The visible time range moved (pan/zoom/fit — fires per applied change, NOT
      * debounced; the engine re-run debounce is separate). Payload = `{from, to}` in
@@ -811,8 +1111,74 @@ interface VelaEventMap extends Record<string, unknown> {
         oldestTime: number;
         barsLoaded: number;
     };
+    /**
+     * Scroll-back paging (`'auto'` and `'manual'`): the oldest loaded bar came on screen (`atEdge`)
+     * or left it. `canLoadMore` = an older page can be had (auto loads it by itself; manual waits
+     * for `chart.loadOlderHistory()`); false at the source's first bar, the depth cap, or after a
+     * failure. Fires on change only.
+     */
+    "history:edge": {
+        atEdge: boolean;
+        canLoadMore: boolean;
+        /** Why no more can load: the source's first bar, a `from` floor, the 40,000-bar cap, or a failed page (retry in 30 s). */
+        stop: "start" | "floor" | "cap" | "retry" | null;
+        oldestTime: number;
+        barsLoaded: number;
+    };
+    /** An older page of the chart's own bars started loading (`history:complete` says when it landed). */
+    "history:page": {
+        bars: number;
+        oldestTime: number;
+    };
+    /**
+     * The active chart type's OWN history state changed (a type that pages its own data, see
+     * `SeriesDataEngineHost.reportHistory`). `replacesSeries` = the type's bars ARE the view, so its
+     * `oldestTime` is where the chart starts; otherwise its layer is drawn over the chart's bars.
+     */
+    "history:layer": {
+        style: string;
+        replacesSeries: boolean;
+        busy: boolean;
+        oldestTime: number | null;
+        more: boolean;
+        note?: string;
+    };
+    /** Replay mode began (or seeked): the chart shows history up to `cursorTime`, `remaining` bars are hidden. */
+    "replay:start": {
+        cursorTime: number;
+        remaining: number;
+    };
+    /** One hidden bar was revealed (it also fires `bar`, like a live bar). A bar played tick
+     *  by tick steps once, when its last tick settles it. */
+    "replay:step": {
+        cursorTime: number;
+        remaining: number;
+    };
+    /** An intrabar update of the bar forming at `cursorTime` (`chart.replay.setTicks`):
+     *  tick `index` of `count` is applied (batched updates report the last one). */
+    "replay:tick": {
+        cursorTime: number;
+        index: number;
+        count: number;
+    };
+    /** Timed reveal started, or its pace changed. */
+    "replay:play": {
+        intervalMs: number;
+    };
+    /** Timed reveal paused — `pause()`, or a seek (`start()` while playing). */
+    "replay:pause": undefined;
+    /**
+     * Replay mode ended: `'stopped'` = `chart.replay.stop()`, `'finished'` = the last hidden
+     * bar was revealed, `'market'` = a symbol switch replaced the history (a timeframe or
+     * session switch carries the replay over instead). The full history
+     * is back and live updates resumed.
+     */
+    "replay:end": {
+        reason: ReplayEndReason;
+    };
     /** An indicator's script raised an alert. `indicator` names the source — the
-     *  indicator's display title (what its legend row shows). */
+     *  indicator's display title (what its legend row shows). Never fires for bars a
+     *  replay reveals (`chart.replay`). */
     alert: EngineAlert & {
         indicator?: string;
     };
@@ -904,6 +1270,13 @@ declare class RendererControl {
      */
     setLegendActions(provider: ((indicatorId: string) => LegendActionView[]) | null): void;
     /**
+     * Host hook for the price-axis countdown chip. Called on every paint with the end of
+     * the last bar and now (ms): return rows of text to show instead of the bar-close
+     * countdown (e.g. `['OPENS IN', '15:22:10']` while a market is shut), or null for the
+     * normal countdown. Pass null to remove it. No-op on a renderer without the hook.
+     */
+    setCountdownLines(fn: ((lastBarEndMs: number, nowMs: number) => string[] | null) | null): this;
+    /**
      * Wire the legend rows' HOST-CONTRIBUTED callout bubbles (the shells route the
      * plugin registry through this; see `registerLegendCallout`). Silent on a renderer
      * without the seam — contributed callouts simply never show there, same graceful
@@ -928,13 +1301,20 @@ declare class RendererControl {
      * Export the current chart as a PNG data URL, or null if the active renderer
      * doesn't support it (warns). DOM overlays (tables, legend) are not included.
      */
-    screenshot(): string | null;
+    screenshot(opts?: ScreenshotOptions): string | null;
     /**
      * Raster of the current chart onto a canvas (same pixels as {@link screenshot}),
      * or null if the renderer has no canvas export. Silent — a host compositing
      * several charts skips a renderer that cannot contribute.
      */
-    screenshotCanvas(): HTMLCanvasElement | null;
+    screenshotCanvas(opts?: ScreenshotOptions): HTMLCanvasElement | null;
+    /** CSS box (viewport coordinates) the last {@link screenshotCanvas} covers, or null. */
+    screenshotBox(): {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+    } | null;
     /**
      * The active renderer's full cosmetic config as a serializable, versioned JSON
      * document — persist it (templates, saved settings) and feed it back to
@@ -960,6 +1340,19 @@ declare class RendererControl {
      * public seam host chrome (status lines, data windows) builds on.
      */
     onCrosshairMove(cb: (e: CrosshairEvent) => void): Unsubscribe;
+    /** A click — or a touch tap — on the plot, never the end of a pan: the open time of
+     *  the bar under it (`null` off the bars). On touch, where a tap moves no crosshair,
+     *  this is how an interaction learns which bar was chosen. */
+    onClick(cb: (e: ClickEvent) => void): Unsubscribe;
+    /** The active symbol's tick size as the price axis uses it (`undefined` until the symbol's metadata
+     *  resolves, or when it has none). Host chrome formats prices with it so it reads like the axis. */
+    priceMintick(): number | undefined;
+    /** Width in px of the master price column: 64 unless long labels (0.035000 at a large font) widened it.
+     *  Overlays that draw into the price gutter size themselves from this. */
+    priceColumnWidth(): number;
+    /** CSS x of a bar time from the plot's left edge (extrapolated before the first bar), so host overlays can
+     *  anchor to a bar; null when the renderer has no layout yet or lacks the seam. */
+    timeToX(ms: number): number | null;
     /** Touch long-press on a price or time axis strip — silent no-op without the seam. */
     onAxisLongPress(cb: (e: AxisLongPressEvent) => void): Unsubscribe;
     /**
@@ -1001,6 +1394,12 @@ declare class RendererControl {
      * dialog on its first tab, and with a section an open dialog switches tab instead of closing.
      */
     openSettings(section?: string): this;
+    /**
+     * Give the settings dialog's footer the host's "Template ▾" menu (the shells route the
+     * plugin registry through this; see `registerSettingsTemplateMenu`). `null` restores the
+     * plain "Reset defaults" button. Silent no-op on a renderer without a settings dialog.
+     */
+    setSettingsTemplateMenu(provider: (() => SettingsTemplateMenuView | null) | null): this;
     /** Contribute host settings tabs (callback rows) to the renderer's settings dialog —
      *  e.g. the widget's Status line toggles. Silent no-op without a dialog. */
     setSettingsSections(sections: ReadonlyArray<{
@@ -1027,6 +1426,13 @@ declare class RendererControl {
      *  `'mobile'` switches its dialogs/toolbars to the touch-first presentation.
      *  Silent no-op on a renderer without adaptive chrome. */
     setLayoutMode(mode: 'mobile' | 'desktop'): this;
+    /**
+     * Drive the renderer's time-of-day chrome (the countdown-to-bar-close chip) from the
+     * host's own second pulse, so it ticks in step with a host clock display instead of
+     * on a separate timer that can read a different second. `null` hands the pulse back
+     * to the renderer. Silent no-op on a renderer without time-of-day chrome.
+     */
+    setWallClock(clock: WallClock | null): this;
 }
 
 /** Callback surface `PanesControl` uses to drive the orchestrator. */
@@ -1039,6 +1445,8 @@ interface PaneController {
     collapsePane(paneId: string, collapsed: boolean): void;
     maximizePane(paneId: string | null): void;
     moveIndicator(id: string, target: MoveTarget): void;
+    placeIndicator(id: string, placement: IndicatorPlacement): void;
+    orderPanes(ids: string[]): void;
 }
 /**
  * The public pane control surface — `chart.panes`. Lists panes with their indicators
@@ -1062,6 +1470,10 @@ declare class PanesControl {
     maximize(paneId: string | null): this;
     /** Move/merge an indicator to a pane — sugar for `handle.moveTo(...)` by id. */
     moveIndicator(id: string, target: MoveTarget): this;
+    /** Put an indicator at an exact placement (the `from` of an `indicator:moved`): undoes a move or a merge. */
+    place(id: string, placement: IndicatorPlacement): this;
+    /** Put the panes in this order, top to bottom. `'price'` places the main chart; left out, it stays on top. Panes not listed follow. */
+    order(ids: string[]): this;
     private guard;
 }
 
@@ -1120,6 +1532,7 @@ declare class DrawingController {
     private favs;
     private selectedIds;
     private clipboard;
+    /** The last-used style per tool, read through the shared, persisted tool memory (./toolMemory.ts). */
     private readonly lastStyle;
     private readonly subs;
     constructor(renderer: IChartRenderer, events: TypedEventBus<VelaEventMap>, option: DrawingsOption | undefined, seriesGateway?: DrawingSeriesGateway);
@@ -1130,9 +1543,25 @@ declare class DrawingController {
     getSnapMode(): SnapMode;
     setSnapMode(mode: SnapMode): void;
     getStayMode(): boolean;
+    plotClientRect(): {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+    } | null;
+    pointAtClient(clientX: number, clientY: number): {
+        time: number;
+        price: number;
+        paneId: string;
+    } | null;
     setStayMode(on: boolean): void;
     getMode(): DrawingMode;
     setMode(mode: DrawingMode): void;
+    /** The drawing types whose toolbar offers Add Alert (the host listens on `drawing:alert`). */
+    setAlertTypes(types: readonly string[]): void;
+    /** Zoom Out: back to the view before the last Zoom In (false when there is none). */
+    zoomOut(): boolean;
+    canZoomOut(): boolean;
     showToolbar(visible: boolean): void;
     /** The favorite tool types, in the order they were starred. */
     favorites(): DrawingTypeKey[];
@@ -1146,6 +1575,8 @@ declare class DrawingController {
     /** Display (or clear) another chart's in-progress placement as a ghost — silently
      *  inert on a renderer without the optional `setExternalGhost` seam. */
     setExternalGhost(doc: SerializedDrawing | null): void;
+    /** Attach the app object drawings read as `Projector.host` (the chart sets itself; an app may replace it). */
+    setHost(host: unknown): void;
     /** Push per-tool shortcut hints (pre-formatted display strings) to the toolbar flyouts. */
     setToolShortcuts(map: Readonly<Partial<Record<DrawingTypeKey, string>>>): void;
     add(type: DrawingTypeKey, init?: AddInit): Drawing | null;
@@ -1190,13 +1621,19 @@ declare class DrawingController {
     clone(id: string): Drawing | null;
     /** Copy drawings into the in-memory clipboard (no model change, no event). */
     copy(ids: readonly string[]): void;
-    paste(): Drawing[];
+    /** True when {@link paste} would place something. */
+    canPaste(): boolean;
+    /** Paste the clipboard, or `docs` (a host's own page-wide copy), as new selected drawings, where the renderer
+     *  puts a paste (TradingView: 40 px above the source). One undo step. */
+    paste(docs?: readonly SerializedDrawing[]): Drawing[];
     all(): SerializedDrawing[];
     toJSON(): DrawingsDocument;
     fromJSON(doc: unknown): void;
     destroy(): void;
     /** Set/extend the selection. `additive` toggles membership (shift-click) vs replacing it. */
     private setSelection;
+    /** Push the selection to the renderer and announce it (primary + the full list). */
+    private announceSelection;
     /** Restore a history snapshot, reconciling selection against what survived. */
     private restoreSnapshot;
     /** Delete drawings as one undo step; prune them from the selection. */
@@ -1237,12 +1674,33 @@ declare class DrawingsControl {
     setStayMode(on: boolean): this;
     /** Whether tools stay armed after placement — follow changes on `drawing:stay`. */
     getStayMode(): boolean;
+    /** The plot's box in client (viewport) pixels, or null without an interactive renderer.
+     *  For hosts that place content themselves (a pasted image, a dropped file). */
+    plotClientRect(): {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+    } | null;
+    /** The chart point (time, price, pane) under a client position; null outside the plot. */
+    pointAtClient(clientX: number, clientY: number): {
+        time: number;
+        price: number;
+        paneId: string;
+    } | null;
     /** Enter/exit a renderer-local mode: `'measure'` (transient ruler), `'eraser'`, or
      *  `null` (none). Mutually exclusive with each other and with any armed tool — the
      *  renderer enforces the exclusion and the outcome lands on `drawing:mode`. */
     setMode(mode: DrawingMode): this;
     /** The current renderer-local mode — follow changes on `drawing:mode`. */
     getMode(): DrawingMode;
+    /** TradingView's Add Alert on the drawing toolbar, for these drawing types (e.g. `['trendline', 'hline']`):
+     *  pressing it emits `drawing:alert` with the drawing, and the host creates the alert. Empty = no button. */
+    setAlertTypes(types: readonly string[]): this;
+    /** Zoom Out: back to the view before the last Zoom In (the `'zoom'` mode). False when there is none. */
+    zoomOut(): boolean;
+    /** True while a Zoom In can be gone back from (a toolbar shows its Zoom Out button then). */
+    canZoomOut(): boolean;
     /** Show or hide the on-chart drawing toolbar. */
     showToolbar(visible?: boolean): this;
     /** Reconfigure the toolbar groups/tools live. */
@@ -1256,6 +1714,9 @@ declare class DrawingsControl {
      *  charts. Never a real drawing: no store entry, no selection, no persistence.
      *  Silently inert on a renderer without the optional seam. */
     setExternalGhost(doc: SerializedDrawing | null): this;
+    /** The object an app-registered drawing type reads as `Projector.host` (its market and data). The chart
+     *  attaches itself by default; pass another object to give such drawings a different context. */
+    setHost(host: unknown): this;
     /** Create a drawing programmatically (no clicking). Returns it, or null if unsupported. */
     add(type: DrawingTypeKey, init?: AddInit): Drawing | null;
     remove(id: string): this;
@@ -1289,8 +1750,11 @@ declare class DrawingsControl {
     duplicate(ids: string[]): this;
     /** Copy drawings into the in-memory clipboard for a later {@link paste}. */
     copyToClipboard(ids: string[]): this;
-    /** Paste the clipboard as new drawings (fresh ids), selecting them. */
-    paste(): this;
+    /** Paste the clipboard (or `docs`, e.g. a copy kept by the host across charts) as new drawings with fresh ids,
+     *  40 px above where they were copied, as TradingView pastes, and select them. */
+    paste(docs?: readonly SerializedDrawing[]): this;
+    /** True when {@link paste} has drawings to place (a menu greys its Paste row otherwise). */
+    canPaste(): boolean;
     /** Every drawing as plain JSON, in paint order. */
     all(): SerializedDrawing[];
     /** Snapshot all drawings as a versioned document (persistence). */
@@ -1308,6 +1772,86 @@ declare class DrawingsControl {
     getConfig(): DrawingsDocument;
     applyConfig(doc: unknown): this;
     private ok;
+}
+
+/**
+ * Renderer-agnostic owner of the timeline-mark model (backs `chart.marks`). Holds the
+ * marks + group definitions (the source of truth), pushes snapshots to the renderer
+ * through its optional `setTimelineMarks` seam, and re-emits the renderer's glyph
+ * clicks as `mark:click`. Inert on a renderer without the `timelineMarks` capability —
+ * the model still fills, so `all()` and a later host UI see it.
+ */
+declare class MarksController {
+    private readonly renderer;
+    /** Insertion-ordered — the order a cluster falls back to for equal times. */
+    private readonly marks;
+    private readonly groups;
+    private readonly enabled;
+    private readonly subs;
+    constructor(renderer: IChartRenderer, events: TypedEventBus<VelaEventMap>);
+    /** Whether the active renderer paints timeline marks. */
+    get supported(): boolean;
+    /** Add (or replace, by id) one mark. */
+    add(mark: TimelineMark): void;
+    /** Replace the whole set — a market switch. */
+    set(marks: readonly TimelineMark[]): void;
+    remove(id: string): boolean;
+    clear(): void;
+    /** Every mark, in insertion order (shallow copies — mutating one changes nothing). */
+    all(): TimelineMark[];
+    /** Define (or replace) a group's presentation — its settings label and default visibility. */
+    defineGroup(group: MarkGroup): void;
+    /** The defined groups, in definition order. */
+    groupDefinitions(): MarkGroup[];
+    /**
+     * Show or hide one group's marks. The choice lives in the renderer's cosmetic config
+     * (the `marks` feature) — what the settings dialog's Events checkboxes edit and what
+     * a persisted chart restores — so it warns + no-ops on a renderer without it.
+     */
+    setGroupVisible(id: string, visible: boolean): void;
+    /**
+     * A group's effective visibility: its own switch — the user's (persisted) choice, else
+     * the declared default, else visible — AND every ancestor's, so a child under a
+     * switched-off parent reads hidden whatever its own choice says.
+     */
+    isGroupVisible(id: string): boolean;
+    destroy(): void;
+    private sync;
+}
+
+/**
+ * The chart's timeline-marks control surface (`chart.marks`) — sibling of
+ * `chart.drawings` / `chart.panes`. Marks are DATA, not user state: the chart never
+ * persists them; re-supply them when the market changes (`market:changed`). The model
+ * is core-owned, so every method works on any renderer; on one without the
+ * `timelineMarks` capability nothing paints (`supported` reports it) and the group
+ * visibility setter warns + no-ops.
+ */
+declare class MarksControl {
+    private readonly ctrl;
+    constructor(ctrl: MarksController);
+    /** Whether the active renderer paints timeline marks. */
+    get supported(): boolean;
+    /** Add one mark; an existing id is replaced in place. */
+    add(mark: TimelineMark): this;
+    /** Replace the whole set (a market switch). */
+    set(marks: readonly TimelineMark[]): this;
+    remove(id: string): this;
+    clear(): this;
+    /** Every mark, in insertion order. */
+    all(): TimelineMark[];
+    /**
+     * Define a visibility group's presentation: the label of its checkbox in chart
+     * settings (the Events tab) and its default visibility. Marks may name a group
+     * that was never defined — it then shows its capitalized id.
+     */
+    defineGroup(group: MarkGroup): this;
+    /** The defined groups, in definition order. */
+    groups(): MarkGroup[];
+    /** Show or hide one group's marks — the same switch as the settings checkbox, persisted with the chart's config. */
+    setGroupVisible(id: string, visible?: boolean): this;
+    /** A group's effective visibility (the user's choice, else the group's declared default). */
+    isGroupVisible(id: string): boolean;
 }
 
 /** Outcome of {@link Vela.runIndicator}: success carries the live handle, failure the error. */
@@ -1343,6 +1887,8 @@ declare class Vela {
     private readonly panesControl;
     private readonly dataControl;
     private readonly drawingsControl;
+    private readonly marksControl;
+    private readonly replayControl;
     constructor(container: HTMLElement | string, options?: VelaOptions, deps?: VelaDeps);
     /**
      * Register a scripting engine so `addIndicator({ language })` can run that
@@ -1430,6 +1976,17 @@ declare class Vela {
      *  `history:complete` events). Never rejects: on destroy or a failed backfill it
      *  resolves with whatever depth loaded. */
     historyComplete(): Promise<void>;
+    /** Scroll-back paging: `'auto'` (default) loads older bars by itself as the view nears the
+     *  oldest one; `'manual'` only reports it (`history:edge`) and loads on
+     *  {@link loadOlderHistory}; `'off'` never pages. */
+    setHistoryPaging(mode: 'auto' | 'manual' | 'off'): void;
+    /** Load `bars` (default 1000) more older bars now, view kept. `'loading'` = on its way
+     *  (`history:complete` says when it landed), `'busy'` = a load is running, `'none'` =
+     *  nothing older can be had. */
+    loadOlderHistory(bars?: number): 'loading' | 'busy' | 'none';
+    /** The active chart type's own history state (a type that pages its own data, e.g. an order-flow grid or
+     *  bars built from a trade archive), or null. Changes arrive as `history:layer` events. */
+    historyLayer(): VelaEventMap['history:layer'] | null;
     /**
      * A renderer-agnostic snapshot of the graphic elements the core has generated
      * (series, fills, drawings, tables, …) — a deterministic check that a feature was
@@ -1469,7 +2026,28 @@ declare class Vela {
      * `new Vela(el, { drawings: true })` or `chart.drawings.showToolbar()`.
      */
     get drawings(): DrawingsControl;
+    /**
+     * The chart's timeline-marks control surface: host events pinned to a bar and shown
+     * as glyphs on a lane above the time axis, each opening a popup on click —
+     * `chart.marks.add({ id, time, glyph, title, content })`, `chart.marks.set(list)`,
+     * `chart.marks.defineGroup({ id, label })`. Marks are data, not user state: re-supply
+     * them on `market:changed`. On a renderer without the `timelineMarks` capability the
+     * model still fills but nothing paints (`chart.marks.supported`).
+     */
+    get marks(): MarksControl;
+    /**
+     * The chart's bar-replay control surface: rewind to a past bar and reveal the
+     * following ones by hand or on a timer, from the history already loaded —
+     * `await chart.replay.start({ from })`, `chart.replay.play(2000)`, `chart.replay.step()`,
+     * `chart.replay.stop()`. Revealed bars behave like live bars for indicators; live
+     * updates pause meanwhile. Follow it with the `replay:*` events.
+     */
+    get replay(): ReplayControl;
     on<K extends keyof VelaEventMap>(event: K, handler: (payload: VelaEventMap[K]) => void): () => void;
+    /** The loaded market bars, oldest first, as a copy (safe to keep): real OHLCV, never the Heikin Ashi or other
+     *  style view, and during a replay only the bars up to the replay cursor. Empty before the first load.
+     *  For exports ("Export chart data") and host-side checks. */
+    bars(): OHLCV[];
     /** The current visible time range (`from`/`to` in epoch-ms), or null before data loads. */
     getVisibleRange(): VisibleRange | null;
     /** Set the visible time range explicitly (epoch-ms). Use for a custom date range. */
@@ -1488,6 +2066,10 @@ declare class Vela {
      * history simply frames everything (it doesn't fetch more bars).
      */
     setVisibleRangePreset(preset: VisibleRangePreset): this;
+    /**
+     * TradingView's "Reset chart view" (Alt+R): back to the newest bars at the default zoom, with auto scale on.
+     */
+    resetView(): this;
     resize(): void;
     /**
      * Swap the app theme at runtime — `'dark'`, `'light'`, or a full custom
@@ -1499,6 +2081,563 @@ declare class Vela {
      */
     setTheme(theme: ThemeName | VelaTheme): this;
     destroy(): void;
+}
+
+/**
+ * A 1:1, TIME-PRESERVING per-bar transform a price style applies to the chart's bar
+ * stream (Heikin Ashi is the first). The orchestrator applies it at its single outbound
+ * bar seam, so the renderer, the scripting engines, and the native indicators all see
+ * one consistent VIEW while the raw series stays the untouched source of truth (the
+ * `'bar'` event and `chart.data` stay on the raw plane).
+ *
+ * Deliberately NOT a contract for styles that change the bar count or time axis
+ * (Renko, Kagi, Point & Figure) — those need a different seam.
+ */
+interface BarTransform {
+    /** Derive the full view series from the raw series (front-to-back; may be recursive). */
+    full(raw: readonly OHLCV[]): OHLCV[];
+    /** Derive ONE view bar from a raw bar + the PREVIOUS view bar (live tick / append; O(1)). */
+    next(raw: OHLCV, prevView: OHLCV | undefined): OHLCV;
+}
+
+/** The environment a chart hands to a style's data engine when the style activates. */
+interface SeriesDataEngineHost {
+    /** The chart's symbol (as configured, provider prefix stripped by the data layer). */
+    symbol: string;
+    /** The chart's timeframe (canonical string, e.g. `'60'`). */
+    timeframe: string;
+    /** Whether the chart runs live (streaming forming bar) or static history. False during
+     *  a bar replay — entering and leaving replay REBUILDS the engine, so this never
+     *  changes within one host's lifetime. */
+    live: boolean;
+    /** The chart's trading session (`'regular'` | `'extended'`); undefined = regular /
+     *  no session model. A session switch reloads the market and REBUILDS the engine,
+     *  so this never changes within one host's lifetime. */
+    session?: string;
+    /** The chart's CURRENT view bars (post-transform) — read fresh, never cache. */
+    bars: () => readonly OHLCV[];
+    /** The chart's data control surface (`chart.data`) — providers, capabilities, resolution. */
+    data: DataControl;
+    /** Push the style's per-bar layer data to the renderer (the `<id>` native channel). */
+    pushData: (data: unknown) => void;
+    /** Push the ranges still loading (the `<id>-pending` channel — skeleton/reveal UIs). */
+    pushPending: (ranges: ReadonlyArray<readonly [number, number]>) => void;
+    /**
+     * The chart's RAW bars (the feed's series, never transformed) — read fresh, never cache.
+     * Present only for a type that {@link ChartTypeDefinition.replacesSeries replaces the
+     * series}: its `bars()` is its own pushed series, so this is where it reads the market.
+     */
+    rawBars?: () => readonly OHLCV[];
+    /**
+     * Replace the chart's whole view series (a {@link ChartTypeDefinition.replacesSeries}
+     * type only). Bar times must be strictly increasing. The renderer, every Pine
+     * indicator and every native indicator see these bars instead of the raw ones; the
+     * first call also ends the style's loading state. `preserveView` keeps the viewport
+     * (right-anchored, so older bars prepended in place do not move the view).
+     */
+    setSeries?: (bars: OHLCV[], opts?: {
+        preserveView?: boolean;
+    }) => void;
+    /**
+     * Update the forming view bar (same `time` as the last bar) or append a new one
+     * (a later `time`) — the live path of a series-replacing type. Earlier times are ignored.
+     */
+    updateSeries?: (bar: OHLCV) => void;
+    /**
+     * Ask for at least `bars` RAW bars of history (a {@link ChartTypeDefinition.replacesSeries}
+     * type only). Renko and similar types fold many raw bars into one view bar, so the chart's
+     * default depth can leave too few view bars for an indicator to warm up (TradingView loads
+     * history until a brick count is reached). The extra history streams in behind the chart
+     * like any backfill (`onBars` per chunk). A no-op while a market switch, a backfill or a
+     * replay is running, for an offline series, or when that many bars are already held.
+     */
+    ensureDepth?: (bars: number) => void;
+    /**
+     * Store values in the type's own settings bag (`chartTypes.<id>`), exactly as the settings dialog does: they
+     * persist with the chart, reach the renderer's `<id>-settings` channel and come back through `onSettings`. For
+     * an engine that keeps state tied to the market, e.g. a Renko box size typed for one symbol and converted for
+     * the next. Ignored once the engine is no longer this chart's engine for the type.
+     */
+    saveSettings?: (values: Record<string, unknown>) => void;
+    /**
+     * Report the type's OWN history state, for a type that pages its own data (an order-flow grid, bars built from
+     * a trade archive, bricks folded from raw bars). The chart relays it as the `history:layer` event (and
+     * `chart.historyLayer()`), so a host can mark where what is DRAWN starts and show older data loading there.
+     */
+    reportHistory?: (state: HistoryLayerState) => void;
+}
+/** A chart type's own history state (see {@link SeriesDataEngineHost.reportHistory}). */
+interface HistoryLayerState {
+    /** An older page is on its way. */
+    busy: boolean;
+    /** Time (ms) of the oldest bar the type draws; null before its first data. */
+    oldestTime: number | null;
+    /** Older data exists and will load when the view reaches the edge. */
+    more: boolean;
+    /** Why no more loads, when `more` is false and the reason is not "the data starts here" (e.g. a brick budget). */
+    note?: string;
+}
+/**
+ * A per-chart data engine behind a chart type: created on first entry into the style,
+ * suspended/resumed as the user switches styles, stopped when the chart is destroyed.
+ * All methods are fire-and-forget from the chart's point of view — the engine owns its
+ * own scheduling and pushes results through the host channels.
+ */
+interface SeriesDataEngine {
+    start(host: SeriesDataEngineHost): void;
+    /** The style was left — stop fetching/pushing, keep state for a cheap resume. */
+    suspend(): void;
+    /** The style was re-entered. */
+    resume(): void;
+    /** The chart is going away — release everything. */
+    stop(): void;
+    /** The visible range changed (pan/zoom) while the style is active. */
+    onViewport?(range: {
+        from: number;
+        to: number;
+    }): void;
+    /** The chart's bars changed while the style is active — a live tick, a new bar (a
+     *  replayed one included), or older history prepended. Re-read `host.bars()`; an
+     *  engine that streams its own live data may ignore ticks while `host.live`. */
+    onBars?(): void;
+    /** New settings values from the chart-settings dialog (the type's SDK section).
+     *  Also delivered once just BEFORE `start()` whenever stored values exist (a
+     *  persisted config, a market switch recreating the engine) — an engine must
+     *  accept a pre-start call as pure configuration, so it never fetches on
+     *  schema defaults the user has edited away. */
+    onSettings?(values: Record<string, unknown>): void;
+}
+/** One registered chart type. */
+interface ChartTypeDefinition {
+    /** The price-style id (`'heikinashi'`; a plugin might register `'footprint'`, `'renko'`…). */
+    id: string;
+    /** Human-readable label for style pickers. Defaults to the id. */
+    label?: string;
+    /** Reached through the INTERVAL dropdown (an `interval-sections.ts` section such as ticks or
+     *  ranges), so it is left out of the chart-type pickers. Still a normal price style otherwise. */
+    intervalOnly?: boolean;
+    /** The bars are not a time span: a tick chart or a range chart. Drawings then follow TradingView's "Ticks" /
+     *  "Ranges" rows of their Visibility tab instead of the time rows. */
+    barKind?: 'ticks' | 'ranges';
+    /** Raw `<svg>` markup for style pickers (surfaced as icon id `style-<id>`). */
+    icon?: string;
+    /** Optional SETTINGS SECTION rendered inside the chart-settings dialog — declarative
+     *  rows (never DOM). Values persist in the renderer config under `chartTypes.<id>`
+     *  and are pushed to the type's `<id>-settings` native-data channel on change. */
+    settings?: ChartTypeSettingsSection;
+    /** View-bar transform applied at the chart's outbound bar seam (1:1, time-preserving). */
+    barTransform?: BarTransform;
+    /**
+     * Whether the type participates in extended tickers (`"SYM;id"` — scripts request the
+     * transformed series via `ticker.*`). Defaults to `true` when `barTransform` is set:
+     * a transform-based type is exactly what the data plane can re-derive server-side.
+     */
+    tickerModifier?: boolean;
+    /** Factory for the style's per-chart data engine (created lazily on first activation). */
+    dataEngine?: () => SeriesDataEngine;
+    /**
+     * What the renderer paints for the PRICE SERIES while this style is active.
+     * `'candles'` (default) keeps the base candle painting under the type's layers;
+     * `'none'` suppresses it — for types whose renderer layer fully REPLACES the
+     * price representation (an order-flow grid, bricks, …). Axes, grid, volume,
+     * indicators and drawings are unaffected.
+     */
+    basePainting?: 'candles' | 'none';
+    /**
+     * The type's data engine SUPPLIES the bar series itself (Renko, tick bars, range bars):
+     * its bars are not 1:1 with the raw ones, so neither the bar count nor the time axis
+     * follows the chart's timeframe. While the style is active the raw series keeps
+     * loading, streaming, healing and replaying exactly as usual, but only the engine sees
+     * it (`host.rawBars()`, poked through `onBars`); the view, the renderer and every
+     * indicator read what the engine pushes through `host.setSeries` / `host.updateSeries`.
+     * Requires `dataEngine`. The countdown-to-bar-close chip is hidden for such a type
+     * (its bars have no fixed close time).
+     */
+    replacesSeries?: boolean;
+}
+/**
+ * A declarative visibility condition on another row's CURRENT value (stored value,
+ * or that row's `defval` while unset). Pure data — the dialog evaluates it live as
+ * the user edits, so dependent rows appear/disappear without a rebuild.
+ * `anyOf` wins over `equals` when both are given.
+ */
+interface SettingsRowCondition {
+    key: string;
+    equals?: boolean | string | number;
+    anyOf?: readonly (boolean | string | number)[];
+}
+/** A row's visibility gate: one condition, or several AND-ed together. */
+type SettingsRowWhen = SettingsRowCondition | readonly SettingsRowCondition[];
+/**
+ * An inline color swatch on a toggle row — the color(s) the toggle governs, edited
+ * right on the toggle's row (dimmed while the toggle is off) instead of a
+ * conditionally revealed row below. Each swatch stores under its own bag key.
+ */
+interface SettingsRowSwatch {
+    key: string;
+    /** Names the color for the swatch's tooltip (`'Highlight color'`). */
+    label: string;
+    defval: string;
+    /**
+     * Optional visibility gate, evaluated live against the values bag exactly like a
+     * row's own `when` — lets one toggle row swap its swatch set as another value
+     * changes (a mode's two colors while it is on, its one alternative while off).
+     * A gated swatch is EXEMPT from the toggle-off dim: its gate already says when
+     * it matters, and it may exist specifically for the off state.
+     */
+    when?: SettingsRowWhen;
+}
+/**
+ * An inline LINE-WIDTH dropdown on a toggle row — sits beside the row's color
+ * swatches (dimmed with them while the toggle is off) and stores a px number under
+ * its own bag key. The control offers the classic drawing-bar weights (1–5 px),
+ * each option previewed as a line at that weight.
+ */
+interface SettingsRowWidth {
+    key: string;
+    /** Names the control for its tooltip (`'Line width'`). */
+    label: string;
+    defval: number;
+}
+/**
+ * An inline NUMBER input on a toggle row — sits AHEAD of the row's color swatches
+ * (dimmed with them while the toggle is off) and stores a number under its own bag
+ * key. For the one value the toggle governs (a percent, a count) — the declarative
+ * alternative to a separate `number` row gated on the toggle.
+ */
+interface SettingsRowInlineNumber {
+    key: string;
+    /** Names the input for its tooltip (`'Value area (%)'`). */
+    label: string;
+    defval: number;
+    min?: number;
+    max?: number;
+    step?: number;
+}
+/**
+ * A select option: a bare string (value = label) or a `[value, label]` pair when the
+ * stored id differs from the human-readable text (`['bidAskProfile', 'Bid × Ask Profile']`).
+ */
+type SettingsSelectOption = string | readonly [value: string, label: string];
+/**
+ * One INLINE CONTROL on a composite `row` — the composable unit every value row is
+ * made of. Each keyed control stores under its own bag key; `label` names it for the
+ * control's tooltip. A control may carry its own `when` gate (same shape as a row's),
+ * evaluated live against the values bag: a gated control appears/disappears as other
+ * values change, and is EXEMPT from the row's toggle-off dim — its gate already says
+ * when it matters, and it may exist specifically for the off state.
+ *
+ * - `number` — a compact number input. With `placeholder`, an input at the default
+ *   value renders EMPTY showing it, and clearing the input stores the default back —
+ *   the placeholder names the "unset" state (`'Off'` for a 0-disables bound).
+ * - `color` — a color swatch opening the shared color picker.
+ * - `width` — a line-width dropdown (the classic drawing-bar 1–5 px weights, each
+ *   option previewed as a line at that weight), storing a px number.
+ * - `select` — a dropdown over {@link SettingsSelectOption}s.
+ * - `hint` — display-only dimmed text between controls (the `–` of a min–max pair,
+ *   a unit); stores nothing.
+ */
+type SettingsInlineControl = {
+    kind: 'number';
+    key: string;
+    label: string;
+    defval: number;
+    min?: number;
+    max?: number;
+    step?: number;
+    placeholder?: string;
+    when?: SettingsRowWhen;
+} | {
+    kind: 'color';
+    key: string;
+    label: string;
+    defval: string;
+    when?: SettingsRowWhen;
+} | {
+    kind: 'width';
+    key: string;
+    label: string;
+    defval: number;
+    when?: SettingsRowWhen;
+} | {
+    kind: 'select';
+    key: string;
+    label: string;
+    options: readonly SettingsSelectOption[];
+    defval: string;
+    when?: SettingsRowWhen;
+} | {
+    kind: 'hint';
+    text: string;
+};
+/**
+ * One declarative settings row. To add a NEW inline control kind, see
+ * docs/architecture/settings-rows.md.
+ *
+ * `heading` titles a GROUP of rows: the heading plus everything after it up to the next
+ * heading. In a flat `rows` section headings render as inline group titles; inside
+ * `instances`/`subsections` (or a `layout: 'grouped'` section) they become entries of
+ * the pane's group TOC (see {@link ChartTypeSettingsSection}).
+ *
+ * `header` is an in-pane subgroup title: same visual as a flat heading, but inside a
+ * structured pane it stays in the rows column (does NOT become a TOC entry). Use it to
+ * cluster rows inside a TOC group (e.g. Colors / Values under Display).
+ *
+ * `row` is the COMPOSITE form every value row reduces to: a label, an optional leading
+ * `toggle` (a checkbox storing a boolean under `toggle.key`; while off, the row's
+ * controls dim and ignore input), and an ordered list of {@link SettingsInlineControl}s
+ * in the control column. Any mix of control kinds in any order — no per-combination
+ * SDK surface.
+ *
+ * The remaining kinds are SUGAR over `row` (see {@link normalizeSettingsRow}):
+ * - `toggle` — a checkbox row; optional inline `number`, color `colors`, and `width`
+ *   attachments render in that order.
+ * - `number` / `color` / `select` — one control on its own row.
+ * - `range` — a min–max pair (two number inputs under `minKey`/`maxKey`, both seeded
+ *   from the shared `defval`, with `placeholder` naming the unset state).
+ *
+ * Any row may carry `when` — it is shown only while the condition holds.
+ */
+type SettingsRowDescriptor = {
+    kind: 'heading';
+    label: string;
+    when?: SettingsRowWhen;
+} | {
+    kind: 'header';
+    label: string;
+    when?: SettingsRowWhen;
+} | {
+    kind: 'row';
+    label: string;
+    toggle?: {
+        key: string;
+        defval: boolean;
+    };
+    controls: readonly SettingsInlineControl[];
+    when?: SettingsRowWhen;
+} | {
+    kind: 'toggle';
+    key: string;
+    label: string;
+    defval: boolean;
+    number?: SettingsRowInlineNumber;
+    colors?: readonly SettingsRowSwatch[];
+    width?: SettingsRowWidth;
+    when?: SettingsRowWhen;
+} | {
+    kind: 'number';
+    key: string;
+    label: string;
+    defval: number;
+    min?: number;
+    max?: number;
+    step?: number;
+    when?: SettingsRowWhen;
+} | {
+    kind: 'color';
+    key: string;
+    label: string;
+    defval: string;
+    when?: SettingsRowWhen;
+} | {
+    kind: 'select';
+    key: string;
+    label: string;
+    options: readonly SettingsSelectOption[];
+    defval: string;
+    when?: SettingsRowWhen;
+} | {
+    kind: 'range';
+    label: string;
+    minKey: string;
+    maxKey: string;
+    defval: number;
+    min?: number;
+    max?: number;
+    step?: number;
+    placeholder?: string;
+    when?: SettingsRowWhen;
+};
+/** A value-carrying row (everything except the key-less `heading`/`header` titles). */
+type SettingsValueRow = Exclude<SettingsRowDescriptor, {
+    kind: 'heading' | 'header';
+}>;
+/** The canonical row shape every {@link SettingsValueRow} reduces to (the `row` kind's fields). */
+interface NormalizedSettingsRow {
+    label: string;
+    toggle?: {
+        key: string;
+        defval: boolean;
+    };
+    controls: readonly SettingsInlineControl[];
+    when?: SettingsRowWhen;
+}
+/**
+ * Reduce a value row to the canonical composite shape — the ONE contract view layers
+ * render and the persistence layer enumerates. The sugar kinds map exactly onto their
+ * historical rendering: `toggle` attachments in number → colors → width order, `range`
+ * as two number controls around a `–` hint (placeholder semantics preserved).
+ */
+declare function normalizeSettingsRow(r: SettingsValueRow): NormalizedSettingsRow;
+/** One value a settings row stores: its bag key, runtime type, and registry default. */
+interface SettingsRowValueKey {
+    key: string;
+    type: 'boolean' | 'number' | 'string';
+    defval: boolean | number | string;
+}
+/**
+ * EVERY key a row stores (toggle key + each keyed inline control), with its expected
+ * type and default — the single enumeration the dialog seeds from and the factory
+ * reset restores, so no key can fall through a kind-specific walk.
+ */
+declare function settingsRowValueKeys(r: SettingsRowDescriptor): SettingsRowValueKey[];
+/**
+ * One tab of a section's INSTANCE STRIP — a repeated block of settings (e.g. one of
+ * several overlays a style can paint). The dialog shows a tab per PRESENT instance,
+ * a dashed `+` that turns on the next absent one, and an `×` on the active removable
+ * tab that turns it off. Presence is the boolean at `enableKey` (stored in the same
+ * per-type bag as every other value); an instance without `enableKey` is always
+ * present and not removable — the base instance.
+ */
+interface ChartTypeSettingsInstance {
+    label: string;
+    /** Boolean bag key controlling presence; omitted = always present, not removable. */
+    enableKey?: string;
+    rows: readonly SettingsRowDescriptor[];
+}
+/** An indented sub-entry under the section's rail tab, with its own pane of rows. */
+interface ChartTypeSettingsSubsection {
+    title: string;
+    rows: readonly SettingsRowDescriptor[];
+    /**
+     * Boolean bag key that masters this pane. While it is false, every row EXCEPT the
+     * one whose `key` matches stays visible but grayed out (not hidden) — so users can
+     * still browse and preview settings with the feature off. The matching toggle is
+     * typically the first row of the Display group.
+     */
+    enableKey?: string;
+}
+/**
+ * A chart type's settings tab. Two forms:
+ *
+ * - **Flat**: `rows` only — rendered as one scrollable pane, `heading` rows as inline
+ *   group titles (the historical form). `layout: 'grouped'` upgrades the same rows to
+ *   the GROUP TOC presentation (below) without declaring an instance strip.
+ * - **Structured**: `instances` (and optionally `subsections`) — the pane opens with an
+ *   instance TAB STRIP, and each instance's rows are organized by a GROUP TOC on the
+ *   left of the pane (right of the dialog's tab rail) built from its `heading` rows
+ *   (rows before the first heading always show above the groups; selecting a TOC entry
+ *   shows only that group's rows). `subsections` add indented rail entries under the
+ *   section's tab, each a pane with the same TOC treatment. A TOC entry hides itself
+ *   while every row of its group is hidden by `when` gates.
+ *
+ * All values — every instance and subsection included — live in the ONE per-type bag
+ * (`config.chartTypes[<id>]`), so consumers keep receiving a single flat object.
+ */
+interface ChartTypeSettingsSection {
+    /** Section heading in the settings dialog. */
+    title: string;
+    /** Flat form. Ignored when `instances` is declared. */
+    rows?: readonly SettingsRowDescriptor[];
+    /** How `rows` are presented: `'flat'` (default) renders headings as inline group
+     *  titles; `'grouped'` promotes them to a group TOC beside the rows (the structured
+     *  pane's presentation, without an instance strip). Ignored with `instances`. */
+    layout?: 'flat' | 'grouped';
+    /** Structured form: the pane's instance tab strip. */
+    instances?: readonly ChartTypeSettingsInstance[];
+    /** Indented sub-entries under this section's rail tab. */
+    subsections?: readonly ChartTypeSettingsSubsection[];
+    /** `'active'` (default): shown only while this chart type is the active price style;
+     *  `'always'`: shown whenever the type is registered. */
+    visibility?: 'always' | 'active';
+    /** Rail position: `'end'` (default, after the built-in tabs) or `'after-symbol'`
+     *  (directly under the Symbol tab). Subsections follow their parent. */
+    placement?: 'after-symbol' | 'end';
+}
+/** Register (or replace) a chart type. */
+declare function registerChartType(def: ChartTypeDefinition): void;
+/** Remove a registered chart type (built-ins can be re-registered via their register fn). */
+declare function unregisterChartType(id: string): void;
+/** The definition behind a price-style id, or undefined for built-ins/unknown ids. */
+declare function chartType(id: unknown): ChartTypeDefinition | undefined;
+/** Every registered chart type (registration order). */
+declare function chartTypes(): ChartTypeDefinition[];
+/** Whether the price style is a {@link ChartTypeDefinition.replacesSeries series-replacing} type. */
+declare function replacesSeries(id: unknown): boolean;
+/** Ids that act as extended-ticker modifiers (`"SYM;id"`). */
+declare function tickerModifierIds(): string[];
+
+/**
+ * The native renderer's chart-settings dialog (item 15): a DOM overlay, opened from
+ * an in-chart gear, that edits a curated slice of the serializable `ChartConfig`
+ * (background, candle/grid/crosshair colors, fonts, price scale, timezone, …). Each
+ * control emits a minimal nested patch via `onChange`; the renderer merges it onto
+ * the live config and repaints with NO indicator re-run. A footer exposes the whole
+ * config as JSON for export/import — the templating surface.
+ *
+ * It is renderer chrome (a positioned overlay on the chart container), kept
+ * dependency-free and themed to match the chart, mirroring `InputsUI`.
+ */
+/** A host-contributed settings row: callback-based (the host owns the state).
+ *  `heading` opens a titled group inside the tab (an in-pane section title);
+ *  `color` is a swatch opening the themed picker (any CSS color, alpha included).
+ *  `id` is the row's stable visibility id (defaults to the label's slug) — hiding a
+ *  heading's id hides its whole group (see `settings-visibility.ts`). */
+type HostSettingsRow = ({
+    kind: 'heading';
+    label: string;
+    id?: string;
+} | {
+    kind: 'toggle';
+    label: string;
+    get: () => boolean;
+    set: (v: boolean) => void;
+    id?: string;
+} | {
+    kind: 'select';
+    label: string;
+    options: readonly SettingsSelectOption[];
+    get: () => string;
+    set: (v: string) => void;
+    id?: string;
+} | {
+    kind: 'color';
+    label: string;
+    get: () => string;
+    set: (v: string) => void;
+    id?: string;
+}
+/** The host draws the row itself (e.g. a grid of pictures): `render` gets an empty element, full width, when the
+ *  tab is built (`label` names the row for hiding it, it is not shown). It should stop any work once the
+ *  element leaves the page (`isConnected`). */
+ | {
+    kind: 'custom';
+    label: string;
+    render: (host: HTMLElement) => void;
+    id?: string;
+}
+/** A calendar date (`yyyy-mm-dd`); `max` caps the picker (e.g. today). */
+ | {
+    kind: 'date';
+    label: string;
+    get: () => string;
+    set: (v: string) => void;
+    max?: () => string;
+    id?: string;
+}) & {
+    /** Shown only while this holds — re-read after every change made in the same section
+     *  (a mode select showing the one field of its mode). */
+    visible?: () => boolean;
+};
+/** A host-contributed settings tab (see `RendererControl.setSettingsSections`). */
+interface HostSettingsSection {
+    title: string;
+    rows: readonly HostSettingsRow[];
+    /** Tab position: own tab after Symbol (default), end of the rail, or rows INSIDE
+     *  the Symbol tab itself (`'symbol'` — e.g. the widget's watermark toggle). */
+    placement?: 'after-symbol' | 'end' | 'symbol' | 'canvas';
+    /** Stable visibility id (defaults to the title's slug). Row ids scope under it. */
+    id?: string;
 }
 
 /** The runtime surface an action's `when`/`run` receives. */
@@ -1522,6 +2661,11 @@ interface WidgetContext {
      *  it. The dock stays exclusive: opening one closes whichever was showing. Unknown ids
      *  are ignored. The seam a plugin uses to open ITS OWN panel programmatically. */
     togglePanel(id: string, open?: boolean): void;
+    /** Dock `el` as a full-width strip in the shell's layout, between the chart area and
+     *  the bottom bar — the charts shrink to make room. Strips stack in docking order.
+     *  Returns the undock (removes `el`; a no-op once it has left the strip area). The
+     *  caller owns `el`, its content and styling. */
+    dockStrip(el: HTMLElement): () => void;
     /** The widget's root element — pass it as `host` when mounting kit components
      *  (Dialog/Menu/Tooltip) from an action; without an explicit host they portal to
      *  the body, OUTSIDE the theme variables. A multi-chart shell hands its own root. */
@@ -1542,18 +2686,50 @@ interface WidgetContext {
      *  `state:changed` + storage write follows). Only needed for state with no shell
      *  event of its own — indicator adds/removals already trigger the save cycle. */
     stateChanged(): void;
+    /** Where the right-click that opened a context menu landed. Set on the context handed
+     *  to `context:*` actions (`when` and `run`); absent everywhere else. */
+    pointer?: ContextMenuPointer;
+}
+/**
+ * What the chart's crosshair reported when a context menu opened ({@link WidgetContext.pointer}),
+ * on the chart that received the right-click — in a workspace, the cell under the pointer.
+ * Captured once at open: moving through the menu before picking a row does not change it.
+ * The axis menus get what the crosshair reports over the axis: off the plot, `price` and
+ * `paneKind` are null, while `time` still names the bar column under the pointer (on the
+ * time axis, the bar above the click; null past the last bar).
+ */
+interface ContextMenuPointer {
+    /** The value under the pointer on the pane it landed on: a price on the price pane, an
+     *  indicator value on a study pane (see `paneKind`). Null off the plot. */
+    price: number | null;
+    /** Open time of the bar under the pointer; null off the bars. */
+    time: number | null;
+    /** The kind of pane the pointer is on; null off the plot. */
+    paneKind: 'price' | 'study' | null;
 }
 /** What {@link WidgetContext.addIndicator} takes: a named script, ready to run. */
 interface ExternalIndicatorEntry {
     name: string;
     /** The script source (the recorded undo/redo action re-adds from it). */
     script: string;
+    /** The indicator's id on the chart (see `AddIndicatorOptions.id`) — what a persistence
+     *  handler stores and hands back on restore so the indicator comes back under the id
+     *  its document knows. Omitted: the chart mints one. Either way undo/redo re-add the
+     *  indicator under the id it first ran with. An id already live on the cell's chart
+     *  is rejected (a warning; nothing is added). */
+    id?: string;
     /** Engine language (default: the chart's default engine). */
     language?: string;
     /** Input-value overrides applied at add time (what a persistence handler restores). */
     inputs?: Record<string, InputValue>;
     /** Declaration-prop overrides applied at add time. */
     props?: Record<string, InputValue>;
+    /** Style overrides (the settings dialog's "Style" tab) applied at add time. */
+    style?: Record<string, InputValue>;
+    /** Restore hidden: the indicator is suspended right after the add (legend row
+     *  stays, marked hidden) — a persistence handler carrying a hidden flag applies
+     *  it here so the engine never spends anything on a tucked-away indicator. */
+    hidden?: boolean;
 }
 /** Where an action is projected. */
 type WidgetActionTarget = 'topbar' | 'context:body' | 'context:price-axis' | 'context:time-axis';
@@ -1573,17 +2749,59 @@ interface WidgetActionDescriptor {
      *  one the flag is ignored (with a console warning) and the label renders. The piece
      *  that makes a `'screenshot'` slot override pixel-faithful to the native button. */
     iconOnly?: boolean;
-    /** Sort key within the contributed group (ascending; default 0). */
+    /** Sort key (ascending; default 0; ties keep registration order). On the topbar it orders
+     *  the contributed group. In a context menu (`context:*`) contributed rows sort TOGETHER
+     *  with the menu's built-in rows, which sit at the ranks of `CONTEXT_MENU_BUILTIN_ORDER`:
+     *  the built-in actions below 0 and the settings row at 1000. So an action without
+     *  `order` lands after the built-in actions and before the settings row, `order: -100`
+     *  leads the menu, and on a tie the built-in row comes first. */
     order?: number;
     /** Topbar only: which cluster the button joins. `'right'` (default) is the
      *  right-hand tools cluster; `'left'` puts it with the PRIMARY chrome buttons —
      *  right after the style/layout dropdowns, styled like them (the spot and look of
      *  the built-in Indicators button, for actions that replace it). */
     align?: 'left' | 'right';
+    /** Topbar only: where the action goes on the MOBILE layout (the topbar is hidden
+     *  there). `'bar'` is an icon stop on the bottom bar; `'menu'` is a row in the
+     *  three-dots menu — a left (primary) action right after Layout, a right one at the
+     *  end. Default: `'bar'` for `align: 'left'`, `'menu'` otherwise. */
+    mobile?: 'bar' | 'menu';
     /** Runtime gate — omitted ⇒ always shown. */
     when?: (ctx: WidgetContext) => boolean;
+    /** Context menus only: the row's text worked out when the menu opens (TradingView's
+     *  "Add alert on BTCUSDT at 81,782.00…"); `label` stays the fallback and the aria name. */
+    labelFor?: (ctx: WidgetContext) => string;
+    /** Context-menu actions: draw the row as a SWITCH showing this state (the menu stays open on a click and the
+     *  switch flips). For on/off settings such as "Enable smooth chart". */
+    checkedFor?: (ctx: WidgetContext) => boolean;
+    /** Context menus only: right-aligned shortcut hint (`'Alt+A'`). */
+    hint?: string;
+    /** Context menus only: the built-in group the row joins, so it sits inside that block
+     *  instead of a separated block of its own: `'clipboard'` (copy price, paste), `'trade'`
+     *  (alerts and orders), `'cursor'`, `'objects'` (table view, object tree, templates),
+     *  `'remove'`. Omitted: contributed rows form their own block. */
+    group?: ContextMenuGroup;
+    /** Context menus only: makes the row a submenu (TradingView's "Chart template ›"). The
+     *  rows are worked out when the menu opens; picking one calls {@link runItem}. */
+    submenu?: (ctx: WidgetContext) => ReadonlyArray<{
+        id: string;
+        label: string;
+        checked?: boolean;
+        disabled?: boolean;
+        separatorBefore?: boolean;
+    }>;
+    /** Runs a picked {@link submenu} row (its `id`). */
+    runItem?: (ctx: WidgetContext, id: string) => void;
+    /** Context menus only: the built-in row this action stands in for (`'paste'` for a host with its own
+     *  drawing clipboard); that row is left out while the action is shown. */
+    replaces?: string;
+    /** Context menus only: greys the row (shown, not runnable) when false — TradingView keeps Paste
+     *  visible with nothing to paste. */
+    enabled?: (ctx: WidgetContext) => boolean;
     run: (ctx: WidgetContext) => void;
 }
+/** The blocks of the chart-body menu, top to bottom (see {@link WidgetActionDescriptor.group}). */
+type ContextMenuGroup = 'view' | 'clipboard' | 'trade' | 'cursor' | 'objects' | 'remove';
 /**
  * A widget ATTACHMENT — a contributed unit of per-widget behavior/UI beyond a single
  * button: overlays, gesture handlers, custom key handling. `mount` runs once per
@@ -1620,6 +2838,11 @@ interface SidePanelHeader {
     /** Replace the header title (an empty string hides it). The topbar toggle keeps the
      *  DECLARED `title` as its tooltip. */
     setTitle(title: string): void;
+    /** Whether the panel covers every chart right now (see `maximizable`). */
+    readonly maximized: boolean;
+    /** Maximize the panel over the shell's charts, or restore it — what its header button
+     *  does. A no-op unless the descriptor is `maximizable`. Closing restores it too. */
+    setMaximized(maximized: boolean): void;
 }
 /**
  * A contributed SIDE PANEL — a docked column in the shell's panel dock, alongside the object
@@ -1651,6 +2874,10 @@ interface SidePanelDescriptor {
      *  column that shrinks the chart). For panels wide enough that a column would crush
      *  the plot. The dock stays exclusive either way. */
     overlay?: boolean;
+    /** A header button that maximizes the panel over every chart of the shell, and restores
+     *  it (default false). For panels that are sometimes the main work surface, like an
+     *  editor; the contribution can drive it too ({@link SidePanelHeader.setMaximized}). */
+    maximizable?: boolean;
     mount(ctx: WidgetContext, body: HTMLElement, header: SidePanelHeader): SidePanelHandle | void;
 }
 /** One panel toggle, as the shell's chrome consumes it (data, never DOM). */
@@ -1697,8 +2924,9 @@ declare function widgetActions(target: WidgetActionTarget, ctx?: WidgetContext):
 interface LegendIndicatorInfo {
     id: string;
     title: string;
-    /** The script source the indicator was added with; undefined for a NATIVE
-     *  (core-computed) indicator. The usual `when` gate for source-centric actions. */
+    /** The script source the indicator runs NOW (read at click time, so an in-place code
+     *  update shows through); undefined for a NATIVE (core-computed) indicator. The usual
+     *  `when` gate for source-centric actions. */
     source?: string;
 }
 /**
@@ -1757,6 +2985,9 @@ interface LegendCalloutSpec {
     tooltip: string;
     /** Deployed panel — presence makes the bubble clickable. */
     content?: LegendCalloutContent;
+    /** Icon slots side by side (default 1): a wider pill for an icon drawn `span` squares wide (several logos in
+     *  a row). The icon's viewBox should be 16*span x 16. Clamped to 1..6. */
+    span?: number;
 }
 /**
  * A contributed LEGEND CALLOUT: a small tinted bubble with a centered icon, visible
@@ -1775,8 +3006,12 @@ interface LegendCalloutDescriptor {
     id: string;
     /** Sort key within the contributed group (ascending; default 0). */
     order?: number;
-    /** Resolve the row's bubble — `null`/`undefined` shows none. */
-    callout(indicator: LegendIndicatorInfo): LegendCalloutSpec | null | undefined;
+    /** Resolve the row's bubble — `null`/`undefined` shows none. `on` is the row's own chart and indicator handle
+     *  (ids repeat across a workspace's charts, so a callout that reads inputs must use this, not a lookup by id). */
+    callout(indicator: LegendIndicatorInfo, on?: {
+        chart: Vela;
+        handle: IndicatorHandle;
+    }): LegendCalloutSpec | null | undefined;
 }
 /** Register (or replace) a legend callout. Returns an unregister disposer. */
 declare function registerLegendCallout(desc: LegendCalloutDescriptor): () => void;
@@ -1876,5 +3111,34 @@ declare function unregisterDefaultEngine(language: string): void;
 /** The registered defaults merged UNDER `overrides` — per-instance factories win per
  *  language. The shell layers (widget, workspace cell) register exactly this result. */
 declare function resolveEngines(overrides?: Record<string, EngineFactory>): Record<string, EngineFactory>;
+/**
+ * App-wide rows in the chart settings dialog: a tab of their own (`placement` 'after-symbol' or
+ * 'end'), or a titled group inside the Symbol or Canvas tab ('symbol' / 'canvas'). The rows are
+ * callback-based, so the host owns the state. Every chart built AFTER the registration shows them.
+ */
+type HostSettingsSectionDescriptor = HostSettingsSection;
+/** Register a settings section for every chart built from now on. Returns a disposer. */
+declare function registerSettingsSection(desc: HostSettingsSectionDescriptor): () => void;
+/**
+ * The host's saved-template store, plugged into the chart settings dialog's footer as a
+ * "Template ▾" dropdown (what the drawing settings dialog already has): the host lists its
+ * templates and acts on a pick, the dialog adds its own "Reset defaults" as the LAST row.
+ * The core ships no template storage — `registerWidgetAction` buttons own it in a host app —
+ * so this is only the seam: register the same store the header "Templates" button uses and
+ * both surfaces stay one store.
+ *
+ * There is ONE such menu per page (re-registering replaces it); without one the footer is the
+ * plain "Reset defaults" button. Late registrations show on the next `refreshActions()`.
+ */
+interface SettingsTemplateMenuDescriptor {
+    /** The rows above "Reset defaults". Called at EVERY open, so a save or delete shows at once.
+     *  An empty list leaves "Reset defaults" alone in the menu. */
+    items(ctx: WidgetContext): readonly SettingsMenuRowView[];
+    /** A leaf row was picked. `anchor` is the footer button — where a follow-up menu belongs. */
+    run(itemId: string, ctx: WidgetContext, anchor: HTMLElement): void;
+}
+/** Register (or replace) the settings dialog's template menu. Returns a disposer. */
+declare function registerSettingsTemplateMenu(desc: SettingsTemplateMenuDescriptor): () => void;
+declare function unregisterSettingsTemplateMenu(): void;
 
-export { TypedEventBus as $, type RunIndicatorResult as A, type BarsChangeReason as B, type CellStateContext as C, type DrawingsDocument as D, type ExternalIndicatorEntry as E, type FetchSeries as F, type SceneInspection as G, type ScriptRunCause as H, type IndicatorHandle as I, type ScriptRunResult as J, type SidePanelButton as K, type LegendActionDescriptor as L, type SidePanelDescriptor as M, type NativeIndicator as N, OVERRIDABLE_TOPBAR_IDS as O, type ParsedSymbol as P, type SidePanelHandle as Q, type Resolved as R, type ScriptingEngine as S, type SidePanelHeader as T, type StatePersistenceHandler as U, Vela as V, type WidgetContext as W, type StrategyFill as X, type StrategyState as Y, type StrategyTrade as Z, type SymbolRankingHook as _, type ScriptRun as a, type VelaDeps as a0, type VelaEventMap as a1, type VisibleBarRange as a2, type WidgetActionDescriptor as a3, type WidgetActionTarget as a4, type WidgetAttachment as a5, getNativeIndicator as a6, legendActions as a7, legendCallouts as a8, nativeIndicatorDescriptors as a9, nativeIndicatorTypes as aa, registerDefaultEngine as ab, registerLegendAction as ac, registerLegendCallout as ad, registerNativeIndicator as ae, registerSidePanel as af, registerStatePersistence as ag, registerSymbolRanking as ah, registerWidgetAction as ai, registerWidgetAttachment as aj, resolveEngines as ak, sidePanels as al, statePersistenceHandlers as am, symbolRanking as an, topbarActionOverride as ao, unregisterDefaultEngine as ap, unregisterLegendAction as aq, unregisterLegendCallout as ar, unregisterNativeIndicator as as, unregisterSidePanel as at, unregisterStatePersistence as au, unregisterWidgetAction as av, unregisterWidgetAttachment as aw, widgetActions as ax, widgetAttachments as ay, DEFAULT_PANEL_ORDER as az, type ContextSelect as b, DataControl as c, DrawingsControl as d, type EngineAlert as e, type EngineCapabilities as f, type EngineContextSnapshot as g, type EngineFactory as h, type EngineWarning as i, type ExecutionHandlers as j, type ExecutionMarket as k, type ExecutionRequest as l, type ExecutionSession as m, type IndicatorEventMap as n, type IndicatorSummary as o, type LegendCalloutContent as p, type LegendCalloutDescriptor as q, type LegendCalloutItem as r, type LegendCalloutSpec as s, type LegendIndicatorInfo as t, type NativeIndicatorContext as u, type NativeIndicatorDescriptor as v, type NativeIndicatorInfo as w, type NativeIndicatorOutput as x, type PreparedScript as y, RendererControl as z };
+export { ReplayControl as $, type LegendCalloutContent as A, type BarTransform as B, type CellStateContext as C, type DrawingsDocument as D, type EngineAlert as E, type FetchSeries as F, type LegendCalloutDescriptor as G, type HostSettingsSection as H, type IndicatorEventMap as I, type LegendCalloutItem as J, type LegendCalloutSpec as K, type LegendActionDescriptor as L, type LegendIndicatorInfo as M, MarksControl as N, type NativeIndicator as O, type NativeIndicatorContext as P, type NativeIndicatorDescriptor as Q, type Resolved as R, type NativeIndicatorInfo as S, type NativeIndicatorOutput as T, type NormalizedSettingsRow as U, OVERRIDABLE_TOPBAR_IDS as V, type ParsedSymbol as W, type PeriodBars as X, type PreparedScript as Y, RendererControl as Z, type ReplayBounds as _, type ReplayTick as a, setNativeInstanceCap as a$, type ReplayEndReason as a0, type ReplayStartOptions as a1, type ReplayState as a2, type RunIndicatorResult as a3, type SceneInspection as a4, type ScriptRun as a5, type ScriptRunCause as a6, type ScriptRunResult as a7, type ScriptingEngine as a8, type SeriesDataEngine as a9, type WidgetActionDescriptor as aA, type WidgetActionTarget as aB, type WidgetAttachment as aC, type WidgetContext as aD, chartType as aE, chartTypes as aF, getNativeIndicator as aG, legendActions as aH, legendCallouts as aI, nativeIndicatorDescriptors as aJ, nativeIndicatorTypes as aK, nativeInstanceCap as aL, normalizeSettingsRow as aM, registerChartType as aN, registerDefaultEngine as aO, registerLegendAction as aP, registerLegendCallout as aQ, registerNativeIndicator as aR, registerSettingsSection as aS, registerSettingsTemplateMenu as aT, registerSidePanel as aU, registerStatePersistence as aV, registerSymbolRanking as aW, registerWidgetAction as aX, registerWidgetAttachment as aY, replacesSeries as aZ, resolveEngines as a_, type SeriesDataEngineHost as aa, type SettingsInlineControl as ab, type SettingsRowCondition as ac, type SettingsRowDescriptor as ad, type SettingsRowInlineNumber as ae, type SettingsRowSwatch as af, type SettingsRowValueKey as ag, type SettingsRowWhen as ah, type SettingsRowWidth as ai, type SettingsSelectOption as aj, type SettingsTemplateMenuDescriptor as ak, type SettingsValueRow as al, type SidePanelButton as am, type SidePanelDescriptor as an, type SidePanelHandle as ao, type SidePanelHeader as ap, type StatePersistenceHandler as aq, type StrategyFill as ar, type StrategyState as as, type StrategyTrade as at, type SymbolRankingHook as au, TypedEventBus as av, Vela as aw, type VelaDeps as ax, type VelaEventMap as ay, type VisibleBarRange as az, DataControl as b, settingsRowValueKeys as b0, sidePanels as b1, statePersistenceHandlers as b2, symbolRanking as b3, tickerModifierIds as b4, topbarActionOverride as b5, unregisterChartType as b6, unregisterDefaultEngine as b7, unregisterLegendAction as b8, unregisterLegendCallout as b9, unregisterNativeIndicator as ba, unregisterSettingsTemplateMenu as bb, unregisterSidePanel as bc, unregisterStatePersistence as bd, unregisterWidgetAction as be, unregisterWidgetAttachment as bf, widgetActions as bg, widgetAttachments as bh, type ContextMenuGroup as bi, DEFAULT_PANEL_ORDER as bj, type ReplayTickSource as c, type BarsChangeReason as d, type ChartTypeDefinition as e, type ChartTypeSettingsInstance as f, type ChartTypeSettingsSection as g, type ChartTypeSettingsSubsection as h, type CodeUpdateResult as i, type ContextMenuPointer as j, type ContextSelect as k, DrawingsControl as l, type EngineCapabilities as m, type EngineContextSnapshot as n, type EngineFactory as o, type EngineWarning as p, type ExecutionHandlers as q, type ExecutionMarket as r, type ExecutionRequest as s, type ExecutionSession as t, type ExternalIndicatorEntry as u, type HistoryLayerState as v, type HostSettingsSectionDescriptor as w, type IndicatorHandle as x, type IndicatorSettings as y, type IndicatorSummary as z };

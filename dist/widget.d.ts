@@ -1,12 +1,12 @@
-import { V as Vela, W as WidgetContext, K as SidePanelButton } from './contributions-NvOMUXXm.js';
-export { C as CellStateContext, az as DEFAULT_PANEL_ORDER, E as ExternalIndicatorEntry, O as OVERRIDABLE_TOPBAR_IDS, M as SidePanelDescriptor, Q as SidePanelHandle, U as StatePersistenceHandler, _ as SymbolRankingHook, a3 as WidgetActionDescriptor, a4 as WidgetActionTarget, a5 as WidgetAttachment, af as registerSidePanel, ag as registerStatePersistence, ah as registerSymbolRanking, ai as registerWidgetAction, aj as registerWidgetAttachment, al as sidePanels, am as statePersistenceHandlers, an as symbolRanking, ao as topbarActionOverride, at as unregisterSidePanel, au as unregisterStatePersistence, av as unregisterWidgetAction, aw as unregisterWidgetAttachment, ax as widgetActions, ay as widgetAttachments } from './contributions-NvOMUXXm.js';
-import { b as VelaOptions, d as MarketSession, T as ThemeName, c as VelaTheme, s as DataWindowReadout } from './options-BSbXQdMy.js';
-import { c as VelaShellOptions, W as WidgetHistory, b as RangePreset, f as WorkspaceState, j as TopbarComposition, a as StatuslinePart, P as PanelsState } from './statusline-model-CqGoLw8w.js';
-export { B as Bottombar, k as BottombarOptions, C as CellState, g as ChartState, I as IndicatorLoader, l as IndicatorManifest, m as IndicatorManifestEntry, n as RANGE_PRESETS, R as ResolvedIndicator, o as ResolvedTopbarComposition, p as TOPBAR_BUILTIN_IDS, q as TOPBAR_DEFAULT_LEFT, r as TOPBAR_DEFAULT_RIGHT, V as VelaStorage, t as WidgetStorage, h as decodeState, i as encodeState, u as localStorageAdapter, v as pinnedTopbarActionIds, w as resolveIndicators, x as resolveTopbarComposition, s as sanitizeState, y as topbarHas } from './statusline-model-CqGoLw8w.js';
-import { K as KeymapManager } from './keymap-CGOz5F5f.js';
-import { a as SymbolDescriptor } from './DataProvider-BPCAysxU.js';
-import { d as SidePanel } from './side-panel-HF0IAzwf.js';
-export { D as DEFAULT_PANEL_MAX_WIDTH, a as DEFAULT_PANEL_MIN_WIDTH, b as DEFAULT_PANEL_WIDTH, S as SidePanelOptions, c as clampPanelWidth } from './side-panel-HF0IAzwf.js';
+import { aw as Vela, aD as WidgetContext, am as SidePanelButton } from './contributions-DtaeOFCZ.js';
+export { C as CellStateContext, bi as ContextMenuGroup, j as ContextMenuPointer, bj as DEFAULT_PANEL_ORDER, u as ExternalIndicatorEntry, V as OVERRIDABLE_TOPBAR_IDS, an as SidePanelDescriptor, ao as SidePanelHandle, aq as StatePersistenceHandler, au as SymbolRankingHook, aA as WidgetActionDescriptor, aB as WidgetActionTarget, aC as WidgetAttachment, aU as registerSidePanel, aV as registerStatePersistence, aW as registerSymbolRanking, aX as registerWidgetAction, aY as registerWidgetAttachment, b1 as sidePanels, b2 as statePersistenceHandlers, b3 as symbolRanking, b5 as topbarActionOverride, bc as unregisterSidePanel, bd as unregisterStatePersistence, be as unregisterWidgetAction, bf as unregisterWidgetAttachment, bg as widgetActions, bh as widgetAttachments } from './contributions-DtaeOFCZ.js';
+import { be as VelaOptions, bo as MarketSession, T as ThemeName, V as VelaTheme, v as DataWindowReadout } from './options-E_TmxEA7.js';
+import { V as VelaShellOptions, W as WidgetHistory, R as RangePreset, a as WorkspaceState, T as TopbarComposition, S as StatuslinePart, P as PanelsState } from './statusline-model-BiBzwS17.js';
+export { B as Bottombar, b as BottombarOptions, C as CellState, c as ChartState, I as IndicatorLoader, d as IndicatorManifest, e as IndicatorManifestEntry, f as RANGE_PRESETS, g as ResolvedIndicator, h as ResolvedTopbarComposition, i as TOPBAR_BUILTIN_IDS, j as TOPBAR_DEFAULT_LEFT, k as TOPBAR_DEFAULT_RIGHT, l as VelaStorage, m as WidgetStorage, n as decodeState, o as encodeState, p as localStorageAdapter, q as pinnedTopbarActionIds, r as resolveIndicators, s as resolveTopbarComposition, t as sanitizeState, u as topbarHas } from './statusline-model-BiBzwS17.js';
+import { a as KeymapManager } from './keymap-CGIxBV99.js';
+import { a as SymbolDescriptor } from './DataProvider-Brs7Yc4U.js';
+import { d as SidePanel } from './side-panel-DPWdgW2J.js';
+export { C as CONTEXT_MENU_BUILTIN_ORDER, D as DEFAULT_PANEL_MAX_WIDTH, a as DEFAULT_PANEL_MIN_WIDTH, b as DEFAULT_PANEL_WIDTH, S as SidePanelOptions, c as clampPanelWidth } from './side-panel-DPWdgW2J.js';
 
 interface VelaWidgetOptions extends VelaOptions, VelaShellOptions {
     /** @deprecated No longer supported — the option is ignored (a console warning
@@ -56,6 +56,16 @@ type LayoutPickerShape = {
     rows: number;
     cols: number;
 };
+/** One chart-count section of the layout catalog. */
+interface LayoutCatalogGroup {
+    count: number;
+    items: Array<{
+        id: string;
+        label: string; /** 16px `<svg>` markup */
+        glyph: string;
+        checked: boolean;
+    }>;
+}
 
 declare function priceStyleLabel(id: string): string;
 interface TopbarOptions {
@@ -72,6 +82,13 @@ interface TopbarOptions {
      *  chips never render — the host owns (and persists) the favorite set. */
     onTimeframeFavorite?: (tf: string, on: boolean) => void;
     onPriceStyle: (style: string) => void;
+    /** Favorite chart types — quick-switch icon buttons before the chart-type button, stars in its
+     *  menu rows (TradingView's favorite chart types). Push later changes with
+     *  {@link Topbar.setStyleFavorites}. */
+    styleFavorites?: readonly string[];
+    /** A chart-type menu star was toggled. Omitted, the menu carries no stars and no buttons
+     *  render — the host owns (and persists) the favorite set. */
+    onStyleFavorite?: (style: string, on: boolean) => void;
     /** Optional workspace LAYOUT dropdown (rendered after the style dropdown when
      *  given) — the grid-canvas picker composing uniform grids, with the workspace
      *  SYNC switches beside it. Everything is read live, so plugin-registered
@@ -87,6 +104,8 @@ interface TopbarOptions {
         }>;
         onSelectGrid: (rows: number, cols: number) => void;
         onSelectPreset: (id: string) => void;
+        /** The arrangement catalog grouped by chart count; replaces the grid canvas when given. */
+        catalog?: () => LayoutCatalogGroup[];
         /** SYNC switch rows (re-read on every open and after each toggle). */
         syncs: () => Array<{
             id: string;
@@ -94,6 +113,9 @@ interface TopbarOptions {
             checked: boolean;
         }>;
         onToggleSync: (id: string) => void;
+        /** The current layout's 16px glyph (`<svg>` markup) for the button, re-read on
+         *  every {@link Topbar.setLayout}. Omitted ⇒ the registered `'layout'` icon. */
+        glyph?: () => string;
     };
     onIndicatorsClick?: () => void;
     /** Unified undo/redo (same stack as Ctrl+Z / Ctrl+Y). Enabled state is pushed with
@@ -122,7 +144,11 @@ declare class Topbar {
     private layoutPicker;
     private layoutId;
     private readonly tfMenu;
+    private readonly offIntervals;
     private readonly styleMenu;
+    /** Favorite chart types (quick-switch buttons) and the element holding their buttons. */
+    private styleFavs;
+    private readonly styleChipsHost;
     private readonly tooltips;
     private readonly actionsHost;
     /** Left-aligned contributed actions (`align: 'left'`) — right after the dropdowns. */
@@ -155,8 +181,31 @@ declare class Topbar {
     private timeframe;
     private priceStyle;
     private readonly onHairlineSync;
+    /** Where the reader scrolled the bar to (`end`: all the way right). Rebuilds of the bar's buttons (actions
+     *  re-rendered, a host control removed and put back a frame later) shrink it for a moment, and the browser
+     *  then clamps the scroll position; this puts the reader's position back once the bar has settled. */
+    private scrollIntent;
+    /** Set by a change inside the bar until the next settle: scroll events meanwhile are the browser's clamp. */
+    private relayout;
+    /** A position this class is moving the bar to (an arrow's smooth scroll, a restore): the scroll events on the
+     *  way are not the reader's. Dropped on arrival, or after `ownUntil` if the browser never gets there. */
+    private ownScroll;
+    private ownUntil;
+    private moveTo;
+    private readonly onBarMutation;
+    /** The bar's own size stays put when its buttons grow (a font loading, a host style); watching the items
+     *  catches that, so the scroll arrows appear as soon as something is cut off. */
+    private itemsRo;
+    private observeItems;
+    private restoreScroll;
+    private readonly onBarScroll;
+    private readonly onBarWheel;
     private hairlineRo;
+    /** Host additions to the bar (controls placed next to the chart-type button) change its width too. */
+    private barMo;
     private hairlineRaf;
+    private readonly scrollL;
+    private readonly scrollR;
     constructor(host: HTMLElement, opts: TopbarOptions);
     setSymbol(symbol: string): void;
     setTimeframe(tf: string): void;
@@ -164,6 +213,13 @@ declare class Topbar {
     setTimeframeFavorites(favs: readonly string[]): void;
     /** Rebuild the quick-switch chips (current value changed, or the favorite set did). */
     private renderTfChips;
+    /** Reflect the favorite chart-type set — the quick-switch buttons and the menu stars. */
+    setStyleFavorites(favs: readonly string[]): void;
+    /** Icon buttons for the starred chart types, in menu order; the current one highlighted. */
+    private renderStyleChips;
+    /** A narrow bar drops favorite chart-type buttons from the end (the current one last) until the
+     *  bar fits, so the right-side actions stay on screen. The chart-type menu still lists them all. */
+    private fitStyleChips;
     setPriceStyle(style: string): void;
     /** Reflect the current workspace layout (no-op without the layout dropdown). */
     setLayout(id: string): void;
@@ -191,8 +247,9 @@ declare class Topbar {
     /** One icon-only tool button with its kit tooltip, parked in `sink` for disposal. */
     private toolButton;
     /** Paint each `.vela-sep` as exactly one device pixel, snapped to the pixel grid. */
+    /** Shows each arrow while content is cut off on its side. */
+    private syncScrollArrows;
     private syncHairlines;
-    private tfItems;
     private styleItems;
 }
 
@@ -222,9 +279,12 @@ declare class Statusline {
     private readonly ohlcEl;
     private readonly changeEl;
     private readonly symbolEl;
+    /** The badge slot — the market bubble, or the replay badge while replaying. */
     private readonly marketEl;
-    /** The badge itself — a kit callout bubble (the same element as {@link marketEl}). */
+    /** The market status face — a kit callout bubble. */
     private readonly marketBubble;
+    /** The replay face — see {@link REPLAY_BADGE_SVG}. */
+    private readonly replayBadge;
     private marketTip;
     /** The show-chart eye — visible only while the chart is hidden. */
     private readonly eyeEl;
@@ -232,6 +292,9 @@ declare class Statusline {
     private avatarEl;
     private metaEl;
     private readonly parts;
+    private marketStatus;
+    /** The chart replays past bars — the badge shows the replay mode (see {@link setReplaying}). */
+    private replaying;
     /** The right-click action menu — present once a host wires it via {@link attachMenu}. */
     private menu;
     private menuHooks;
@@ -239,6 +302,8 @@ declare class Statusline {
     private chartHidden;
     private lastBar;
     private hoverBar;
+    /** The bound chart's tick size source (the price axis's precision), see {@link dp}. */
+    private mintick;
     private unsubs;
     /** Up/down ink for the OHLC + change values — the ACTIVE price style's configured
      *  colors (candle bodies, bar ticks, the line color, …); null falls back to the theme
@@ -252,21 +317,45 @@ declare class Statusline {
     /** Fit mode (multi-chart cells): one row, overflowing segments hidden — see {@link setFitMode}. */
     private fitMode;
     private fitRO;
+    /** An embedder that relabels the symbol or meta after Vela writes them (a longer display
+     *  name) changes the row's width without a resize: re-fit on the next frame, or the values
+     *  stay beside a name that no longer leaves them room and run off the plot. Text only —
+     *  fit() itself never writes this row's text, so it cannot loop. */
+    private textMO;
+    private textQueued;
+    /** The identity row (avatar / symbol / meta / market) and the values row (readout /
+     *  eye) — one line side by side, or a two-line column once the ladder stacks them. */
+    private readonly identityRow;
+    private readonly valuesRow;
+    /** The ladder rung currently applied — see {@link fit}. */
+    private layout;
+    /** The readout {@link widthKey} the applied rung was fitted to. */
+    private fitKey;
+    /** Web fonts landing after the last fit change every width without a resize. */
+    private readonly onFontsLoaded;
     constructor(host: HTMLElement, symbol: string, 
     /** The avatar's icon URL for a raw symbol — the shell routes it to the owning
      *  provider's `resolveSymbolIcon`. Absent ⇒ the initials badge. */
     iconFor?: ((symbol: string) => string | undefined) | undefined);
     setSymbol(symbol: string): void;
     /**
-     * Multi-chart cells: keep the line on ONE row whatever the cell width — never wrap.
-     * Segments that don't fit are hidden outright rather than clipped mid-glyph, least
-     * important first: OHLC, then the bar change, the venue/timeframe meta, and the
-     * market badge; the logo + ticker always stay. Re-fits live on host resizes.
+     * Multi-chart cells: the same width ladder as a single chart, plus a last resort for
+     * cells too narrow for even its bottom rung — whatever still overflows is hidden
+     * outright rather than clipped mid-glyph, least important first: the values, the
+     * venue/timeframe meta, then the market badge; the logo + ticker always stay.
      */
     setFitMode(on: boolean): void;
     /** Project the parts config onto the segments (the baseline fit() prunes from). */
     private syncParts;
-    /** Hide overflowing segments until the row fits its max-width (fit mode only). */
+    /** Apply one ladder rung: the stacked/inline shape and the readout's level. */
+    private applyLayout;
+    /**
+     * Walk the width ladder (see {@link STATUSLINE_LADDER}) until the chip fits its
+     * max-width: the full one-line readout, then the values stacked under the symbol
+     * line, then O/H/L shed, then the absolute change. In fit mode, when the last rung
+     * still overflows, whole segments hide, least important first. Without layout
+     * (detached host, node tests) nothing overflows, so the widest rung stays.
+     */
     private fit;
     /** Shape + color the value readout after the active price style: its own up/down
      *  colors (candle bodies, bar ticks, the line color, …), the direction rule that
@@ -279,11 +368,16 @@ declare class Statusline {
         open: number;
         close: number;
     }) => boolean) | null, readout?: StatuslineReadout): void;
-    /** The "· BINANCE · 1h" segment after the symbol — venue first, then resolution. */
-    setMeta(timeframe: string, provider: string): void;
+    /** The "· BINANCE · 1h" segment after the symbol — venue first, then resolution.
+     *  `label` overrides the resolution (tick/range… bars: `'100T'`). */
+    setMeta(timeframe: string, provider: string, label?: string): void;
     /** Dress the market badge for a session state: its icon, tinted circle, and the
      *  hover label. Callers with no session model leave the constructor's 'open'. */
     setMarketStatus(status: MarketStatus): void;
+    /** The chart entered or left a bar replay: the badge shows the replay mode meanwhile
+     *  (the session state of a past bar says nothing about the market now). */
+    setReplaying(replaying: boolean): void;
+    private dressBadge;
     /** Show/hide one part — the settings dialog's Status line tab and the right-click
      *  menu both drive these. 'name' owns the venue/timeframe meta too (see
      *  {@link segmentVisibility}). */
@@ -306,24 +400,45 @@ declare class Statusline {
     destroy(): void;
     private detach;
     private render;
+    /** Everything the readout's width depends on, at every rung: its shape, and each
+     *  value's sign, digit count and decimals (the digits themselves are tabular — see
+     *  the CSS; the grouping commas follow from the digit count). `toFixed` carries all
+     *  three at a fraction of the locale formatter's cost — this runs per pointer move.
+     *  The parts, the host's size and the fonts re-fit through their own paths. */
+    private widthKey;
+    /** Decimals of the OHLC readout: the symbol's tick size, as on the price axis (a 0.0333 pair with a
+     *  0.000001 tick reads 0.033273, not 0.0333); the magnitude rule only while the tick is unknown. */
+    private dp;
+    /** Write the value readout for the current bar at the current ladder level. */
+    private renderValues;
 }
 
 declare class Watermark {
     readonly el: HTMLElement;
     private readonly text;
+    private readonly replayLine;
     private readonly resizeObserver;
     /** The host's visibility preference (the persisted watermark toggle). */
     private shown;
+    /** The host's preference for the replay line (its own persisted toggle). */
+    private replayShown;
+    /** The chart is replaying past bars. */
+    private replaying;
     /** A bar load is in flight with nothing painted — the loading affordance owns the
      *  canvas, so the mark stays out of its way. Starts true: the FIRST `load:start`
      *  fires during chart construction, before any subscriber can see it. */
     private loading;
     constructor(host: HTMLElement, symbol: string, timeframe: string);
     setVisible(visible: boolean): void;
+    /** Show/hide the replay line (the host's toggle); it only ever shows while replaying. */
+    setReplayVisible(visible: boolean): void;
+    /** The chart entered or left a bar replay. */
+    setReplaying(replaying: boolean): void;
     /** Loading and the watermark never share the canvas — hidden while a load is up. */
     setLoading(loading: boolean): void;
     private sync;
-    update(symbol: string, timeframe: string): void;
+    /** `label` overrides the resolution (tick/range… bars: `'100T'`). */
+    update(symbol: string, timeframe: string, label?: string): void;
     /** Measure the text at the cap and shrink it to the price pane's width. */
     private fit;
     destroy(): void;
@@ -340,6 +455,8 @@ interface SymbolPickerOptions {
     /** The row's icon URL — routed to the descriptor's OWNING provider
      *  (`resolveSymbolIcon`). Absent or `undefined` per row ⇒ the initials badge. */
     iconFor?: (d: SymbolDescriptor) => string | undefined;
+    /** The venue logo beside the badge text — routed to the owning provider (`resolveVenueIcon`). */
+    venueIconFor?: (d: SymbolDescriptor) => string | undefined;
 }
 declare class SymbolPicker {
     private readonly opts;
@@ -365,6 +482,11 @@ declare class SymbolPicker {
     /** Wire where symbols come from (re-called on every widget rebuild). */
     setSource(source: () => readonly SymbolDescriptor[]): void;
     open(initialQuery?: string): void;
+    get isOpen(): boolean;
+    /** Text typed at the picker that never reached its field: closed, it opens seeded
+     *  with the text; open (the field takes focus a tick after the dialog does, and a
+     *  fast typist's next key lands in that tick), it extends the query. */
+    type(text: string): void;
     close(): void;
     destroy(): void;
     /** Route a row activation: a GROUP row loads its default member (the root itself is
@@ -435,6 +557,11 @@ declare class TimeframeQuick {
     private readonly hint;
     constructor(opts: TimeframeQuickOptions);
     open(seed?: string): void;
+    get isOpen(): boolean;
+    /** Text typed at the entry that never reached its field: closed, it opens seeded
+     *  with the text; open (the field takes focus a tick after the dialog does, and a
+     *  fast typist's next key lands in that tick), it extends the entry. */
+    type(text: string): void;
     close(): void;
     destroy(): void;
     private renderHint;
@@ -481,8 +608,8 @@ declare class PanelDock {
     /**
      * (Re)build the CONTRIBUTED panels from the registry — call once after the built-ins, and
      * again on `refreshActions()` so a late registration appears. Contributed panels that are
-     * gone from the registry are dropped; the ones still there are rebuilt, so a replaced
-     * descriptor takes effect.
+     * gone from the registry are dropped and a REPLACED descriptor is rebuilt; a panel whose
+     * descriptor is unchanged stays mounted as it is, so its content and state survive.
      */
     refresh(): void;
     /** Bind (or rebind) every docked panel to a chart instance. */
@@ -519,7 +646,8 @@ declare class ObjectTree extends SidePanel {
      *  owning provider's `resolveSymbolIcon`. Absent ⇒ the initials badge. */
     private readonly iconFor?;
     private chart;
-    private selectedDrawing;
+    /** What the CHART has selected — every member of a multi-selection, mirrored as rows. */
+    private selectedDrawings;
     private symbolName;
     /** The raw (possibly venue-prefixed) symbol — what icon resolution routes on. */
     private symbolRaw;
@@ -550,7 +678,7 @@ declare class ObjectTree extends SidePanel {
     /** The price row's avatar icon URL for a raw symbol — routed by the shell to the
      *  owning provider's `resolveSymbolIcon`. Absent ⇒ the initials badge. */
     iconFor?: ((symbol: string) => string | undefined) | undefined);
-    toggle(open?: boolean): void;
+    toggle(open?: boolean, instant?: boolean): void;
     setSymbol(symbol: string): void;
     /** (Re)bind to a chart instance — called after every widget rebuild. */
     onChart(chart: Vela): void;
@@ -688,7 +816,7 @@ declare class DataWindow extends SidePanel {
     private chart;
     private unsubs;
     constructor(host: HTMLElement);
-    toggle(open?: boolean): void;
+    toggle(open?: boolean, instant?: boolean): void;
     /** (Re)bind to a chart instance — called after every widget rebuild. */
     onChart(chart: Vela): void;
     destroy(): void;
@@ -710,18 +838,29 @@ declare class ShortcutsHelp {
 interface ContextMenuCallbacks {
     /** Reset the view (all history, autoscale back on). */
     resetView: () => void;
-    /** The display timezone the host holds (the time-axis menu checks it). */
+    /** The display-timezone choice the host holds — a zone or the exchange rule (the time-axis menu checks it). */
     timezone?: () => string;
     /** Switch the display timezone through the host, so its own chrome follows. */
     setTimezone?: (zone: string) => void;
     /** Live widget context for contributed `context:*` actions. */
     getContext?: () => WidgetContext;
+    /** Open the host's object tree; without it the menu has no Object tree row. */
+    openObjectTree?: () => void;
+    /** Shortcut hints by body row id, for the keys the host binds (`'reset-view': 'Alt+R'`), read when the menu opens. */
+    hints?: () => Readonly<Record<string, string>>;
 }
 declare class ChartContextMenu {
     private readonly cbs;
     private readonly menu;
     private readonly host;
     private chart;
+    private offCrosshair;
+    /** The bound chart's latest crosshair report — a right-click always follows a pointer
+     *  move to its spot, so this is where it landed. */
+    private crosshair;
+    /** {@link crosshair} as it stood when the menu opened: the pointer moves on through the
+     *  menu before a row is picked, and `run` must see the right-clicked spot. */
+    private pointer;
     private lastZone;
     /** The pane whose scale the open price-axis menu targets (null ⇒ the main scale). */
     private lastPane;
@@ -734,10 +873,24 @@ declare class ChartContextMenu {
     /** The pane under the pointer, so every pane's price scale has its own menu. */
     private paneAt;
     private flag;
+    /** A fresh widget context carrying the pointer captured at open. Copied by property
+     *  descriptor: the context's getters must stay LIVE, and a spread would freeze them. */
+    private context;
     private contributed;
     private itemsFor;
+    private builtinItems;
+    /** The right-clicked value as the scale writes it (the symbol's tick on the price pane), or null. */
+    private pointerPrice;
     private run;
 }
+
+declare const REMOVE_LOCKED_KEY = "vela:remove-locked-drawings";
+/** On unless the user switched it off (TradingView's default). Storage may be missing or blocked. */
+declare function removeLockedDrawings(): boolean;
+declare function setRemoveLockedDrawings(on: boolean): void;
+/** The drawings a bulk remove takes off `chart`: all of them, or the unlocked ones when locked
+ *  drawings are kept. Empty on a renderer without drawings. */
+declare function removableDrawingIds(chart: Vela, removeLocked?: boolean): string[];
 
 interface ParsedTimeframe {
     valid: boolean;
@@ -775,9 +928,12 @@ declare function tzButtonLabel(zone: string): string;
 
 /** Sensible decimal count for a price magnitude (crypto-friendly). */
 declare function decimalsFor(ref: number): number;
+/** Decimals for a price readout: the symbol's tick size when known (what the price axis shows), else the
+ *  magnitude heuristic. */
+declare function priceDecimals(ref: number, mintick?: number): number;
 /** Locale-formatted price; `'—'` for null/non-finite. */
 declare function fmtPrice(n: number | null | undefined, dp?: number): string;
 /** Signed change + percent ("+123.45 (+1.23%)") from open→close; `''` when unavailable. */
-declare function fmtChange(open: number | null | undefined, close: number | null | undefined): string;
+declare function fmtChange(open: number | null | undefined, close: number | null | undefined, dp?: number): string;
 
-export { type BuiltInPanel, ChartContextMenu, type ContextMenuCallbacks, DataWindow, type DataWindowLine, type DataWindowSection, IndicatorPicker, type IndicatorPickerOptions, type IndicatorRow, ObjectTree, type PanelChrome, PanelDock, type PanelDockDeps, PanelsState, type ParsedTimeframe, RangePreset, ShortcutsHelp, SidePanel, SidePanelButton, Statusline, type StatuslineMenuHooks, StatuslinePart, SymbolPicker, type SymbolPickerOptions, TIMEZONES, TimeframeQuick, type TimeframeQuickOptions, type TimezoneEntry, Topbar, TopbarComposition, type TopbarOptions, VelaShellOptions, VelaWidget, type VelaWidgetOptions, Watermark, WidgetContext, WorkspaceState, dataWindowSections, decimalsFor, filterSymbols, fmtChange, fmtPrice, normalizeTimezone, parseTimeframe, priceStyleLabel, timeframeLabel, timeframeMs, tzButtonLabel, tzMenuLabel, tzOffset };
+export { type BuiltInPanel, ChartContextMenu, type ContextMenuCallbacks, DataWindow, type DataWindowLine, type DataWindowSection, IndicatorPicker, type IndicatorPickerOptions, type IndicatorRow, ObjectTree, type PanelChrome, PanelDock, type PanelDockDeps, PanelsState, type ParsedTimeframe, REMOVE_LOCKED_KEY, RangePreset, ShortcutsHelp, SidePanel, SidePanelButton, Statusline, type StatuslineMenuHooks, StatuslinePart, SymbolPicker, type SymbolPickerOptions, TIMEZONES, TimeframeQuick, type TimeframeQuickOptions, type TimezoneEntry, Topbar, TopbarComposition, type TopbarOptions, VelaShellOptions, VelaWidget, type VelaWidgetOptions, Watermark, WidgetContext, WorkspaceState, dataWindowSections, decimalsFor, filterSymbols, fmtChange, fmtPrice, normalizeTimezone, parseTimeframe, priceDecimals, priceStyleLabel, removableDrawingIds, removeLockedDrawings, setRemoveLockedDrawings, timeframeLabel, timeframeMs, tzButtonLabel, tzMenuLabel, tzOffset };

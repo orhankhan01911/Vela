@@ -1,4 +1,4 @@
-import { M as MarketConfig, O as OHLCV, U as Unsubscribe } from './options-BSbXQdMy.cjs';
+import { B as MarketConfig, O as OHLCV, U as Unsubscribe } from './options-E_TmxEA7.js';
 
 /**
  * Symbol metadata an engine may need (e.g. Pine `syminfo.*`). Free-form beyond
@@ -75,6 +75,14 @@ interface MarketDataFeed {
  */
 interface SymbolDescriptor {
     /** The ticker exactly as the provider expects it (e.g. `BTCUSDT`, `BTCUSDT.P`). */
+    /**
+     * The exact query this row was made for (a plugin that builds rows from what was typed, e.g. a pair named
+     * `BTCUSDT.P/ETHUSDT.P`). The matcher lists such a row first for that query even when neither its ticker nor
+     * its description contains the typed text.
+     */
+    matches?: string;
+    /** Other names the search finds this row by (a broker's `USTEC` is also `US100` and `NAS100`). Never shown. */
+    aliases?: readonly string[];
     ticker: string;
     /** Human-readable label (e.g. `Bitcoin / TetherUS`). */
     description?: string;
@@ -189,6 +197,11 @@ interface DataProvider {
      * breaks the PNG export — a load error falls back to initials either way.
      */
     resolveSymbolIcon?(symbol: SymbolDescriptor): string | undefined;
+    /**
+     * The venue's own logo (an exchange mark), shown beside the venue badge in the symbol
+     * picker. `undefined` or absent ⇒ the text badge alone. Same CORS note as above.
+     */
+    resolveVenueIcon?(): string | undefined;
     /**
      * Open a true live stream for `ticker`/`timeframe`. Each call to `onBar` delivers
      * the forming candle (or a freshly-closed one). Returns an unsubscribe fn. Absent

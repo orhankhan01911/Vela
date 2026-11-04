@@ -64,6 +64,25 @@ interface MarkerPoint {
     text?: string;
     size?: 'tiny' | 'small' | 'normal' | 'large' | 'huge';
 }
+/** A chart surface a series can show on (see {@link SeriesDisplay}). */
+type SeriesSurface = 'pane' | 'priceScale' | 'legend' | 'dataWindow';
+/**
+ * Where a series shows, surface by surface. Every flag defaults to shown; `false` takes
+ * the series off that one surface while it keeps anchoring fills:
+ * - `pane` — painted in its pane;
+ * - `priceScale` — present on the price scale: its values keep the pane's autoscale in
+ *   view, and back any axis value label a renderer draws for it;
+ * - `legend` — its value beside the indicator's legend title;
+ * - `dataWindow` — its row in the data window.
+ * A series off both the pane and the price scale has no on-chart extent, so it never
+ * stretches the scale (see {@link seriesInScale}).
+ */
+interface SeriesDisplay {
+    pane?: boolean;
+    priceScale?: boolean;
+    legend?: boolean;
+    dataWindow?: boolean;
+}
 interface SeriesBase {
     /** Content-addressed, stable across re-runs of identical source (see identity.ts). */
     id: string;
@@ -72,9 +91,27 @@ interface SeriesBase {
     paneId: string;
     /** Declared draw-order intent; the renderer owns final z-ordering. */
     zOrder?: number;
+    /**
+     * `false` hides the series from every surface — a fill anchor that shows nowhere.
+     * The shorthand form: when {@link display} is set it decides instead, surface by surface.
+     */
     visible?: boolean;
+    /** Per-surface visibility; absent ⇒ every surface {@link visible} allows. */
+    display?: SeriesDisplay;
     /** `force_overlay` → render on the price pane regardless of the indicator's pane. */
     overlay?: boolean;
+    /** A short name shown before this plot's value in the legend ("7d 31.95"), for panes of several
+     *  same-kind lines (one per tenor) where colour alone does not say which is which. */
+    legendLabel?: string;
+    /** Also tag this plot's latest value on its pane's price scale, in its colour, named by `legendLabel`
+     *  ("7d -3.1"), so lines of one colour family can be told apart where they end. Line-like series only. */
+    axisTag?: boolean;
+    /** The colours a per-bar coloured plot picks from, in order (TradingView's "Color 0", "Color 1"...): the
+     *  settings dialog's Style tab edits each one. */
+    palette?: string[];
+    /** Listed on the Style tab although not displayed (Pine `display.none`, e.g. a VWAP band switched off or
+     *  Ichimoku's Kumo edge lines): its box starts unticked, and ticking it draws the plot, as on TradingView. */
+    styleOff?: boolean;
 }
 interface LineLikeSeries extends SeriesBase {
     kind: LineLikeKind;
@@ -93,6 +130,14 @@ interface MarkerSeries extends SeriesBase {
     markers: MarkerPoint[];
 }
 type SeriesSpec = LineLikeSeries | CandleSeries | MarkerSeries;
+/** Whether a series shows on `surface`: its `display` flag when it carries one, else its `visible` shorthand. */
+declare function seriesShownOn(spec: Pick<SeriesSpec, 'visible' | 'display'>, surface: SeriesSurface): boolean;
+/**
+ * Whether a series takes part in its pane's autoscale: it is painted there, or its value
+ * sits on the price scale. A series that only reports a value (legend, data window) has
+ * nothing on the chart to keep in view and must not stretch the scale.
+ */
+declare function seriesInScale(spec: Pick<SeriesSpec, 'visible' | 'display'>): boolean;
 
 /**
  * Renderer-neutral models for Pine drawing objects (`line.new`, `box.new`, …).
@@ -316,6 +361,10 @@ interface Fill {
     gradient?: Array<FillGradientStop | null>;
     /** `force_overlay` → render on the price pane regardless of the indicator's pane. */
     overlay?: boolean;
+    /** Name on the settings dialog's Style tab (TradingView's fill `title`). */
+    title?: string;
+    /** The colours {@link colors} picks from, in order (TradingView's "Color 0", "Color 1"); the Style tab edits each. */
+    palette?: string[];
 }
 /** A vertical background tint over a time span (Pine `bgcolor()` / session bands). */
 interface Background {
@@ -429,6 +478,8 @@ interface InputSchema {
     step?: number;
     /** Choices for a dropdown (`input.string(..., options=[...])`). */
     options?: readonly string[];
+    /** Display text for some {@link options} (value -> label), e.g. TradingView's "(H + L + C)/3" for HLC3. */
+    optionLabels?: Readonly<Record<string, string>>;
     /** Grouping label for the dialog layout. */
     group?: string;
     /** Inline grouping label (controls placed on one row). */
@@ -440,7 +491,44 @@ interface InputSchema {
      *  `inline=` row show while ANY member's gate passes. A hidden input keeps its value. */
     when?: InputWhen;
     tooltip?: string;
+    /** Numbers only: the settings dialog shows a slider (with the value typed beside it) instead of a bare
+     *  number field. `ends` labels the two ends in plain words ("Fewer", "More"); `unit` trails the value ("%"). */
+    slider?: {
+        ends?: readonly [string, string];
+        unit?: string;
+    };
 }
+/** A row of an input's own menu (see {@link InputMenu}); the shape of the UI menu's items. */
+interface InputMenuItem {
+    id: string;
+    label: string;
+    /** Icon id from the icon registry, before the label. */
+    icon?: string;
+    /** A switch row that keeps the menu open (a checklist). */
+    toggle?: boolean;
+    checked?: boolean;
+    separatorBefore?: boolean;
+}
+/**
+ * A host's own picker for one input: the indicator settings dialog shows a dropdown button reading
+ * `label(value)` that opens these rows instead of a free text field (e.g. an exchange checklist for a
+ * `source` string the legend's picker also edits). `pick` gives the value after a row is clicked.
+ */
+interface InputMenu {
+    items(value: InputValue): InputMenuItem[];
+    pick(value: InputValue, id: string): InputValue;
+    label(value: InputValue): string;
+}
+/**
+ * Decides which inputs get a menu: the indicator's id, the input, and the element of the chart the
+ * dialog belongs to (indicator ids are unique per chart only: in a multi-chart layout every chart's
+ * first indicator is `native-1`); null = the usual control.
+ */
+type InputMenuResolver = (indicatorId: string, input: InputSchema, chartEl?: HTMLElement) => InputMenu | null;
+/** Register (or clear, with null) the host's input-menu resolver for every chart's settings dialog. */
+declare function registerInputMenu(resolver: InputMenuResolver | null): void;
+/** The menu for one input, or null. A throwing resolver falls back to the usual control. */
+declare function inputMenuFor(indicatorId: string, input: InputSchema, chartEl?: HTMLElement): InputMenu | null;
 /**
  * The DELTAS of a value bag against its schema's declaration defaults — what state
  * persistence stores (a default that later changes in the script must not stay frozen
@@ -466,8 +554,10 @@ interface PaneAxisBand {
     label: string;
 }
 /** A pane's value-axis override (see {@link IndicatorModel.paneAxis}): `'none'` = a
- *  blank axis; band labels = a categorical axis, one label per content band/row. */
-type PaneAxis = 'none' | {
+ *  blank axis; band labels = a categorical axis, one label per content band/row;
+ *  `'compact'` = a normal value axis whose labels and crosshair chip read `1.2M` / `300K`
+ *  instead of `1200000.00` (for panes of money or size, where raw digits are unreadable). */
+type PaneAxis = 'none' | 'compact' | {
     bands: PaneAxisBand[];
 };
 /**
@@ -477,11 +567,11 @@ type PaneAxis = 'none' | {
 interface IndicatorModel {
     /** Per-instance id (stable). */
     id: string;
-    /** Full display name (settings dialog, object tree, inspect). */
+    /** Full display name (picker, inspect, and every surface with no {@link shorttitle}). */
     title: string;
     /**
-     * Compact label the legend chip and the settings dialog show instead of the full
-     * {@link title}. Absent ⇒ both use {@link title}. Mirrors Pine
+     * Compact label the legend chip, the settings dialog and the object tree's rows show
+     * instead of the full {@link title}. Absent ⇒ all use {@link title}. Mirrors Pine
      * `indicator(..., shorttitle=)`.
      */
     shorttitle?: string;
@@ -494,7 +584,17 @@ interface IndicatorModel {
      */
     native?: {
         type: string;
+        /**
+         * The renderer-layer data channel this instance's bespoke payload (`pushData`) lands
+         * on, when it differs from the type: set for an instance of a `multiInstance` type,
+         * so a renderer mounts a DEDICATED layer instance (own canvas, own pane, own stacking)
+         * reading this channel instead of the shared per-type layer. Absent ⇒ the type is the
+         * channel (single-instance natives, the built-in volume/VPVR).
+         */
+        channel?: string;
     };
+    /** `false` ⇒ no legend row and no pane listing for this indicator (host-owned chrome); absent ⇒ a row. */
+    legend?: boolean;
     /**
      * Value-axis override for the pane this indicator OWNS — declared by content that is
      * not value-mapped (e.g. a bespoke renderer layer painting in pixel bands), where a
@@ -555,6 +655,15 @@ interface IndicatorModel {
     props?: InputSchema[];
     /** Current prop values (effective defaults merged with any user/add-time overrides). */
     propValues?: Record<string, InputValue>;
+    /** Script indicators: the settings dialog's "Style" tab (per plot / level / fill), read
+     *  from the run's own output (see `core/engine/plotStyle.ts`). Absent ≡ none. */
+    styleInputs?: InputSchema[];
+    /** The user's style overrides, keyed like {@link styleInputs}. */
+    styleValues?: Record<string, InputValue>;
+    /** Input values shown after the title in the legend (see {@link shorttitle}); the Style tab can hide them. */
+    statusInputs?: string;
+    /** Decimals the legend and data window show (the Style tab's Precision); absent = the pane's own format. */
+    precision?: number;
 }
 
 interface DirtyRange {
@@ -570,6 +679,7 @@ type SeriesValueDelta = {
     seriesId: string;
     kind: 'bars';
     bars: OHLCV[];
+    barColors?: Array<CandleBarColor | null>;
 } | {
     seriesId: string;
     kind: 'markers';
@@ -605,6 +715,12 @@ interface ValuePatch {
     tables?: DrawingTable[];
     /** Trade executions follow the same full-snapshot-per-tick pattern as the drawings. */
     trades?: TradeExecution[];
+    /**
+     * Fills between two series, also a full snapshot: a fill's per-bar `colors` are indexed like the series'
+     * points, so a re-run whose points changed length (older bars loaded) must carry its fills too, or the
+     * first run's colours land on the wrong bars and the fill disappears.
+     */
+    fills?: Fill[];
 }
 /**
  * Structural change — series added/removed/kind-changed, or panes changed.
@@ -625,6 +741,35 @@ type ScenePatch = ValuePatch | SchemaPatch;
 
 /** A function that detaches a previously-registered subscription. */
 type Unsubscribe = () => void;
+
+/**
+ * A once-per-second wall-clock pulse. Every subscriber receives the SAME `now` for a
+ * given second, so chrome that displays time (a bottom-bar clock, a countdown-to-bar-close
+ * chip) can be driven from one source and never disagrees about which second it is.
+ */
+interface WallClock {
+    /** Called shortly after every wall-clock second boundary with that instant (epoch ms). */
+    onTick(cb: (now: number) => void): Unsubscribe;
+}
+/**
+ * A {@link WallClock} aligned to the wall clock's second boundaries. Free-running
+ * `setInterval(1000)` timers start at an arbitrary sub-second phase and slide against
+ * each other, so two of them sample different seconds part of the time; this one
+ * re-arms a `setTimeout` to the NEXT boundary after every tick, so it fires just past
+ * `hh:mm:ss.000` regardless of when it was started or how long the callback took (a
+ * throttled background tab simply skips seconds — it never drifts). Runs only while it
+ * has subscribers: zero idle timers when nothing displays time.
+ */
+declare class SecondClock implements WallClock {
+    private readonly now;
+    private readonly subs;
+    private timer;
+    constructor(now?: () => number);
+    onTick(cb: (now: number) => void): Unsubscribe;
+    /** Milliseconds from `now` to just past the next second boundary. */
+    static delayToNextSecond(now: number): number;
+    private arm;
+}
 
 /**
  * Async series access for data-driven drawings — the ranged, any-timeframe sibling
@@ -683,6 +828,30 @@ interface DrawingSeriesGateway {
 }
 
 /**
+ * Drawing anchors past the newest bar on charts whose x axis counts bars, not time (tick, volume, delta, range bars,
+ * Renko: the chart types that supply their own series).
+ *
+ * An anchor is a time. Past the newest bar the time scale extrapolates with the median bar spacing, which on those
+ * charts is a few seconds and changes with every reload and data update, so a point drawn "10 bars ahead" slid or
+ * jumped by itself (2026-10-26: 40-70 px in 90 s on tick and delta bars, a jump on Renko after a reload). There such an
+ * anchor is kept as "`n` bars after the bar at `from`" ({@link FutureBars}): new bars walk into it one at a time and a
+ * reload cannot move it. Its `time` stays the clock time it had when placed, so time charts (and readers that do not
+ * know `bars`) keep placing it exactly as before.
+ */
+
+/** The bar axis of a chart whose x counts bars; null on a time chart. */
+interface BarAxis {
+    /** Time of the newest bar. */
+    lastTime: number;
+    /** Fractional bar index of a time (extrapolated past either end). */
+    logicalOf(time: number): number;
+    /** Time at a fractional bar index (inverse of {@link logicalOf}). */
+    timeOf(logical: number): number;
+    /** Index of the newest bar. */
+    lastLogical: number;
+}
+
+/**
  * Geometry seam for user drawings. A drawing stores its anchors in DATA space
  * ({@link DrawingPoint}); every pixel it needs is resolved on demand through a
  * {@link Projector} the renderer supplies. The model never stores pixels, so a
@@ -696,6 +865,11 @@ interface DrawingPoint {
     time: number;
     /** Data-space price (not normalized, not pane-relative). */
     price: number;
+    /** Past the newest bar of a chart whose x counts bars: `n` bars after the bar at `from` (see `futureAnchors`). */
+    bars?: {
+        from: number;
+        n: number;
+    };
 }
 /** Axes a handle is free to move along — drives drag constraints + handle generation. */
 type FreeAxis = 'both' | 'x' | 'y' | 'none';
@@ -719,6 +893,8 @@ interface Projector {
     yOf(price: number, paneId: string): number | null;
     /** Inverse — pixel → data point on a pane (used on create/drag commit). */
     pxToPoint(x: number, y: number, paneId: string): DrawingPoint;
+    /** The chart's bar axis when its x counts bars (tick, Renko ... bars), else null/absent; see `futureAnchors`. */
+    barAxis?: BarAxis | null;
     /** Which pane owns a pixel y, or `null` outside every pane. */
     paneIdAtY(y: number): string | null;
     /**
@@ -755,6 +931,27 @@ interface Projector {
      * an anchors-only rendering.
      */
     seriesInRange?(timeframe: string, from: number, to: number): DrawingSeriesState;
+    /**
+     * The main series' bar that holds `time`: the last bar opened at or before it (so on a 1m chart the minute, on
+     * 1h the hour, on a range or tick chart the bar that was forming then). `line` is true when the series is drawn
+     * as a line, which shows only the close. Null outside the loaded bars. Optional.
+     */
+    barAt?(time: number): {
+        time: number;
+        high: number;
+        low: number;
+        close: number;
+        line: boolean;
+    } | null;
+    /**
+     * The app object attached with `chart.drawings.setHost(host)` (by default the chart itself): a host-registered
+     * drawing type reads its market and data through it. Typed unknown so core stays free of the app. Optional.
+     */
+    readonly host?: unknown;
+    /** Repaint the drawings: a drawing whose data loads in the background calls this when it lands. Optional. */
+    requestRepaint?(): void;
+    /** The chart's time zone (IANA name), for drawings that print a date. Optional: UTC. */
+    readonly timeZone?: string;
     /** Plot width in media px (excludes the right price-axis strip). */
     readonly width: number;
     /** Plot height in media px (excludes the bottom time-axis strip). */
@@ -782,7 +979,8 @@ interface DrawingText {
     value: string;
     /** `undefined` ⇒ auto-contrast against the fill/background. */
     color?: string;
-    size: 'tiny' | 'small' | 'normal' | 'large' | 'huge' | 'auto';
+    /** Px (TradingView's 8-40 list), or an older named size. */
+    size: 'tiny' | 'small' | 'normal' | 'large' | 'huge' | 'auto' | number;
     hAlign: 'left' | 'center' | 'right';
     vAlign: 'top' | 'center' | 'bottom';
     bold?: boolean;
@@ -824,10 +1022,47 @@ interface SettingsSchema {
 }
 
 /**
+ * "Visibility on intervals" (TradingView's drawing Visibility tab): a drawing can be shown only on some chart
+ * timeframes, e.g. on 1-4 hour charts and daily charts but not on minute charts. Each unit has an on/off switch
+ * and a from-to range in that unit. A drawing with no `intervals` is shown everywhere.
+ *
+ * The chart's timeframe comes in as its bar duration in ms. Tick and range charts have no fixed duration: TradingView
+ * gives them a plain on/off row each ("Ticks" first, "Ranges" last; its intervalsVisibilitiesDefaults, module 648442),
+ * and the renderer says when the chart is one (`BarKind`, from the chart type's `barKind`).
+ */
+type TimeIntervalUnit = 'seconds' | 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
+/** Bars that are not a time span: a tick chart or a range chart. */
+type BarKind = 'ticks' | 'ranges';
+type IntervalUnit = TimeIntervalUnit | BarKind;
+interface IntervalRange {
+    on: boolean;
+    from: number;
+    to: number;
+}
+type IntervalVisibility = Partial<Record<IntervalUnit, IntervalRange>>;
+
+interface DrawingInputsDialog {
+    title: string;
+    inputs: InputSchema[];
+    values: Record<string, InputValue>;
+    /** Settings path the values live under on the drawing, e.g. `'of'` for `drawing.of.<key>`. */
+    path: string;
+}
+/** An extra button on a drawing's floating toolbar ({@link Drawing.toolbarActions}). */
+interface DrawingToolbarAction {
+    id: string;
+    /** Tooltip / accessible name. */
+    label: string;
+    /** Inline SVG markup. */
+    icon: string;
+    /** Run on press; `anchor` is the button (a menu opens from it). */
+    run(anchor: HTMLElement): void;
+}
+/**
  * The interactive user-drawing types. The lean-core set ships first; new types
  * (fibs/patterns) extend the union + register a class — no base/port change.
  */
-type DrawingTypeKey = 'trendline' | 'hline' | 'ray' | 'extendedline' | 'vline' | 'hray' | 'crossline' | 'infoline' | 'trendangle' | 'box' | 'text' | 'note' | 'pricenote' | 'comment' | 'pricelabel' | 'signpost' | 'parallelchannel' | 'disjointchannel' | 'flattopbottom' | 'regressionchannel' | 'anchoredvwap' | 'fixedrangevp' | 'fixedrangetpo' | 'pricealert' | 'pitchfork' | 'schiffpitchfork' | 'modifiedschiffpitchfork' | 'insidepitchfork' | 'arrow' | 'callout' | 'ellipse' | 'triangle' | 'polyline' | 'freehand' | 'highlighter' | 'circle' | 'rotatedrect' | 'path' | 'arc' | 'curve' | 'arrowmarkup' | 'arrowmarkdown' | 'flagmark' | 'iconstamp' | 'fibretracement' | 'fibextension' | 'fibextensiontrend' | 'fibfan' | 'fibtimezones' | 'fibchannel' | 'fibspeedfan' | 'trendfibtime' | 'fibcircles' | 'fibarcs' | 'fibwedge' | 'fibspiral' | 'gannfan' | 'gannbox' | 'gannsquare' | 'dedekind' | 'sonic' | 'supersonic' | 'goldensonic' | 'goldensupersonic' | 'datepricerange' | 'position' | 'magnifier' | 'xabcd' | 'abcd' | 'elliottimpulse' | 'elliottcorrection' | 'headshoulders' | 'gartley' | 'bat' | 'butterfly' | 'crab' | 'shark' | 'cypher';
+type DrawingTypeKey = 'trendline' | 'hline' | 'ray' | 'extendedline' | 'vline' | 'hray' | 'crossline' | 'infoline' | 'trendangle' | 'box' | 'text' | 'note' | 'pricenote' | 'comment' | 'pricelabel' | 'signpost' | 'parallelchannel' | 'disjointchannel' | 'flattopbottom' | 'regressionchannel' | 'anchoredvwap' | 'fixedrangevp' | 'anchoredvp' | 'projection' | 'forecast' | 'barspattern' | 'ghostfeed' | 'anchoredtext' | 'anchorednote' | 'table' | 'image' | 'xpost' | 'doublecurve' | 'fixedrangetpo' | 'pricealert' | 'pitchfork' | 'pitchfan' | 'schiffpitchfork' | 'modifiedschiffpitchfork' | 'insidepitchfork' | 'arrow' | 'callout' | 'ellipse' | 'triangle' | 'polyline' | 'freehand' | 'highlighter' | 'emoji' | 'icon' | 'circle' | 'rotatedrect' | 'path' | 'arc' | 'curve' | 'arrowmarkup' | 'arrowmarkdown' | 'flagmark' | 'iconstamp' | 'fibretracement' | 'fibextension' | 'fibextensiontrend' | 'fibfan' | 'fibtimezones' | 'fibchannel' | 'fibspeedfan' | 'trendfibtime' | 'fibcircles' | 'fibarcs' | 'fibwedge' | 'fibspiral' | 'gannfan' | 'gannbox' | 'gannsquare' | 'gannsquarefixed' | 'dedekind' | 'sonic' | 'supersonic' | 'goldensonic' | 'goldensupersonic' | 'datepricerange' | 'daterange' | 'pricerange' | 'cycliclines' | 'timecycles' | 'sineline' | 'arrowmarker' | 'trianglepattern' | 'elliotttriangle' | 'elliottdoublecombo' | 'elliotttriplecombo' | 'position' | 'long-position' | 'short-position' | 'magnifier' | 'xabcd' | 'abcd' | 'threedrives' | 'elliottimpulse' | 'elliottcorrection' | 'headshoulders' | 'gartley' | 'bat' | 'butterfly' | 'crab' | 'shark' | 'cypher';
 /** One anchor's role + which axes its handle may move along. */
 interface AnchorSlot {
     role: string;
@@ -853,6 +1088,10 @@ interface SerializedDrawing {
      *  anywhere in the stack, under the candles or between two indicators included. */
     zIndex: number;
     createdAt: number;
+    /** Timeframes the drawing shows on (the settings dialog's Visibility tab); absent = every timeframe. */
+    intervals?: IntervalVisibility;
+    /** The user's name for the drawing (TradingView's rename, the pencil in the settings dialog); absent = the tool's name. */
+    title?: string;
     /** Per-type extras (e.g. box `extend`) — keeps the base closed. */
     props?: Record<string, unknown>;
 }
@@ -872,8 +1111,14 @@ declare abstract class Drawing {
     text?: DrawingText;
     locked: boolean;
     visible: boolean;
+    /** Timeframes the drawing shows on; undefined = all. See `intervals.ts`. */
+    intervals?: IntervalVisibility;
+    /** The user's name for it; undefined = the tool's own name. */
+    title?: string;
     zIndex: number;
     readonly createdAt: number;
+    /** The bar axis of the chart showing this drawing (null on a time chart); see `futureAnchors`. Not saved. */
+    barAxis: BarAxis | null;
     constructor(init: Partial<SerializedDrawing> & {
         paneId: string;
     });
@@ -912,6 +1157,49 @@ declare abstract class Drawing {
      * pointer tip fixed and moves only the box).
      */
     translateBody(dt: number, dp: number, orig: DrawingPoint[]): DrawingPoint[];
+    /**
+     * A handle drag in screen pixels, for a type whose geometry is partly in pixels (an image's size). Return true
+     * when handled: the interaction then skips the anchor move. Default: not handled.
+     */
+    dragHandlePx(_index: number, _x: number, _y: number, _proj: Projector, _start?: {
+        x: number;
+        y: number;
+        doc: SerializedDrawing;
+    }): boolean;
+    /** The CSS cursor over handle `index` (e.g. a resize arrow), or null for the default pointer. */
+    /** Each handle's look: TradingView draws most as rings, some (horizontal line) as rounded squares. Empty = rings. */
+    handleShapes(): ReadonlyArray<'circle' | 'square'>;
+    /** The points TradingView marks on the axes while the drawing is selected (a price chip and a time chip each, the
+     *  shaded spans between them): its anchors by default; a channel marks its four corners. */
+    axisPoints(): DrawingPoint[];
+    handleCursor(_index: number, _proj?: Projector): string | null;
+    /**
+     * A whole-body drag in screen pixels from the press point, for a type whose anchors are not all price/time (a post
+     * card's height on the pane). Return the moved anchors, or null to use {@link translateBody}. Default: null.
+     */
+    translateBodyPx(_dx: number, _dy: number, _orig: DrawingPoint[], _proj: Projector): DrawingPoint[] | null;
+    /**
+     * Paint this drawing yourself, instead of the renderer's built-in look: for a type the host app registers
+     * (`registerDrawingType`) whose body the app draws, e.g. a profile computed from the app's own data. Called by
+     * the native painter with the canvas already in media px and clipped to the drawing's pane. Return true when
+     * painted (the built-in painting is then skipped); the default paints nothing and returns false. Selection
+     * handles stay the renderer's. Read async data through {@link Projector.host} and call
+     * {@link Projector.requestRepaint} when it lands.
+     */
+    paintSelf(_ctx: CanvasRenderingContext2D, _proj: Projector, _theme: VelaTheme): boolean;
+    /**
+     * Settings shown in the renderer's INDICATOR inputs dialog instead of the drawing settings dialog: for a
+     * host-registered type whose settings are an indicator's inputs. Null (default) keeps the drawing dialog.
+     */
+    inputsDialog(): DrawingInputsDialog | null;
+    /** Extra buttons on the drawing's floating toolbar (e.g. a host's Templates menu). Default none. */
+    toolbarActions(): DrawingToolbarAction[];
+    /**
+     * What the renderer paints while the tool is being placed: `'shape'` (the drawing itself, faded) or
+     * `'timespan'` (only a dashed guide at each time anchor, like the built-in fixed-range profiles: a data-driven
+     * body must not fetch on every cursor move). Default `'shape'`.
+     */
+    placementPreview(): 'shape' | 'timespan';
     /** Is the pixel (px,py) on this drawing's body, within `tol` px? */
     abstract hitTest(px: number, py: number, proj: Projector, tol: number): boolean;
     /** Index of the grabbed handle, or -1 for the body. */
@@ -951,8 +1239,16 @@ declare abstract class Drawing {
         enabled: boolean;
         label?: string;
     }> | null;
+    /** A handle that is grabbed but not drawn (TradingView's text shows no point). */
+    handleHidden(_index: number): boolean;
+    /** A variable click tool that ends when the next click lands on its last point (TradingView's path). */
+    finishesOnSamePoint(): boolean;
+    /** TradingView's text for this tool (color, size, alignment), used when text is first added. */
+    textDefaults(): Partial<DrawingText> | undefined;
     /** Apply a `{ 'dot.path': value }` patch (the popup emits these). */
     applySettings(patch: Record<string, unknown>): void;
+    /** Points TradingView marks on a selected drawing without letting them be dragged (a brush's two ends). */
+    selectionMarkers(_proj: Projector): Array<[number, number]>;
     /** Re-read per-type extras (props) onto this instance — used by the store on an edit. */
     applyProps(props: Record<string, unknown>): void;
     serialize(): SerializedDrawing;
@@ -1019,7 +1315,7 @@ declare function buildToolbar(option: DrawingsOption | undefined): {
  * the renderer owns that exclusion; the core mirrors the outcome (see the `mode`
  * intent) so external UIs (a shared workspace toolbar) can reflect and drive it.
  */
-type DrawingMode = 'measure' | 'eraser' | null;
+type DrawingMode = 'measure' | 'eraser' | 'zoom' | null;
 /**
  * Renderer→core INTENT. The renderer proposes a change from a user gesture; the
  * core {@link DrawingController} decides, mutates the store (the source of truth),
@@ -1043,6 +1339,9 @@ type DrawingIntent = {
     doc: SerializedDrawing;
 } | {
     kind: 'edit';
+    doc: SerializedDrawing;
+} | {
+    kind: 'convert';
     doc: SerializedDrawing;
 } | {
     kind: 'edit-many';
@@ -1069,6 +1368,9 @@ type DrawingIntent = {
     type: DrawingTypeKey;
     on: boolean;
 } | {
+    kind: 'alert';
+    id: string;
+} | {
     kind: 'snap-mode';
     mode: SnapMode;
 }
@@ -1087,6 +1389,14 @@ type DrawingIntent = {
 } | {
     kind: 'duplicate';
     ids: string[];
+}
+/** Commit COPIES carrying the geometry given (the end of a drag-to-duplicate: the
+ *  sources never moved, the docs are their serialized twins already translated).
+ *  Ids are reassigned; the copies keep their sources' depth and become the selection.
+ *  One undo step. */
+ | {
+    kind: 'clone';
+    docs: SerializedDrawing[];
 } | {
     kind: 'copy';
     ids: string[];
@@ -1110,8 +1420,14 @@ interface IDrawingsRendererPort {
      *  tool's last-used style (if any) so the placement preview matches what will be
      *  committed, rather than falling back to the type default. */
     setActiveTool(type: DrawingTypeKey | null, lastStyle?: SerializedDrawing['style']): void;
+    /** The armed tool's remembered style changed (a color picked while it is armed): the next placement preview uses
+     *  it, without re-arming the tool. */
+    setActiveToolStyle?(lastStyle: SerializedDrawing['style'] | undefined): void;
     /** Reflect which drawings are selected (drives handle painting); `[]` = none. */
     setSelection(ids: readonly string[]): void;
+    /** Where pasted copies land: TradingView puts them 40 px above their source, so the copy is seen. Optional —
+     *  without it a copy lands on its source. */
+    shiftForPaste?(docs: readonly SerializedDrawing[]): SerializedDrawing[];
     /** Push the FAVORITE tool set (flyout stars + any favorites-driven UI). Optional —
      *  favorites still work headless without a renderer reflection. */
     setFavorites?(types: readonly DrawingTypeKey[]): void;
@@ -1129,10 +1445,18 @@ interface IDrawingsRendererPort {
      *  renderer keeps owning the mutual exclusion (with armed tools too) and reports
      *  every actual change back through the `mode` intent. Optional. */
     setMode?(mode: DrawingMode): void;
+    /** The drawing types whose toolbar shows Add Alert (the host can alert on them); empty = none. Optional. */
+    setAlertTypes?(types: readonly string[]): void;
+    /** Zoom Out: back to the view before the last Zoom In. False when there is none. Optional. */
+    zoomOut?(): boolean;
+    /** True while a Zoom In can be gone back from (the toolbar then shows Zoom Out). Optional. */
+    canZoomOut?(): boolean;
     /** Hand the renderer the core's series gateway so data-driven drawings can read bars
      *  of a finer timeframe (exposed to them as `Projector.seriesInRange`). Optional — a
      *  renderer without it simply never resolves lower-timeframe series. */
     setSeriesGateway?(gateway: DrawingSeriesGateway): void;
+    /** The app object drawings see as `Projector.host` (see `DrawingController.setHost`). Optional. */
+    setHost?(host: unknown): void;
     /** Open a drawing's settings popup (selecting it too) — the programmatic twin of a click on it. */
     openSettings(id: string): void;
     /** Display another chart's in-progress placement as a GHOST at reduced opacity
@@ -1152,11 +1476,154 @@ interface IDrawingsRendererPort {
         back: number;
         price?: number;
     };
+    /** The plot's box in client (viewport) pixels — where a host drops or pastes content
+     *  (an image, a post) onto the chart. Optional — null when the renderer has no plot. */
+    plotClientRect?(): {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+    } | null;
+    /** The chart point under a client (viewport) position, with the pane it falls in; null
+     *  outside the plot. Pairs with {@link plotClientRect} for host-side placement. */
+    pointAtClient?(clientX: number, clientY: number): {
+        time: number;
+        price: number;
+        paneId: string;
+    } | null;
     /** The one channel up — create/edit/select/delete/settings/tool-finished. */
     onDrawingIntent(cb: (intent: DrawingIntent) => void): Unsubscribe;
 }
 
+/** The built-in glyph outlines. */
+type MarkShape = 'circle' | 'square' | 'diamond' | 'pin';
+/**
+ * How a mark looks on the lane: a colored token carrying either a short letter or a
+ * registered icon (`registerIcon` from `vela/ui` — an id, never inline markup, so a mark
+ * payload can come from data without ever carrying SVG). `icon` wins over `letter`
+ * when both are given; the symbol's ink is auto-contrasted against `color`.
+ */
+interface MarkGlyph {
+    /** Token outline (default `'circle'`). */
+    shape?: MarkShape;
+    /** Token fill — any CSS color. */
+    color: string;
+    /** One or two characters drawn inside the token (`'D'`, `'E'`, `'!'`). */
+    letter?: string;
+    /** Icon id from the icon registry, drawn inside the token. */
+    icon?: string;
+    /**
+     * Draw the icon over the WHOLE token, clipped to its outline, with the outline in `color`
+     * on top: a full-colour picture (a country flag, a logo) rather than a one-ink symbol.
+     * The icon keeps its own colours. Default false.
+     */
+    iconFill?: boolean;
+    /**
+     * A small dot on the token's top-right shoulder, any CSS color: a status the glyph itself does not
+     * carry (an economic event's impact, an unread item). Omitted = no dot.
+     */
+    badge?: string;
+    /**
+     * Which mark's badge a cluster shows: the highest `badgeRank` among its marks that have a badge
+     * (default 0; ties keep cluster order). Lets a cluster of mixed events show its most important one.
+     */
+    badgeRank?: number;
+}
+/** One row of a structured panel — the callout vocabulary plus a label/value field. */
+type MarkPanelItem = {
+    type: 'text';
+    text: string;
+} | {
+    type: 'field';
+    label: string;
+    value: string;
+} | {
+    type: 'button';
+    label: string;
+    /** Emphasized (selection-colored) button — the panel's main action. */
+    primary?: boolean;
+    /** Close the popup after `run` (default true). */
+    close?: boolean;
+    run(): void;
+};
+/**
+ * What the popup shows for one mark: plain text (escaped), HTML (sanitized through an
+ * allowlist — scripts, styles, frames, event handlers and `javascript:` URLs never
+ * reach the page), or a structured panel of rows and buttons.
+ */
+type MarkContent = {
+    text: string;
+} | {
+    html: string;
+} | {
+    panel: {
+        items: MarkPanelItem[];
+    };
+};
+/** A content value, or a thunk resolved when the popup needs it (details fetched on click). */
+type MarkContentSource = MarkContent | (() => MarkContent | Promise<MarkContent>);
+/** One timeline mark. */
+interface TimelineMark {
+    /** Stable id — re-adding an id replaces the mark. */
+    id: string;
+    /**
+     * The moment the mark belongs to, epoch-ms. The glyph never sits at this exact pixel:
+     * it centers on the bar whose span contains the time (a time falling in a gap — a
+     * weekend, a closed session — goes to the first bar that follows; one past the newest
+     * bar projects onto the extrapolated grid in the right whitespace).
+     */
+    time: Millis;
+    /** Popup heading — shown above the content whatever its form. */
+    title?: string;
+    glyph: MarkGlyph;
+    /** Hover text on the glyph. */
+    tooltip?: string;
+    /**
+     * The visibility group the mark belongs to (`'dividends'`, `'splits'`). Marks of one
+     * group that land on the same bar — or whose glyphs would overlap at the current zoom —
+     * cluster into one glyph (the tooltip carries the count, the popup lists them all); groups get a checkbox each
+     * in the chart settings (the Events tab). Define the display label with
+     * `chart.marks.defineGroup`; an undefined group shows its capitalized id.
+     */
+    group?: string;
+    /** Popup content. Without it a click only emits `mark:click` — the host owns the UI. */
+    content?: MarkContentSource;
+}
+/** A visibility group's presentation (see {@link TimelineMark.group}). */
+interface MarkGroup {
+    id: string;
+    /** The settings checkbox label (`'Dividends'`). */
+    label: string;
+    /** Default visibility before the user toggles it (default true). A persisted choice wins. */
+    visible?: boolean;
+    /**
+     * The id of the group this one nests under. A child's marks paint only while BOTH it
+     * and its parent are visible; on the Events tab it lists indented beneath the parent
+     * and dims while the parent is off, keeping its own choice for when the parent comes
+     * back. Lets a host offer `News → Latest / All` or `Economic → High / Medium / Low`
+     * as one master switch with sub-choices. A parent may hold marks of its own.
+     */
+    parent?: string;
+}
+/** The `mark:click` payload — every mark under the clicked glyph (a cluster lists them all). */
+interface MarkClickEvent {
+    /** The cluster's first mark (earliest time, then insertion order). */
+    id: string;
+    /** Every mark in the clicked cluster, in cluster order. */
+    ids: string[];
+    /** The first mark's time, epoch-ms. */
+    time: Millis;
+    /** The cluster's group, when its marks belong to one. */
+    group?: string;
+}
+
 /** What a rendering backend supports — drives graceful degradation + warnings. */
+/** How a screenshot is taken. */
+interface ScreenshotOptions {
+    /** Pixels per CSS pixel. Above the screen's own ratio the chart is drawn again at it, sharper than the screen;
+     *  capped so the picture stays under 16 M pixels. Default: the screen's ratio. */
+    scale?: number;
+}
 interface RendererCapabilities {
     panes: boolean;
     /**
@@ -1186,6 +1653,10 @@ interface RendererCapabilities {
      *  ticks on the price pane, plus the `tradeMarkers` display feature. Absent/false ⇒ the
      *  channel is carried through mounts/patches but never painted. */
     trades?: boolean;
+    /** Timeline marks (`chart.marks`): host events pinned to a bar, painted as glyphs on a lane
+     *  above the time axis with a detail popup on click. Absent/false ⇒ the model still fills
+     *  (`chart.marks.all()`) but nothing paints. */
+    timelineMarks?: boolean;
     /** Whether the renderer provides the in-chart inputs/settings UI. */
     inputsUI: boolean;
 }
@@ -1207,6 +1678,28 @@ interface LegendActionView {
     icon: string;
     tooltip: string;
     run(): void;
+}
+/** One row of the settings dialog's footer menu, as the renderer consumes it (the shape the
+ *  kit `Menu` takes — plain data, so the core stays ignorant of the UI kit). */
+interface SettingsMenuRowView {
+    id: string;
+    label: string;
+    hint?: string;
+    disabled?: boolean;
+    /** Draw a separator line above this row. */
+    separatorBefore?: boolean;
+    /** Nested rows — the row becomes a submenu opening to the side (a branch is not selectable). */
+    submenu?: readonly SettingsMenuRowView[];
+}
+/**
+ * The host's "Template" menu in the settings dialog's footer, as the renderer consumes it:
+ * the shell resolves the plugin descriptor (and its context) BEFORE it reaches the renderer.
+ * `items` is read at EVERY open, so a save or delete shows at once; `run` receives the picked
+ * leaf id and the footer button (an anchor for any follow-up menu the host opens).
+ */
+interface SettingsTemplateMenuView {
+    items(): readonly SettingsMenuRowView[];
+    run(itemId: string, anchor: HTMLElement): void;
 }
 /** One block of a legend callout's deployed panel — plain text, or an action button. */
 type LegendCalloutPanelItem = {
@@ -1246,6 +1739,9 @@ interface LegendCalloutView {
     tooltip: string;
     /** Deployed panel — presence makes the bubble clickable. */
     content?: LegendCalloutPanel;
+    /** Icon slots side by side (default 1): a wider pill for an icon drawn `span` squares wide (several logos in
+     *  a row). The icon's viewBox should be 16*span x 16. Clamped to 1..6. */
+    span?: number;
 }
 /** OHLCV of the price bar under the crosshair (the "data window" source). */
 interface CrosshairOHLC {
@@ -1321,8 +1817,8 @@ interface InputChangeEvent {
     indicatorId: string;
     key: string;
     value: InputValue;
-    /** What was edited: a script input (default) or a declaration prop (the "Properties" tab). */
-    kind?: 'input' | 'prop';
+    /** What was edited: a script input (default), a declaration prop, or a plot style (the "Style" tab). */
+    kind?: 'input' | 'prop' | 'style';
 }
 interface VisibleRange {
     from: Millis;
@@ -1381,6 +1877,8 @@ interface IChartRenderer {
      * (or absent) ⇒ the renderer falls back to its zoom-derived decimals. Optional.
      */
     setPricePrecision?(mintick: number | undefined): void;
+    /** The tick size last given to {@link setPricePrecision} (undefined = zoom-derived decimals). Optional. */
+    getPricePrecision?(): number | undefined;
     /**
      * Push a bespoke NATIVE-LAYER render payload, keyed by layer `type`. Visuals that aren't
      * ordinary series/fills draw through a dedicated renderer layer instead of the model; this is
@@ -1390,6 +1888,15 @@ interface IChartRenderer {
      * layers omits it.
      */
     setNativeData?(type: string, data: unknown): void;
+    /**
+     * Replace the timeline marks + their group definitions (the `chart.marks` model). The
+     * renderer snaps each mark onto its bar, folds same-bar/same-group marks into clusters, and
+     * paints the lane above the time axis; group visibility is its own display state (the
+     * `marks` feature). Present iff `capabilities.timelineMarks`.
+     */
+    setTimelineMarks?(marks: readonly TimelineMark[], groups: readonly MarkGroup[]): void;
+    /** A timeline-mark glyph was clicked — every mark of its cluster is listed. Present iff `capabilities.timelineMarks`. */
+    onMarkClick?(cb: (e: MarkClickEvent) => void): Unsubscribe;
     /**
      * Reflect an indicator's live status in its legend row: `'loading'` (a fetch is in flight —
      * spinner), `'live'` (live-updating — a distinct pulse), or `'idle'` (nothing). Optional.
@@ -1405,6 +1912,13 @@ interface IChartRenderer {
      * Optional.
      */
     setLoading?(loading: boolean): void;
+    /**
+     * Older bars are still loading in behind the oldest one by themselves (auto scroll-back paging, and the source
+     * has more). While true, panning holds the oldest loaded bar at a quarter of the plot's width instead of running
+     * into empty space, like TradingView; each page that lands moves the hold back. False at the real start of the
+     * data, at the depth cap, after a failed page, and in manual paging. Optional.
+     */
+    setOlderHistoryPending?(pending: boolean): void;
     ensurePane(pane: Pane): void;
     removePane(id: string): void;
     /**
@@ -1441,7 +1955,7 @@ interface IChartRenderer {
     removeIndicator(handle: IndicatorRenderHandle): void;
     /** Reflect a programmatic input change in the renderer's settings UI. `props`
      *  (when given) refreshes the declaration-prop values the same way. */
-    setIndicatorInputs(handle: IndicatorRenderHandle, values: Record<string, InputValue>, props?: Record<string, InputValue>): void;
+    setIndicatorInputs(handle: IndicatorRenderHandle, values: Record<string, InputValue>, props?: Record<string, InputValue>, style?: Record<string, InputValue>): void;
     /**
      * Supply a symbol picker so the settings dialog's `input.symbol` control opens the host's own
      * ticker-selection UI (the host wires this). Optional — without it, `input.symbol` is a plain
@@ -1464,6 +1978,13 @@ interface IChartRenderer {
      * a renderer without it simply never shows contributed callouts.
      */
     setLegendCallouts?(provider: ((indicatorId: string) => LegendCalloutView[]) | null): void;
+    /**
+     * Host hook for the price-axis countdown chip, called on every paint with the
+     * end of the last bar and the current time (ms); return rows of text to show instead of
+     * the bar-close countdown (e.g. `['OPENS IN', '15:22:10']` while a market is shut), or
+     * null to keep the normal countdown. Pass null to remove the hook.
+     */
+    setCountdownLines?(fn: ((lastBarEndMs: number, nowMs: number) => string[] | null) | null): void;
     /**
      * Replace the indicator legend's fold toggle with a HOST action (or restore it with
      * null): the chip stays — a list glyph plus the indicator count — but pressing it
@@ -1495,6 +2016,15 @@ interface IChartRenderer {
      * a renderer without runtime style switching omits it.
      */
     onPriceStyleChange?(cb: (style: PriceStyle) => void): Unsubscribe;
+    /**
+     * The renderer tells core that the base price style is ABOUT to change, `from` → `to`
+     * — the same sources as {@link onPriceStyleChange} (one runtime write path), called
+     * synchronously before the renderer touches its scene, so the chart still paints
+     * `from` while the callback runs. Never called for the constructed style or for a
+     * write of the style already shown. Callbacks must not change the style themselves.
+     * Optional — a renderer without runtime style switching omits it.
+     */
+    onPriceStyleWillChange?(cb: (from: PriceStyle, to: PriceStyle) => void): Unsubscribe;
     /** The renderer tells core when the user edits an input in-chart. */
     onInputChange(cb: (e: InputChangeEvent) => void): Unsubscribe;
     /** The renderer tells core when the user removes an indicator in-chart (the legend ✕). */
@@ -1506,6 +2036,10 @@ interface IChartRenderer {
     /** Touch long-press on a price or time axis strip. Optional — a renderer without
      *  touch axis gestures omits it; host chrome (timezone / price-scale sheets) keys off it. */
     onAxisLongPress?(cb: (e: AxisLongPressEvent) => void): Unsubscribe;
+    /** Width in px of the pane master price column (it grows to fit long price labels). */
+    priceColumnWidth?(): number;
+    /** CSS x (from the plot's left edge) of a bar time, extrapolated past the loaded bars; null before the first layout. */
+    timeToX?(ms: number): number | null;
     /**
      * Display an EXTERNAL crosshair at a data-space position — a ghost marker driven by
      * another chart (multi-chart crosshair sync), not by this chart's own pointer.
@@ -1526,6 +2060,11 @@ interface IChartRenderer {
     getVisibleRange(): VisibleRange | null;
     setVisibleRange(range: VisibleRange): void;
     /**
+     * TradingView's "Reset chart view" (Alt+R): the newest bars at the default zoom, every manual price scale dropped
+     * so auto scale resumes. OPTIONAL: without it the core frames the newest 200 bars with `setVisibleRange`.
+     */
+    resetView?(): void;
+    /**
      * Pan by a fraction of the visible width at constant zoom (positive ⇒ toward the
      * latest bars), behaving exactly like a pointer drag: same pan limits (including the
      * bounded whitespace past the newest bar), eased if the renderer animates pans.
@@ -1537,12 +2076,19 @@ interface IChartRenderer {
      * Export the current chart as a PNG data URL (optional — a renderer that can't
      * rasterize its surface omits it). DOM overlays may not be included.
      */
-    screenshot?(): string | null;
+    screenshot?(opts?: ScreenshotOptions): string | null;
     /**
      * Raster of the current chart onto a canvas (optional). Same pixels as
      * {@link screenshot}, for hosts that composite several charts into one image.
      */
-    screenshotCanvas?(): HTMLCanvasElement | null;
+    screenshotCanvas?(opts?: ScreenshotOptions): HTMLCanvasElement | null;
+    /** CSS box (viewport coordinates) the last {@link screenshotCanvas} covers (optional). */
+    screenshotBox?(): {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+    } | null;
     /**
      * Snapshot the renderer's full cosmetic configuration as a serializable,
      * versioned document — for persistence (templates, saved user settings).
@@ -1593,6 +2139,9 @@ interface IChartRenderer {
     /** A chart type's SDK settings changed (dialog edit / applyConfig) — the core forwards
      *  them to the type's data engine. */
     onChartTypeSettingsChange?(cb: (typeId: string, values: Record<string, unknown>) => void): Unsubscribe;
+    /** The host's "Template ▾" menu in the settings dialog's footer (`null` removes it, and the
+     *  footer keeps its plain "Reset defaults" button). The provider is read when the dialog opens. */
+    setSettingsTemplateMenu?(provider: (() => SettingsTemplateMenuView | null) | null): void;
     /** Host-app settings tabs (callback rows) shown by the renderer's settings dialog.
      *  `id` names a section for the visibility policy (defaults to the title's slug). */
     setSettingsSections?(sections: ReadonlyArray<{
@@ -1616,6 +2165,13 @@ interface IChartRenderer {
      * pointer-first one. Optional — a renderer without adaptive chrome omits it.
      */
     setLayoutMode?(mode: 'mobile' | 'desktop'): void;
+    /**
+     * Drive the renderer's time-of-day displays (the countdown-to-bar-close chip) from the
+     * HOST's second pulse instead of the renderer's own, so they read the same second as
+     * the host's clock chrome. `null` restores the renderer's own pulse. Optional — a
+     * renderer without time-of-day chrome omits it.
+     */
+    setWallClock?(clock: WallClock | null): void;
     /**
      * Interactive user-drawings surface. Present iff `capabilities.userDrawings`.
      * The core `DrawingController` drives it (commands down) and listens for
@@ -1644,6 +2200,9 @@ interface MarketConfig {
     symbol?: string;
     timeframe?: string;
     bars?: number;
+    /** Oldest bar time to load (ms): history stops there even when `bars` would reach further back (a start date
+     *  or a span of days, `workspace/history-depth.ts`). `bars` stays the ceiling. Absent = no time floor. */
+    from?: number;
     /** Trading session to show ({@link MarketSession}). Absent = the provider's default
      *  (`regular` on session markets); continuous markets ignore it entirely. */
     session?: MarketSession;
@@ -1670,6 +2229,8 @@ interface MarketSwitch {
     symbol?: string;
     timeframe?: string;
     bars?: number;
+    /** Oldest bar time to load ({@link MarketConfig.from}); `null` removes the floor. */
+    from?: number | null;
     /** Switch the shown trading session (reloads like a timeframe change). */
     session?: MarketSession;
     data?: OHLCV[];
@@ -1727,10 +2288,12 @@ interface VelaOptions extends MarketConfig {
      *  or force `'canvas2d'` / `'webgl2'`. Native renderer only. */
     nativeBackend?: NativeBackend;
     /** Native-renderer animations. `true`/`false` toggles all; an object configures
-     *  each independently. Default: eased **zoom on**, inertial **pan on but snappy**
-     *  (short glide), live-bar glide **off**. Set `{ pan: false }` for an instant pan
-     *  with no momentum, `{ liveBar: true }` (or a duration in ms) to make the forming
-     *  candle slide toward each live tick instead of snapping. */
+     *  each motion independently — on/off, or its ease duration in ms. Default: eased
+     *  **zoom on**, inertial **pan on but snappy** (short glide), gliding **autoscale
+     *  on**, first-paint **reveal on**, live-bar glide **off**. Set `{ pan: false }` for an
+     *  instant pan with no momentum, `{ zoom: 150 }` for a slower zoom glide,
+     *  `{ liveBar: true }` (or a duration in ms) to make the forming candle slide toward
+     *  each live tick instead of snapping, `{ intro: false }` to skip the reveal. */
     animations?: boolean | AnimationConfig;
     /** Neon glow/bloom intensity for line series (0 = off, ~0.6 = strong). WebGL2 only
      *  — the canvas2d backend ignores it. Default 0. */
@@ -1759,18 +2322,89 @@ interface VelaOptions extends MarketConfig {
      *  chart with `chart.renderer.listSettingsIds()`; the catalog is documented in
      *  docs/user/options.md. */
     settings?: SettingsVisibilityPolicy;
+    /** Price-axis customization (native renderer): `ticks` replaces the built-in tick
+     *  ladder of every pane's price axis — labels and horizontal gridlines together. */
+    priceAxis?: PriceAxisOptions;
 }
+/** Price-axis customization (see `VelaOptions.priceAxis`). */
+interface PriceAxisOptions {
+    /** Supplies the ticks of each pane's price axis — the labels and the horizontal
+     *  gridlines both follow them. Called per pane when the pane's range, size or mode
+     *  changes. Returning `null`/`undefined` keeps the built-in ticks. Seeds the native
+     *  renderer's runtime `priceAxisTicks` feature; `null` (the default) = built-in ticks. */
+    ticks?: PriceAxisTicksFn | null;
+}
+/** One price-axis tick: a gridline at `price` and its axis label. */
+interface PriceAxisTick {
+    /** Where the tick sits, in prices (also in percent/indexed mode). */
+    price: number;
+    /** The axis label, drawn as given. */
+    label: string;
+    /** true = emphasized (semibold), false = de-emphasized (muted), omitted = the regular label. */
+    major?: boolean;
+}
+/** What a {@link PriceAxisTicksFn} receives for one pane. */
+interface PriceAxisTickContext {
+    /** The pane whose axis is being built. */
+    pane: {
+        id: string;
+        kind: 'price' | 'study';
+    };
+    /** The pane's visible value range, in prices (also in percent/indexed mode). */
+    min: number;
+    /** Upper end of the visible range, in prices. */
+    max: number;
+    /** Whether the pane's scale is logarithmic. */
+    log: boolean;
+    /** Pane height in CSS px. */
+    height: number;
+    /** The mode the axis labels render in this frame. */
+    mode: 'price' | 'percent' | 'indexed';
+    /** The percent/indexed baseline price (undefined in price mode). */
+    baseline?: number;
+    /** The symbol's tick size, when known. */
+    mintick?: number;
+    /** The axis font size in px. */
+    fontSize: number;
+    /** A price's pane-relative y in CSS px (honours log and inverted scales). */
+    priceToY(price: number): number;
+    /** Vela's own ticks for this frame — return them, or a filtered/extended copy, to build on the default. */
+    defaults: readonly PriceAxisTick[];
+}
+/**
+ * Builds a pane's price-axis ticks. Return the ticks to draw (an empty array draws none),
+ * or `null`/`undefined` to keep the built-in ones. Entries with a non-finite `price` or a
+ * non-string `label` are dropped; a function that throws falls back to the built-in ticks.
+ */
+type PriceAxisTicksFn = (ctx: PriceAxisTickContext) => readonly PriceAxisTick[] | null | undefined;
 /** Settings-dialog visibility policy (see `VelaOptions.settings`). */
 interface SettingsVisibilityPolicy {
     /** Setting ids to hide — a tab, a group, or a row; an id hides its subtree. */
     hidden?: readonly string[];
 }
-/** Per-feature native-renderer animation toggles. */
+/**
+ * Per-feature native-renderer animation settings. Every eased motion takes
+ * `boolean | number`: `false`/`0` = off (the motion is instant), `true` = the built-in
+ * duration, a number = its ease time-constant in ms — the motion covers ~63% of the
+ * remaining distance per time-constant and is visually settled after about three of
+ * them (clamped to {@link ANIMATION_EASE_MAX_MS}).
+ */
 interface AnimationConfig {
-    /** Eased cursor-anchored wheel-zoom (+ gliding autoscale while zooming). Default true. */
-    zoom?: boolean;
-    /** Inertial/kinetic pan — a short snappy glide after a drag-release. Default true. */
-    pan?: boolean;
+    /** Eased cursor-anchored wheel-zoom: the bar spacing glides toward each wheel notch's
+     *  target instead of jumping. Default `true` ({@link ZOOM_EASE_DEFAULT_MS}). */
+    zoom?: boolean | number;
+    /** Inertial/kinetic pan on touch — the velocity a finger flick releases with decays
+     *  over this time-constant (a short, snappy glide by default; `false` stops dead). A
+     *  mouse release always stops dead. Default `true` ({@link PAN_INERTIA_DEFAULT_MS}). */
+    pan?: boolean | number;
+    /** The programmatic scroll glide — the scroll-to-latest button, `chart.panBy`, the
+     *  keyboard pan keys — easing the view toward its target at constant zoom. Default:
+     *  follows `pan` on/off, at {@link SCROLL_EASE_DEFAULT_MS} when on. */
+    scroll?: boolean | number;
+    /** Autoscale glide: while a zoom or fling is in flight the price scale eases toward
+     *  its new window instead of snapping every frame. Default `true`
+     *  ({@link AUTOSCALE_EASE_DEFAULT_MS}). */
+    autoscale?: boolean | number;
     /** Glide of the forming bar: on a live tick the displayed high/low/close ease toward
      *  the new values instead of snapping (the price line and axis label follow). `true`
      *  uses the default duration ({@link LIVE_BAR_EASE_DEFAULT_MS}); a number is the ease
@@ -1778,6 +2412,24 @@ interface AnimationConfig {
      *  {@link LIVE_BAR_EASE_MAX_MS}); `false`/`0` snaps. A new bar always snaps. Default
      *  `false` — the painted candle is then never behind the real data. */
     liveBar?: boolean | number;
+    /** The first-paint reveal: candles draw themselves in, left to right, when they first
+     *  appear. `true` = the default `'settle'` style (an overshoot that eases back);
+     *  `'grow'` = a plain ease-out; `false` = no reveal; an object picks the style and/or
+     *  the `duration` of the whole sweep in ms (default {@link INTRO_DURATION_DEFAULT_MS};
+     *  clamped to {@link INTRO_DURATION_MAX_MS}). Default `true`. */
+    intro?: boolean | IntroStyle | IntroConfig;
+}
+/** The first-paint reveal styles: `settle` overshoots and eases back, `grow` eases out. */
+type IntroStyle = 'settle' | 'grow';
+/** Object form of `animations.intro` — style and/or sweep duration (ms). */
+interface IntroConfig {
+    style?: IntroStyle;
+    duration?: number;
+}
+/** A resolved `animations.intro`: `style: false` = no reveal. */
+interface IntroAnimation {
+    style: IntroStyle | false;
+    duration: number;
 }
 /** Native geometry-layer backend selection. */
 type NativeBackend = 'auto' | 'canvas2d' | 'webgl2';
@@ -1789,19 +2441,24 @@ type NativeBackend = 'auto' | 'canvas2d' | 'webgl2';
  *  bars applied at the core's bar seam, so indicators compute on the same
  *  smoothed values the chart shows (raw data stays untouched underneath). */
 /** Built-in styles plus any id registered through the chart-type SDK (`registerChartType`). */
-type PriceStyle = 'candles' | 'bars' | 'line' | 'area' | 'baseline' | 'heikinashi' | (string & {});
+type PriceStyle = 'candles' | 'hollowcandles' | 'volumecandles' | 'bars' | 'line' | 'area' | 'baseline' | 'heikinashi' | (string & {});
 /** Display options passed to a renderer at construction. */
 interface RendererDisplayOptions {
     currentPriceLine: boolean;
     logScale: boolean;
     nativeBackend: NativeBackend;
-    animZoom: boolean;
-    animPan: boolean;
+    animZoom: number;
+    animPan: number;
+    animScroll: number;
+    animAutoscale: number;
     animLiveBar: number;
+    animIntro: IntroAnimation;
     glow: number;
     upColor: string;
     downColor: string;
     priceStyle: PriceStyle;
+    /** Host price-axis ticks (`VelaOptions.priceAxis.ticks`); absent/null = built-in ticks. */
+    priceAxisTicks?: PriceAxisTicksFn | null;
 }
 /**
  * Where to move an indicator (via `handle.moveTo(...)`):
@@ -1819,6 +2476,16 @@ type MoveTarget = 'price' | {
         after?: string;
     } | true;
 };
+/**
+ * Exactly where an indicator sits: its pane, whether it reads on its own (left) scale there, and, for a study pane
+ * that is not there any more, the pane it is re-opened above. `indicator:moved` reports the placement a move left
+ * (`from`), and `chart.panes.place(id, from)` puts the indicator back there: that is how a move is undone.
+ */
+interface IndicatorPlacement {
+    paneId: string;
+    ownScale: boolean;
+    before?: string;
+}
 /** A pane and the indicators it holds — a `chart.panes.list()` entry. */
 interface PaneInfo {
     id: string;
@@ -1830,11 +2497,22 @@ interface PaneInfo {
     indicators: Array<{
         id: string;
         title: string;
+        shorttitle?: string;
         ownScale: boolean;
     }>;
 }
 /** Options for `chart.addIndicator(source, options?)`. */
 interface AddIndicatorOptions {
+    /**
+     * The indicator's id — an opaque, non-empty string the host owns (a document key, an
+     * editor tab, a UUID). It is what `handle.id`, `chart.indicators()`, the `indicator:*`
+     * events, `script:run`, and the legend/pane surfaces carry, so a host that supplies
+     * it can address the indicator without keeping a side map. Omit it and the chart
+     * mints one (stable for the chart's lifetime, not across reloads). An id already live
+     * on this chart is rejected: `addIndicator` throws, `runIndicator`/`runScript`
+     * resolve `{ ok: false }` — never renamed silently.
+     */
+    id?: string;
     /** Which registered engine runs this script (by language id). Default: the chart's `defaultLanguage`. */
     language?: string;
     /** Input overrides, keyed by input title or varId. */
@@ -1843,6 +2521,9 @@ interface AddIndicatorOptions {
      *  `precision`, …), keyed like the engine's props schema. Ignored by engines
      *  without props support. */
     props?: Record<string, InputValue>;
+    /** Style overrides for a script indicator's plots, levels and fills (the settings
+     *  dialog's "Style" tab), keyed like `IndicatorHandle.styleValues()`. */
+    style?: Record<string, InputValue>;
     /** Force overlay-vs-pane placement (default: read from `indicator(overlay=…)`). */
     overlay?: boolean;
     /** Explicit pane placement. */
@@ -1851,4 +2532,4 @@ interface AddIndicatorOptions {
     title?: string;
 }
 
-export { type DrawingExtend as $, type AxisLongPressEvent as A, type Background as B, type CrosshairEvent as C, Drawing as D, type BoxFontFamily as E, type BoxHAlign as F, type BoxTextSize as G, type BoxVAlign as H, type InputValue as I, type CandleBarColor as J, type CandleSeries as K, type LineStyle as L, type MarketConfig as M, type NativeBackend as N, type OHLCV as O, type PriceStyle as P, type CandleStyle as Q, type RendererCapabilities as R, type SerializedDrawing as S, type ThemeName as T, type Unsubscribe as U, type VisibleRangePreset as V, type DataWindowGroup as W, type DataWindowOHLC as X, type DataWindowRow as Y, type DirtyRange as Z, type DrawingBox as _, type VisibleRange as a, type DrawingIntent as a0, type DrawingLabel as a1, type DrawingLine as a2, type DrawingLinefill as a3, type DrawingMode as a4, type DrawingPoint as a5, type DrawingPolyline as a6, type DrawingSeriesBar as a7, type DrawingSeriesGateway as a8, type DrawingSeriesState as a9, type PriceLine as aA, type Projector as aB, type ProviderName as aC, type RendererConstructor as aD, type Scene as aE, type SchemaPatch as aF, type SeriesKind as aG, type SeriesPoint as aH, type SeriesSpec as aI, type SeriesValueDelta as aJ, type SettingsField as aK, type SettingsSchema as aL, type SettingsVisibilityPolicy as aM, type TableCell as aN, type TableMerge as aO, type TablePosition as aP, type ToolbarGroupConfig as aQ, type TradeExecution as aR, type ValuePatch as aS, buildToolbar as aT, defaultToolbar as aU, inputDeltas as aV, inputVisible as aW, type PaneInfo as aX, type DrawingStyle as aa, type DrawingTable as ab, type DrawingText as ac, type DrawingXLoc as ad, type DrawingsOption as ae, type Fill as af, type FillGradientStop as ag, type IndicatorMeta as ah, type InputCondition as ai, type InputSchema as aj, type InputType as ak, type InputWhen as al, type LabelStyle as am, type LabelYLoc as an, type LineLikeKind as ao, type LineLikeSeries as ap, type LineLikeStyle as aq, type MarkerPoint as ar, type MarkerSeries as as, type MarketSnapshot as at, type MarketSwitch as au, type PaneAxis as av, type PaneAxisBand as aw, type PaneHint as ax, type PaneKind as ay, type PolylinePoint as az, type VelaOptions as b, type VelaTheme as c, type MarketSession as d, type IChartRenderer as e, type RendererDisplayOptions as f, type IndicatorRenderHandle as g, type IndicatorStatus as h, type Pane as i, type PaneAction as j, type MoveTarget as k, type IndicatorModel as l, type ScenePatch as m, type SymbolPickerFn as n, type LegendActionView as o, type LegendCalloutView as p, type InputChangeEvent as q, type ClickEvent as r, type DataWindowReadout as s, type IDrawingsRendererPort as t, type Millis as u, type SnapMode as v, type DrawingTypeKey as w, type ToolbarDefinition as x, type AddIndicatorOptions as y, type AnimationConfig as z };
+export { type DataWindowOHLC as $, type AxisLongPressEvent as A, type MarketConfig as B, type CrosshairEvent as C, type DrawingStyle as D, type MarketSnapshot as E, type AddIndicatorOptions as F, type AnimationConfig as G, type Background as H, type IChartRenderer as I, type BoxFontFamily as J, type BoxHAlign as K, type LineStyle as L, type MoveTarget as M, type BoxTextSize as N, type OHLCV as O, type PriceStyle as P, type BoxVAlign as Q, type RendererCapabilities as R, type SerializedDrawing as S, type ThemeName as T, type Unsubscribe as U, type VelaTheme as V, type WallClock as W, type CandleBarColor as X, type CandleSeries as Y, type CandleStyle as Z, type DataWindowGroup as _, type DrawingText as a, type SeriesKind as a$, type DataWindowRow as a0, type DirtyRange as a1, type DrawingBox as a2, type DrawingExtend as a3, type DrawingInputsDialog as a4, type DrawingIntent as a5, type DrawingLabel as a6, type DrawingLine as a7, type DrawingLinefill as a8, type DrawingMode as a9, type LineLikeStyle as aA, type MarkContent as aB, type MarkContentSource as aC, type MarkGlyph as aD, type MarkPanelItem as aE, type MarkShape as aF, type MarkerPoint as aG, type MarkerSeries as aH, type MarketSwitch as aI, type PaneAxis as aJ, type PaneAxisBand as aK, type PaneHint as aL, type PaneKind as aM, type PolylinePoint as aN, type PriceAxisOptions as aO, type PriceAxisTick as aP, type PriceAxisTickContext as aQ, type PriceAxisTicksFn as aR, type PriceLine as aS, type Projector as aT, type ProviderName as aU, type RendererConstructor as aV, type Scene as aW, type SchemaPatch as aX, type ScreenshotOptions as aY, SecondClock as aZ, type SeriesDisplay as a_, type DrawingPoint as aa, type DrawingPolyline as ab, type DrawingSeriesBar as ac, type DrawingSeriesGateway as ad, type DrawingSeriesState as ae, type DrawingTable as af, type DrawingToolbarAction as ag, type DrawingXLoc as ah, type DrawingsOption as ai, type Fill as aj, type FillGradientStop as ak, type IndicatorMeta as al, type InputCondition as am, type InputMenu as an, type InputMenuItem as ao, type InputMenuResolver as ap, type InputSchema as aq, type InputType as ar, type InputWhen as as, type IntroAnimation as at, type IntroConfig as au, type IntroStyle as av, type LabelStyle as aw, type LabelYLoc as ax, type LineLikeKind as ay, type LineLikeSeries as az, type DrawingTypeKey as b, type SeriesPoint as b0, type SeriesSpec as b1, type SeriesSurface as b2, type SeriesValueDelta as b3, type SettingsField as b4, type SettingsMenuRowView as b5, type SettingsSchema as b6, type SettingsVisibilityPolicy as b7, type TableCell as b8, type TableMerge as b9, type TablePosition as ba, type ToolbarGroupConfig as bb, type TradeExecution as bc, type ValuePatch as bd, type VelaOptions as be, type VisibleRangePreset as bf, buildToolbar as bg, defaultToolbar as bh, inputDeltas as bi, inputMenuFor as bj, inputVisible as bk, registerInputMenu as bl, seriesInScale as bm, seriesShownOn as bn, type MarketSession as bo, type NativeBackend as bp, type IndicatorPlacement as bq, type PaneInfo as br, Drawing as c, type RendererDisplayOptions as d, type IndicatorRenderHandle as e, type IndicatorStatus as f, type Pane as g, type PaneAction as h, type IndicatorModel as i, type ScenePatch as j, type InputValue as k, type SymbolPickerFn as l, type LegendActionView as m, type LegendCalloutView as n, type InputChangeEvent as o, type SettingsTemplateMenuView as p, type ClickEvent as q, type TimelineMark as r, type MarkGroup as s, type MarkClickEvent as t, type VisibleRange as u, type DataWindowReadout as v, type IDrawingsRendererPort as w, type Millis as x, type SnapMode as y, type ToolbarDefinition as z };
